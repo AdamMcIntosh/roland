@@ -1,26 +1,41 @@
 """Registry for reusable skills. Extend with Goose hooks."""
 
+try:
+    import goose  # Import Goose lib
+except ImportError:
+    goose = None
+
 _skills: dict[str, callable] = {}
 
 
 def register_skill(name: str, func: callable) -> None:
-    """Register a skill function.
+    """Register a skill function as a Goose MCP tool if available.
     
     Args:
         name: The skill name.
         func: The callable skill function.
     """
-    _skills[name] = func
+    # Wrap as Goose MCP tool if available
+    if goose is not None and hasattr(goose, 'mcp') and hasattr(goose.mcp, 'Tool'):
+        try:
+            mcp_tool = goose.mcp.Tool(name=name, func=func)
+            _skills[name] = mcp_tool
+        except Exception:
+            # Fall back to raw function if wrapping fails
+            _skills[name] = func
+    else:
+        # Use raw function if Goose MCP not available
+        _skills[name] = func
 
 
 def get_skill(name: str) -> callable:
-    """Get a skill function by name.
+    """Get a skill function (or Goose MCP Tool) by name.
     
     Args:
         name: The skill name.
     
     Returns:
-        The skill function, or a default "not found" function.
+        The skill function or Goose MCP Tool, or a default "not found" function.
     """
     return _skills.get(name, lambda: "Skill not found")
 
@@ -75,7 +90,7 @@ def visual_review():
     return "Review visuals"
 
 
-# Register all skills
+# Register all skills as Goose MCP tools
 register_skill("auth", auth)
 register_skill("database", database)
 register_skill("testing", testing)

@@ -5,6 +5,11 @@ import yaml
 import os
 from functools import lru_cache
 
+try:
+    import goose  # Import Goose lib
+except ImportError:
+    goose = None
+
 
 class RoutingConfig(BaseModel):
     """Pydantic model for routing configuration."""
@@ -12,6 +17,12 @@ class RoutingConfig(BaseModel):
     medium: list[str]
     complex: list[str]
     explain: list[str]
+
+
+class GooseConfig(BaseModel):
+    """Pydantic model for Goose configuration."""
+    api_keys: dict[str, str]
+    mcp_defaults: dict[str, float | int]
 
 
 DEFAULT_ROUTING = {
@@ -49,6 +60,64 @@ def load_config() -> RoutingConfig:
         return RoutingConfig(**DEFAULT_ROUTING)
 
 
+def load_goose_config() -> GooseConfig:
+    """Load Goose configuration from config.yaml.
+    
+    Returns:
+        GooseConfig: The loaded Goose configuration.
+    """
+    config_path = "config.yaml"
+    
+    if not os.path.exists(config_path):
+        print("config.yaml not found. Using default Goose config.")
+        return GooseConfig(
+            api_keys={},
+            mcp_defaults={"temperature": 0.7, "max_tokens": 2000}
+        )
+    
+    try:
+        with open(config_path, "r") as f:
+            data = yaml.safe_load(f)
+        
+        if data is None or "goose" not in data:
+            print("Warning: 'goose' section not found in config.yaml")
+            return GooseConfig(
+                api_keys={},
+                mcp_defaults={"temperature": 0.7, "max_tokens": 2000}
+            )
+        
+        return GooseConfig(**data["goose"])
+    except Exception as e:
+        print(f"Error loading Goose config: {e}. Using defaults.")
+        return GooseConfig(
+            api_keys={},
+            mcp_defaults={"temperature": 0.7, "max_tokens": 2000}
+        )
+
+
+# Initialize Goose globally if available
+_goose_config = None
+def init_goose():
+    """Initialize Goose with configuration from config.yaml."""
+    global _goose_config
+    if goose is None:
+        print("Warning: Goose library not installed. Install with: poetry add goose-ai")
+        return
+    
+    _goose_config = load_goose_config()
+    try:
+        if _goose_config.api_keys:
+            goose.init(api_keys=_goose_config.api_keys)
+        else:
+            print("Warning: No API keys configured for Goose. Update config.yaml.")
+    except Exception as e:
+        print(f"Warning: Failed to initialize Goose: {e}")
+
+
+# Initialize on module import
+init_goose()
+
+
 @lru_cache(maxsize=32)
 def select_model(complexity: str) -> str:
     """Select a model based on complexity level.
@@ -79,13 +148,14 @@ def select_model(complexity: str) -> str:
     return models[0]
 
 
-def delegate_mode(mode: str, query: str, verbose: bool) -> str:
+def delegate_mode(mode: str, query: str, verbose: bool, recipe: str = None) -> str:
     """Delegate to the appropriate mode function.
     
     Args:
         mode: The mode name (autopilot, eco, ulw, swarm, pipeline).
         query: The input query.
         verbose: Whether to print detailed HUD information.
+        recipe: Optional recipe name for pipeline mode.
     
     Returns:
         The result from the selected mode function.
@@ -127,6 +197,10 @@ def delegate_mode(mode: str, query: str, verbose: bool) -> str:
     }
     
     mode_func = modes_dict.get(mode.lower(), autopilot)
+    
+    # Pass recipe to pipeline mode if provided
+    if mode.lower() == "pipeline" and recipe:
+        return mode_func(query, verbose, recipe_name=recipe)
     return mode_func(query, verbose)
 
 
@@ -156,6 +230,60 @@ def load_agent(name: str) -> dict:
     return agent_config
 
 
+def load_agent_with_mcp(name: str) -> dict:
+    """Load agent YAML and hook to Goose MCP (if available).
+    
+    Args:
+        name: The agent name (e.g., 'architect', 'researcher').
+    
+    Returns:
+        A dictionary containing the agent configuration with MCP chain if Goose is available.
+    """
+    from oh_my_goose.skills.registry import get_skill
+    
+    agent = load_agent(name)
+    
+    if goose is None:
+        print("Warning: Goose not available. Using basic agent config.")
+        return agent
+    
+    try:
+        # Hook tools to MCP
+        mcp_tools = []
+        if "tools" in agent:
+            for tool_name in agent.get("tools", []):
+                try:
+                    skill_func = get_skill(tool_name)
+                    # Wrap skill as Goose MCP tool if wrapper available
+                    if hasattr(goose, 'mcp') and hasattr(goose.mcp, 'Tool'):
+                        mcp_tool = goose.mcp.Tool(name=tool_name, func=skill_func)
+                    else:
+                        mcp_tool = skill_func
+                    mcp_tools.append(mcp_tool)
+                except Exception as e:
+                    print(f"Warning: Failed to load tool {tool_name}: {e}")
+        
+        # Create MCP chain if goose.mcp.create_chain is available
+        if hasattr(goose, 'mcp') and hasattr(goose.mcp, 'create_chain'):
+            role_prompt = agent.get('role_prompt', '')
+            model = agent.get('recommended_model', 'claude-4-sonnet')
+            temperature = agent.get('temperature', 0.7)
+            
+            agent['mcp_chain'] = goose.mcp.create_chain(
+                prompt=role_prompt,
+                tools=mcp_tools,
+                model=model,
+                temperature=temperature
+            )
+        else:
+            agent['mcp_chain'] = None
+    except Exception as e:
+        print(f"Warning: Failed to create MCP chain for {name}: {e}")
+        agent['mcp_chain'] = None
+    
+    return agent
+
+
 def execute_skill(skill_name: str) -> str:
     """Execute a skill by name.
     
@@ -169,3 +297,26 @@ def execute_skill(skill_name: str) -> str:
     
     skill_func = get_skill(skill_name)
     return skill_func()
+
+
+def load_recipe(name: str) -> dict:
+    """Load recipe YAML with validation.
+    
+    Args:
+        name: The recipe name (e.g., '4-agent-pipeline').
+    
+    Returns:
+        A dictionary containing the validated recipe configuration.
+    
+    Raises:
+        ValueError: If the recipe file is not found or has invalid format.
+    """
+    path = f"recipes/{name}.yaml"
+    if not os.path.exists(path):
+        raise ValueError(f"Recipe {name} not found")
+    with open(path, "r") as f:
+        recipe = yaml.safe_load(f)
+    # Basic validation
+    if 'workflow' not in recipe or 'subagents' not in recipe:
+        raise ValueError("Invalid recipe format")
+    return recipe

@@ -12,6 +12,18 @@ DEFAULT_CONFIG = {
         "medium": ["claude-4-sonnet", "gpt-4o", "gemini-2.5-pro"],
         "complex": ["claude-4.5-sonnet", "gpt-4o", "grok-4.1-full"],
         "explain": ["grok-4.1-fast"]
+    },
+    "goose": {
+        "api_keys": {
+            "anthropic": "YOUR_ANTHROPIC_KEY",
+            "openai": "YOUR_OPENAI_KEY",
+            "google": "YOUR_GOOGLE_KEY",
+            "xai": "YOUR_XAI_KEY",
+        },
+        "mcp_defaults": {
+            "temperature": 0.7,
+            "max_tokens": 2000,
+        }
     }
 }
 
@@ -44,7 +56,8 @@ def setup():
 @omg.command()
 @click.argument("query")
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose output.")
-def run(query, verbose):
+@click.option("--recipe", default=None, help="Recipe YAML name (e.g., 4-agent-pipeline)")
+def run(query, verbose, recipe):
     """Run a query with magic keyword detection."""
     modes_keywords = {
         "autopilot:": "autopilot",
@@ -63,7 +76,7 @@ def run(query, verbose):
             mode_str = m
             break
     
-    result = delegate_mode(mode_str, query, verbose)
+    result = delegate_mode(mode_str, query, verbose, recipe=recipe)
     print(result)
 
 

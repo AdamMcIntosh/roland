@@ -13,3 +13,12 @@ routing:
   - grok-4.1-fast
   - gemini-2.5-flash
   - gpt-4o-mini
+goose:
+  api_keys:
+    anthropic: "YOUR_ANTHROPIC_KEY"
+    openai: "YOUR_OPENAI_KEY"
+    google: "YOUR_GOOGLE_KEY"
+    xai: "YOUR_XAI_KEY"
+  mcp_defaults:
+    temperature: 0.7
+    max_tokens: 2000
