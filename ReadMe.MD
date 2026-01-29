@@ -1,65 +1,62 @@
-# oh-my-goose 🦆
+# oh-my-goose 🦢
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![TypeScript](https://img.shields.io/badge/typescript-5.3+-blue.svg)](https://www.typescriptlang.org/)
-[![Node.js](https://img.shields.io/badge/node-18+-blue.svg)](https://nodejs.org/)
+[![Goose](https://img.shields.io/badge/goose-MCP%20Integration-blue.svg)](https://github.com/block/goose)
+[![Status](https://img.shields.io/badge/status-in%20development-yellow.svg)]()
 
-A powerful, zero-learning-curve orchestration framework for **Goose** inspired by **oh-my-claudecode**. OMG provides intelligent AI workflow management with multiple execution modes, specialized agents, persistent caching, cost optimization, and beautiful real-time HUD status displays.
+A powerful orchestration framework for **[Goose](https://github.com/block/goose)** that provides intelligent AI workflow management through MCP (Model Context Protocol) tools integration. Inspired by **oh-my-claudecode**, OMG extends Goose with specialized agents, reusable skills, and advanced execution modes.
 
-## ✨ Highlights
+> **⚠️ Project Status**: Currently in active development. Core TypeScript implementation in progress with Goose MCP integration.
 
-- **5 Execution Modes**: Autopilot, Ecomode, Ultrapilot, Swarm, Pipeline
-- **10+ Specialized Agents**: Architect, Researcher, Designer, Writer, Vision, QA-Tester, and more
-- **10+ Reusable Skills**: Auth, Database, Testing, Deployment, Security, Refactoring, and more
-- **Magic Keywords**: Natural language triggers (`autopilot:`, `eco:`, `ulw:`, `swarm:`, `pipeline:`)
-- **Rich HUD Display**: Real-time progress bars and cost tracking with beautiful formatting
-- **Smart Model Routing**: Complexity-based model selection with caching and fallbacks
-- **Persistent Caching**: Automatic disk-based result caching across sessions
-- **Cost Optimization**: 30–55% savings with Ecomode through intelligent model selection
-- **File Watching**: Ralph-style persistence loop for continuous processing
+## ✨ Planned Features
 
-## 🚀 Quick Start
+- **🦢 Goose MCP Integration**: Native Goose AI agent with custom MCP tools
+- **🎯 5 Execution Modes**: Autopilot, Ecomode, Ultrapilot, Swarm, Pipeline
+- **🤖 10+ Specialized Agents**: Architect, Researcher, Designer, Writer, Vision, QA-Tester, and more
+- **⚡ Reusable Skills as MCP Tools**: Auth, Database, Testing, Deployment, Security, Refactoring
+- **🎨 Rich HUD Display**: Real-time progress tracking with Goose session status
+- **🧠 Smart Model Routing**: Complexity-based model selection across providers
+- **💰 Cost Optimization**: Intelligent model selection with prompt caching
+- **📊 Multi-Agent Workflows**: Declarative YAML-based agent coordination
 
-### Installation
+## 🚀 Current Status
 
-```bash
-# Clone the TypeScript repository
-git clone https://github.com/yourusername/oh-my-goose-ts.git
-cd oh-my-goose-ts
+### What's Ready
 
-# Install dependencies with Yarn
-yarn install
-
-# One-time setup
-yarn setup
+```
+oh-my-goose/
+├── config.yaml                 # ✅ Model routing & Goose API config
+├── agents/*.yaml               # ✅ 10 specialized agent definitions
+│   ├── architect.yaml
+│   ├── researcher.yaml
+│   ├── designer.yaml
+│   └── ... (7 more)
+└── recipes/
+    └── PlanExecRevEx.yaml     # ✅ 4-agent workflow template
 ```
 
-### First Run
+### Installation (Coming Soon)
 
 ```bash
+# Install Goose first
+npm install -g goose-ai
+
+# Clone this repository
+git clone https://github.com/yourusername/oh-my-goose.git
+cd oh-my-goose
+
+# Install dependencies
+npm install
+
+# Configure API keys
+cp config.yaml.example config.yaml
+# Edit config.yaml with your API keys
+
 # Build TypeScript
-yarn build
+npm run build
 
-# Default autopilot mode (lead agent + subagents)
-yarn start run "build a todo app with auth"
-
-# Ecomode (cost-optimized)
-yarn start run "eco: refactor legacy code"
-
-# Ultrapilot (5 parallel subagents)
-yarn start run "ulw: implement payment integration"
-
-# Swarm (8 dynamic agents with shared memory)
-yarn start run "swarm: redesign authentication system"
-
-# Pipeline (4-step sequential processing)
-yarn start run "pipeline: create documentation"
-
-# Execute a specific skill
-yarn start skill testing
-
-# Load agent configuration
-yarn start agent architect
+# Run with Goose
+goose session start --mcp oh-my-goose
 ```
 
 ## 📋 Features
@@ -74,65 +71,70 @@ yarn start agent architect
 | **Swarm** | Dynamic coordination, memory | $0.08 | Medium | 8 agents |
 | **Pipeline** | Sequential processing chain | $0.04 | Slow | 4 steps |
 
-### Modes by Keyword
+## 🎯 Example: 4-Agent Workflow
 
-```bash
-# Default (autopilot if no keyword)
-omg run "your query here"
+The included `PlanExecRevEx.yaml` recipe demonstrates multi-agent coordination:
 
-# Ecomode: Cheapest models, aggressive caching
-yarn start run "eco: your query"
-
-# Ultrapilot: 5 subagents in parallel
-yarn start run "ulw: your query"
-
-# Swarm: 8 agents with shared memory
-yarn start run "swarm: your query"
-
-# Pipeline: Plan → Execute → Review → Explain
-yarn start run "pipeline: your query"
-
-# Verbose output (all modes)
-yarn start run "your query" -v
+```yaml
+workflow:
+  - Planner (Claude 4): Break down task into steps
+  - Executor (GPT-4o): Implement the changes
+  - Reviewer (Gemini 2.5): Check for issues
+  - Explainer (Grok 4.1): Explain what was done
 ```
 
-### Agents
-
-Load any of 10 pre-configured specialized agents:
+This will be executable via:
 
 ```bash
-omg agent architect      # Design system architecture
-omg agent researcher     # Conduct in-depth research
-omg agent designer       # Create UI/UX designs
-omg agent writer         # Write clear content
-omg agent vision         # Analyze visual data
-omg agent critic         # Provide constructive feedback
-omg agent analyst        # Analyze data and trends
-omg agent executor       # Execute tasks efficiently
-omg agent planner        # Plan projects and strategies
-omg agent qa-tester      # Test for quality assurance
+goose run --recipe recipes/PlanExecRevEx.yaml "build a REST API"
 ```
 
-### Skills
+## 🔮 Planned Usage Examples
 
-Execute reusable skills on demand:
+### Execution Modes (Coming Soon)
 
 ```bash
-omg skill auth           # Implement authentication
-omg skill database       # Handle database operations
-omg skill testing        # Run tests
-omg skill deployment     # Deploy application
-omg skill refactoring    # Refactor code
-omg skill migration      # Migrate data
-omg skill security_scan  # Scan for security issues
-omg skill git_flow       # Manage git workflow
-omg skill documentation  # Generate documentation
-omg skill visual_review  # Review visuals
+# Default autopilot mode (lead agent + subagents)
+goose run "build a todo app with auth"
+
+# Ecomode (cost-optimized)
+goose run "eco: refactor legacy code"
+
+# Ultrapilot (5 parallel subagents)
+goose run "ulw: implement payment integration"
+
+# Swarm (8 dynamic agents with shared memory)
+goose run "swarm: redesign authentication system"
+
+# Pipeline (4-step sequential processing)
+goose run "pipeline: create documentation"
+```
+
+### Specialized Agents
+
+```bash
+goose agent architect      # Design system architecture
+goose agent researcher     # Conduct in-depth research
+goose agent designer       # Create UI/UX designs
+goose agent writer         # Write clear content
+goose agent vision         # Analyze visual data
+goose agent qa-tester      # Test for quality assurance
+```
+
+### Skills as MCP Tools
+
+```bash
+goose skill auth           # Implement authentication
+goose skill database       # Handle database operations
+goose skill testing        # Run tests
+goose skill deployment     # Deploy application
+goose skill refactoring    # Refactor code
+goose skill security_scan  # Scan for security issues
 ```
 
 ## ⚙️ Configuration
 
-Edit `config.yaml` to customize model routing:
+Current `config.yaml` structure (✅ ready):
 
 ```yaml
 routing:
@@ -150,6 +152,16 @@ routing:
     - grok-4.1-full
   explain:
     - grok-4.1-fast
+
+goose:
+  api_keys:
+    anthropic: "YOUR_ANTHROPIC_KEY"
+    openai: "YOUR_OPENAI_KEY"
+    google: "YOUR_GOOGLE_KEY"
+    xai: "YOUR_XAI_KEY"
+  mcp_defaults:
+    temperature: 0.7
+    max_tokens: 2000
 ```
 
 ## 📁 Architecture
@@ -183,86 +195,90 @@ oh-my-goose/
 └── README.md
 ```
 
-## 🛠️ Development
+## 🛠️ Development (Coming Soon)
 
 ```bash
-# Install development dependencies
-poetry install
+# Install dependencies
+npm install
+
+# Run in dev mode with watch
+npm run dev
+
+# Build TypeScript
+npm run build
 
 # Run tests
-poetry run pytest
+npm test
 
-# Format code with Black
-poetry run black .
+# Lint code
+npm run lint
 
-# Check linting
-poetry run flake8 .
+# Format code
+npm run format
 ```
 
-## 📊 Performance & Costs
+## 💡 Design Philosophy
 
-### Cost Comparison (per query)
+### Goose + MCP = Power
 
-- **Autopilot**: $0.03 (balanced)
-- **Ecomode**: $0.01 (35–55% savings)
-- **Ultrapilot**: $0.06 (parallel execution)
-- **Swarm**: $0.08 (dynamic coordination)
-- **Pipeline**: $0.04 (sequential steps)
+**oh-my-goose** leverages Goose's strengths while adding orchestration:
 
-### Caching Impact
+- **Goose handles**: AI execution, context management, tool calling
+- **oh-my-goose provides**: Agent coordination, workflow patterns, skills library
+- **MCP enables**: Seamless integration without modifying Goose core
 
-- **First run**: Full cost (cold cache)
-- **Cached hits**: $0.00 (instant results)
-- **Typical savings**: 30–50% with Ecomode + caching
+### Key Benefits
 
-## 🔑 Key Concepts
+- ✅ **No forking required** - Pure MCP integration
+- ✅ **Goose updates automatically** - No version lock-in
+- ✅ **Reusable skills** - Build once, use everywhere
+- ✅ **Multi-provider** - Anthropic, OpenAI, Google, xAI support
+- ✅ **Cost optimization** - Smart model routing per complexity
 
-### Magic Keywords
+## 💰 Expected Performance (Planned)
 
-Natural language triggers for mode selection:
+### Cost Estimates (per query)
+
+- **Autopilot**: ~$0.03 (balanced execution)
+- **Ecomode**: ~$0.01 (35–55% savings)
+- **Ultrapilot**: ~$0.06 (parallel execution)
+- **Swarm**: ~$0.08 (dynamic coordination)
+- **Pipeline**: ~$0.04 (sequential processing)
+
+*Actual costs depend on task complexity and prompt caching effectiveness*
+
+## 🎯 Example: 4-Agent Workflow
+
+The included `PlanExecRevEx.yaml` recipe demonstrates multi-agent coordination:
+
+```yaml
+workflow:
+  - Planner (Claude 4): Break down task into steps
+  - Executor (GPT-4o): Implement the changes
+  - Reviewer (Gemini 2.5): Check for issues
+  - Explainer (Grok 4.1): Explain what was done
+```
+
+This will be executable via:
 
 ```bash
-omg run "autopilot: query"   # Explicit mode
-omg run "eco: query"         # Cost-optimized
-omg run "ulw: query"         # Parallel execution
-omg run "swarm: query"       # Dynamic coordination
-omg run "pipeline: query"    # Sequential chain
-omg run "ralph: path"        # File watching
-omg run "query"              # Default (autopilot)
+goose run --recipe recipes/PlanExecRevEx.yaml "build a REST API"
 ```
 
-### Complexity Classification
+## 🗺️ Roadmap
 
-Queries are auto-classified based on length:
-
-- **Simple** (<50 chars): Cheapest model
-- **Medium** (<200 chars): Balanced model
-- **Complex** (≥200 chars): Strongest model
-
-### Result Caching
-
-All results are automatically cached in `cache.json`:
-
-- Subsequent identical queries return instant results
-- Cache persists across CLI sessions
-- Zero cost for cache hits
-
-### HUD (Heads-Up Display)
-
-Real-time status with Rich formatting:
-
-```
-╭────────────────────────────╮
-│ AUTOPILOT                  │
-│ Status: Completed          │
-│ Progress: 100.0%           │
-│ Cost: $0.03                │
-╰────────────────────────────╯
-```
+- [x] Define agent configurations (YAML)
+- [x] Design workflow templates
+- [x] Create model routing config
+- [ ] **Phase 1**: TypeScript MCP server foundation
+- [ ] **Phase 2**: Core skills as MCP tools
+- [ ] **Phase 3**: Execution modes (autopilot, swarm, etc.)
+- [ ] **Phase 4**: Goose CLI integration
+- [ ] **Phase 5**: Documentation & examples
 
 ## 🤝 Contributing
 
-We welcome contributions! To get started:
+Contributions welcome! This project is in active development.
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/AmazingFeature`
@@ -271,8 +287,8 @@ We welcome contributions! To get started:
 5. Open a Pull Request
 
 Please ensure:
-- Code follows PEP 8 style (Black formatting)
-- Tests pass (`poetry run pytest`)
+- Code follows TypeScript/ESLint conventions
+- Tests pass (`npm test`)
 - Documentation is updated
 
 ## 📜 License
@@ -282,8 +298,9 @@ Distributed under the MIT License. See [LICENSE](LICENSE) for details.
 ## 🙏 Acknowledgments
 
 - Inspired by **[oh-my-claudecode](https://github.com/ldavidson45/oh-my-claudecode)**
-- Built with ❤️ using [Goose](https://github.com/block/goose), [Click](https://click.palletsprojects.com/), [Rich](https://rich.readthedocs.io/), [Pydantic](https://docs.pydantic.dev/), and [Watchdog](https://watchdog.readthedocs.io/)
-- Thanks to the open-source community
+- Built on **[Goose](https://github.com/block/goose)** by Block
+- Powered by **[Model Context Protocol (MCP)](https://modelcontextprotocol.io/)**
+- Thanks to the open-source AI community
 
 ## 📧 Support
 
@@ -291,8 +308,7 @@ For issues, questions, or feature requests:
 
 - **GitHub Issues**: [Open an issue](https://github.com/yourusername/oh-my-goose/issues)
 - **Discussions**: [Start a discussion](https://github.com/yourusername/oh-my-goose/discussions)
-- **Documentation**: See [docs/](docs/) for detailed guides
 
 ---
 
-**oh-my-goose** — Orchestration made simple. 🚀
+**oh-my-goose** — Orchestration made simple. 🦢
