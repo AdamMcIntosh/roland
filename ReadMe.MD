@@ -1,8 +1,8 @@
 # oh-my-goose 🦆
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Poetry](https://img.shields.io/badge/dependency%20management-poetry-blue.svg)](https://python-poetry.org/)
+[![TypeScript](https://img.shields.io/badge/typescript-5.3+-blue.svg)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/node-18+-blue.svg)](https://nodejs.org/)
 
 A powerful, zero-learning-curve orchestration framework for **Goose** inspired by **oh-my-claudecode**. OMG provides intelligent AI workflow management with multiple execution modes, specialized agents, persistent caching, cost optimization, and beautiful real-time HUD status displays.
 
@@ -23,40 +23,43 @@ A powerful, zero-learning-curve orchestration framework for **Goose** inspired b
 ### Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/oh-my-goose.git
-cd oh-my-goose
+# Clone the TypeScript repository
+git clone https://github.com/yourusername/oh-my-goose-ts.git
+cd oh-my-goose-ts
 
-# Install dependencies with Poetry
-poetry install
+# Install dependencies with Yarn
+yarn install
 
 # One-time setup
-poetry run omg setup
+yarn setup
 ```
 
 ### First Run
 
 ```bash
+# Build TypeScript
+yarn build
+
 # Default autopilot mode (lead agent + subagents)
-poetry run omg run "build a todo app with auth"
+yarn start run "build a todo app with auth"
 
 # Ecomode (cost-optimized)
-poetry run omg run "eco: refactor legacy Python code"
+yarn start run "eco: refactor legacy code"
 
 # Ultrapilot (5 parallel subagents)
-poetry run omg run "ulw: implement payment integration"
+yarn start run "ulw: implement payment integration"
 
 # Swarm (8 dynamic agents with shared memory)
-poetry run omg run "swarm: redesign authentication system"
+yarn start run "swarm: redesign authentication system"
 
 # Pipeline (4-step sequential processing)
-poetry run omg run "pipeline: create documentation"
+yarn start run "pipeline: create documentation"
 
 # Execute a specific skill
-poetry run omg skill testing
+yarn start skill testing
 
 # Load agent configuration
-poetry run omg agent architect
+yarn start agent architect
 ```
 
 ## 📋 Features
@@ -78,22 +81,19 @@ poetry run omg agent architect
 omg run "your query here"
 
 # Ecomode: Cheapest models, aggressive caching
-omg run "eco: your query"
+yarn start run "eco: your query"
 
 # Ultrapilot: 5 subagents in parallel
-omg run "ulw: your query"
+yarn start run "ulw: your query"
 
 # Swarm: 8 agents with shared memory
-omg run "swarm: your query"
+yarn start run "swarm: your query"
 
 # Pipeline: Plan → Execute → Review → Explain
-omg run "pipeline: your query"
-
-# Ralph: Watch directory for changes
-omg run "ralph: path/to/watch"
+yarn start run "pipeline: your query"
 
 # Verbose output (all modes)
-omg run "your query" -v
+yarn start run "your query" -v
 ```
 
 ### Agents

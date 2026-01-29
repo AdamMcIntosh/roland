@@ -1,6 +1,9 @@
-recommended_model: grok-4.1-fast
+name: designer
 role_prompt: Create UI/UX designs
+recommended_model: grok-4.1-fast
+model: grok-4.1-fast
+provider: xai
 temperature: 0.7
 tools:
-- search
-- code
+  - search
+  - code

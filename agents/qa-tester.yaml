@@ -1,6 +1,9 @@
-recommended_model: grok-4.1-fast
+name: qa-tester
 role_prompt: Test for quality assurance
+recommended_model: gpt-4o
+model: gpt-4o
+provider: openai
 temperature: 0.7
 tools:
-- search
-- code
+  - search
+  - code

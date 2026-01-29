@@ -4,7 +4,7 @@ lead_model: claude-4-sonnet
 subagents:
   - name: Planner
     provider: anthropic
-    model: claude-4-sonnet  # Or 4.5-sonnet (~$3 in/$15 out per 1M tokens)
+    model: claude-4-sonnet
     prompt: |
       You are the planning agent. For the task: {{user_task}}.
       Break it down into detailed steps, required files, dependencies, best practices (e.g., security, efficiency), potential risks, and a high-level architecture.
@@ -12,7 +12,7 @@ subagents:
 
   - name: Executor
     provider: openai
-    model: gpt-4o  # Or gpt-5-mini (~$2.5 in/$10 out per 1M)
+    model: gpt-4o
     prompt: |
       You are the execution agent. Use the plan from @Planner.
       Implement changes: Edit/create files, install deps if needed, run tests/commands.
@@ -20,7 +20,7 @@ subagents:
 
   - name: Reviewer
     provider: google
-    model: gemini-2.5-flash  # Cheap: ~$0.10 in/$0.40 out per 1M
+    model: gemini-2.5-flash
     prompt: |
       You are the review agent. Analyze diffs/code from @Executor.
       Check for: Bugs, performance issues, security vulnerabilities, code smells, adherence to best practices.
@@ -28,7 +28,7 @@ subagents:
 
   - name: Explainer
     provider: xai
-    model: grok-4.1-fast  # Cheap variant: ~$0.20 in/$0.50 out per 1M
+    model: grok-4.1-fast
     prompt: |
       You are the explanation agent (Grok style: clear, witty, step-by-step like Hitchhiker's Guide).
       Take final changes from @Reviewer/@Executor.
@@ -43,10 +43,13 @@ workflow:
     - agent: Executor
       output_to: Reviewer
     - agent: Reviewer
-      loop_if: "issues found"  # Auto-iterate back to Executor (up to 3x to avoid loops)
+      loop_if: "issues found"
       output_to: Explainer
     - agent: Explainer
-      final_output: true  # Display full explanations
+      final_output: true
+
 options:
+  cache_messages: true
+  max_loops: 3
   cache_messages: true  # Goose-side caching
   max_loops: 3  # Prevent infinite iterations
