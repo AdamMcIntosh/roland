@@ -270,7 +270,7 @@ goose run --recipe recipes/PlanExecRevEx.yaml "build a REST API"
 - [x] Define agent configurations (YAML)
 - [x] Design workflow templates
 - [x] Create model routing config
-- [ ] **Phase 1**: TypeScript MCP server foundation
+- [x] **Phase 1**: TypeScript MCP server foundation
 - [ ] **Phase 2**: Core skills as MCP tools
 - [ ] **Phase 3**: Execution modes (autopilot, swarm, etc.)
 - [ ] **Phase 4**: Goose CLI integration
