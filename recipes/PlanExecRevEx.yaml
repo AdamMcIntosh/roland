@@ -28,7 +28,7 @@ subagents:
 
   - name: Explainer
     provider: xai
-    model: grok-4.1-fast
+    model: grok-4-1-fast-reasoning
     prompt: |
       You are the explanation agent (Grok style: clear, witty, step-by-step like Hitchhiker's Guide).
       Take final changes from @Reviewer/@Executor.

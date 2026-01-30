@@ -21,7 +21,7 @@ os.makedirs("agents", exist_ok=True)
 for agent in agents:
     data = {
         "role_prompt": agent["role_prompt"],
-        "recommended_model": "grok-4.1-fast",
+        "recommended_model": "grok-4-1-fast-reasoning",
         "tools": ["search", "code"],
         "temperature": 0.7,
     }

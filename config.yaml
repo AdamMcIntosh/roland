@@ -4,13 +4,13 @@ routing:
   - gpt-4o
   - grok-4.1-full
   explain:
-  - grok-4.1-fast
+  - grok-4-1-fast-reasoning
   medium:
   - claude-4-sonnet
   - gpt-4o
   - gemini-2.5-pro
   simple:
-  - grok-4.1-fast
+  - grok-4-1-fast-reasoning
   - gemini-2.5-flash
   - gpt-4o-mini
 goose:

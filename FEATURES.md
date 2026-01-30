@@ -188,7 +188,7 @@ Rich terminal UI with:
 **Routing Logic**:
 ```yaml
 routing:
-  simple:   [grok-4.1-fast, gemini-2.5-flash]  # <50 chars
+  simple:   [grok-4-1-fast-reasoning, gemini-2.5-flash]  # <50 chars
   medium:   [claude-4-sonnet, gpt-4o]          # <200 chars
   complex:  [claude-4.5-sonnet, gpt-4o]        # ≥200 chars
 ```

@@ -1,7 +1,7 @@
 name: vision
 role_prompt: Analyze visual data
-recommended_model: grok-4.1-fast
-model: grok-4.1-fast
+recommended_model: grok-4-1-fast-reasoning
+model: grok-4-1-fast-reasoning
 provider: xai
 temperature: 0.7
 tools:

@@ -1,6 +1,6 @@
 {
   "name": "oh-my-goose",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Orchestration framework for Goose with MCP integration",
   "main": "dist/index.js",
   "type": "module",
@@ -8,6 +8,7 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
+    "cli": "node dist/cli/cli-main.js",
     "mcp": "node dist/server/mcp-server.js",
     "lint": "eslint src/**/*.ts",
     "format": "prettier --write src/**/*.ts",

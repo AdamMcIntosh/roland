@@ -7,6 +7,8 @@
 import { McpServer } from './server/mcp-server.js';
 import { loadConfig } from './config/config-loader.js';
 import { logger } from './utils/logger.js';
+import { initializeAgents } from './agents/index.js';
+import { initializeSkills } from './skills/index.js';
 
 async function main() {
   try {
@@ -14,7 +16,13 @@ async function main() {
 
     // Load configuration
     const config = await loadConfig();
-    logger.info(`✅ Configuration loaded from ${config.configPath}`);
+    logger.info(`✅ Configuration loaded`);
+
+    // Initialize Phase 3 components
+    logger.info('Initializing Phase 3 components...');
+    await initializeSkills();
+    await initializeAgents('./agents');
+    logger.info('✅ Phase 3 components initialized');
 
     // Initialize MCP server
     const server = new McpServer(config);
