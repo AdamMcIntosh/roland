@@ -25,7 +25,14 @@ export class CacheManager {
   constructor(cacheDir: string = '.cache') {
     this.cacheDir = cacheDir;
     this.cacheFile = path.join(cacheDir, 'query-cache.json');
-    this.stats = { hits: 0, misses: 0, totalEntries: 0, savedCost: 0 };
+    this.stats = {
+      hits: 0,
+      misses: 0,
+      totalEntries: 0,
+      savedCost: 0,
+      agentStats: new Map(),
+      modeStats: new Map(),
+    };
     this.ensureCacheDir();
     this.loadCache();
   }
@@ -101,21 +108,29 @@ export class CacheManager {
   }
 
   /**
-   * Generate cache key from query
-   * Simple hash-like key based on query content
+   * Generate cache key from query with optional metadata
+   * Enhanced key includes mode, agent, and complexity for better cache isolation
    * 
    * @param query - Query string
+   * @param metadata - Optional metadata (mode, agent, complexity)
    * @returns Cache key
    */
-  private generateKey(query: string): string {
-    // Simple but effective: hash the query
+  private generateKey(query: string, metadata?: { mode?: string; agent?: string; complexity?: string }): string {
+    // Build key prefix with metadata for better cache isolation
+    const prefix = metadata
+      ? `${metadata.mode || 'default'}_${metadata.agent || 'default'}_${metadata.complexity || 'default'}`
+      : 'default';
+
+    // Hash the query
     let hash = 0;
     for (let i = 0; i < query.length; i++) {
       const char = query.charCodeAt(i);
       hash = (hash << 5) - hash + char;
       hash = hash & hash; // Convert to 32-bit integer
     }
-    return `query_${Math.abs(hash).toString(16)}`;
+    const key = `${prefix}_${Math.abs(hash).toString(16)}`;
+    logger.debug(`[CacheKey] Query: "${query}", Metadata: ${JSON.stringify(metadata)}, Key: ${key}`);
+    return key;
   }
 
   /**
@@ -131,39 +146,52 @@ export class CacheManager {
   }
 
   /**
-   * Try to get result from cache
+   * Try to get result from cache with metadata support
    * 
-   * @param query - Query string
+   * @param query - Query string or cache key
+   * @param metadata - Optional metadata for key generation
    * @returns Cached result or null if not found/expired
    */
-  get(query: string): string | null {
-    const key = this.generateKey(query);
+  get(query: string, metadata?: { mode?: string; agent?: string; complexity?: string }): string | null {
+    const key = metadata ? this.generateKey(query, metadata) : query;
+    logger.debug(`[Cache.get] Looking up key: ${key}`);
     const entry = this.cache.get(key);
 
     if (!entry) {
+      logger.debug(`[Cache.get] MISS - Key not found: ${key}`);
       this.stats.misses++;
+      this.updateAgentStats(metadata?.agent, false, 0);
+      this.updateModeStats(metadata?.mode, false, 0);
       return null;
     }
 
     if (this.isExpired(entry)) {
+      logger.debug(`[Cache.get] MISS - Entry expired: ${key}`);
       this.cache.delete(key);
       this.stats.misses++;
+      this.updateAgentStats(metadata?.agent, false, 0);
+      this.updateModeStats(metadata?.mode, false, 0);
       return null;
     }
 
     this.stats.hits++;
-    logger.debug(`Cache hit: ${key}`);
+    const savedCost = entry.cost || 0;
+    this.stats.savedCost += savedCost;
+    this.updateAgentStats(metadata?.agent || entry.metadata?.agent, true, savedCost);
+    this.updateModeStats(metadata?.mode || entry.metadata?.mode, true, savedCost);
+    logger.debug(`Cache hit: ${key} (saved $${savedCost.toFixed(6)})`);
 
     return entry.value as string;
   }
 
   /**
-   * Store result in cache
+   * Store result in cache with metadata support
    * 
-   * @param query - Query string
+   * @param query - Query string or cache key
    * @param result - Result to cache
    * @param model - Model used
    * @param cost - Cost of this query
+   * @param metadata - Optional metadata (agent, mode, complexity)
    * @param ttl - Time to live in milliseconds (optional)
    */
   set(
@@ -171,9 +199,10 @@ export class CacheManager {
     result: string,
     model: string,
     cost: number,
+    metadata?: { agent?: string; mode?: string; complexity?: string },
     ttl?: number
   ): void {
-    const key = this.generateKey(query);
+    const key = metadata ? this.generateKey(query, metadata) : query;
 
     const entry: CacheEntry = {
       key,
@@ -181,11 +210,22 @@ export class CacheManager {
       timestamp: Date.now(),
       ttl,
       cost,
+      metadata: metadata ? {
+        agent: metadata.agent,
+        mode: metadata.mode,
+        complexity: metadata.complexity,
+        model,
+      } : { model },
     };
 
     this.cache.set(key, entry);
-    this.saveCache();
-    logger.debug(`Cached result: ${key}`);
+    this.stats.totalEntries = this.cache.size;
+    logger.debug(`[Cache.set] Cached result: ${key} (cost: $${cost.toFixed(6)}, model: ${model})`);
+
+    // Periodically save to disk
+    if (this.cache.size % 10 === 0) {
+      this.saveCache();
+    }
   }
 
   /**
@@ -193,9 +233,48 @@ export class CacheManager {
    */
   clear(): void {
     this.cache.clear();
-    this.stats = { hits: 0, misses: 0, totalEntries: 0, savedCost: 0 };
+    this.stats = {
+      hits: 0,
+      misses: 0,
+      totalEntries: 0,
+      savedCost: 0,
+      agentStats: new Map(),
+      modeStats: new Map(),
+    };
     this.saveCache();
     logger.debug('Cache cleared');
+  }
+
+  /**
+   * Update agent-specific statistics
+   */
+  private updateAgentStats(agent: string | undefined, isHit: boolean, savedCost: number): void {
+    if (!agent || !this.stats.agentStats) return;
+
+    const stats = this.stats.agentStats.get(agent) || { hits: 0, misses: 0, savedCost: 0 };
+    if (isHit) {
+      stats.hits++;
+      stats.savedCost += savedCost;
+    } else {
+      stats.misses++;
+    }
+    this.stats.agentStats.set(agent, stats);
+  }
+
+  /**
+   * Update mode-specific statistics
+   */
+  private updateModeStats(mode: string | undefined, isHit: boolean, savedCost: number): void {
+    if (!mode || !this.stats.modeStats) return;
+
+    const stats = this.stats.modeStats.get(mode) || { hits: 0, misses: 0, savedCost: 0 };
+    if (isHit) {
+      stats.hits++;
+      stats.savedCost += savedCost;
+    } else {
+      stats.misses++;
+    }
+    this.stats.modeStats.set(mode, stats);
   }
 
   /**

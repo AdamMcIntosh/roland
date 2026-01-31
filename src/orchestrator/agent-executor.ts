@@ -19,6 +19,8 @@ export interface ExecutionRequest {
   complexity?: 'simple' | 'medium' | 'explain' | 'complex';
   agentName?: string;
   useCache?: boolean;
+  mode?: 'ecomode' | 'autopilot' | 'ultrapilot' | 'swarm' | 'pipeline';
+  skipCache?: boolean;
 }
 
 export interface ExecutionResult {
@@ -34,8 +36,8 @@ export class AgentExecutor {
   private startTime: number = 0;
 
   /**
-   * Execute a single request in Ecomode
-   * MVP: Uses cheapest model, checks cache first, tracks cost
+   * Execute the agent with routing to appropriate mode
+   * Supports: ecomode, autopilot, ultrapilot, swarm, pipeline
    * 
    * @param request - Execution request
    * @returns Execution result
@@ -48,8 +50,38 @@ export class AgentExecutor {
       complexity = 'simple',
       agentName = 'default',
       useCache = true,
+      mode = 'ecomode',
+      skipCache = false,
     } = request;
 
+    // Route to appropriate mode
+    const normalizedMode = (mode || 'ecomode').toLowerCase();
+    
+    if (normalizedMode === 'ecomode' || normalizedMode === 'default') {
+      return this.executeEcomode(query, complexity as any, agentName, useCache && !skipCache);
+    } else if (normalizedMode === 'autopilot') {
+      return this.executeAutopilot(query, complexity as any);
+    } else if (normalizedMode === 'ultrapilot') {
+      return this.executeUltrapilot(query, complexity as any);
+    } else if (normalizedMode === 'swarm') {
+      return this.executeSwarm(query, complexity as any);
+    } else if (normalizedMode === 'pipeline') {
+      return this.executePipeline(query, complexity as any);
+    } else {
+      throw new Error(`Unknown execution mode: ${normalizedMode}`);
+    }
+  }
+
+  /**
+   * Execute in Ecomode (cheapest single-agent execution)
+   * MVP: Uses cheapest model, checks cache first, tracks cost
+   */
+  private async executeEcomode(
+    query: string,
+    complexity: 'simple' | 'medium' | 'complex' | 'explain',
+    agentName: string,
+    useCache: boolean
+  ): Promise<ExecutionResult> {
     logger.info(`[Ecomode] Executing: "${query.substring(0, 50)}..."`);
 
     // Step 1: Try cache
@@ -318,6 +350,170 @@ Key points:
 
 Expected behavior confirmed.
     `.trim();
+  }
+
+  /**
+   * Execute in Autopilot mode (lead + 2 subagents)
+   * Phase 7: Fully implemented
+   */
+  private async executeAutopilot(
+    query: string,
+    complexity: 'simple' | 'medium' | 'complex' | 'explain'
+  ): Promise<ExecutionResult> {
+    logger.info(`[Autopilot] Starting mode execution`);
+
+    try {
+      const { AutopilotMode } = await import('../modes/autopilot-mode.js');
+      const autopilotMode = new AutopilotMode(
+        new ModelRouter(),
+        costCalculator,
+        cacheManager
+      );
+
+      const modeResult = await autopilotMode.execute(query, complexity);
+
+      const duration = Date.now() - this.startTime;
+
+      return {
+        query,
+        result: modeResult.synthesizedResult,
+        model: 'autopilot (multi-agent)',
+        cost: modeResult.totalCost,
+        cachedHit: false,
+        duration,
+        modeDetails: {
+          mode: 'autopilot',
+          agents: modeResult.agentResults.map((r) => r.agentName),
+          totalCost: modeResult.totalCost,
+        }
+      } as any;
+    } catch (error) {
+      logger.error('[Autopilot] Mode execution failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Execute in Ultrapilot mode (5 parallel agents)
+   * Phase 7: 5 agents work in parallel
+   */
+  private async executeUltrapilot(
+    query: string,
+    complexity: 'simple' | 'medium' | 'complex' | 'explain'
+  ): Promise<ExecutionResult> {
+    logger.info(`[Ultrapilot] Starting mode execution`);
+
+    try {
+      const { UltrapilotMode } = await import('../modes/ultrapilot-mode.js');
+      const ultrapilotMode = new UltrapilotMode(
+        new ModelRouter(),
+        costCalculator,
+        cacheManager
+      );
+
+      const modeResult = await ultrapilotMode.execute(query, complexity);
+
+      const duration = Date.now() - this.startTime;
+
+      return {
+        query,
+        result: modeResult.synthesizedResult,
+        model: 'ultrapilot (5 parallel agents)',
+        cost: modeResult.totalCost,
+        cachedHit: false,
+        duration,
+        modeDetails: {
+          mode: 'ultrapilot',
+          agents: modeResult.agentResults.map((r) => r.agentName),
+          totalCost: modeResult.totalCost,
+        }
+      } as any;
+    } catch (error) {
+      logger.error('[Ultrapilot] Mode execution failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Execute in Swarm mode (8 dynamic agents with shared memory)
+   * Phase 7: 8 agents work in parallel with shared memory
+   */
+  private async executeSwarm(
+    query: string,
+    complexity: 'simple' | 'medium' | 'complex' | 'explain'
+  ): Promise<ExecutionResult> {
+    logger.info(`[Swarm] Starting mode execution`);
+
+    try {
+      const { SwarmMode } = await import('../modes/swarm-mode.js');
+      const swarmMode = new SwarmMode(
+        new ModelRouter(),
+        costCalculator,
+        cacheManager
+      );
+
+      const modeResult = await swarmMode.execute(query, complexity);
+
+      const duration = Date.now() - this.startTime;
+
+      return {
+        query,
+        result: modeResult.synthesizedResult,
+        model: 'swarm (8 agents with shared memory)',
+        cost: modeResult.totalCost,
+        cachedHit: false,
+        duration,
+        modeDetails: {
+          mode: 'swarm',
+          agents: modeResult.agentResults.map((r) => r.agentName),
+          totalCost: modeResult.totalCost,
+        }
+      } as any;
+    } catch (error) {
+      logger.error('[Swarm] Mode execution failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Execute in Pipeline mode (4-step sequential processing)
+   * Phase 7: Each step feeds output as context into next step
+   */
+  private async executePipeline(
+    query: string,
+    complexity: 'simple' | 'medium' | 'complex' | 'explain'
+  ): Promise<ExecutionResult> {
+    logger.info(`[Pipeline] Starting mode execution`);
+
+    try {
+      const { PipelineMode } = await import('../modes/pipeline-mode.js');
+      const pipelineMode = new PipelineMode(
+        new ModelRouter(),
+        costCalculator,
+        cacheManager
+      );
+
+      const modeResult = await pipelineMode.execute(query, complexity);
+
+      const duration = Date.now() - this.startTime;
+
+      return {
+        query,
+        result: modeResult.synthesizedResult,
+        model: 'pipeline (4-step sequential)',
+        cost: modeResult.totalCost,
+        cachedHit: false,
+        duration,
+        modeDetails: {
+          mode: 'pipeline',
+          agents: modeResult.agentResults.map((r) => r.agentName),
+          totalCost: modeResult.totalCost,
+        }
+      } as any;
+    } catch (error) {
+      logger.error('[Pipeline] Mode execution failed:', error);
+      throw error;
+    }
   }
 
   /**

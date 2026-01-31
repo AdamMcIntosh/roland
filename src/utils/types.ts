@@ -165,6 +165,12 @@ export interface CacheEntry {
   timestamp: number;
   ttl?: number;
   cost?: number;
+  metadata?: {
+    agent?: string;
+    mode?: string;
+    complexity?: string;
+    model?: string;
+  };
 }
 
 export interface CacheStats {
@@ -172,6 +178,8 @@ export interface CacheStats {
   misses: number;
   totalEntries: number;
   savedCost: number;
+  agentStats?: Map<string, { hits: number; misses: number; savedCost: number }>;
+  modeStats?: Map<string, { hits: number; misses: number; savedCost: number }>;
 }
 
 // ============================================================================

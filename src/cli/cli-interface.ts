@@ -25,6 +25,7 @@ import {
 import { agentExecutor, ExecutionRequest, ExecutionResult } from '../orchestrator/agent-executor.js';
 import { costCalculator } from '../orchestrator/cost-calculator.js';
 import { cacheManager } from '../orchestrator/cache-manager.js';
+import { PerformanceMonitor } from '../utils/performance-monitor.js';
 import { logger } from '../utils/logger.js';
 
 export class CliInterface {
@@ -80,6 +81,18 @@ export class CliInterface {
       .description('Show session statistics')
       .action(() => this.handleStats());
 
+    // Modes command
+    this.program
+      .command('modes')
+      .description('List available execution modes')
+      .action(() => this.handleModes());
+
+    // Performance command
+    this.program
+      .command('perf')
+      .description('Show performance dashboard')
+      .action(() => this.handlePerformance());
+
     // Default help
     this.program.on('-h,--help', () => {
       console.log(formatHelp());
@@ -105,26 +118,21 @@ export class CliInterface {
       // Parse query for keywords and mode
       const parsed = parseQuery(fullQuery);
 
-      if (parsed.mode !== 'ecomode' && parsed.mode !== 'default') {
-        console.log(
-          formatInfo(
-            `⚠️ Mode "${parsed.mode}" not yet available. Using Ecomode.`
-          )
-        );
-      }
-
-      // Show processing message
-      console.log(formatProcessing('ECOMODE', parsed.query));
+      // Show processing message with mode
+      const modeDisplay = parsed.mode === 'default' ? 'ECOMODE' : parsed.mode.toUpperCase();
+      console.log(formatProcessing(modeDisplay, parsed.query));
 
       // Start spinner
       this.spinner.start('Processing...');
 
-      // Build execution request
+      // Build execution request - map 'default' to 'ecomode'
+      const executionMode = parsed.mode === 'default' ? 'ecomode' : parsed.mode;
       const request: ExecutionRequest = {
         query: parsed.query,
         complexity: getComplexity(parsed.query),
         agentName: parsed.agent || 'default',
         useCache: options.cache !== false,
+        mode: executionMode as 'ecomode' | 'autopilot' | 'ultrapilot' | 'swarm' | 'pipeline',
       };
 
       // Execute
@@ -256,6 +264,64 @@ export class CliInterface {
       `  Cache Hit Rate: ${cacheStats.hitRate.toFixed(1)}% (${cacheStats.hits}/${cacheStats.hits + cacheStats.misses})`
     );
     console.log();
+  }
+
+  /**
+   * Handle modes command
+   */
+  private handleModes(): void {
+    const modes = [
+      {
+        name: 'ecomode',
+        keyword: 'eco:',
+        description: 'Single agent (cheapest) - for simple tasks',
+      },
+      {
+        name: 'autopilot',
+        keyword: 'autopilot:',
+        description: '3-agent sequential - executor + architect + qa-tester',
+      },
+      {
+        name: 'ultrapilot',
+        keyword: 'ulw:',
+        description: '5 parallel agents - architect, researcher, designer, writer, executor',
+      },
+      {
+        name: 'swarm',
+        keyword: 'swarm:',
+        description: '8 dynamic agents with shared memory - full agent team coordination',
+      },
+      {
+        name: 'pipeline',
+        keyword: 'pipeline:',
+        description: '4-step sequential pipeline - planning → execution → review → documentation',
+      },
+    ];
+
+    console.log(
+      '\n' +
+        '🚀 Available Execution Modes:\n' +
+        '─'.repeat(80) +
+        '\n'
+    );
+
+    modes.forEach((mode) => {
+      console.log(`  ${mode.name.padEnd(12)} (${mode.keyword.padEnd(12)})`);
+      console.log(`    ${mode.description}\n`);
+    });
+
+    console.log('Example usage:');
+    console.log('  > run "eco: refactor this code"');
+    console.log('  > run "autopilot: build a todo app"');
+    console.log('  > run "ulw: analyze this architecture"\n');
+  }
+
+  /**
+   * Handle performance command
+   */
+  private handlePerformance(): void {
+    const report = PerformanceMonitor.generateReport();
+    console.log(report);
   }
 
   /**
