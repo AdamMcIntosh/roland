@@ -5,7 +5,9 @@
  */
 
 import { RefactoringSkill, DocumentationSkill, TestingSkill } from './implementations/core-skills.js';
+import { SecurityScanSkill, PerformanceSkill } from './implementations/advanced-skills.js';
 import { skillRegistry } from './skill-framework.js';
+import { SkillExecutor, getSkillExecutor } from './skill-executor.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -20,6 +22,8 @@ export async function initializeSkills(): Promise<void> {
     skillRegistry.register(new RefactoringSkill());
     skillRegistry.register(new DocumentationSkill());
     skillRegistry.register(new TestingSkill());
+    skillRegistry.register(new SecurityScanSkill());
+    skillRegistry.register(new PerformanceSkill());
 
     logger.info(`Loaded ${skillRegistry.count()} skills`);
     logger.debug(`Skill registry: ${skillRegistry.getSkillNames().join(', ')}`);
@@ -29,4 +33,28 @@ export async function initializeSkills(): Promise<void> {
   }
 }
 
-export { skillRegistry };
+/**
+ * Register skills as MCP tools via a provided registerTool function
+ */
+export function registerSkillsAsTools(
+  registerTool: (
+    name: string,
+    description: string,
+    handler: (args: Record<string, unknown>) => Promise<unknown>,
+    inputSchema?: Record<string, unknown>
+  ) => void
+): void {
+  const executor = getSkillExecutor();
+  const tools = executor.getToolDefinitions();
+
+  tools.forEach((tool) => {
+    registerTool(
+      tool.name,
+      tool.description ?? '',
+      executor.getToolHandler(tool.name),
+      tool.inputSchema
+    );
+  });
+}
+
+export { skillRegistry, SkillExecutor };

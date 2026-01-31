@@ -39,6 +39,21 @@ export abstract class Skill {
         logger.warn(`Missing required parameter: ${param.name}`);
         return false;
       }
+
+      if (param.name in input && input[param.name] !== undefined) {
+        const value = input[param.name];
+        const type = param.type;
+
+        const isValidType =
+          (type === 'array' && Array.isArray(value)) ||
+          (type === 'object' && value !== null && typeof value === 'object' && !Array.isArray(value)) ||
+          (type !== 'array' && type !== 'object' && typeof value === type);
+
+        if (!isValidType) {
+          logger.warn(`Invalid type for ${param.name}: expected ${type}`);
+          return false;
+        }
+      }
     }
 
     return true;

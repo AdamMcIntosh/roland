@@ -8,7 +8,7 @@ import { McpServer } from './server/mcp-server.js';
 import { loadConfig } from './config/config-loader.js';
 import { logger } from './utils/logger.js';
 import { initializeAgents } from './agents/index.js';
-import { initializeSkills } from './skills/index.js';
+import { initializeSkills, registerSkillsAsTools } from './skills/index.js';
 
 async function main() {
   try {
@@ -26,6 +26,10 @@ async function main() {
 
     // Initialize MCP server
     const server = new McpServer(config);
+
+    // Register skills as MCP tools
+    registerSkillsAsTools(server.registerTool.bind(server));
+
     await server.start();
 
     logger.info('✅ MCP Server started successfully');

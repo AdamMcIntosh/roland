@@ -15,46 +15,6 @@ import { McpServerError, McpToolError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 
 // ============================================================================
-// Tool Definitions
-// ============================================================================
-
-const HEALTH_CHECK_TOOL: Tool = {
-  name: 'health_check',
-  description: 'Check the health status of the oh-my-goose MCP server',
-  inputSchema: {
-    type: 'object' as const,
-    properties: {},
-    required: [],
-  },
-};
-
-const GET_MODELS_TOOL: Tool = {
-  name: 'get_models',
-  description: 'Get available models for a given complexity level',
-  inputSchema: {
-    type: 'object' as const,
-    properties: {
-      complexity: {
-        type: 'string',
-        enum: ['simple', 'medium', 'complex', 'explain'],
-        description: 'Complexity level to get models for',
-      },
-    },
-    required: ['complexity'],
-  },
-};
-
-const GET_CONFIG_TOOL: Tool = {
-  name: 'get_config',
-  description: 'Get current routing configuration (safe, no API keys)',
-  inputSchema: {
-    type: 'object' as const,
-    properties: {},
-    required: [],
-  },
-};
-
-// ============================================================================
 // MCP Server Implementation
 // ============================================================================
 
@@ -62,10 +22,12 @@ export class McpServer {
   private server: Server;
   private config: AppConfig;
   private tools: Map<string, (args: Record<string, unknown>) => Promise<unknown>>;
+  private toolDefinitions: Map<string, Tool>;
 
   constructor(config: AppConfig) {
     this.config = config;
     this.tools = new Map();
+    this.toolDefinitions = new Map();
     this.registerTools();
 
     // Initialize MCP server with stdio transport
@@ -82,37 +44,70 @@ export class McpServer {
    */
   private registerTools(): void {
     // Health check tool
-    this.tools.set('health_check', async () => {
-      return {
-        status: 'healthy',
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
-      };
-    });
+    this.registerTool(
+      'health_check',
+      'Check the health status of the oh-my-goose MCP server',
+      async () => {
+        return {
+          status: 'healthy',
+          timestamp: new Date().toISOString(),
+          uptime: process.uptime(),
+        };
+      },
+      {
+        type: 'object',
+        properties: {},
+        required: [],
+      }
+    );
 
     // Get models tool
-    this.tools.set('get_models', async (args: Record<string, unknown>) => {
-      const complexity = args.complexity as string;
-      if (!['simple', 'medium', 'complex', 'explain'].includes(complexity)) {
-        throw new McpToolError('get_models', 'Invalid complexity level');
-      }
+    this.registerTool(
+      'get_models',
+      'Get available models for a given complexity level',
+      async (args: Record<string, unknown>) => {
+        const complexity = args.complexity as string;
+        if (!['simple', 'medium', 'complex', 'explain'].includes(complexity)) {
+          throw new McpToolError('get_models', 'Invalid complexity level');
+        }
 
-      const models = this.config.routing[complexity as keyof typeof this.config.routing];
-      return {
-        complexity,
-        models: models || [],
-        default: models?.[0] || null,
-      };
-    });
+        const models = this.config.routing[complexity as keyof typeof this.config.routing];
+        return {
+          complexity,
+          models: models || [],
+          default: models?.[0] || null,
+        };
+      },
+      {
+        type: 'object',
+        properties: {
+          complexity: {
+            type: 'string',
+            enum: ['simple', 'medium', 'complex', 'explain'],
+            description: 'Complexity level to get models for',
+          },
+        },
+        required: ['complexity'],
+      }
+    );
 
     // Get config tool (safe - no API keys)
-    this.tools.set('get_config', async () => {
-      return {
-        routing: this.config.routing,
-        mcp_defaults: this.config.goose.mcp_defaults,
-        configPath: this.config.configPath,
-      };
-    });
+    this.registerTool(
+      'get_config',
+      'Get current routing configuration (safe, no API keys)',
+      async () => {
+        return {
+          routing: this.config.routing,
+          mcp_defaults: this.config.goose.mcp_defaults,
+          configPath: this.config.configPath,
+        };
+      },
+      {
+        type: 'object',
+        properties: {},
+        required: [],
+      }
+    );
   }
 
   /**
@@ -123,7 +118,7 @@ export class McpServer {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       logger.debug('📋 ListTools request received');
       return {
-        tools: [HEALTH_CHECK_TOOL, GET_MODELS_TOOL, GET_CONFIG_TOOL],
+        tools: Array.from(this.toolDefinitions.values()),
       };
     });
 
@@ -216,6 +211,15 @@ export class McpServer {
     inputSchema?: Record<string, unknown>
   ): void {
     this.tools.set(name, handler);
+    this.toolDefinitions.set(name, {
+      name,
+      description,
+      inputSchema: (inputSchema as Tool['inputSchema']) || {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    });
     logger.debug(`✅ Registered tool: ${name}`);
   }
 

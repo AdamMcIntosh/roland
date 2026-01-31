@@ -16,6 +16,7 @@ export interface AgentConfig {
   provider: 'anthropic' | 'openai' | 'google' | 'xai';
   temperature: number;
   tools?: string[];
+  skills?: string[];
   max_tokens?: number;
   description?: string;
   system_prompt?: string;
@@ -40,8 +41,56 @@ export interface AgentExecutionContext {
   session_id: string;
   mode: 'ecomode' | 'autopilot' | 'ultrapilot' | 'swarm' | 'pipeline';
   parent_result?: string;
+  tools?: string[];
+  skills?: string[];
+  promptTemplate?: string;
   metadata?: Record<string, unknown>;
 }
+
+/**
+ * Goose session parameters derived from agent configuration
+ */
+export interface GooseSessionParams {
+  session_id: string;
+  agent_name: string;
+  provider: Agent['provider'];
+  model: string;
+  temperature: number;
+  max_tokens?: number;
+  system_prompt: string;
+  tools: string[];
+  skills: string[];
+}
+
+/**
+ * Prompt bundle passed to Goose
+ */
+export interface AgentPromptBundle {
+  system: string;
+  user: string;
+}
+
+/**
+ * Goose execution result for a single agent
+ */
+export interface GooseSessionResult {
+  output: string;
+  status?: 'success' | 'error' | 'partial';
+  error?: string;
+  tokens_used?: {
+    input: number;
+    output: number;
+  };
+  cost?: number;
+}
+
+/**
+ * Adapter interface for Goose session execution
+ */
+export type GooseSessionExecutor = (
+  params: GooseSessionParams,
+  prompt: AgentPromptBundle
+) => Promise<GooseSessionResult>;
 
 /**
  * Agent execution result
@@ -72,6 +121,7 @@ export const AgentConfigSchema = z.object({
   provider: z.enum(['anthropic', 'openai', 'google', 'xai']),
   temperature: z.number().min(0).max(2),
   tools: z.array(z.string()).optional(),
+  skills: z.array(z.string()).optional(),
   max_tokens: z.number().optional(),
   description: z.string().optional(),
   system_prompt: z.string().optional(),
