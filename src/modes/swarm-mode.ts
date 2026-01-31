@@ -24,7 +24,6 @@ import { CostCalculator } from '../orchestrator/cost-calculator.js';
 import { CacheManager } from '../orchestrator/cache-manager.js';
 import { agentLoader } from '../agents/index.js';
 import { logger } from '../utils/logger.js';
-import { ComplexityAnalyzer } from '../utils/complexity-analyzer.js';
 
 const SWARM_CONFIG: ModeConfig = {
   name: 'Swarm',
@@ -70,22 +69,28 @@ export class SwarmMode extends BaseMode {
     const startTime = Date.now();
 
     try {
-      // Analyze query complexity to determine optimal agent count
-      const analysis = ComplexityAnalyzer.analyze(query);
-      const normalizedComplexity = complexity === 'explain' ? 'complex' : complexity;
-      const selectedAgentNames = ComplexityAnalyzer.recommendAgentsForMode(
-        analysis.level,
-        'swarm'
-      );
+      // Swarm mode uses fixed 8-agent pool with shared memory
+      const swarmAgentNames = [
+        'architect',
+        'researcher',
+        'designer',
+        'writer',
+        'vision',
+        'critic',
+        'analyst',
+        'executor',
+      ];
+
+      const normalizedComplexity =
+        complexity === 'explain' ? 'complex' : complexity;
 
       logger.info(
-        `[Swarm] Starting mode execution with ${selectedAgentNames.length} agents (${analysis.level} complexity, score: ${analysis.score})`
+        `[Swarm] Starting swarm execution with ${swarmAgentNames.length} agents (${normalizedComplexity})`
       );
-      logger.debug(`[Swarm] Reasoning: ${analysis.reasoning.join(', ')}`);
 
-      // Load selected agents
+      // Load agents
       const agentMap = new Map<string, any>();
-      selectedAgentNames.forEach((agentName) => {
+      swarmAgentNames.forEach((agentName) => {
         const agent = agentLoader.getAgent(agentName);
         if (agent) {
           agentMap.set(agentName, agent);
@@ -96,7 +101,7 @@ export class SwarmMode extends BaseMode {
         throw new Error('[Swarm] No agents available');
       }
 
-      // Initialize shared memory
+      // Initialize shared memory for cross-agent communication
       const sharedMemory: SharedMemory = {
         query,
         complexity,
@@ -104,21 +109,29 @@ export class SwarmMode extends BaseMode {
         insights: new Map(),
       };
 
-      // Define agent specializations (filter to selected agents only)
-      const allAgentContexts: SwarmAgentContext[] = [
-        { agentName: 'architect', specialization: 'System design and architecture' },
-        { agentName: 'researcher', specialization: 'Research and investigation' },
-        { agentName: 'designer', specialization: 'UX/UI and visual design' },
+      // Define agent specializations
+      const agentContexts: SwarmAgentContext[] = [
+        {
+          agentName: 'architect',
+          specialization: 'System design and architecture',
+        },
+        {
+          agentName: 'researcher',
+          specialization: 'Research and investigation',
+        },
+        {
+          agentName: 'designer',
+          specialization: 'UX/UI and visual design',
+        },
         { agentName: 'writer', specialization: 'Documentation and communication' },
         { agentName: 'vision', specialization: 'Strategic vision and planning' },
-        { agentName: 'critic', specialization: 'Quality assurance and critique' },
+        {
+          agentName: 'critic',
+          specialization: 'Quality assurance and critique',
+        },
         { agentName: 'analyst', specialization: 'Data analysis and metrics' },
         { agentName: 'executor', specialization: 'Implementation and execution' },
       ];
-
-      const agentContexts = allAgentContexts.filter(ctx =>
-        selectedAgentNames.includes(ctx.agentName)
-      );
 
       // Execute selected agents in parallel with shared memory
       logger.debug(`[Swarm] Launching ${agentContexts.length} parallel tasks with shared memory`);

@@ -20,7 +20,6 @@ import { CostCalculator } from '../orchestrator/cost-calculator.js';
 import { CacheManager } from '../orchestrator/cache-manager.js';
 import { agentLoader } from '../agents/index.js';
 import { logger } from '../utils/logger.js';
-import { ComplexityAnalyzer } from '../utils/complexity-analyzer.js';
 
 const ULTRAPILOT_CONFIG: ModeConfig = {
   name: 'Ultrapilot',
@@ -50,53 +49,40 @@ export class UltrapilotMode extends BaseMode {
     const startTime = Date.now();
 
     try {
-      // Analyze query complexity to determine optimal agent count
-      const analysis = ComplexityAnalyzer.analyze(query);
       const normalizedComplexity = complexity === 'explain' ? 'complex' : complexity;
-      const selectedAgentNames = ComplexityAnalyzer.recommendAgentsForMode(
-        analysis.level,
-        'ultrapilot'
-      );
 
       logger.info(
-        `[Ultrapilot] Starting mode execution with ${selectedAgentNames.length} agents (${analysis.level} complexity, score: ${analysis.score})`
+        `[Ultrapilot] Starting 5-agent parallel execution for: "${query.substring(0, 50)}..."`
       );
-      logger.debug(`[Ultrapilot] Reasoning: ${analysis.reasoning.join(', ')}`);
 
-      // Load selected agents
+      // Fixed 5 agents for Ultrapilot (no dynamic selection)
+      const agentNames = ['architect', 'researcher', 'designer', 'writer', 'executor'];
       const agentMap = new Map<string, any>();
-      selectedAgentNames.forEach((agentName) => {
+      
+      for (const agentName of agentNames) {
         const agent = agentLoader.getAgent(agentName);
         if (agent) {
           agentMap.set(agentName, agent);
         }
-      });
+      }
 
       if (agentMap.size === 0) {
         throw new Error('[Ultrapilot] No agents available');
       }
 
-      // Define task contexts (filter to selected agents only)
-      const allTaskContexts: ParallelTaskContext[] = [
+      // Define task contexts
+      const taskContexts = [
         { agentName: 'architect', context: 'System architecture and design' },
         { agentName: 'researcher', context: 'Research and analysis' },
         { agentName: 'designer', context: 'User experience and interface design' },
         { agentName: 'writer', context: 'Documentation and explanation' },
         { agentName: 'executor', context: 'Implementation and execution' },
-      ];
+      ].filter(ctx => agentMap.has(ctx.agentName));
 
-      const taskContexts = allTaskContexts.filter(ctx =>
-        selectedAgentNames.includes(ctx.agentName)
-      );
-
-      // Execute selected agents in parallel
+      // Execute all agents in parallel
       logger.debug(`[Ultrapilot] Launching ${taskContexts.length} parallel tasks`);
       const parallelPromises = taskContexts.map((ctx) => {
-        const agent = agentMap.get(ctx.agentName);
-        if (!agent) {
-          throw new Error(`Agent ${ctx.agentName} not loaded`);
-        }
-        // Use BaseMode's executeTaskWithAPI for consistent caching
+        const agent = agentMap.get(ctx.agentName)!;
         const taskInput = this.specializeQueryForAgent(query, agent, { context: ctx.context });
         return this.executeTaskWithAPI(agent, taskInput, normalizedComplexity);
       });
