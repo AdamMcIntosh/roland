@@ -73,7 +73,11 @@ export class CacheManager {
         }
 
         if (parsed.stats) {
-          this.stats = parsed.stats;
+          this.stats = {
+            ...parsed.stats,
+            agentStats: new Map(Object.entries(parsed.stats.agentStats || {})),
+            modeStats: new Map(Object.entries(parsed.stats.modeStats || {})),
+          };
         }
 
         logger.debug(`Loaded ${this.cache.size} cached entries`);
@@ -222,10 +226,8 @@ export class CacheManager {
     this.stats.totalEntries = this.cache.size;
     logger.debug(`[Cache.set] Cached result: ${key} (cost: $${cost.toFixed(6)}, model: ${model})`);
 
-    // Periodically save to disk
-    if (this.cache.size % 10 === 0) {
-      this.saveCache();
-    }
+    // Save to disk immediately (changed from periodic to ensure cache persistence)
+    this.saveCache();
   }
 
   /**

@@ -7,6 +7,7 @@
 
 import { getConfig } from '../config/config-loader.js';
 import { logger } from '../utils/logger.js';
+import { BudgetManager } from '../utils/budget-manager.js';
 import {
   ApiError,
   ApiAuthenticationError,
@@ -130,6 +131,10 @@ export class LLMClient {
     const attemptNumber = this.DEFAULT_RETRIES - retries + 1;
 
     try {
+      // Check budget before making API call
+      const estimatedCost = this.estimateCost(model, prompt, maxTokens);
+      BudgetManager.checkBudget(estimatedCost);
+
       logger.debug(`[LLM] Calling ${provider} model: ${model} (attempt ${attemptNumber})`);
 
       const response = await this.callProvider(
@@ -141,6 +146,10 @@ export class LLMClient {
         temperature,
         maxTokens
       );
+
+      // Record actual spending
+      const actualCost = this.calculateActualCost(model, response.totalTokens);
+      BudgetManager.recordSpending(actualCost);
 
       logger.debug(
         `[LLM] Success: ${response.totalTokens} tokens used (${response.inputTokens} input, ${response.outputTokens} output)`
@@ -445,6 +454,9 @@ export class LLMClient {
    */
   private static async handleAPIError(response: Response, provider: string): Promise<never> {
     const errorData = (await response.json().catch(() => ({}))) as AnyRecord;
+    
+    // Debug: log full error response
+    logger.debug(`[LLM] API Error Details: ${JSON.stringify(errorData)}`);
 
     if (response.status === 401 || response.status === 403) {
       throw new ApiAuthenticationError(
@@ -459,7 +471,7 @@ export class LLMClient {
     }
 
     throw new ApiError(
-      `${provider} API error (${response.status}): ${(errorData.message as string) || response.statusText}`
+      `${provider} API error (${response.status}): ${(errorData.message as string) || (errorData.error as string) || response.statusText}`
     );
   }
 
@@ -472,5 +484,47 @@ export class LLMClient {
     if (model.startsWith('gpt-')) return 'openai';
     if (model.startsWith('gemini-')) return 'google';
     throw new ApiError(`Unknown provider for model: ${model}`);
+  }
+
+  /**
+   * Estimate cost before API call (rough approximation)
+   */
+  private static estimateCost(model: string, prompt: string, maxTokens: number): number {
+    // Rough token estimation: ~4 chars per token
+    const estimatedInputTokens = Math.ceil(prompt.length / 4);
+    const estimatedTotalTokens = estimatedInputTokens + maxTokens;
+
+    // Cost per 1k tokens (very rough estimates)
+    const costPer1k: Record<string, number> = {
+      'grok-3-mini': 0.0005,
+      'grok-3': 0.002,
+      'claude-3-5-sonnet-20241022': 0.003,
+      'claude-3-haiku-20240307': 0.00025,
+      'gpt-4o': 0.0025,
+      'gpt-4o-mini': 0.00015,
+      'gemini-1.5-flash': 0.00007,
+      'gemini-1.5-pro': 0.00125,
+    };
+
+    const cost = (costPer1k[model] || 0.001) * (estimatedTotalTokens / 1000);
+    return cost;
+  }
+
+  /**
+   * Calculate actual cost based on token usage
+   */
+  private static calculateActualCost(model: string, totalTokens: number): number {
+    const costPer1k: Record<string, number> = {
+      'grok-3-mini': 0.0005,
+      'grok-3': 0.002,
+      'claude-3-5-sonnet-20241022': 0.003,
+      'claude-3-haiku-20240307': 0.00025,
+      'gpt-4o': 0.0025,
+      'gpt-4o-mini': 0.00015,
+      'gemini-1.5-flash': 0.00007,
+      'gemini-1.5-pro': 0.00125,
+    };
+
+    return (costPer1k[model] || 0.001) * (totalTokens / 1000);
   }
 }

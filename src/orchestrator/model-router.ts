@@ -14,13 +14,13 @@ import { RoutingError } from '../utils/errors.js';
  * Used to estimate cheapest option per complexity level
  */
 export const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  'grok-4-1-fast-reasoning': { input: 0.05, output: 0.15 },
+  'grok-3-mini': { input: 0.5, output: 1.5 },
+  'grok-3': { input: 2, output: 10 },
   'gemini-2.5-flash': { input: 0.075, output: 0.3 },
   'gpt-4o-mini': { input: 0.15, output: 0.6 },
   'claude-4-sonnet': { input: 3, output: 15 },
   'gpt-4o': { input: 5, output: 15 },
   'gemini-2.5-pro': { input: 2.5, output: 10 },
-  'grok-4.1-full': { input: 1.5, output: 5 },
   'claude-4.5-sonnet': { input: 3, output: 15 },
 };
 

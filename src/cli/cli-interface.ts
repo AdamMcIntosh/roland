@@ -26,6 +26,7 @@ import { agentExecutor, ExecutionRequest, ExecutionResult } from '../orchestrato
 import { costCalculator } from '../orchestrator/cost-calculator.js';
 import { cacheManager } from '../orchestrator/cache-manager.js';
 import { PerformanceMonitor } from '../utils/performance-monitor.js';
+import { BudgetManager } from '../utils/budget-manager.js';
 import { logger } from '../utils/logger.js';
 
 export class CliInterface {
@@ -92,6 +93,16 @@ export class CliInterface {
       .command('perf')
       .description('Show performance dashboard')
       .action(() => this.handlePerformance());
+
+    // Budget command
+    this.program
+      .command('budget')
+      .description('Manage API cost budget')
+      .option('-s, --set <amount>', 'Set budget limit (e.g., 5.00)')
+      .option('-r, --reset', 'Reset current spending to zero')
+      .option('-e, --enable', 'Enable budget enforcement')
+      .option('-d, --disable', 'Disable budget enforcement')
+      .action((options) => this.handleBudget(options));
 
     // Default help
     this.program.on('-h,--help', () => {
@@ -322,6 +333,56 @@ export class CliInterface {
   private handlePerformance(): void {
     const report = PerformanceMonitor.generateReport();
     console.log(report);
+  }
+
+  /**
+   * Handle budget command
+   */
+  private handleBudget(options: any): void {
+    // No options - show status
+    if (!options.set && !options.reset && !options.enable && !options.disable) {
+      console.log('\n💰 API Cost Budget');
+      console.log('─'.repeat(50));
+      console.log(BudgetManager.formatStatus());
+      console.log('\nCommands:');
+      console.log('  --set <amount>   Set budget limit');
+      console.log('  --reset          Reset spending to $0');
+      console.log('  --enable         Enable enforcement');
+      console.log('  --disable        Disable enforcement\n');
+      return;
+    }
+
+    // Set budget
+    if (options.set) {
+      const amount = parseFloat(options.set);
+      if (isNaN(amount) || amount <= 0) {
+        console.log(formatError('Invalid budget amount'));
+        return;
+      }
+      BudgetManager.setMaxBudget(amount);
+      console.log(formatSuccess(`Budget set to $${amount.toFixed(2)}`));
+    }
+
+    // Reset spending
+    if (options.reset) {
+      BudgetManager.reset();
+      console.log(formatSuccess('Budget spending reset to $0.00'));
+    }
+
+    // Enable enforcement
+    if (options.enable) {
+      BudgetManager.enable();
+      console.log(formatSuccess('Budget enforcement enabled'));
+    }
+
+    // Disable enforcement
+    if (options.disable) {
+      BudgetManager.disable();
+      console.log(formatSuccess('Budget enforcement disabled'));
+    }
+
+    // Show updated status
+    console.log('\n' + BudgetManager.formatStatus() + '\n');
   }
 
   /**
