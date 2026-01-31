@@ -1,0 +1,136 @@
+# Web App Full Stack Recipe
+# Complete workflow for building a full-stack web application
+# Covers frontend, backend, database, and deployment considerations
+
+name: WebAppFullStack
+recipe: web-app-full-stack
+version: 1.0.0
+author: oh-my-goose
+description: |
+  End-to-end workflow for designing and implementing a full-stack web application.
+  Covers architecture, frontend, backend, database, authentication, and deployment.
+
+tags:
+  - web
+  - full-stack
+  - frontend
+  - backend
+  - database
+
+agents:
+  - architect
+  - designer
+  - executor
+  - critic
+  - writer
+
+modes:
+  - pipeline
+  - swarm
+
+input_variables:
+  - app_name
+  - app_description
+  - target_users
+  - key_features
+
+variables:
+  use_authentication: true
+  use_database: true
+
+steps:
+  - name: ArchitectureDesign
+    description: Design application architecture
+    agent: architect
+    mode: ecomode
+    input: |
+      App: {{app_name}}
+      Description: {{app_description}}
+      Features: {{key_features}}
+      
+      Design a comprehensive architecture including:
+      1. System design and components
+      2. Frontend framework recommendation
+      3. Backend API design
+      4. Database schema
+      5. Authentication approach
+      6. Deployment strategy
+    output_to: architecture
+    timeout_seconds: 300
+
+  - name: UIDesign
+    description: Create UI/UX design
+    agent: designer
+    mode: ecomode
+    input: |
+      Architecture: {{architecture}}
+      App: {{app_name}}
+      Target Users: {{target_users}}
+      
+      Create UI/UX design including:
+      1. User flows
+      2. Wireframes
+      3. Component library
+      4. Styling approach
+    output_to: ui_design
+    timeout_seconds: 300
+
+  - name: Implementation
+    description: Implement full-stack application
+    agent: executor
+    mode: swarm
+    input: |
+      Architecture: {{architecture}}
+      UI Design: {{ui_design}}
+      
+      Implement the full-stack application including:
+      1. Frontend implementation
+      2. Backend API
+      3. Database setup
+      4. Authentication
+    output_to: implementation
+    timeout_seconds: 900
+
+  - name: QualityAssurance
+    description: Comprehensive QA review
+    agent: critic
+    mode: swarm
+    input: |
+      Implementation: {{implementation}}
+      Architecture: {{architecture}}
+      
+      Perform QA review covering:
+      1. Functionality testing
+      2. Security review
+      3. Performance analysis
+      4. Database optimization
+      5. API documentation
+    output_to: qa_report
+    timeout_seconds: 600
+
+  - name: Deployment
+    description: Create deployment guide
+    agent: writer
+    mode: ecomode
+    input: |
+      Implementation: {{implementation}}
+      QA Report: {{qa_report}}
+      
+      Create deployment documentation:
+      1. Setup instructions
+      2. Environment configuration
+      3. Database migration steps
+      4. Deployment procedures
+      5. Monitoring setup
+    output_to: deployment_guide
+    timeout_seconds: 300
+
+outputs:
+  system_architecture: architecture
+  ui_design: ui_design
+  implementation_code: implementation
+  qa_report: qa_report
+  deployment_guide: deployment_guide
+
+max_total_cost: 5.0
+max_duration_seconds: 3600

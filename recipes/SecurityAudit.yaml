@@ -1,0 +1,110 @@
+# Security Audit Recipe
+# Complete security assessment and hardening workflow
+
+name: SecurityAudit
+recipe: security-audit
+version: 1.0.0
+author: oh-my-goose
+description: |
+  Comprehensive security audit workflow covering threat modeling, code review,
+  vulnerability assessment, and hardening recommendations.
+
+tags:
+  - security
+  - audit
+  - vulnerability
+  - compliance
+
+agents:
+  - architect
+  - critic
+  - executor
+  - writer
+
+modes:
+  - swarm
+
+input_variables:
+  - system_description
+  - code_to_audit
+  - compliance_requirements
+
+steps:
+  - name: ThreatModeling
+    description: Identify threats and attack vectors
+    agent: architect
+    mode: ecomode
+    input: |
+      System: {{system_description}}
+      
+      Perform threat modeling:
+      1. Asset identification
+      2. Threat identification
+      3. Attack vectors analysis
+      4. Risk assessment
+      5. Security controls needed
+    output_to: threat_model
+    timeout_seconds: 300
+
+  - name: CodeSecurityReview
+    description: Review code for security issues
+    agent: critic
+    mode: swarm
+    input: |
+      Code: {{code_to_audit}}
+      Threat Model: {{threat_model}}
+      
+      Perform security code review:
+      1. Authentication vulnerabilities
+      2. Authorization issues
+      3. Input validation flaws
+      4. Injection attacks
+      5. Cryptographic weaknesses
+      6. Session management
+      7. Dependency vulnerabilities
+    output_to: security_findings
+    timeout_seconds: 600
+
+  - name: VulnerabilityAssessment
+    description: Assess vulnerabilities and risk
+    agent: executor
+    mode: swarm
+    input: |
+      Security Findings: {{security_findings}}
+      Threat Model: {{threat_model}}
+      
+      Assess vulnerabilities:
+      1. Severity classification
+      2. Exploitability analysis
+      3. Impact assessment
+      4. Remediation priority
+      5. Test cases for verification
+    output_to: vulnerability_assessment
+    timeout_seconds: 500
+
+  - name: RemediationPlan
+    description: Create remediation and hardening plan
+    agent: writer
+    mode: ecomode
+    input: |
+      Vulnerability Assessment: {{vulnerability_assessment}}
+      Compliance Requirements: {{compliance_requirements}}
+      
+      Create remediation plan:
+      1. Critical fixes (immediate)
+      2. Major improvements (short-term)
+      3. Enhancement recommendations (long-term)
+      4. Compliance alignment
+      5. Security testing procedures
+      6. Monitoring and logging setup
+    output_to: remediation_plan
+    timeout_seconds: 300
+
+outputs:
+  threat_model: threat_model
+  security_findings: security_findings
+  vulnerability_assessment: vulnerability_assessment
+  remediation_plan: remediation_plan
+
+max_total_cost: 5.0
+max_duration_seconds: 2400

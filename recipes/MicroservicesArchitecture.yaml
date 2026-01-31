@@ -1,0 +1,113 @@
+# Microservices Architecture Recipe
+# Complete workflow for designing a scalable microservices system
+
+name: MicroservicesArchitecture
+recipe: microservices
+version: 1.0.0
+author: oh-my-goose
+description: |
+  Comprehensive workflow for designing, implementing, and deploying a microservices architecture.
+  Covers service decomposition, inter-service communication, and deployment strategy.
+
+tags:
+  - microservices
+  - architecture
+  - distributed
+  - scalability
+
+agents:
+  - architect
+  - executor
+  - critic
+  - writer
+
+modes:
+  - pipeline
+
+input_variables:
+  - system_name
+  - business_domain
+  - scale_requirements
+
+steps:
+  - name: ServiceDecomposition
+    description: Decompose system into services
+    agent: architect
+    mode: ecomode
+    input: |
+      System: {{system_name}}
+      Domain: {{business_domain}}
+      Scale: {{scale_requirements}}
+      
+      Design microservices architecture:
+      1. Bounded contexts and services
+      2. Service responsibilities
+      3. Communication patterns (sync/async)
+      4. Data consistency strategy
+      5. Fault tolerance approach
+      6. Monitoring and logging
+      7. Deployment topology
+    output_to: service_design
+    timeout_seconds: 300
+
+  - name: ServiceImplementation
+    description: Implement individual services
+    agent: executor
+    mode: swarm
+    input: |
+      Service Design: {{service_design}}
+      
+      Implement services:
+      1. Core service logic
+      2. API endpoints
+      3. Database per service
+      4. Event handling
+      5. Circuit breakers
+      6. Health checks
+    output_to: services_code
+    timeout_seconds: 900
+
+  - name: IntegrationTesting
+    description: Test service integration
+    agent: critic
+    mode: swarm
+    input: |
+      Services Code: {{services_code}}
+      Service Design: {{service_design}}
+      
+      Test integration:
+      1. Service-to-service communication
+      2. Consistency and synchronization
+      3. Failure scenarios
+      4. Performance under load
+      5. Security between services
+    output_to: integration_tests
+    timeout_seconds: 600
+
+  - name: DeploymentStrategy
+    description: Create deployment guide
+    agent: writer
+    mode: ecomode
+    input: |
+      Services Code: {{services_code}}
+      Integration Tests: {{integration_tests}}
+      
+      Document deployment:
+      1. Container strategy (Docker)
+      2. Orchestration (Kubernetes)
+      3. CI/CD pipeline
+      4. Service discovery
+      5. Load balancing
+      6. Monitoring and alerts
+      7. Rollout procedures
+    output_to: deployment_guide
+    timeout_seconds: 300
+
+outputs:
+  architecture_design: service_design
+  service_implementations: services_code
+  integration_tests: integration_tests
+  deployment_documentation: deployment_guide
+
+max_total_cost: 8.0
+max_duration_seconds: 3600

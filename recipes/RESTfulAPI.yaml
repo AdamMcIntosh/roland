@@ -1,0 +1,115 @@
+# RESTful API Recipe
+# Workflow for designing and building a production-grade REST API
+
+name: RESTfulAPI
+recipe: restful-api
+version: 1.0.0
+author: oh-my-goose
+description: |
+  Complete workflow for designing, implementing, and documenting a production-grade REST API.
+  Includes architecture, implementation, testing, and comprehensive documentation.
+
+tags:
+  - api
+  - rest
+  - backend
+  - microservices
+
+agents:
+  - architect
+  - executor
+  - critic
+  - writer
+
+modes:
+  - pipeline
+
+input_variables:
+  - api_name
+  - api_purpose
+  - endpoints
+
+steps:
+  - name: APIDesign
+    description: Design RESTful API
+    agent: architect
+    mode: ecomode
+    input: |
+      API Name: {{api_name}}
+      Purpose: {{api_purpose}}
+      Endpoints: {{endpoints}}
+      
+      Design a production-grade API including:
+      1. RESTful resource design
+      2. Endpoint specifications
+      3. Request/response formats
+      4. Error handling strategy
+      5. Rate limiting approach
+      6. Security considerations
+      7. Versioning strategy
+    output_to: api_design
+    timeout_seconds: 300
+
+  - name: APIImplementation
+    description: Implement REST API
+    agent: executor
+    mode: autopilot
+    input: |
+      API Design: {{api_design}}
+      
+      Implement the API:
+      1. Route handlers
+      2. Request validation
+      3. Response formatting
+      4. Error handling
+      5. Middleware setup
+      6. Authentication/Authorization
+    output_to: api_code
+    timeout_seconds: 600
+
+  - name: APITesting
+    description: Create comprehensive API tests
+    agent: critic
+    mode: ecomode
+    input: |
+      API Code: {{api_code}}
+      API Design: {{api_design}}
+      
+      Create and document tests:
+      1. Unit tests
+      2. Integration tests
+      3. Performance tests
+      4. Security tests
+      5. Edge case coverage
+    output_to: test_suite
+    timeout_seconds: 400
+
+  - name: APIDocumentation
+    description: Create API documentation
+    agent: writer
+    mode: ecomode
+    input: |
+      API Code: {{api_code}}
+      API Design: {{api_design}}
+      Test Suite: {{test_suite}}
+      
+      Create comprehensive documentation:
+      1. API overview
+      2. Authentication guide
+      3. Endpoint reference
+      4. Request/response examples
+      5. Error codes reference
+      6. Rate limits documentation
+      7. SDKs and client libraries
+      8. Best practices
+    output_to: api_documentation
+    timeout_seconds: 300
+
+outputs:
+  api_specification: api_design
+  implementation: api_code
+  test_suite: test_suite
+  documentation: api_documentation
+
+max_total_cost: 3.0
+max_duration_seconds: 2400
