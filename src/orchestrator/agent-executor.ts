@@ -101,13 +101,20 @@ export class AgentExecutor {
       }
     }
 
-    // Step 2: Select cheapest model
+    // Step 2: Select cheapest model with fallback
     const routingContext: RoutingContext = { 
       queryLength: query.length, 
       complexity: (complexity as 'simple' | 'medium' | 'complex') || 'simple'
     };
-    const modelSelection = ModelRouter.selectCheapestModel(routingContext);
+
+    const { selected: modelSelection, fallbacks } = ModelRouter.selectModelWithFallback(
+      routingContext,
+      { requireApiKey: true }
+    );
     logger.info(`[Router] Selected: ${modelSelection.model}`);
+    if (fallbacks.length > 0) {
+      logger.debug(`[Router] Fallbacks: ${fallbacks.map(f => f.model).join(', ')}`);
+    }
 
     // Step 3: Validate API key
     const config = await loadConfig();

@@ -67,6 +67,57 @@ export class ModelRouter {
   }
 
   /**
+   * Select a model with fallback options
+   * Prefers models that have configured API keys when required
+   */
+  static selectModelWithFallback(
+    context: RoutingContext,
+    options?: { requireApiKey?: boolean }
+  ): { selected: ModelSelection; fallbacks: ModelSelection[] } {
+    const config = getConfig();
+    if (!config) {
+      throw new RoutingError('Configuration not loaded. Call loadConfig() first.');
+    }
+
+    const complexity = context.complexity || 'simple';
+    const models = config.routing[complexity as keyof typeof config.routing];
+
+    if (!models || models.length === 0) {
+      throw new RoutingError(`No models configured for complexity level: ${complexity}`);
+    }
+
+    const selections = models.map((model) => {
+      const pricing = MODEL_PRICING[model];
+      if (!pricing) {
+        throw new RoutingError(`Unknown model pricing for: ${model}`);
+      }
+      return {
+        model,
+        provider: this.getProvider(model),
+        costPer1kTokens: (pricing.input + pricing.output) / 1000,
+      } as ModelSelection;
+    });
+
+    const requireApiKey = options?.requireApiKey ?? false;
+
+    let selected: ModelSelection | undefined;
+    if (requireApiKey) {
+      selected = selections.find((s) => ConfigLoader.hasApiKey(config, s.provider));
+      if (!selected) {
+        throw new RoutingError(
+          `No API keys configured for any models in complexity: ${complexity}`
+        );
+      }
+    } else {
+      selected = selections[0];
+    }
+
+    const fallbacks = selections.filter((s) => s.model !== selected!.model);
+
+    return { selected, fallbacks };
+  }
+
+  /**
    * Get all available models for a complexity level
    * Useful for fallback selection
    * 
@@ -103,6 +154,40 @@ export class ModelRouter {
     const outputCost = (outputTokens / 1_000_000) * pricing.output;
 
     return inputCost + outputCost;
+  }
+
+  /**
+   * Generate a basic cost report for a model and token estimate
+   */
+  static generateCostReport(
+    model: string,
+    inputTokens: number,
+    outputTokens: number
+  ): {
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+    inputCost: number;
+    outputCost: number;
+    totalCost: number;
+  } {
+    const pricing = MODEL_PRICING[model];
+    if (!pricing) {
+      throw new RoutingError(`Unknown model: ${model}`);
+    }
+
+    const inputCost = (inputTokens / 1_000_000) * pricing.input;
+    const outputCost = (outputTokens / 1_000_000) * pricing.output;
+    const totalCost = inputCost + outputCost;
+
+    return {
+      model,
+      inputTokens,
+      outputTokens,
+      inputCost,
+      outputCost,
+      totalCost,
+    };
   }
 
   /**
