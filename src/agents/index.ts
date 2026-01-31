@@ -1,9 +1,14 @@
 /**
- * Agent Initialization - Bootstrap agent system
- * 
- * Loads all agent configurations on application startup
+ * Agent System
+ * Manages agent loading, validation, and execution
  */
 
+// Phase 2 New Modules
+export * from './types';
+export { AgentManager, getAgentManager } from './agent-manager';
+export { AgentExecutor, getAgentExecutor } from './agent-executor';
+
+// Legacy modules
 import { agentLoader } from './agent-loader.js';
 import { logger } from '../utils/logger.js';
 
