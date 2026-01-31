@@ -1,13 +1,15 @@
 /**
- * Model Router - Ecomode Simple Model Selection
+ * Model Router - Enhanced Model Selection with Complexity Classification
  * 
- * MVP Version: Always selects the cheapest model for a given complexity level
- * Routes queries to the most cost-effective LLM based on task complexity
+ * Phase 4 Enhanced: Intelligently routes queries based on complexity analysis
+ * Supports: complexity classification, provider abstraction, advanced fallback
  */
 
 import { getConfig, ConfigLoader } from '../config/config-loader.js';
 import { ModelSelection, RoutingContext } from '../utils/types.js';
 import { RoutingError } from '../utils/errors.js';
+import { ComplexityClassifier } from './complexity-classifier.js';
+import { ProviderAbstraction, LLMProvider } from './provider-abstraction.js';
 
 /**
  * Model pricing (input/output tokens per million)
@@ -25,6 +27,178 @@ export const MODEL_PRICING: Record<string, { input: number; output: number }> = 
 };
 
 export class ModelRouter {
+  /**
+   * Analyze query complexity and suggest model (Phase 4 Enhanced)
+   * 
+   * @param query - Raw query string
+   * @returns Complexity analysis with suggested model
+   */
+  static analyzeQueryComplexity(query: string) {
+    const analysis = ComplexityClassifier.getDetailedAnalysis(query);
+    return {
+      complexity: analysis.complexity,
+      score: analysis.score,
+      tokenEstimate: analysis.tokenEstimate,
+      suggestedModel: analysis.suggestedModel,
+      factors: analysis.factors,
+    };
+  }
+
+  /**
+   * Route query based on automatic complexity detection (Phase 4 Enhanced)
+   * 
+   * @param query - Query to analyze
+   * @param options - Routing options
+   * @returns Selected model with fallbacks
+   */
+  static routeByComplexity(
+    query: string,
+    options?: { requireApiKey?: boolean; preferredProvider?: LLMProvider }
+  ): { selected: ModelSelection; fallbacks: ModelSelection[]; analysis: ReturnType<typeof ComplexityClassifier.getDetailedAnalysis> } {
+    // Analyze query complexity
+    const analysis = ComplexityClassifier.getDetailedAnalysis(query);
+
+    // Route based on detected complexity
+    const context: RoutingContext = {
+      queryLength: query.length,
+      complexity: analysis.complexity,
+    };
+
+    const routing = this.selectModelWithFallback(context, options);
+
+    return {
+      ...routing,
+      analysis,
+    };
+  }
+
+  /**
+   * Select model from a specific provider (Phase 4 Enhanced)
+   * 
+   * @param provider - Provider to select from
+   * @param complexity - Complexity level
+   * @returns Selected model info
+   */
+  static selectFromProvider(
+    provider: LLMProvider,
+    complexity: 'simple' | 'medium' | 'complex'
+  ): ModelSelection {
+    const models = ProviderAbstraction.getModelsForProvider(provider);
+    if (models.length === 0) {
+      throw new RoutingError(`No models available for provider: ${provider}`);
+    }
+
+    // Prefer the first model from the provider
+    const model = models[0];
+
+    return {
+      model,
+      provider,
+      costPer1kTokens: ProviderAbstraction.estimateCost(model, 1000, 1000) / 1000,
+    };
+  }
+
+  /**
+   * Compare multiple models for a query (Phase 4 Enhanced)
+   * Useful for showing cost/performance tradeoffs
+   */
+  static compareModels(
+    query: string,
+    models: string[]
+  ): Array<{
+    model: string;
+    provider: LLMProvider;
+    estimatedCost: number;
+    supportsStreaming: boolean;
+    supportsTools: boolean;
+  }> {
+    const analysis = ComplexityClassifier.getDetailedAnalysis(query);
+    const tokens = analysis.tokenEstimate;
+
+    return models.map((model) => {
+      const provider = ProviderAbstraction.getProvider(model);
+      const cost = ProviderAbstraction.estimateCost(model, tokens, tokens * 2); // Assume 2x output
+
+      return {
+        model,
+        provider,
+        estimatedCost: cost,
+        supportsStreaming: ProviderAbstraction.supportsFeature(
+          provider,
+          'streaming'
+        ),
+        supportsTools: ProviderAbstraction.supportsFeature(provider, 'tools'),
+      };
+    });
+  }
+
+  /**
+   * Find best model for specific requirements (Phase 4 Enhanced)
+   */
+  static findBestModelForUseCase(options: {
+    query?: string;
+    needsStreaming?: boolean;
+    needsTools?: boolean;
+    needsVision?: boolean;
+    maxCostPerQuery?: number;
+    preferredProvider?: LLMProvider;
+  }): ModelSelection {
+    let candidates: string[] = [];
+
+    if (options.query) {
+      const analysis = ComplexityClassifier.getDetailedAnalysis(options.query);
+      const routingContext: RoutingContext = {
+        queryLength: options.query.length,
+        complexity: analysis.complexity,
+      };
+      const config = getConfig();
+      if (config) {
+        candidates = config.routing[analysis.complexity] || [];
+      }
+    } else {
+      candidates = ProviderAbstraction.getSupportedModels();
+    }
+
+    // Filter by feature requirements
+    for (const model of candidates) {
+      const provider = ProviderAbstraction.getProvider(model);
+
+      if (
+        options.needsStreaming &&
+        !ProviderAbstraction.supportsFeature(provider, 'streaming')
+      ) {
+        continue;
+      }
+      if (
+        options.needsTools &&
+        !ProviderAbstraction.supportsFeature(provider, 'tools')
+      ) {
+        continue;
+      }
+      if (
+        options.needsVision &&
+        !ProviderAbstraction.supportsFeature(provider, 'vision')
+      ) {
+        continue;
+      }
+      if (
+        options.preferredProvider &&
+        provider !== options.preferredProvider
+      ) {
+        continue;
+      }
+
+      return {
+        model,
+        provider,
+        costPer1kTokens:
+          ProviderAbstraction.estimateCost(model, 1000, 1000) / 1000,
+      };
+    }
+
+    // Fallback to cheapest
+    return this.selectCheapestModel({ queryLength: 1, complexity: 'simple' });
+  }
   /**
    * Select the cheapest model for Ecomode
    * MVP: Always use the first (cheapest) model from the configured complexity level

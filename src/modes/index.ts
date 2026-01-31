@@ -8,6 +8,7 @@ import { AutopilotMode } from './autopilot-mode.js';
 import { UltrapilotMode } from './ultrapilot-mode.js';
 import { SwarmMode } from './swarm-mode.js';
 import { PipelineMode } from './pipeline-mode.js';
+import { Ecomode } from './ecomode.js';
 import { BaseMode } from './base-mode.js';
 import { ModelRouter } from '../orchestrator/model-router.js';
 import { CostCalculator } from '../orchestrator/cost-calculator.js';
@@ -34,12 +35,13 @@ export class ModeRegistry {
     this.modes = new Map();
 
     // Initialize modes
+    this.registerMode('ecomode', new Ecomode(modelRouter, costCalculator, cacheManager));
     this.registerMode('autopilot', new AutopilotMode(modelRouter, costCalculator, cacheManager));
     this.registerMode('ultrapilot', new UltrapilotMode(modelRouter, costCalculator, cacheManager));
     this.registerMode('swarm', new SwarmMode(modelRouter, costCalculator, cacheManager));
     this.registerMode('pipeline', new PipelineMode(modelRouter, costCalculator, cacheManager));
 
-    logger.info('Mode registry initialized with 4 modes (Autopilot, Ultrapilot, Swarm, Pipeline)');
+    logger.info('Mode registry initialized with 5 modes (Ecomode, Autopilot, Ultrapilot, Swarm, Pipeline)');
   }
 
   /**
@@ -88,6 +90,7 @@ export class ModeRegistry {
 
 // Export mode classes
 export { BaseMode } from './base-mode.js';
+export { Ecomode } from './ecomode.js';
 export { AutopilotMode } from './autopilot-mode.js';
 export { UltrapilotMode } from './ultrapilot-mode.js';
 export { SwarmMode } from './swarm-mode.js';
