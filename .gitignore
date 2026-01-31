@@ -34,7 +34,22 @@ cache.json
 .cache/
 test_watch/
 *.bak
+
+# Test outputs
+.test-cache/
+coverage/
+*.lcov
+
+# Lock files (if you want - currently tracked)
+# Uncomment to ignore lock files:
+# package-lock.json
+
+# IDE specific settings
+.vscode/settings.json
+
+# Runtime
 *.log
+*.pid
 
 # Python (legacy - keeping for reference)
 __pycache__/
