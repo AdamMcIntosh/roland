@@ -6,9 +6,9 @@
 import fs from 'fs';
 import path from 'path';
 import yaml from 'yaml';
-import { Agent, AgentConfig, AgentConfigSchema, AgentRegistryEntry, AgentStats } from './types';
-import { logger } from '../utils/logger';
-import { ConfigError } from '../utils/errors';
+import { Agent, AgentConfig, AgentConfigSchema, AgentRegistryEntry, AgentStats } from './types.js';
+import { logger } from '../utils/logger.js';
+import { ConfigError } from '../utils/errors.js';
 
 export class AgentManager {
   private agents: Map<string, Agent> = new Map();

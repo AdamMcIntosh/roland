@@ -11,9 +11,9 @@ import {
   GooseSessionExecutor,
   GooseSessionParams,
   GooseSessionResult,
-} from './types';
-import { skillRegistry } from '../skills/skill-framework';
-import { logger } from '../utils/logger';
+} from './types.js';
+import { skillRegistry } from '../skills/skill-framework.js';
+import { logger } from '../utils/logger.js';
 
 export class AgentExecutor {
   private gooseExecutor: GooseSessionExecutor;

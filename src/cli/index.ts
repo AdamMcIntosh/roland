@@ -12,4 +12,6 @@ export {
   formatSuccess,
   formatWarning,
   formatHelp,
+  formatWelcome,
+  formatConnectionStatus,
 } from './output-formatter.js';

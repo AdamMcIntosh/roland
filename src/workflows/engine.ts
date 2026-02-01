@@ -7,6 +7,7 @@
 
 import { Workflow, WorkflowStep, WorkflowContext, WorkflowResult, ValidationResult } from './types.js';
 import { logger } from '../utils/logger.js';
+import { CacheManager } from '../cache/index.js';
 
 // Simple UUID generator for workflow IDs
 function generateId(): string {
@@ -19,6 +20,16 @@ function generateId(): string {
 export class WorkflowEngine {
   private workflows: Map<string, Workflow> = new Map();
   private contexts: Map<string, WorkflowContext> = new Map();
+  private cacheManager: CacheManager;
+
+  constructor(enableCache: boolean = true) {
+    this.cacheManager = new CacheManager({
+      enabled: enableCache,
+      persistent: true,
+      cachePath: './cache.json',
+    });
+    logger.info('[WorkflowEngine] Initialized with caching ' + (enableCache ? 'enabled' : 'disabled'));
+  }
 
   /**
    * Register a workflow
@@ -115,6 +126,13 @@ export class WorkflowEngine {
     const workflow = this.getWorkflow(workflowName, version);
     if (!workflow) {
       throw new Error(`Workflow not found: ${workflowName}`);
+    }
+
+    // Check cache first
+    const cacheHit = this.cacheManager.get(workflowName, version || '1.0.0', inputs);
+    if (cacheHit.hit) {
+      logger.success(`[WorkflowEngine] Cache HIT for ${workflowName} (saved $${cacheHit.costSaved?.toFixed(4)}, ${cacheHit.timeSaved}ms)`);
+      return cacheHit.result;
     }
 
     // Validate workflow
@@ -222,7 +240,7 @@ export class WorkflowEngine {
         `[WorkflowEngine] Workflow completed: ${workflowName} (Cost: $${context.totalCost.toFixed(4)}, Duration: ${context.endTime - startTime}ms)`
       );
 
-      return {
+      const result: WorkflowResult = {
         workflowId,
         workflowName,
         status: 'success',
@@ -234,6 +252,11 @@ export class WorkflowEngine {
         stepsExecuted: workflow.steps.length,
         stepResults: context.stepResults,
       };
+
+      // Cache successful result
+      this.cacheManager.set(workflowName, version || '1.0.0', inputs, result);
+
+      return result;
     } catch (error) {
       context.status = 'failed';
       context.endTime = Date.now();
@@ -353,6 +376,41 @@ export class WorkflowEngine {
       context.status = 'cancelled';
       logger.info(`[WorkflowEngine] Cancelled workflow: ${workflowId}`);
     }
+  }
+
+  /**
+   * Get cache statistics
+   */
+  getCacheStats() {
+    return this.cacheManager.getStats();
+  }
+
+  /**
+   * Clear workflow cache
+   */
+  clearCache(): void {
+    this.cacheManager.clear();
+  }
+
+  /**
+   * Invalidate cache entries
+   */
+  invalidateCache(workflowName?: string, version?: string): number {
+    return this.cacheManager.invalidate({ workflowName, version });
+  }
+
+  /**
+   * Cleanup expired cache entries
+   */
+  cleanupCache(): number {
+    return this.cacheManager.cleanup();
+  }
+
+  /**
+   * Destroy engine and save cache
+   */
+  destroy(): void {
+    this.cacheManager.destroy();
   }
 }
 

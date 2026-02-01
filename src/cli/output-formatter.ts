@@ -14,6 +14,84 @@ export interface FormattedOutput {
 }
 
 /**
+ * ASCII Goose Logo
+ */
+function getGooseLogo(): string {
+  return chalk.cyan(`
+    ╔═══════════════════════════════════════╗
+    ║                                       ║
+    ║       🦢  oh-my-goose  🦢            ║
+    ║       Workflow Orchestration CLI      ║
+    ║                                       ║
+    ║         v1.0.0 - Phase Complete       ║
+    ║                                       ║
+    ╚═══════════════════════════════════════╝
+  `);
+}
+
+/**
+ * ASCII Goose Character (detailed)
+ */
+function getGooseCharacter(): string {
+  return chalk.yellow(`
+          ^^^
+         (o o)
+        /|   |\\
+       / | ▼ | \\
+      /  |   |  \\
+         \\___/
+    `);
+}
+
+/**
+ * Format welcome banner
+ */
+export function formatWelcome(): string {
+  let welcome = '\n';
+  welcome += getGooseLogo();
+  welcome += '\n';
+  welcome += chalk.bold.cyan('Welcome to oh-my-goose! 🦢\n');
+  welcome += chalk.gray('═'.repeat(80)) + '\n\n';
+  
+  welcome += chalk.bold('Quick Start:\n');
+  welcome += chalk.green('  • Run a task:') + '        goose run "eco: your task"\n';
+  welcome += chalk.green('  • View help:') + '         goose help\n';
+  welcome += chalk.green('  • List recipes:') + '      goose recipes\n';
+  welcome += chalk.green('  • View cache stats:') + '  goose cache --stats\n\n';
+  
+  welcome += chalk.bold('5 Execution Modes:\n');
+  welcome += chalk.cyan('  eco:') + '          Single agent (cheapest)\n';
+  welcome += chalk.yellow('  autopilot:') + '    3-agent sequential\n';
+  welcome += chalk.magenta('  ultrapilot:') + '   5 parallel agents\n';
+  welcome += chalk.blue('  swarm:') + '         8 dynamic agents\n';
+  welcome += chalk.green('  pipeline:') + '     4-step workflow\n\n';
+  
+  welcome += chalk.gray('═'.repeat(80)) + '\n';
+  welcome += chalk.dim('Type "goose help" for detailed documentation\n\n');
+  
+  return welcome;
+}
+
+/**
+ * Format connection status
+ */
+export function formatConnectionStatus(connected: boolean, user?: string): string {
+  const status = connected 
+    ? chalk.green('✓ Connected')
+    : chalk.red('✗ Disconnected');
+  
+  let message = chalk.bold('Connection Status:\n');
+  message += `  ${status}`;
+  
+  if (user) {
+    message += ` ${chalk.gray(`(as: ${user})`)}`;
+  }
+  
+  message += '\n';
+  return message;
+}
+
+/**
  * Format execution result for display
  */
 export function formatResult(
@@ -96,33 +174,53 @@ export function formatWarning(message: string): string {
  */
 export function formatHelp(): string {
   let help = '\n';
-  help += chalk.bold.cyan('🦢 oh-my-goose MVP\n');
-  help += chalk.gray('═'.repeat(60)) + '\n\n';
+  help += chalk.bold.cyan('🦢 oh-my-goose v1.0.0\n');
+  help += chalk.gray('═'.repeat(80)) + '\n\n';
 
-  help += chalk.bold('Usage:\n');
-  help += '  goose run <query>\n';
-  help += '  goose run "eco: your task here"\n\n';
+  help += chalk.bold('BASIC USAGE:\n');
+  help += '  goose run <query>                    Execute a task with Ecomode\n';
+  help += '  goose run "eco: your task here"      Explicitly use Ecomode\n';
+  help += '  goose workflow <name>                Execute a workflow\n';
+  help += '  goose recipe <name>                  Execute a pre-built recipe\n\n';
 
-  help += chalk.bold('Modes:\n');
-  help += '  ' + chalk.green('eco:') + '           Ecomode (cheapest model)\n';
-  help += '  ' + chalk.yellow('autopilot:') + '      Autopilot mode (advanced)\n';
-  help += '  ' + chalk.cyan('swarm:') + '           Swarm mode (multiple agents)\n\n';
+  help += chalk.bold('EXECUTION MODES:\n');
+  help += '  ' + chalk.green('eco:') + '           Ecomode (cheapest model, single agent)\n';
+  help += '  ' + chalk.yellow('autopilot:') + '      Autopilot mode (3-agent sequential)\n';
+  help += '  ' + chalk.magenta('ultrapilot:') + '     Ultrapilot mode (5 parallel agents)\n';
+  help += '  ' + chalk.cyan('swarm:') + '           Swarm mode (8 dynamic agents)\n';
+  help += '  ' + chalk.blue('pipeline:') + '        Pipeline mode (4-step sequential)\n\n';
 
-  help += chalk.bold('Examples:\n');
+  help += chalk.bold('COMMANDS:\n');
+  help += '  run <query>                          Execute a task\n';
+  help += '  workflow <name>                      Run a specific workflow\n';
+  help += '  recipe <name>                        Execute a recipe\n';
+  help += '  recipes                              List available recipes\n';
+  help += '  skills                               List available skills\n';
+  help += '  agents                               List loaded agents\n';
+  help += '  modes                                List execution modes\n';
+  help += '  stats                                Show session statistics\n';
+  help += '  cache                                Manage workflow cache\n';
+  help += '  budget                               Manage API cost budget\n';
+  help += '  perf                                 Show performance dashboard\n';
+  help += '  help                                 Show this help\n\n';
+
+  help += chalk.bold('WORKFLOW OPTIONS:\n');
+  help += '  -v, --version <version>              Workflow version (default: 1.0.0)\n';
+  help += '  -i, --input <json>                   Input parameters as JSON\n';
+  help += '  --no-cache                           Disable caching\n\n';
+
+  help += chalk.bold('CACHE OPTIONS:\n');
+  help += '  -s, --stats                          Show cache statistics\n';
+  help += '  -c, --clear                          Clear all cache\n';
+  help += '  -i, --invalidate <workflow>          Invalidate specific workflow\n\n';
+
+  help += chalk.bold('EXAMPLES:\n');
   help += '  goose run "eco: refactor this function"\n';
-  help += '  goose run "eco: write tests for this code"\n';
-  help += '  goose run "eco: document this API"\n\n';
-
-  help += chalk.bold('Skills:\n');
-  help += '  • ' + chalk.cyan('refactoring') + ' - Improve code quality\n';
-  help += '  • ' + chalk.cyan('documentation') + ' - Auto-generate docs\n';
-  help += '  • ' + chalk.cyan('testing') + ' - Generate test cases\n\n';
-
-  help += chalk.bold('Options:\n');
-  help += '  --help              Show this help\n';
-  help += '  --no-cache          Disable caching\n';
-  help += '  --verbose           Show detailed output\n';
-  help += '  --model <name>      Force specific model\n\n';
+  help += '  goose run "autopilot: build a todo app"\n';
+  help += '  goose workflow CodeRefactoring --input \'{"file": "app.ts"}\'\n';
+  help += '  goose recipe "Plan Execute Review"\n';
+  help += '  goose cache --stats\n';
+  help += '  goose budget --set 10.00\n\n';
 
   help += chalk.gray('Documentation: https://github.com/oh-my-goose\n');
 

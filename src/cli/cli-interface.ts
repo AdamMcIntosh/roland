@@ -21,6 +21,8 @@ import {
   formatHelp,
   formatCostSummary,
   formatSkillResult,
+  formatWelcome,
+  formatConnectionStatus,
 } from './output-formatter.js';
 import { agentExecutor, ExecutionRequest, ExecutionResult } from '../orchestrator/agent-executor.js';
 import { costCalculator } from '../orchestrator/cost-calculator.js';
@@ -28,14 +30,17 @@ import { cacheManager } from '../orchestrator/cache-manager.js';
 import { PerformanceMonitor } from '../utils/performance-monitor.js';
 import { BudgetManager } from '../utils/budget-manager.js';
 import { logger } from '../utils/logger.js';
+import { WorkflowEngine } from '../workflows/engine.js';
 
 export class CliInterface {
   private program: Command;
   private spinner: Ora;
+  private workflowEngine: WorkflowEngine;
 
   constructor() {
     this.program = new Command();
     this.spinner = ora();
+    this.workflowEngine = new WorkflowEngine(true); // Enable cache
     this.setupProgram();
   }
 
@@ -103,6 +108,37 @@ export class CliInterface {
       .option('-e, --enable', 'Enable budget enforcement')
       .option('-d, --disable', 'Disable budget enforcement')
       .action((options) => this.handleBudget(options));
+
+    // Workflows command
+    this.program
+      .command('workflow <name>')
+      .description('Execute a workflow by name')
+      .option('-v, --version <version>', 'Workflow version', '1.0.0')
+      .option('-i, --input <json>', 'Input parameters as JSON string')
+      .option('--no-cache', 'Disable caching for this execution')
+      .action((name, options) => this.handleWorkflow(name, options));
+
+    // Recipes command
+    this.program
+      .command('recipes')
+      .description('List available pre-built recipes')
+      .action(() => this.handleRecipes());
+
+    // Execute recipe command
+    this.program
+      .command('recipe <name>')
+      .description('Execute a pre-built recipe')
+      .option('-i, --input <json>', 'Input parameters as JSON string')
+      .action((name, options) => this.handleExecuteRecipe(name, options));
+
+    // Cache command
+    this.program
+      .command('cache')
+      .description('Manage workflow cache')
+      .option('-s, --stats', 'Show cache statistics')
+      .option('-c, --clear', 'Clear all cache')
+      .option('-i, --invalidate <workflow>', 'Invalidate specific workflow cache')
+      .action((options) => this.handleCache(options));
 
     // Default help
     this.program.on('-h,--help', () => {
@@ -185,6 +221,7 @@ export class CliInterface {
    * Handle help command
    */
   private handleHelp(): void {
+    console.log(formatWelcome());
     console.log(formatHelp());
   }
 
@@ -356,6 +393,155 @@ export class CliInterface {
     if (options.set) {
       const amount = parseFloat(options.set);
       if (isNaN(amount) || amount <= 0) {
+        console.log(formatError('Invalid budget amount'));
+        return;
+      }
+      BudgetManager.setMaxBudget(amount);
+      console.log(formatSuccess(`Budget set to $${amount.toFixed(2)}`));
+    }
+
+    // Reset spending
+    if (options.reset) {
+      BudgetManager.reset();
+      console.log(formatSuccess('Budget spending reset to $0.00'));
+    }
+
+    // Enable enforcement
+    if (options.enable) {
+      BudgetManager.enable();
+      console.log(formatSuccess('Budget enforcement enabled'));
+    }
+
+    // Disable enforcement
+    if (options.disable) {
+      BudgetManager.disable();
+      console.log(formatSuccess('Budget enforcement disabled'));
+    }
+
+    // Show updated status
+    console.log('\n' + BudgetManager.formatStatus() + '\n');
+  }
+
+  /**
+   * Handle workflow command
+   */
+  private async handleWorkflow(name: string, options: any): Promise<void> {
+    try {
+      console.log(formatProcessing('WORKFLOW', `Executing ${name}...`));
+      this.spinner.start('Running workflow...');
+
+      // Parse inputs
+      const inputs = options.input ? JSON.parse(options.input) : {};
+      const version = options.version || '1.0.0';
+
+      // Execute workflow
+      const result = await this.workflowEngine.executeWorkflow(
+        name,
+        version,
+        inputs
+      );
+
+      this.spinner.stop();
+
+      // Display results
+      console.log(formatSuccess('Workflow completed successfully!\n'));
+      console.log('Results:');
+      console.log(`  Status: ${result.status}`);
+      console.log(`  Duration: ${result.totalDuration}ms`);
+      console.log(`  Cost: $${(result.totalCost || 0).toFixed(4)}`);
+      console.log(`  Steps Completed: ${result.stepsExecuted}`);
+      
+      if (result.outputs) {
+        console.log('\nOutputs:');
+        console.log(JSON.stringify(result.outputs, null, 2));
+      }
+    } catch (error) {
+      this.spinner.stop();
+      console.log(formatError((error as Error).message));
+      logger.error(`Workflow error: ${error}`);
+    }
+  }
+
+  /**
+   * Handle recipes command
+   */
+  private async handleRecipes(): Promise<void> {
+    try {
+      // List recipe files
+      const fs = await import('fs');
+      const path = await import('path');
+      const recipesDir = './recipes';
+      
+      if (!fs.existsSync(recipesDir)) {
+        console.log('\n📚 Available Recipes:\n' + '─'.repeat(80) + '\n');
+        console.log('  No recipes directory found.\n');
+        return;
+      }
+
+      const files = fs.readdirSync(recipesDir).filter(f => f.endsWith('.yaml'));
+      
+      console.log('\n📚 Available Recipes:\n' + '─'.repeat(80) + '\n');
+
+      if (files.length === 0) {
+        console.log('  No recipes found.\n');
+        return;
+      }
+
+      files.forEach((file) => {
+        const name = file.replace('.yaml', '');
+        console.log(`  ${name}`);
+      });
+
+      console.log('\nNote: Recipe execution via CLI coming soon.\n');
+    } catch (error) {
+      console.log(formatError((error as Error).message));
+    }
+  }
+
+  /**
+   * Handle execute recipe command
+   */
+  private async handleExecuteRecipe(name: string, options: any): Promise<void> {
+    this.spinner.stop();
+    console.log(formatInfo('Recipe execution via CLI is not yet implemented.'));
+    console.log('Use workflow command instead: goose workflow <name>\n');
+  }
+
+  /**
+   * Handle cache command
+   */
+  private handleCache(options: any): void {
+    // Show stats
+    if (options.stats || (!options.clear && !options.invalidate)) {
+      const stats = this.workflowEngine.getCacheStats();
+      console.log('\n💾 Cache Statistics:\n' + '─'.repeat(60) + '\n');
+      console.log(`  Entries: ${stats.entryCount}`);
+      console.log(`  Size: ${(stats.sizeBytes / 1024).toFixed(2)} KB`);
+      console.log(`  Hit Rate: ${(stats.hitRate * 100).toFixed(1)}%`);
+      console.log(`  Hits: ${stats.hits}`);
+      console.log(`  Misses: ${stats.misses}`);
+      console.log(`  Cost Saved: $${stats.costSaved.toFixed(4)}`);
+      console.log(`  Time Saved: ${(stats.timeSaved / 1000).toFixed(2)}s\n`);
+      return;
+    }
+
+    // Clear cache
+    if (options.clear) {
+      this.workflowEngine.clearCache();
+      console.log(formatSuccess('Cache cleared successfully'));
+      return;
+    }
+
+    // Invalidate specific workflow
+    if (options.invalidate) {
+      const count = this.workflowEngine.invalidateCache(options.invalidate);
+      console.log(formatSuccess(`Invalidated ${count} cache entries for workflow: ${options.invalidate}`));
+      return;
+    }
+  }
+
+  /**
+   *  if (isNaN(amount) || amount <= 0) {
         console.log(formatError('Invalid budget amount'));
         return;
       }

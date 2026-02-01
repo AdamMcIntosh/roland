@@ -4,9 +4,9 @@
  */
 
 // Phase 2 New Modules
-export * from './types';
-export { AgentManager, getAgentManager } from './agent-manager';
-export { AgentExecutor, getAgentExecutor } from './agent-executor';
+export * from './types.js';
+export { AgentManager, getAgentManager } from './agent-manager.js';
+export { AgentExecutor, getAgentExecutor } from './agent-executor.js';
 
 // Legacy modules
 import { agentLoader } from './agent-loader.js';
