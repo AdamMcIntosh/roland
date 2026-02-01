@@ -174,7 +174,10 @@ Complete documentation suite included:
 - [README.md](README.md) - Project overview and features
 - [INSTALLATION.md](INSTALLATION.md) - Step-by-step setup guide
 - [EXAMPLE_USAGE.md](EXAMPLE_USAGE.md) - 20+ code examples and patterns
-- [GETTING_STARTED.md](GETTING_STARTED.md) - Beginner's tutorial
+- [EXAMPLE_WORKFLOWS.md](EXAMPLE_WORKFLOWS.md) - Real-world workflow examples
+- [RECIPES_CATALOG.md](RECIPES_CATALOG.md) - Recipe reference
+- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Common issues and solutions
+- [ReadMe.MD](ReadMe.MD) - Documentation index
 - [CHANGELOG.md](CHANGELOG.md) - Version history and changes
 
 ### Example Scripts

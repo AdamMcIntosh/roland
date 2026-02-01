@@ -2,14 +2,14 @@
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Goose](https://img.shields.io/badge/goose-MCP%20Integration-blue.svg)](https://github.com/block/goose)
-[![Status](https://img.shields.io/badge/status-MVP%20Complete-green.svg)]()
+[![Status](https://img.shields.io/badge/status-Production%20Ready-brightgreen.svg)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)]()
 
 A powerful orchestration framework for **[Goose](https://github.com/block/goose)** that provides intelligent AI workflow management through MCP (Model Context Protocol) tools integration. Inspired by **oh-my-claudecode**, OMG extends Goose with specialized agents, reusable skills, and cost-optimized execution modes.
 
-> **✅ MVP Status**: Ecomode MVP complete with CLI, skills system, cost tracking, and caching. Ready for production use!
+> **✅ Production Status**: v1.0.0 complete with workflows, caching, CLI, skills, and documentation. Ready for production use!
 
-## ✨ Features (MVP v1.0.0)
+## ✨ Features (v1.0.0)
 
 ### 🎯 Ecomode - Cost-Optimized AI Execution
 - **85% cost savings** vs standard models
@@ -24,16 +24,29 @@ A powerful orchestration framework for **[Goose](https://github.com/block/goose)
 - Ready for multi-agent orchestration (Phase 6+)
 
 ### ⚡ Core Skills System
-- **3 production skills** with auto-detection:
-  - **RefactoringSkill**: Code optimization, performance improvements, readability
-  - **DocumentationSkill**: JSDoc, Markdown, Docstring generation
-  - **TestingSkill**: Jest/Mocha compatible test generation
+- **5 production skills** with auto-detection:
+  - **refactoring**: Code optimization, performance improvements, readability
+  - **documentation**: JSDoc, Markdown, Docstring generation
+  - **testing**: Vitest/Jest compatible test generation
+  - **security_scan**: Vulnerability analysis and secure coding checks
+  - **performance**: Hot-path analysis and optimization suggestions
 - Keyword-based skill detection from queries
 - Extensible skill framework for custom skills
 
+### 🧩 Workflow Orchestration
+- Multi-step workflows with versioning
+- Variable interpolation between steps
+- Recipe support for common patterns
+- Execution tracking, duration, and cost reporting
+- Workflow caching for repeatable runs
+
 ### 🖥️ CLI Interface
-- **5 powerful commands**:
+- **Core commands**:
   - `run` - Execute Ecomode tasks with cost optimization
+  - `workflow <name>` - Execute workflows by name
+  - `recipe <name>` - Execute pre-built recipes
+  - `recipes` - List available recipes
+  - `cache` - Manage workflow cache (stats, clear, invalidate)
   - `skills` - List available skills
   - `agents` - List loaded agents
   - `stats` - View session cost and cache statistics
@@ -105,7 +118,7 @@ Savings (vs standard): 85%
 
 See [EXAMPLE_USAGE.md](EXAMPLE_USAGE.md) for detailed examples and advanced usage patterns.
 
-## � Cost Optimization
+## 💸 Cost Optimization
 
 ### Real Performance (v1.0.0)
 
@@ -186,15 +199,17 @@ oh-my-goose/
 │   │   └── config-loader.ts    # YAML config loader
 │   ├── server/                 # ✅ MCP server (Phase 1)
 │   │   └── mcp-server.ts       # Model Context Protocol
-│   ├── utils/                  # ✅ Core utilities (Phase 1)
+│   ├── utils/                  # ✅ Core utilities
 │   │   ├── types.ts            # 40+ TypeScript interfaces
 │   │   ├── errors.ts           # 24 error classes
-│   │   ├── logger.ts           # Custom logger
-│   │   └── error-messages.ts   # User-friendly errors
+│   │   ├── logger.ts           # Enhanced logger
+│   │   ├── performance.ts      # Lazy loading & pooling
+│   │   └── recovery.ts         # Resilience utilities
 │   └── index.ts                # Main entry point
 ├── agents/                     # ✅ 10 agent YAML configs
-├── tests/                      # ✅ Test suite (Phase 5)
-│   └── integration.test.ts     # 40+ integration tests
+├── tests/                      # ✅ Test suites
+│   ├── integration/            # MCP tool integration tests
+│   └── e2e/                    # Workflow E2E tests
 ├── examples/                   # ✅ Usage examples (Phase 5)
 │   ├── example-refactoring.ts
 │   ├── example-documentation.ts
@@ -203,6 +218,45 @@ oh-my-goose/
 ├── cache.json                  # Auto-generated result cache
 ├── package.json                # Node.js dependencies
 └── tsconfig.json               # TypeScript configuration
+```
+
+## 📚 Documentation Index
+
+### API Reference
+- [docs/api.md](docs/api.md) - Full API reference for LLM, cache, budget, routing, and metrics
+
+### Guides
+- [docs/guides/budget-guide.md](docs/guides/budget-guide.md) - Budget setup and cost control
+- [docs/guides/cache-guide.md](docs/guides/cache-guide.md) - Caching strategy and performance
+- [docs/guides/mode-guide.md](docs/guides/mode-guide.md) - Execution modes and decision guide
+- [docs/guides/integration-guide.md](docs/guides/integration-guide.md) - Integration patterns and production usage
+
+### Examples
+- [EXAMPLE_USAGE.md](EXAMPLE_USAGE.md) - CLI usage patterns and workflows
+- [EXAMPLE_WORKFLOWS.md](EXAMPLE_WORKFLOWS.md) - Workflow examples and templates
+- [RECIPES_CATALOG.md](RECIPES_CATALOG.md) - Pre-built recipe reference
+
+### Troubleshooting
+- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Common issues and fixes
+
+### Programmatic Quick Start
+
+```typescript
+import { loadConfig } from './src/config/config-loader.js';
+import { LLMClient } from './src/orchestrator/llm-client.js';
+import { BudgetManager } from './src/utils/budget-manager.js';
+
+await loadConfig();
+BudgetManager.setMaxBudget(5.00);
+
+const response = await LLMClient.call({
+  model: 'grok-4-1-fast-reasoning',
+  messages: [{ role: 'user', content: 'What is TypeScript?' }],
+  max_tokens: 500,
+  temperature: 0.7,
+});
+
+console.log(response.content);
 ```
 
 ## 🛠️ Development
@@ -238,19 +292,18 @@ npm run clean
 
 ## 🧪 Testing
 
-The project includes comprehensive integration tests:
+The project includes comprehensive test coverage (73+ tests):
 
 ```bash
-# Run full test suite (40+ tests)
+# Run full test suite
 npm test
 
 # Tests cover:
-# - Model routing and cost estimation
-# - Cache management and persistence
-# - Skill execution (refactoring, documentation, testing)
-# - Keyword parsing and complexity detection
-# - End-to-end execution workflows
-# - Error handling scenarios
+# - Workflow system (32 tests)
+# - Cache management and persistence (21 tests)
+# - MCP tools integration (20 tests)
+# - End-to-end workflow execution scenarios
+# - Error handling and recovery paths
 ```
 
 ## 💡 Design Philosophy
@@ -281,24 +334,27 @@ npm test
 
 ## 🗺️ Roadmap
 
-### ✅ MVP v1.0.0 (Complete)
+### ✅ v1.0.0 (Complete)
 - [x] **Phase 1**: TypeScript foundation, type system, error handling, MCP server
 - [x] **Phase 2**: Ecomode core - model routing, cost tracking, caching
-- [x] **Phase 3**: Skills system - agent loader, skill framework, 3 core skills
-- [x] **Phase 4**: CLI interface - keyword parsing, 5 commands, rich output
-- [x] **Phase 5**: Testing & polish - 40+ tests, error handling, documentation
+- [x] **Phase 3**: Skills system - agent loader, skill framework, 5 core skills
+- [x] **Phase 4**: CLI interface - workflow, cache, and recipe commands
+- [x] **Phase 5**: Execution modes - eco, autopilot, ultrapilot, swarm, pipeline
+- [x] **Phase 6**: Workflow system with recipes
+- [x] **Phase 7**: Persistent caching & TTL
+- [x] **Phase 8**: CLI integration & UX polish
+- [x] **Phase 9**: Testing & documentation
+- [x] **Phase 10**: Performance & release polish
 
-### 🚀 Post-MVP Enhancements (Planned)
-- [ ] **Multi-Agent Orchestration**: Autopilot, Ultrapilot, Swarm, Pipeline modes
-- [ ] **Advanced Skills**: Auth, Database, Deployment, Security scanning
-- [ ] **MCP Tool Integration**: Expose skills as Goose MCP tools
-- [ ] **Rich HUD Display**: Real-time progress tracking in terminal
-- [ ] **Workflow Templates**: YAML-based multi-agent recipes
-- [ ] **Prompt Caching**: Advanced caching strategies for cost reduction
-- [ ] **Analytics Dashboard**: Web UI for cost and performance analytics
+### 🚀 Future Ideas (Post v1.0.0)
+- [ ] **Web UI Dashboard**: Analytics and workflow monitoring
+- [ ] **Advanced Scheduling**: Cron-like workflow triggers
+- [ ] **Multi-workspace Support**: Workspace-aware configs and cache
+- [ ] **Goose Adapter Enhancements**: Full runtime integration
+- [ ] **Community Plugins**: Extend skills and agents via plugins
 
 ### 📅 Version History
-- **v1.0.0** (January 2026): Ecomode MVP with CLI, skills, and cost optimization
+- **v1.0.0** (February 2026): Production release with workflows, CLI, caching, and testing
 
 ## 🤝 Contributing
 

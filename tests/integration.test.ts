@@ -102,7 +102,7 @@ describe('Ecomode MVP Integration Tests', () => {
     let cache: CacheManager;
 
     beforeEach(() => {
-      cache = new CacheManager({ enabled: true, persistent: true, cacheFile: './.test-cache' });
+      cache = new CacheManager({ enabled: true, persistent: true, cachePath: './.test-cache' });
     });
 
     afterEach(() => {

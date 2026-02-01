@@ -421,8 +421,8 @@ npm run cli
 
 ## Next Steps
 
-- See [GETTING_STARTED.md](GETTING_STARTED.md) for installation
-- See [README.md](README.md) for full documentation
+- See [INSTALLATION.md](INSTALLATION.md) for setup
+- See [ReadMe.MD](ReadMe.MD) for full documentation
 - Check [agents/](agents/) directory for agent configurations
 - Review [config.yaml](config.yaml) for advanced settings
-- Phase 6: Multi-agent orchestration and custom workflow definitions
+- Explore [RECIPES_CATALOG.md](RECIPES_CATALOG.md) for workflow examples
