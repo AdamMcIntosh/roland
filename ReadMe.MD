@@ -98,6 +98,24 @@ npm run cli
 ```bash
 npm run cli
 
+    ╔═══════════════════════════════════════╗
+    ║                                       ║
+    ║       🦢  oh-my-goose  🦢            ║
+    ║       Workflow Orchestration CLI      ║
+    ║                                       ║
+    ║         v1.0.0 - Phase Complete       ║
+    ║                                       ║
+    ╚═══════════════════════════════════════╝
+
+Welcome to oh-my-goose! 🦢
+════════════════════════════════════════════════════════════════════════════════
+
+Quick Start:
+  • Run a task:        goose run "eco: your task"
+  • View help:         goose help
+  • List recipes:      goose recipes
+  • View cache stats:  goose cache --stats
+
 > run "eco: refactor legacy authentication code"
 ✓ Ecomode Result
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
