@@ -31,6 +31,8 @@ import { PerformanceMonitor } from '../utils/performance-monitor.js';
 import { BudgetManager } from '../utils/budget-manager.js';
 import { logger } from '../utils/logger.js';
 import { WorkflowEngine } from '../workflows/engine.js';
+import { AutonomousAgent } from '../agent-loop/agent.js';
+import { SessionConfig } from '../agent-loop/types.js';
 
 export class CliInterface {
   private program: Command;
@@ -93,11 +95,16 @@ export class CliInterface {
       .description('List available execution modes')
       .action(() => this.handleModes());
 
-    // Performance command
+    // Agent command - Autonomous agent with natural language
     this.program
-      .command('perf')
-      .description('Show performance dashboard')
-      .action(() => this.handlePerformance());
+      .command('agent <query...>')
+      .description('Run autonomous agent with natural language query')
+      .option('--model <name>', 'Specify LLM model (default: claude-opus)')
+      .option('--interactive', 'Start interactive multi-turn session')
+      .option('--auto-confirm', 'Auto-approve file/terminal/skill operations')
+      .option('--max-tools <number>', 'Max tool calls (default: 20)', '20')
+      .option('--max-commands <number>', 'Max terminal commands (default: 10)', '10')
+      .action((query: string[], options) => this.handleAgent(query, options));
 
     // Budget command
     this.program
@@ -362,6 +369,86 @@ export class CliInterface {
     console.log('  > run "eco: refactor this code"');
     console.log('  > run "autopilot: build a todo app"');
     console.log('  > run "ulw: analyze this architecture"\n');
+  }
+
+  /**
+   * Handle agent command - Autonomous agent with tool calling
+   */
+  private async handleAgent(query: string[], options: any): Promise<void> {
+    try {
+      this.spinner.stop();
+
+      const queryText = query.join(' ');
+
+      // Configuration for this session
+      const config: SessionConfig = {
+        model: options.model || 'claude-opus',
+        autoConfirm: {
+          files: options.autoConfirm || false,
+          terminal: options.autoConfirm || false,
+          skills: options.autoConfirm || false,
+        },
+        maxToolCalls: parseInt(options.maxTools, 10) || 20,
+        maxTerminalCommands: parseInt(options.maxCommands, 10) || 10,
+        workspaceDirectory: process.cwd(),
+        logActions: true,
+      };
+
+      console.log(formatWelcome());
+      console.log(formatInfo(`Model: ${config.model}`));
+      console.log(formatInfo(`Max tool calls: ${config.maxToolCalls}`));
+      console.log(formatInfo(`Auto-confirm: ${config.autoConfirm?.files ? 'enabled' : 'disabled'}`));
+      console.log('');
+
+      // Confirmation handler for file/terminal operations
+      const onConfirmation = async (question: string): Promise<boolean> => {
+        if (config.autoConfirm?.files) return true;
+        
+        // For CLI, use simple prompt (would need to implement proper prompt in real version)
+        console.log(`⚠️  ${question}`);
+        console.log('    (Auto-confirm disabled in CLI - operation skipped for safety)');
+        return false; // Skip operations requiring confirmation in CLI mode
+      };
+
+      // Initialize agent
+      const agent = new AutonomousAgent({
+        config,
+        workspaceDirectory: process.cwd(),
+        onConfirmation,
+      });
+
+      if (options.interactive) {
+        // Start interactive session
+        console.log(formatInfo('Type "exit" to quit, "clear" to reset conversation'));
+        console.log('');
+        await agent.startInteractive();
+      } else {
+        // Single query mode
+        console.log(formatProcessing('agent', queryText));
+        console.log('');
+
+        const response = await agent.processInput(queryText);
+
+        console.log(formatSuccess('Agent Response:'));
+        console.log('─'.repeat(60));
+        console.log(response);
+        console.log('─'.repeat(60));
+
+        const summary = agent.getSessionSummary();
+        console.log('');
+        console.log(formatInfo(`Session Summary:`));
+        console.log(`  Duration: ${summary.duration.toFixed(2)}s`);
+        console.log(`  Tool Calls: ${summary.toolCalls}/${summary.model === 'claude-opus' ? 20 : 20}`);
+        console.log(`  Total Cost: $${summary.totalCost.toFixed(4)}`);
+        console.log('');
+
+        await agent.end();
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(formatError(`Agent Error: ${message}`));
+      logger.error('Agent execution failed', message);
+    }
   }
 
   /**

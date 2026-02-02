@@ -1,6 +1,15 @@
 # Installation Guide - oh-my-goose
 
-Complete installation and setup guide for the oh-my-goose Ecomode MVP.
+Complete installation and setup guide for oh-my-goose with standalone CLI and Goose extension modes.
+
+## Table of Contents
+
+1. [Prerequisites](#prerequisites)
+2. [Installation Steps](#installation-steps)
+3. [Goose Integration](#goose-integration) ⭐ **Recommended**
+4. [Getting API Keys](#getting-your-api-keys)
+5. [Testing Installation](#testing-your-installation)
+6. [Troubleshooting](#troubleshooting)
 
 ## Prerequisites
 
@@ -86,6 +95,65 @@ oh-my-goose>
 ```
 
 Type `help` to see available commands.
+
+## Goose Integration
+
+### What is Goose?
+
+[Goose](https://github.com/block/goose) is Block's open-source AI agent that automates coding tasks. oh-my-goose can extend Goose with advanced orchestration capabilities.
+
+### Setup as Goose Extension
+
+**Step 1:** Install Goose (if not already installed)
+
+```bash
+# macOS
+brew install --cask block-goose
+
+# Or download from: https://github.com/block/goose/releases
+```
+
+**Step 2:** Build oh-my-goose (must be done first)
+
+```bash
+cd oh-my-goose
+npm run build
+```
+
+**Step 3:** Add to Goose configuration
+
+Edit your Goose config file:
+- **macOS/Linux**: `~/.config/goose/config.yaml`
+- **Windows**: `%APPDATA%\Block\goose\config\config.yaml`
+
+Add this extension block:
+
+```yaml
+extensions:
+  oh-my-goose:
+    name: "oh-my-goose"
+    display_name: "Oh My Goose"
+    description: "Multi-agent orchestration with workflows and cost optimization"
+    type: "stdio"
+    cmd: "node"
+    args: ["/absolute/path/to/oh-my-goose/dist/index.js"]  # Change this!
+    enabled: true
+    timeout: 600
+    bundled: false
+```
+
+**Important:** Use the **absolute path** to your oh-my-goose installation!
+
+**Step 4:** Start or restart Goose
+
+```bash
+goose session
+
+# Test integration
+> Can you list available tools from oh-my-goose?
+```
+
+For complete integration guide with examples, see **[GOOSE_INTEGRATION.md](GOOSE_INTEGRATION.md)**.
 
 ## Getting Your API Keys
 

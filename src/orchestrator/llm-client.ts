@@ -2,7 +2,7 @@
  * LLM Client - Unified API for calling LLM models
  * 
  * Phase 8: Real API integration for xAI, Anthropic, OpenAI, Google
- * Supports automatic fallback, retry logic, and error handling
+ * Supports automatic fallback, retry logic, error handling, and tool calling
  */
 
 import { getConfig } from '../config/config-loader.js';
@@ -13,6 +13,7 @@ import {
   ApiAuthenticationError,
   ApiRateLimitError,
 } from '../utils/errors.js';
+import type { ToolDefinition, Message, LLMToolResponse, ContentBlock } from '../agent-loop/types.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyRecord = any;
@@ -478,7 +479,7 @@ export class LLMClient {
   /**
    * Get provider from model name
    */
-  private static getProvider(model: string): 'xai' | 'anthropic' | 'openai' | 'google' {
+  public static getProvider(model: string): 'xai' | 'anthropic' | 'openai' | 'google' {
     if (model.startsWith('grok-')) return 'xai';
     if (model.startsWith('claude-')) return 'anthropic';
     if (model.startsWith('gpt-')) return 'openai';
@@ -489,7 +490,7 @@ export class LLMClient {
   /**
    * Estimate cost before API call (rough approximation)
    */
-  private static estimateCost(model: string, prompt: string, maxTokens: number): number {
+  public static estimateCost(model: string, prompt: string, maxTokens: number): number {
     // Rough token estimation: ~4 chars per token
     const estimatedInputTokens = Math.ceil(prompt.length / 4);
     const estimatedTotalTokens = estimatedInputTokens + maxTokens;
@@ -526,5 +527,219 @@ export class LLMClient {
     };
 
     return (costPer1k[model] || 0.001) * (totalTokens / 1000);
+  }
+}
+
+/**
+ * Tool Calling Support for Agent Loop
+ */
+export interface ToolCallingOptions {
+  model: string;
+  messages: Message[];
+  tools: ToolDefinition[];
+  temperature?: number;
+  maxTokens?: number;
+}
+
+/**
+ * Extended LLM Client with tool calling capabilities
+ */
+export class LLMClientWithTools {
+  /**
+   * Call LLM with tool definitions for agent loop
+   */
+  static async callWithTools(options: ToolCallingOptions): Promise<LLMToolResponse> {
+    const {
+      model,
+      messages,
+      tools,
+      temperature = 0.7,
+      maxTokens = 4096,
+    } = options;
+
+    const provider = LLMClient.getProvider(model);
+    const config = getConfig();
+
+    if (!config) {
+      throw new ApiError('Configuration not loaded');
+    }
+
+    const apiKey = config.goose.api_keys[provider];
+    if (!apiKey) {
+      throw new ApiAuthenticationError(
+        `Missing API key for ${provider}. Set OMG_GOOSE_API_KEYS_${provider.toUpperCase()}`
+      );
+    }
+
+    // Check budget
+    const estimatedCost = LLMClient.estimateCost(model, '', maxTokens);
+    BudgetManager.checkBudget(estimatedCost);
+
+    logger.debug(`[LLM] Calling ${provider} with tools (${tools.length} available)`);
+
+    try {
+      const response = await this.callProviderWithTools(
+        provider,
+        model,
+        apiKey,
+        messages,
+        tools,
+        temperature,
+        maxTokens
+      );
+
+      // Record spending
+      BudgetManager.recordSpending(estimatedCost);
+
+      return response;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`[LLM] Tool calling failed: ${message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Convert tool definitions to provider format
+   */
+  private static formatToolsForProvider(
+    provider: string,
+    tools: ToolDefinition[]
+  ): Record<string, unknown>[] {
+    if (provider === 'anthropic') {
+      return tools.map(tool => ({
+        name: tool.name,
+        description: tool.description,
+        input_schema: tool.parameters,
+      }));
+    }
+    // OpenAI format
+    return tools.map(tool => ({
+      type: 'function',
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
+      },
+    }));
+  }
+
+  /**
+   * Call Anthropic with tools
+   */
+  private static async callAnthropicWithTools(
+    model: string,
+    apiKey: string,
+    messages: Message[],
+    tools: ToolDefinition[],
+    temperature: number,
+    maxTokens: number
+  ): Promise<LLMToolResponse> {
+    const formattedTools = this.formatToolsForProvider('anthropic', tools);
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: maxTokens,
+        temperature,
+        tools: formattedTools,
+        messages: messages.map(msg => ({
+          role: msg.role,
+          content: typeof msg.content === 'string' ? msg.content : msg.content,
+        })),
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Anthropic API error: ${response.statusText}`);
+    }
+
+    const data = (await response.json()) as any;
+
+    return {
+      stop_reason: data.stop_reason as 'tool_use' | 'end_turn' | 'max_tokens',
+      content: data.content as ContentBlock[],
+      model,
+      usage: {
+        input_tokens: data.usage.input_tokens,
+        output_tokens: data.usage.output_tokens,
+      },
+    };
+  }
+
+  /**
+   * Call OpenAI with tools
+   */
+  private static async callOpenAIWithTools(
+    model: string,
+    apiKey: string,
+    messages: Message[],
+    tools: ToolDefinition[],
+    temperature: number,
+    maxTokens: number
+  ): Promise<LLMToolResponse> {
+    const formattedTools = this.formatToolsForProvider('openai', tools);
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: messages.map(msg => ({
+          role: msg.role,
+          content: typeof msg.content === 'string' ? msg.content : msg.content,
+        })),
+        tools: formattedTools,
+        temperature,
+        max_tokens: maxTokens,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.statusText}`);
+    }
+
+    const data = (await response.json()) as any;
+    const choice = data.choices[0];
+
+    return {
+      stop_reason: choice.finish_reason === 'tool_calls' ? 'tool_use' : 'end_turn',
+      content: choice.message.tool_calls || [{ type: 'text', text: choice.message.content }],
+      model,
+      usage: {
+        input_tokens: data.usage.prompt_tokens,
+        output_tokens: data.usage.completion_tokens,
+      },
+    };
+  }
+
+  /**
+   * Generic provider dispatcher for tool calling
+   */
+  private static async callProviderWithTools(
+    provider: string,
+    model: string,
+    apiKey: string,
+    messages: Message[],
+    tools: ToolDefinition[],
+    temperature: number,
+    maxTokens: number
+  ): Promise<LLMToolResponse> {
+    if (provider === 'anthropic') {
+      return this.callAnthropicWithTools(model, apiKey, messages, tools, temperature, maxTokens);
+    } else if (provider === 'openai') {
+      return this.callOpenAIWithTools(model, apiKey, messages, tools, temperature, maxTokens);
+    } else {
+      throw new Error(`Tool calling not yet supported for provider: ${provider}`);
+    }
   }
 }

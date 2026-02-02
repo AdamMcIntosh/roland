@@ -1,13 +1,20 @@
 # oh-my-goose 🦢
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Goose](https://img.shields.io/badge/goose-MCP%20Integration-blue.svg)](https://github.com/block/goose)
+[![Goose](https://img.shields.io/badge/goose-MCP%20Extension-blue.svg)](https://github.com/block/goose)
 [![Status](https://img.shields.io/badge/status-Production%20Ready-brightgreen.svg)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)]()
 
-A powerful orchestration framework for **[Goose](https://github.com/block/goose)** that provides intelligent AI workflow management through MCP (Model Context Protocol) tools integration. Inspired by **oh-my-claudecode**, OMG extends Goose with specialized agents, reusable skills, and cost-optimized execution modes.
+A powerful orchestration framework for **[Goose](https://github.com/block/goose)** that provides intelligent AI workflow management through MCP (Model Context Protocol) integration. Inspired by **oh-my-claudecode**, oh-my-goose extends Goose with specialized agents, reusable skills, cost-optimized execution modes, and workflow automation.
 
-> **✅ Production Status**: v1.0.0 complete with workflows, caching, CLI, skills, and documentation. Ready for production use!
+> **✅ Production Status**: v1.0.0 complete with workflows, caching, CLI, skills, MCP server, and Goose integration. Ready for production use!
+
+## 🦢 Two Ways to Use
+
+1. **Standalone CLI** - Use oh-my-goose directly via command line
+2. **Goose Extension** - Add as an MCP extension to [Goose](https://github.com/block/goose) for enhanced capabilities ⭐ **Recommended**
+
+See [GOOSE_INTEGRATION.md](GOOSE_INTEGRATION.md) for complete integration guide.
 
 ## ✨ Features (v1.0.0)
 
@@ -56,7 +63,36 @@ A powerful orchestration framework for **[Goose](https://github.com/block/goose)
 
 ## 🚀 Quick Start
 
-### Installation
+### Option 1: Use as Goose Extension (Recommended)
+
+Integrate oh-my-goose with Goose for the best experience:
+
+```bash
+# 1. Build oh-my-goose
+git clone https://github.com/yourusername/oh-my-goose.git
+cd oh-my-goose
+npm install
+npm run build
+
+# 2. Configure API keys
+echo "OMG_GOOSE_API_KEYS_XAI=your_xai_key" > .env
+
+# 3. Add to Goose config (~/.config/goose/config.yaml)
+# See GOOSE_INTEGRATION.md for detailed instructions
+
+# 4. Start Goose
+goose session
+
+# 5. Use oh-my-goose tools from Goose
+> Use oh-my-goose refactoring skill to improve this code
+> Execute BugFix recipe to fix the login issue
+```
+
+See **[GOOSE_INTEGRATION.md](GOOSE_INTEGRATION.md)** for complete setup guide.
+
+### Option 2: Standalone CLI
+
+Use oh-my-goose directly without Goose:
 
 ```bash
 # Clone the repository
@@ -66,32 +102,22 @@ cd oh-my-goose
 # Install dependencies
 npm install
 
-# Configure API keys (create .env file)
+# Configure API keys
 echo "OMG_GOOSE_API_KEYS_XAI=your_xai_key" > .env
-echo "OMG_GOOSE_API_KEYS_ANTHROPIC=your_anthropic_key" >> .env
 
 # Build the project
 npm run build
-```
 
-### Basic Usage
-
-```bash
 # Start the CLI
 npm run cli
 
-# Execute a refactoring task (Ecomode)
+# Execute tasks
 > run "eco: refactor this function for better readability"
-
-# Generate documentation
 > run "eco: add JSDoc comments to this code"
-
-# Write tests
-> run "eco: write comprehensive unit tests"
-
-# Check your savings
 > stats
 ```
+
+See [EXAMPLE_USAGE.md](EXAMPLE_USAGE.md) for detailed CLI examples.
 
 ### Example Session
 

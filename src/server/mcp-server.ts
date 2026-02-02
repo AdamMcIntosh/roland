@@ -13,6 +13,9 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { AppConfig } from '../utils/types.js';
 import { McpServerError, McpToolError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
+import { WorkflowEngine } from '../workflows/engine.js';
+import { RecipeLoader } from '../workflows/recipe-loader.js';
+import { CacheManager } from '../cache/cache-manager.js';
 
 // ============================================================================
 // MCP Server Implementation
@@ -23,11 +26,18 @@ export class McpServer {
   private config: AppConfig;
   private tools: Map<string, (args: Record<string, unknown>) => Promise<unknown>>;
   private toolDefinitions: Map<string, Tool>;
+  private workflowEngine: WorkflowEngine;
+  private recipeLoader: RecipeLoader;
 
   constructor(config: AppConfig) {
     this.config = config;
     this.tools = new Map();
     this.toolDefinitions = new Map();
+    
+    // Initialize workflow engine with caching
+    this.workflowEngine = new WorkflowEngine(true);
+    this.recipeLoader = new RecipeLoader(this.workflowEngine, './recipes');
+    
     this.registerTools();
 
     // Initialize MCP server with stdio transport
@@ -101,6 +111,133 @@ export class McpServer {
           mcp_defaults: this.config.goose.mcp_defaults,
           configPath: this.config.configPath,
         };
+      },
+      {
+        type: 'object',
+        properties: {},
+        required: [],
+      }
+    );
+
+    // List available recipes
+    this.registerTool(
+      'list_recipes',
+      'List all available workflow recipes',
+      async () => {
+        const recipes = await this.recipeLoader.loadAllRecipes();
+        return {
+          count: recipes.length,
+          recipes: recipes.map(r => ({
+            name: r.name,
+            description: r.description,
+            version: r.version,
+          })),
+        };
+      },
+      {
+        type: 'object',
+        properties: {},
+        required: [],
+      }
+    );
+
+    // Execute a recipe
+    this.registerTool(
+      'execute_recipe',
+      'Execute a pre-built workflow recipe for common tasks (BugFix, RESTfulAPI, SecurityAudit, WebAppFullStack, etc.)',
+      async (args: Record<string, unknown>) => {
+        const recipeName = args.recipe_name as string;
+        const inputs = (args.inputs as Record<string, any>) || {};
+
+        if (!recipeName) {
+          throw new McpToolError('execute_recipe', 'recipe_name is required');
+        }
+
+        try {
+          // Load the recipe
+          const recipeData = await this.recipeLoader.loadRecipe(`${recipeName}.yaml`);
+          if (!recipeData) {
+            throw new McpToolError('execute_recipe', `Recipe not found: ${recipeName}`);
+          }
+
+          // Execute the workflow
+          const workflowResult = await this.workflowEngine.executeWorkflow(recipeData.name, inputs);
+
+          return {
+            recipe: recipeName,
+            status: workflowResult.status,
+            outputs: workflowResult.outputs,
+            cost: workflowResult.totalCost,
+            duration: workflowResult.totalDuration,
+          };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          throw new McpToolError('execute_recipe', `Recipe execution failed: ${message}`);
+        }
+      },
+      {
+        type: 'object',
+        properties: {
+          recipe_name: {
+            type: 'string',
+            description: 'Name of the recipe to execute (e.g., "BugFix", "RESTfulAPI", "SecurityAudit")',
+          },
+          inputs: {
+            type: 'object',
+            description: 'Input variables for the recipe (e.g., { "user_task": "Fix login bug" })',
+          },
+        },
+        required: ['recipe_name'],
+      }
+    );
+
+    // List available workflows
+    this.registerTool(
+      'list_workflows',
+      'List all registered workflows',
+      async () => {
+        const workflows = this.workflowEngine.listWorkflows();
+        return {
+          count: workflows.length,
+          workflows,
+        };
+      },
+      {
+        type: 'object',
+        properties: {},
+        required: [],
+      }
+    );
+
+    // Get budget status
+    this.registerTool(
+      'get_budget_status',
+      'Get current budget spending and limits',
+      async () => {
+        const { BudgetManager } = await import('../utils/budget-manager.js');
+        BudgetManager.initialize();
+        
+        return {
+          enabled: (BudgetManager as any).config?.enabled || false,
+          maxBudget: (BudgetManager as any).config?.maxBudget || 0,
+          currentSpending: (BudgetManager as any).config?.currentSpending || 0,
+          remaining: ((BudgetManager as any).config?.maxBudget || 0) - ((BudgetManager as any).config?.currentSpending || 0),
+        };
+      },
+      {
+        type: 'object',
+        properties: {},
+        required: [],
+      }
+    );
+
+    // Get cache statistics
+    this.registerTool(
+      'get_cache_stats',
+      'Get workflow cache statistics and savings',
+      async () => {
+        const stats = this.workflowEngine.getCacheStats();
+        return stats;
       },
       {
         type: 'object',
