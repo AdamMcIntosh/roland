@@ -20,17 +20,41 @@ See [GOOSE_INTEGRATION.md](GOOSE_INTEGRATION.md) for complete integration guide.
 
 ## ✨ Features (v1.0.0)
 
-### 🎯 Ecomode - Cost-Optimized AI Execution
-- **85% cost savings** vs standard models
-- Automatic cheapest model selection (grok-code-fast-1/fast)
-- Complexity-based routing (simple/medium/complex/explain)
-- Query result caching with persistent storage
-- Real-time cost tracking and session statistics
+### 🎯 Execution Modes
+- **Ecomode** (`eco:`) - Cost-optimized single agent (85% savings)
+- **Autopilot** (`autopilot:`) - 3-agent sequential processing
+- **Ultrapilot** (`ultrapilot:`, `ulw:`) - 5 parallel agents
+- **Swarm** (`swarm:`) - 8 dynamic agents with coordination
+- **Pipeline** (`pipeline:`) - 4-step workflow execution
+- **Planning Mode** (`plan:`, `samwise:`) - Structured implementation planning
+
+### 📊 HUD Status Line
+- **Real-time metrics** - Live progress display in terminal
+- **Spinning animation** - Visual feedback during execution
+- **Live counters** - Duration, tool calls, cost tracking
+- **Auto-detection** - Enabled by default in TTY terminals
+- **Pausable** - Smart pause during user confirmations
+- **Options**: `--hud` to force enable, `--no-hud` to disable
+
+### 🎓 Skill Learning System
+- **Automatic pattern extraction** - Learns from successful sessions
+- **Pattern types**:
+  - Tool sequences (e.g., "search → read → analyze")
+  - Multi-step workflows
+  - Prompt templates
+  - Decision trees
+- **Confidence scoring** - Increases with repeated success
+- **Persistent storage** - Saves to `./learned-skills/` directory
+- **CLI commands**:
+  - `samwise learned` - View all learned skills
+  - `samwise learned --stats` - Show learning statistics
+  - `samwise learned --find <query>` - Find matching skills
+  - `samwise learned --export <id>` - Export to framework
 
 ### 🤖 Specialized Agents
 - **10 pre-configured agents** loaded from YAML
 - Architect, Researcher, Designer, Writer, Vision, Critic, Analyst, Executor, Planner, QA-Tester
-- Ready for multi-agent orchestration (Phase 6+)
+- Ready for multi-agent orchestration
 
 ### ⚡ Core Skills System
 - **5 production skills** with auto-detection:
@@ -45,22 +69,31 @@ See [GOOSE_INTEGRATION.md](GOOSE_INTEGRATION.md) for complete integration guide.
 ### 🧩 Workflow Orchestration
 - Multi-step workflows with versioning
 - Variable interpolation between steps
-- Recipe support for common patterns
+- **6 pre-built recipes**:
+  - PlanExecRevEx - 4-agent coding workflow
+  - BugFix - Automated bug fixing
+  - RESTfulAPI - API development
+  - MicroservicesArchitecture - Architecture design
+  - SecurityAudit - Security review
+  - WebAppFullStack - Full-stack development
 - Execution tracking, duration, and cost reporting
 - Workflow caching for repeatable runs
 
 ### 🖥️ CLI Interface
 - **Core commands**:
-  - `run` - Execute Ecomode tasks with cost optimization
+  - `run` - Execute tasks with mode keywords
+  - `agent <query>` - Autonomous agent with tool calling
   - `workflow <name>` - Execute workflows by name
   - `recipe <name>` - Execute pre-built recipes
   - `recipes` - List available recipes
+  - `learned` - View/manage learned skills
   - `cache` - Manage workflow cache (stats, clear, invalidate)
   - `skills` - List available skills
   - `agents` - List loaded agents
+  - `modes` - List execution modes
   - `stats` - View session cost and cache statistics
   - `help` - Show comprehensive documentation
-- Options: `--no-cache`, `--verbose`, `--model`, `--cost-only`
+- Options: `--no-cache`, `--verbose`, `--model`, `--cost-only`, `--hud`, `--no-hud`
 - Colorized output with rich formatting
 
 ## 🚀 Quick Start
@@ -140,9 +173,20 @@ Welcome to samwise!
 
 Quick Start:
   • Run a task:        samwise run "eco: your task"
+  • Plan mode:         samwise run "plan: build REST API"
   • View help:         samwise help
   • List recipes:      samwise recipes
   • View cache stats:  samwise cache --stats
+  • Learned skills:    samwise learned
+
+7 Execution Modes:
+  eco:          Single agent (cheapest)
+  autopilot:    3-agent sequential
+  ultrapilot:   5 parallel agents
+  swarm:         8 dynamic agents
+  pipeline:     4-step workflow
+  plan:         Planning mode (structured plans)
+  samwise:      Alias for plan: (persistence mode)
 
 > run "eco: refactor legacy authentication code"
 ✓ Ecomode Result
@@ -154,11 +198,43 @@ Cost: $0.0002 | Cached: No | Duration: 1.2s
 [Refactored code output]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+🎓 Learned 1 new pattern(s) from this session
+   • search-read-analyze Pattern (60% confidence)
+
+> run "plan: create REST API for user management" --hud
+⠋ Planning [2.3s] Claude-S 🔧 3/15 $0.0042
+
+📋 Implementation Plan:
+────────────────────────────────────────────────────────────
+## Goal Analysis
+Building a RESTful API for user management...
+
+## Step-by-Step Plan
+1. Define data models (User, Session)
+2. Create routes (GET, POST, PUT, DELETE)
+3. Add authentication middleware
+4. Implement validation
+5. Write tests
+
+[Complete plan output]
+────────────────────────────────────────────────────────────
+
+> learned
+🎓 Learned Skills
+────────────────────────────────────────────────────────────
+Found 1 learned skills
+
+  search-read-analyze Pattern
+    Pattern: grep_search → read_file → semantic_search
+    Confidence: 60% | Used: 1x | Success: 100%
+    Category: analysis | Difficulty: simple
+    Triggers: analyze, search
+
 > stats
 📊 Session Statistics
-Total Queries: 1
+Total Queries: 2
 Cache Hits: 0 (0%)
-Total Cost: $0.0002
+Total Cost: $0.0044
 Savings (vs standard): 85%
 ```
 

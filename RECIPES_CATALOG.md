@@ -1,53 +1,290 @@
 # Pre-Built Recipes Catalog
 
-Complete documentation of all 5 pre-built workflow recipes created
+> Complete documentation of all 6 pre-built workflow recipes included with samwise
+
+Recipes are YAML-based workflow templates that orchestrate multiple agents to accomplish complex tasks. They're loaded automatically and can be executed via CLI or MCP tools.
+
+**Quick Start:**
+```bash
+# List all recipes
+samwise recipes
+
+# Execute a recipe
+samwise recipe PlanExecRevEx
+
+# With custom inputs
+samwise workflow PlanExecRevEx --input '{"task": "build auth system"}'
+```
 
 ---
 
-## 1. PlanExecRevEx - Classic 4-Agent Workflow
+## Quick Reference
+
+| Recipe | Agents | Steps | Best For | Est. Cost |
+|--------|--------|-------|----------|-----------|
+| **PlanExecRevEx** | 4 | 4 | Feature development, refactoring | $0.05-$0.80 |
+| **BugFix** | 3 | 4 | Bug resolution, error fixes | $0.03-$0.25 |
+| **RESTfulAPI** | 4 | 5 | API development, endpoints | $0.15-$1.50 |
+| **MicroservicesArchitecture** | 3 | 5 | System design, architecture | $0.20-$1.00 |
+| **SecurityAudit** | 3 | 4 | Security review, compliance | $0.15-$1.20 |
+| **WebAppFullStack** | 5 | 6 | Full-stack app development | $0.50-$2.00 |
+
+---
+
+## 1. PlanExecRevEx - Plan-Execute-Review-Explain
 
 **File**: `recipes/PlanExecRevEx.yaml`  
-**Purpose**: Classic software development workflow (Plan → Execute → Review → Document)  
-**Agents**: 4 (planner, executor, critic, writer)  
-**Steps**: 4 sequential  
-**Ideal For**: Software development, feature implementation, project planning
+**Purpose**: Autonomous 4-agent coding workflow with continuous improvement loop  
+**Agents**: 4 (Planner, Executor, Reviewer, Explainer)  
+**Models**: Claude Opus → GPT-4o → Gemini Pro → Grok  
+**Steps**: 4 sequential with conditional looping  
+**Ideal For**: Complex development tasks, feature implementation, refactoring
+
+### Description
+"Autonomous loop: Claude plans → GPT-4o executes → Gemini reviews → Grok explains"
+
+This recipe implements a complete development cycle where each agent specializes:
+- **Planner** (Claude Opus): Strategic thinking and architecture
+- **Executor** (GPT-4o): Code implementation
+- **Reviewer** (Gemini Pro): Code review and quality checks
+- **Explainer** (Grok): Documentation and explanation
 
 ### Flow
 ```
-1. Planner → Design approach, create plan
+1. Planner → Analyze task, create detailed plan
+   ↓
 2. Executor → Implement solution based on plan
-3. Critic → Review and provide feedback
-4. Writer → Document findings and results
+   ↓
+3. Reviewer → Review code, identify issues
+   ↓ (if issues found, loop back to Executor)
+   ↓
+4. Explainer → Document solution and rationale
 ```
 
 ### Use Cases
-- Implementing new features
-- Code refactoring projects
-- Bug fixes and patches
-- Architecture changes
-- Documentation updates
+- **Feature Development**: New features requiring planning → implementation → review
+- **Code Refactoring**: Major refactoring with quality gates
+- **Bug Fixes**: Complex bugs needing analysis → fix → verification
+- **Architecture Changes**: System redesigns with peer review
+- **Learning Projects**: Understand complex code through explained solutions
 
-### Variables
-- `user_task`: Main task to complete
-- `context`: Additional context information
-- `requirements`: Specific requirements
+### Example Usage
+```bash
+# Basic execution
+samwise recipe PlanExecRevEx
 
-### Outputs
-- `plan`: Detailed execution plan
-- `implementation`: Code implementation
-- `review`: Code review findings
-- `documentation`: Final documentation
+# With specific task
+samwise workflow PlanExecRevEx --input '{
+  "task": "implement OAuth2 authentication",
+  "context": "Express.js backend, PostgreSQL database",
+  "requirements": "secure, scalable, well-tested"
+}'
+```
 
-### Cost Tracking
-- Per-step cost monitoring
-- Total workflow cost aggregation
-- Cost warnings for expensive steps
+### Cost Estimate
+- **Simple tasks**: $0.05 - $0.10 (1-2 iterations)
+- **Medium tasks**: $0.15 - $0.30 (2-3 iterations)
+- **Complex tasks**: $0.40 - $0.80 (3-4 iterations)
+
+*Note: Costs vary based on task complexity and number of review loops*
 
 ---
 
-## 2. WebAppFullStack - Full-Stack Application Development
+## 2. BugFix - Automated Bug Resolution
 
-**File**: `recipes/WebAppFullStack.yaml`  
+**File**: `recipes/BugFix.yaml`  
+**Purpose**: Systematic bug investigation and fixing workflow  
+**Agents**: 3 (Analyst, Executor, QA-Tester)  
+**Steps**: 4 (analyze → reproduce → fix → verify)  
+**Ideal For**: Bug fixes, error resolution, regression fixes
+
+### Description
+Methodical approach to bug resolution with verification:
+- **Analyst**: Root cause analysis and impact assessment
+- **Executor**: Implement fix with proper error handling
+- **QA-Tester**: Verify fix and test edge cases
+
+### Flow
+```
+1. Analyze → Investigate bug, identify root cause
+   ↓
+2. Reproduce → Create minimal reproduction case
+   ↓
+3. Fix → Implement solution with tests
+   ↓
+4. Verify → Validate fix across scenarios
+```
+
+### Use Cases
+- Production bug fixes
+- Regression testing
+- Error handling improvements
+- Edge case resolution
+
+### Example Usage
+```bash
+samwise workflow BugFix --input '{
+  "bug": "User login fails with 500 error",
+  "logs": "Authentication service timeout",
+  "affected_users": "All users in EU region"
+}'
+```
+
+### Cost Estimate
+- **Simple bugs**: $0.03 - $0.08
+- **Complex bugs**: $0.10 - $0.25
+
+---
+
+## 3. RESTfulAPI - API Development Workflow
+
+**File**: `recipes/RESTfulAPI.yaml`  
+**Purpose**: Complete REST API design and implementation  
+**Agents**: 4 (Architect, Designer, Executor, QA-Tester)  
+**Steps**: 5 (design → spec → implement → test → document)  
+**Ideal For**: API development, endpoint creation, service design
+
+### Description
+End-to-end API development from design to documentation:
+- **Architect**: System design and architecture decisions
+- **Designer**: API specifications (OpenAPI/Swagger)
+- **Executor**: Endpoint implementation
+- **QA-Tester**: API testing and validation
+
+### Flow
+```
+1. Design → Architecture and data models
+   ↓
+2. Spec → OpenAPI specification
+   ↓
+3. Implement → Route handlers and middleware
+   ↓
+4. Test → Integration tests
+   ↓
+5. Document → API documentation
+```
+
+### Use Cases
+- New API endpoints
+- Microservice creation
+- API versioning
+- RESTful service design
+
+### Example Usage
+```bash
+samwise workflow RESTfulAPI --input '{
+  "service": "user-management-api",
+  "endpoints": ["users", "sessions", "permissions"],
+  "auth": "JWT",
+  "database": "PostgreSQL"
+}'
+```
+
+### Cost Estimate
+- **Small API (1-3 endpoints)**: $0.15 - $0.30
+- **Medium API (5-10 endpoints)**: $0.40 - $0.70
+- **Large API (10+ endpoints)**: $0.80 - $1.50
+
+---
+
+## 4. MicroservicesArchitecture - System Architecture Design
+
+**File**: `recipes/MicroservicesArchitecture.yaml`  
+**Purpose**: Design and plan microservices architecture  
+**Agents**: 3 (Architect, Researcher, Critic)  
+**Steps**: 5 (analyze → design → review → optimize → document)  
+**Ideal For**: System design, architecture planning, scalability analysis
+
+### Description
+Comprehensive architecture design process:
+- **Architect**: Service boundaries and communication patterns
+- **Researcher**: Technology stack recommendations
+- **Critic**: Architecture review and tradeoff analysis
+
+### Flow
+```
+1. Analyze → Requirements and constraints
+   ↓
+2. Design → Service decomposition
+   ↓
+3. Review → Architecture patterns review
+   ↓
+4. Optimize → Performance and scalability
+   ↓
+5. Document → Architecture documentation
+```
+
+### Use Cases
+- Microservices migration
+- System architecture design
+- Scalability planning
+- Technology stack selection
+
+### Example Usage
+```bash
+samwise workflow MicroservicesArchitecture --input '{
+  "system": "e-commerce platform",
+  "scale": "100k concurrent users",
+  "constraints": "cloud-native, event-driven",
+  "services": ["auth", "catalog", "orders", "payments"]
+}'
+```
+
+### Cost Estimate
+- **Simple architecture**: $0.20 - $0.40
+- **Complex architecture**: $0.50 - $1.00
+
+---
+
+## 5. SecurityAudit - Security Review Workflow
+
+**File**: `recipes/SecurityAudit.yaml`  
+**Purpose**: Comprehensive security audit and vulnerability assessment  
+**Agents**: 3 (Researcher, Analyst, Critic)  
+**Steps**: 4 (scan → analyze → remediate → verify)  
+**Ideal For**: Security reviews, vulnerability fixes, compliance checks
+
+### Description
+Systematic security assessment:
+- **Researcher**: Threat modeling and vulnerability research
+- **Analyst**: Code analysis and security testing
+- **Critic**: Risk assessment and prioritization
+
+### Flow
+```
+1. Scan → Automated security scanning
+   ↓
+2. Analyze → Manual code review
+   ↓
+3. Remediate → Fix vulnerabilities
+   ↓
+4. Verify → Security validation
+```
+
+### Use Cases
+- Pre-deployment security audit
+- Vulnerability remediation
+- Compliance validation (OWASP, etc.)
+- Security best practices review
+
+### Example Usage
+```bash
+samwise workflow SecurityAudit --input '{
+  "target": "authentication-service",
+  "scope": "OWASP Top 10",
+  "severity": "high,critical"
+}'
+```
+
+### Cost Estimate
+- **Module audit**: $0.15 - $0.35
+- **Full application audit**: $0.50 - $1.20
+
+---
+
+## 6. WebAppFullStack - Full-Stack Application Development
+
+**File**: `recipes/WebAppFullStack.yaml`
 **Purpose**: Complete full-stack web application development from scratch  
 **Agents**: 5 (architect, designer, executor, critic, writer)  
 **Steps**: 5 sequential  

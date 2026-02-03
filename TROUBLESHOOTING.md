@@ -6,6 +6,10 @@ Common issues and solutions for samwise workflow orchestration.
 
 - [Installation & Setup](#installation--setup)
 - [CLI Issues](#cli-issues)
+- [API Authentication](#api-authentication)
+- [Planning Mode](#planning-mode)
+- [HUD Status Line](#hud-status-line)
+- [Skill Learning](#skill-learning)
 - [Workflow Execution](#workflow-execution)
 - [Caching Issues](#caching-issues)
 - [Agent & Skill Problems](#agent--skill-problems)
@@ -51,9 +55,13 @@ Common issues and solutions for samwise workflow orchestration.
 2. Run directly: `node dist/cli/cli-main.js help`
 3. Create an alias in your shell:
    ```bash
+   # PowerShell
+   function samwise { node D:\projects\samwise\dist\cli\cli-main.js $args }
+   
+   # Bash/Zsh
    alias samwise='node /path/to/dist/cli/cli-main.js'
    ```
-4. Install globally: `npm install -g` (if published)
+4. Add to PATH or install globally: `npm link`
 
 ### Issue: CLI help text not displaying
 
@@ -73,7 +81,169 @@ Common issues and solutions for samwise workflow orchestration.
 1. Verify the workflow exists: `samwise recipes`
 2. Check the workflow name exactly: `samwise workflow MyWorkflow:1.0.0`
 3. Check for errors in your shell: `samwise workflow MyWorkflow 2>&1`
-4. Run in verbose mode if available
+4. Run in verbose mode: `samwise workflow MyWorkflow --verbose`
+
+## API Authentication
+
+### Issue: "Unauthorized" or "API key not found" errors
+
+**Error**: `Anthropic API error: Unauthorized` or `API key not configured`
+
+**Solutions**:
+1. Set environment variables with correct prefix:
+   ```bash
+   # PowerShell
+   $env:SAMWISE_GOOSE_API_KEYS_ANTHROPIC="sk-ant-..."
+   $env:SAMWISE_GOOSE_API_KEYS_OPENAI="sk-..."
+   $env:SAMWISE_GOOSE_API_KEYS_XAI="xai-..."
+   $env:SAMWISE_GOOSE_API_KEYS_GOOGLE="..."
+   
+   # Bash
+   export SAMWISE_GOOSE_API_KEYS_ANTHROPIC="sk-ant-..."
+   ```
+
+2. Or create a `.env` file in project root:
+   ```bash
+   SAMWISE_GOOSE_API_KEYS_ANTHROPIC=sk-ant-...
+   SAMWISE_GOOSE_API_KEYS_OPENAI=sk-...
+   SAMWISE_GOOSE_API_KEYS_XAI=xai-...
+   SAMWISE_GOOSE_API_KEYS_GOOGLE=...
+   ```
+
+3. Verify API key format is correct (no quotes in .env)
+4. Check which provider the model requires:
+   - `claude-*` → Anthropic (ANTHROPIC key)
+   - `gpt-*` → OpenAI (OPENAI key)
+   - `grok-*` → xAI (XAI key)
+   - `gemini-*` → Google (GOOGLE key)
+
+### Issue: Rate limiting errors
+
+**Error**: `429 Too Many Requests` or rate limit exceeded
+
+**Solutions**:
+1. Wait and retry (most providers reset limits hourly/daily)
+2. Use a different model: `samwise run "eco: task" --model grok-2`
+3. Enable caching to reduce API calls: ensure `--no-cache` is NOT used
+4. Check your provider's rate limits and upgrade tier if needed
+5. **Coming soon**: Automatic rate limit handling with exponential backoff
+
+## Planning Mode
+
+### Issue: Planning mode fails with API error
+
+**Error**: Planning command returns unauthorized or fails
+
+**Solutions**:
+1. Planning mode uses Claude Sonnet 4 by default - ensure Anthropic API key is set:
+   ```bash
+   $env:SAMWISE_GOOSE_API_KEYS_ANTHROPIC="sk-ant-..."
+   ```
+
+2. Check you're using the correct syntax:
+   ```bash
+   samwise run "plan: build REST API"
+   # OR
+   samwise run "samwise: create auth system"
+   ```
+
+3. Try with explicit model override if Claude isn't available:
+   ```bash
+   samwise run "plan: task" --model gpt-4o
+   ```
+
+### Issue: Planning output is incomplete
+
+**Error**: Plan stops mid-generation or seems truncated
+
+**Solutions**:
+1. Planning mode has a 15 tool call limit - check if it's hitting this
+2. Break down complex tasks into smaller planning sessions
+3. Use verbose mode to see all steps: `samwise run "plan: task" --verbose`
+
+## HUD Status Line
+
+### Issue: HUD not displaying
+
+**Error**: No status line shows during execution
+
+**Solutions**:
+1. HUD auto-disables in non-TTY environments - force enable:
+   ```bash
+   samwise run "task" --hud
+   ```
+
+2. Check your terminal supports ANSI escape codes
+3. HUD requires a terminal (won't work in redirected output):
+   ```bash
+   # This won't show HUD
+   samwise run "task" > output.txt
+   
+   # This will
+   samwise run "task"
+   ```
+
+### Issue: HUD display is garbled or flickering
+
+**Error**: Status line shows strange characters or updates incorrectly
+
+**Solutions**:
+1. Disable HUD if terminal doesn't support it:
+   ```bash
+   samwise run "task" --no-hud
+   ```
+
+2. Update your terminal emulator (Windows Terminal, iTerm2, etc.)
+3. Try a different terminal with better ANSI support
+4. Check terminal width is sufficient (80+ columns recommended)
+
+## Skill Learning
+
+### Issue: No skills are being learned
+
+**Error**: `samwise learned` shows 0 skills after multiple sessions
+
+**Solutions**:
+1. Skills are only learned from **successful** sessions - check if your sessions are completing successfully
+2. Verify learned-skills directory exists and is writable:
+   ```bash
+   mkdir learned-skills
+   ```
+
+3. Check permissions on learned-skills directory
+4. Skills require at least 2 tool calls to form a pattern
+5. Run with `--verbose` to see if learning is being attempted
+
+### Issue: Cannot export learned skill
+
+**Error**: `Skill not found` when trying to export
+
+**Solutions**:
+1. List skills to get the correct ID:
+   ```bash
+   samwise learned
+   ```
+
+2. Use the full skill ID (16-character hex):
+   ```bash
+   samwise learned --export abc123def456
+   ```
+
+3. Ensure the skill has sufficient confidence (>70% by default)
+
+### Issue: Learned skills not matching queries
+
+**Error**: `--find` command returns no results
+
+**Solutions**:
+1. Try broader search terms:
+   ```bash
+   samwise learned --find refactor
+   samwise learned --find test
+   ```
+
+2. Check skill triggers: `samwise learned` (view all skills and their triggers)
+3. Learning system needs more sessions to build patterns - keep using samwise!
 
 ## Workflow Execution
 
