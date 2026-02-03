@@ -20,10 +20,10 @@ function getGooseLogo(): string {
   return chalk.cyan(`
     ╔═══════════════════════════════════════╗
     ║                                       ║
-    ║         samwise                 ║
+    ║         samwise                       ║
     ║       Workflow Orchestration CLI      ║
     ║                                       ║
-    ║         v1.0.0 - Phase Complete       ║
+    ║        \                              ║
     ║                                       ║
     ╚═══════════════════════════════════════╝
   `);
