@@ -1,15 +1,14 @@
 # Installation Guide - samwise
 
-Complete installation and setup guide for samwise with standalone CLI and Goose extension modes.
+Complete installation and setup guide for samwise standalone CLI.
 
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
 2. [Installation Steps](#installation-steps)
-3. [Goose Integration](#goose-integration) ⭐ **Recommended**
-4. [Getting API Keys](#getting-your-api-keys)
-5. [Testing Installation](#testing-your-installation)
-6. [Troubleshooting](#troubleshooting)
+3. [Getting API Keys](#getting-your-api-keys)
+4. [Testing Installation](#testing-your-installation)
+5. [Troubleshooting](#troubleshooting)
 
 ## Prerequisites
 
@@ -54,16 +53,16 @@ Add your API keys:
 
 ```bash
 # xAI (recommended for Ecomode - cheapest models)
-SAMWISE_GOOSE_API_KEYS_XAI=your_xai_api_key_here
+SAMWISE_API_KEYS_XAI=your_xai_api_key_here
 
 # Anthropic (Claude models)
-SAMWISE_GOOSE_API_KEYS_ANTHROPIC=your_anthropic_api_key_here
+SAMWISE_API_KEYS_ANTHROPIC=your_anthropic_api_key_here
 
 # OpenAI (GPT models)
-SAMWISE_GOOSE_API_KEYS_OPENAI=your_openai_api_key_here
+SAMWISE_API_KEYS_OPENAI=your_openai_api_key_here
 
 # Google (Gemini models)
-SAMWISE_GOOSE_API_KEYS_GOOGLE=your_google_api_key_here
+SAMWISE_API_KEYS_GOOGLE=your_google_api_key_here
 ```
 
 **Note**: For Ecomode MVP, only **xAI API key** is required as it provides the cheapest models (grok-code-fast-1 and grok-4-1-fast-reasoning).
@@ -95,65 +94,6 @@ samwise>
 ```
 
 Type `help` to see available commands.
-
-## Goose Integration
-
-### What is Goose?
-
-[Goose](https://github.com/block/goose) is Block's open-source AI agent that automates coding tasks. samwise can extend Goose with advanced orchestration capabilities.
-
-### Setup as Goose Extension
-
-**Step 1:** Install Goose (if not already installed)
-
-```bash
-# macOS
-brew install --cask block-goose
-
-# Or download from: https://github.com/block/goose/releases
-```
-
-**Step 2:** Build samwise (must be done first)
-
-```bash
-cd samwise
-npm run build
-```
-
-**Step 3:** Add to Goose configuration
-
-Edit your Goose config file:
-- **macOS/Linux**: `~/.config/goose/config.yaml`
-- **Windows**: `%APPDATA%\Block\goose\config\config.yaml`
-
-Add this extension block:
-
-```yaml
-extensions:
-  samwise:
-    name: "samwise"
-    display_name: "Samwise"
-    description: "Multi-agent orchestration with workflows and cost optimization"
-    type: "stdio"
-    cmd: "node"
-    args: ["/absolute/path/to/samwise/dist/index.js"]  # Change this!
-    enabled: true
-    timeout: 600
-    bundled: false
-```
-
-**Important:** Use the **absolute path** to your samwise installation!
-
-**Step 4:** Start or restart Goose
-
-```bash
-goose session
-
-# Test integration
-> Can you list available tools from samwise?
-```
-
-For complete integration guide with examples, see **[GOOSE_INTEGRATION.md](GOOSE_INTEGRATION.md)**.
 
 ## Getting Your API Keys
 

@@ -199,7 +199,7 @@ These are optional enhancements beyond v1.0.0:
 - ✅ **7 execution modes** vs 5 in oh-my-claudecode
 - ✅ **6 pre-built recipes** (PlanExecRevEx, BugFix, etc.)
 - ✅ **Workflow engine** with versioning and caching
-- ✅ **MCP server integration** for Goose
+- ✅ **MCP server integration**
 - ✅ **Multi-provider support** (Anthropic, OpenAI, Google, xAI)
 - ✅ **Skill learning with export** to framework
 - ✅ **Persistent cache** with 24h TTL

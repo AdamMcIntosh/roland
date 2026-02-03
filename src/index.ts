@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * samwise MCP Server Entry Point
- * Starts the Model Context Protocol server for Goose integration
+ * Starts the Model Context Protocol server for agent orchestration
  */
 
 import { McpServer } from './server/mcp-server.js';
@@ -33,7 +33,7 @@ async function main() {
     await server.start();
 
     logger.info('✅ MCP Server started successfully');
-    logger.info('🔗 Waiting for Goose connection...');
+    logger.info('🔗 Waiting for client connection...');
 
     // Handle graceful shutdown
     process.on('SIGINT', async () => {

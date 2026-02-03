@@ -540,7 +540,7 @@ routing:
     - gpt-4o
 
 # LLM Settings
-goose:
+session:
   mcp_defaults:
     temperature: 0.7
     max_tokens: 4000

@@ -14,9 +14,9 @@ export interface FormattedOutput {
 }
 
 /**
- * ASCII Goose Logo
+ * ASCII Samwise Logo
  */
-function getGooseLogo(): string {
+function getSamwiseLogo(): string {
   return chalk.cyan(`
     ╔═══════════════════════════════════════╗
     ║                                       ║
@@ -30,9 +30,9 @@ function getGooseLogo(): string {
 }
 
 /**
- * ASCII Goose Character (detailed)
+ * ASCII Samwise Character (detailed)
  */
-function getGooseCharacter(): string {
+function getSamwiseCharacter(): string {
   return chalk.yellow(`
           ^^^
          (o o)
@@ -48,7 +48,7 @@ function getGooseCharacter(): string {
  */
 export function formatWelcome(): string {
   let welcome = '\n';
-  welcome += getGooseLogo();
+  welcome += getSamwiseLogo();
   welcome += '\n';
   welcome += chalk.bold.cyan('Welcome to samwise! \n');
   welcome += chalk.gray('═'.repeat(80)) + '\n\n';

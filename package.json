@@ -16,7 +16,7 @@
     "clean": "rimraf dist"
   },
   "keywords": [
-    "goose",
+    "agent-orchestration",
     "mcp",
     "ai",
     "orchestration",

@@ -798,7 +798,7 @@ export class CliInterface {
   private async handleExecuteRecipe(name: string, options: any): Promise<void> {
     this.spinner.stop();
     console.log(formatInfo('Recipe execution via CLI is not yet implemented.'));
-    console.log('Use workflow command instead: goose workflow <name>\n');
+    console.log('Use workflow command instead: samwise workflow <name>\n');
   }
 
   /**

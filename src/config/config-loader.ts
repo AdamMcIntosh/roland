@@ -7,7 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import YAML from 'yaml';
 import { z } from 'zod';
-import { AppConfig, RoutingConfig, GooseConfig } from '../utils/types.js';
+import { AppConfig, RoutingConfig, SessionConfig } from '../utils/types.js';
 import {
   ConfigError,
   ConfigNotFoundError,
@@ -27,26 +27,26 @@ const RoutingConfigSchema = z.object({
   explain: z.array(z.string()).min(1),
 });
 
-const GooseApiKeysSchema = z.object({
+const SessionApiKeysSchema = z.object({
   anthropic: z.string().optional(),
   openai: z.string().optional(),
   google: z.string().optional(),
   xai: z.string().optional(),
 });
 
-const GooseDefaultsSchema = z.object({
+const SessionDefaultsSchema = z.object({
   temperature: z.number().min(0).max(2).default(0.7),
   max_tokens: z.number().min(1).default(2000),
 });
 
-const GooseConfigSchema = z.object({
-  api_keys: GooseApiKeysSchema,
-  mcp_defaults: GooseDefaultsSchema,
+const SessionConfigSchema = z.object({
+  api_keys: SessionApiKeysSchema,
+  mcp_defaults: SessionDefaultsSchema,
 });
 
 const AppConfigSchema = z.object({
   routing: RoutingConfigSchema,
-  goose: GooseConfigSchema,
+  goose: SessionConfigSchema,
 });
 
 // ============================================================================
@@ -127,7 +127,7 @@ export class ConfigLoader {
     const providers = ['anthropic', 'openai', 'google', 'xai'] as const;
 
     for (const provider of providers) {
-      const envKey = `${this.ENV_PREFIX}GOOSE_API_KEYS_${provider.toUpperCase()}`;
+      const envKey = `${this.ENV_PREFIX}API_KEYS_${provider.toUpperCase()}`;
       const value = process.env[envKey];
 
       if (value) {

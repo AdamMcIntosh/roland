@@ -48,9 +48,9 @@ export interface AgentExecutionContext {
 }
 
 /**
- * Goose session parameters derived from agent configuration
+ * Session parameters derived from agent configuration
  */
-export interface GooseSessionParams {
+export interface SessionParams {
   session_id: string;
   agent_name: string;
   provider: Agent['provider'];
@@ -63,7 +63,7 @@ export interface GooseSessionParams {
 }
 
 /**
- * Prompt bundle passed to Goose
+ * Prompt bundle for agent execution
  */
 export interface AgentPromptBundle {
   system: string;
@@ -71,9 +71,9 @@ export interface AgentPromptBundle {
 }
 
 /**
- * Goose execution result for a single agent
+ * Session execution result for a single agent
  */
-export interface GooseSessionResult {
+export interface SessionResult {
   output: string;
   status?: 'success' | 'error' | 'partial';
   error?: string;
@@ -85,12 +85,12 @@ export interface GooseSessionResult {
 }
 
 /**
- * Adapter interface for Goose session execution
+ * Adapter interface for session execution
  */
-export type GooseSessionExecutor = (
-  params: GooseSessionParams,
+export type SessionExecutor = (
+  params: SessionParams,
   prompt: AgentPromptBundle
-) => Promise<GooseSessionResult>;
+) => Promise<SessionResult>;
 
 /**
  * Agent execution result

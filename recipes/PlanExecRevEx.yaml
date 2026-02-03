@@ -51,5 +51,5 @@ workflow:
 options:
   cache_messages: true
   max_loops: 3
-  cache_messages: true  # Goose-side caching
+  cache_messages: true  # Result caching
   max_loops: 3  # Prevent infinite iterations

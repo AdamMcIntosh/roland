@@ -125,7 +125,7 @@ export class LLMClient {
         }
       }
       throw new ApiAuthenticationError(
-        `Missing API key for ${provider}. Set SAMWISE_GOOSE_API_KEYS_${provider.toUpperCase()}`
+        `Missing API key for ${provider}. Set SAMWISE_API_KEYS_${provider.toUpperCase()}`
       );
     }
 

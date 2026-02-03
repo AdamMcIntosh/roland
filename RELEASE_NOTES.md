@@ -8,7 +8,7 @@
 
 ## 🎉 Welcome to samwise v1.0.0!
 
-We're excited to announce the first production release of **samwise**, a cost-optimized AI orchestration framework for Goose with Model Context Protocol (MCP) integration.
+We're excited to announce the first production release of **samwise**, a cost-optimized AI orchestration framework with Model Context Protocol (MCP) integration.
 
 This MVP focuses on **Ecomode** - an intelligent execution mode that delivers **85% cost savings** through automatic cheapest model selection, aggressive caching, and smart task routing.
 
@@ -302,7 +302,7 @@ These are intentional design decisions for the MVP:
   - Security scanning
 
 - **Enhanced Features**
-  - MCP tool integration with Goose
+  - MCP tool integration
   - Rich HUD display
   - YAML workflow templates
   - Analytics dashboard
@@ -345,7 +345,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## 🙏 Acknowledgments
 
 - Inspired by **[oh-my-claudecode](https://github.com/ldavidson45/oh-my-claudecode)**
-- Built on **[Goose](https://github.com/block/goose)** by Block
 - Powered by **[Model Context Protocol](https://modelcontextprotocol.io/)**
 - Thanks to the open-source AI community
 

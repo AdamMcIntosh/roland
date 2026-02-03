@@ -1,6 +1,6 @@
 /**
  * MCP Server Implementation
- * Implements the Model Context Protocol server for Goose integration
+ * Implements the Model Context Protocol server for agent orchestration
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';

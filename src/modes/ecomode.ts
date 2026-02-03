@@ -211,7 +211,7 @@ export class Ecomode extends BaseMode {
 
   /**
    * Execute agent with specified model
-   * MVP: Mock implementation - will integrate with actual Goose in future phases
+   * MVP: Mock implementation - will integrate with actual LLM integration in future phases
    */
   private async executeAgentWithModel(
     query: string,

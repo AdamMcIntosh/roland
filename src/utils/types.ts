@@ -13,26 +13,26 @@ export interface RoutingConfig {
   explain: string[];
 }
 
-export interface GooseApiKeys {
+export interface SessionApiKeys {
   anthropic?: string;
   openai?: string;
   google?: string;
   xai?: string;
 }
 
-export interface GooseDefaults {
+export interface SessionDefaults {
   temperature: number;
   max_tokens: number;
 }
 
-export interface GooseConfig {
-  api_keys: GooseApiKeys;
-  mcp_defaults: GooseDefaults;
+export interface SessionConfig {
+  api_keys: SessionApiKeys;
+  mcp_defaults: SessionDefaults;
 }
 
 export interface AppConfig {
   routing: RoutingConfig;
-  goose: GooseConfig;
+  goose: SessionConfig;
   configPath?: string;
 }
 

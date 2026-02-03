@@ -208,13 +208,13 @@ Reference outputs from previous steps:
 
 ```bash
 # Execute a specific workflow
-goose workflow CodeAnalysis
+samwise workflow CodeAnalysis
 
 # Execute a specific version
-goose workflow CodeAnalysis:1.0.0
+samwise workflow CodeAnalysis:1.0.0
 
 # Execute with inputs (via JSON)
-goose workflow CodeAnalysis --input '{"sourceCode":"const x = 1;"}'
+samwise workflow CodeAnalysis --input '{"sourceCode":"const x = 1;"}'
 ```
 
 ### Execute via TypeScript

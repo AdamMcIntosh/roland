@@ -8,23 +8,23 @@ import {
   AgentExecutionContext,
   AgentExecutionResult,
   AgentPromptBundle,
-  GooseSessionExecutor,
-  GooseSessionParams,
-  GooseSessionResult,
+  SessionExecutor,
+  SessionParams,
+  SessionResult,
 } from './types.js';
 import { skillRegistry } from '../skills/skill-framework.js';
 import { logger } from '../utils/logger.js';
 
 export class AgentExecutor {
-  private gooseExecutor: GooseSessionExecutor;
+  private sessionExecutor: SessionExecutor;
 
-  constructor(gooseExecutor?: GooseSessionExecutor) {
-    this.gooseExecutor = gooseExecutor ?? this.defaultExecutor.bind(this);
+  constructor(sessionExecutor?: SessionExecutor) {
+    this.sessionExecutor = sessionExecutor ?? this.defaultExecutor.bind(this);
   }
 
   /**
    * Execute an agent with given context
-   * Note: This is a placeholder for actual Goose session integration
+   * Note: This is a placeholder for actual session adapter integration
    */
   async execute(context: AgentExecutionContext): Promise<AgentExecutionResult> {
     const startTime = Date.now();
@@ -37,8 +37,8 @@ export class AgentExecutor {
       const prompt = this.buildPrompt(context);
       const sessionParams = this.mapAgentToSessionParams(context, prompt);
 
-      // Execute via Goose adapter (placeholder by default)
-      const result = await this.gooseExecutor(sessionParams, prompt);
+      // Execute via session adapter (placeholder by default)
+      const result = await this.sessionExecutor(sessionParams, prompt);
 
       const executionTime = Date.now() - startTime;
 
@@ -164,12 +164,12 @@ export class AgentExecutor {
   }
 
   /**
-   * Map agent configuration to Goose session parameters
+   * Map agent configuration to session parameters
    */
   mapAgentToSessionParams(
     context: AgentExecutionContext,
     prompt: AgentPromptBundle
-  ): GooseSessionParams {
+  ): SessionParams {
     const { agent, session_id, mode } = context;
     const model = this.selectModel(agent, mode);
     const tools = this.resolveTools(context);
@@ -253,12 +253,12 @@ export class AgentExecutor {
   }
 
   /**
-   * Default placeholder executor until Goose MCP adapter is wired
+   * Default placeholder executor until session adapter is wired
    */
   private async defaultExecutor(
-    params: GooseSessionParams,
+    params: SessionParams,
     prompt: AgentPromptBundle
-  ): Promise<GooseSessionResult> {
+  ): Promise<SessionResult> {
     return {
       output: `[Placeholder] ${params.agent_name} processed: ${prompt.user.substring(0, 80)}...`,
       status: 'success',

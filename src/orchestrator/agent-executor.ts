@@ -168,7 +168,7 @@ export class AgentExecutor {
 
   /**
    * Call the actual model (mock implementation for MVP)
-   * In Phase 3, this will integrate with actual Goose/MCP calls
+   * In Phase 3, this will integrate with actual MCP calls
    * 
    * @param query - Query/prompt
    * @param model - Model name
@@ -347,7 +347,7 @@ describe('Tests for: ${query}', () => {
 Response to: "${query}"
 
 This is a mock response for MVP testing. In Phase 3, this will be replaced 
-with actual LLM API calls through Goose MCP integration.
+with actual LLM API calls through MCP integration.
 
 Key points:
 1. Models selected by cost optimization (Ecomode)

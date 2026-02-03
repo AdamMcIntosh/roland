@@ -93,21 +93,21 @@ Common issues and solutions for samwise workflow orchestration.
 1. Set environment variables with correct prefix:
    ```bash
    # PowerShell
-   $env:SAMWISE_GOOSE_API_KEYS_ANTHROPIC="sk-ant-..."
-   $env:SAMWISE_GOOSE_API_KEYS_OPENAI="sk-..."
-   $env:SAMWISE_GOOSE_API_KEYS_XAI="xai-..."
-   $env:SAMWISE_GOOSE_API_KEYS_GOOGLE="..."
+   $env:SAMWISE_API_KEYS_ANTHROPIC="sk-ant-..."
+   $env:SAMWISE_API_KEYS_OPENAI="sk-..."
+   $env:SAMWISE_API_KEYS_XAI="xai-..."
+   $env:SAMWISE_API_KEYS_GOOGLE="..."
    
    # Bash
-   export SAMWISE_GOOSE_API_KEYS_ANTHROPIC="sk-ant-..."
+   export SAMWISE_API_KEYS_ANTHROPIC="sk-ant-..."
    ```
 
 2. Or create a `.env` file in project root:
    ```bash
-   SAMWISE_GOOSE_API_KEYS_ANTHROPIC=sk-ant-...
-   SAMWISE_GOOSE_API_KEYS_OPENAI=sk-...
-   SAMWISE_GOOSE_API_KEYS_XAI=xai-...
-   SAMWISE_GOOSE_API_KEYS_GOOGLE=...
+   SAMWISE_API_KEYS_ANTHROPIC=sk-ant-...
+   SAMWISE_API_KEYS_OPENAI=sk-...
+   SAMWISE_API_KEYS_XAI=xai-...
+   SAMWISE_API_KEYS_GOOGLE=...
    ```
 
 3. Verify API key format is correct (no quotes in .env)
@@ -137,7 +137,7 @@ Common issues and solutions for samwise workflow orchestration.
 **Solutions**:
 1. Planning mode uses Claude Sonnet 4 by default - ensure Anthropic API key is set:
    ```bash
-   $env:SAMWISE_GOOSE_API_KEYS_ANTHROPIC="sk-ant-..."
+   $env:SAMWISE_API_KEYS_ANTHROPIC="sk-ant-..."
    ```
 
 2. Check you're using the correct syntax:

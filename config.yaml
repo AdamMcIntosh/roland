@@ -13,7 +13,7 @@ routing:
   - grok-3
   - gemini-2.5-flash
   - gpt-4o-mini
-goose:
+samwise:
   api_keys:
     anthropic: "YOUR_ANTHROPIC_KEY"
     openai: "YOUR_OPENAI_KEY"
