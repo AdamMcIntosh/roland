@@ -114,12 +114,6 @@ export class CliInterface {
       .description('List loaded agents')
       .action(() => this.handleAgents());
 
-    // Stats command
-    this.program
-      .command('stats')
-      .description('Show session statistics')
-      .action(() => this.handleStats());
-
     // Modes command
     this.program
       .command('modes')
@@ -179,6 +173,37 @@ export class CliInterface {
       .option('-c, --clear', 'Clear all cache')
       .option('-i, --invalidate <workflow>', 'Invalidate specific workflow cache')
       .action((options) => this.handleCache(options));
+
+    // Performance monitoring commands
+    this.program
+      .command('stats')
+      .description('Show performance statistics')
+      .option('-d, --daily <days>', 'Show daily costs (default: 7)', '7')
+      .option('-w, --weekly', 'Show weekly costs')
+      .option('-m, --monthly', 'Show monthly costs')
+      .option('-s, --session', 'Show current session stats')
+      .action((options) => this.handleMonitoringStats(options));
+
+    this.program
+      .command('sessions')
+      .description('List session replay history')
+      .option('-l, --list', 'List all sessions')
+      .option('-v, --view <id>', 'View specific session details')
+      .option('--cleanup', 'Delete old session replays')
+      .action((options) => this.handleSessions(options));
+
+    this.program
+      .command('export')
+      .description('Export analytics data')
+      .option('-o, --output <file>', 'Output CSV file', 'analytics.csv')
+      .option('-d, --days <number>', 'Days to include (default: 30)', '30')
+      .action((options) => this.handleExport(options));
+
+    this.program
+      .command('observatory')
+      .description('Show real-time agent observatory')
+      .option('--check', 'Check for interventions')
+      .action((options) => this.handleObservatory(options));
 
     // Default help
     this.program.on('-h,--help', () => {
@@ -476,28 +501,6 @@ export class CliInterface {
     });
 
     console.log(`\nTotal: ${allAgents.length} agents\n`);
-  }
-
-  /**
-   * Handle stats command
-   */
-  private handleStats(): void {
-    const costStats = costCalculator.getSessionSummary();
-    const cacheStats = cacheManager.getStats();
-
-    console.log(
-      '\n' +
-        '📊 Session Statistics:\n' +
-        '─'.repeat(60) +
-        '\n'
-    );
-
-    console.log(`  Total Cost: $${costStats.totalCost.toFixed(4)}`);
-    console.log(`  API Calls: ${costStats.entries.length}`);
-    console.log(
-      `  Cache Hit Rate: ${cacheStats.hitRate.toFixed(1)}% (${cacheStats.hits}/${cacheStats.hits + cacheStats.misses})`
-    );
-    console.log();
   }
 
   /**
@@ -988,6 +991,251 @@ Format your response clearly with sections and bullet points.`;
     } catch (error) {
       logger.error('Failed to learn from session', error);
       // Don't fail the main operation if learning fails
+    }
+  }
+
+  /**
+   * Handle monitoring stats command
+   */
+  private async handleMonitoringStats(options: any): Promise<void> {
+    const { getAnalytics } = await import('../monitoring/index.js');
+    const analytics = getAnalytics();
+
+    if (options.session) {
+      // Current session stats
+      const session = analytics.getCurrentSession();
+      if (!session) {
+        console.log(formatInfo('No active session'));
+        return;
+      }
+
+      console.log(formatSuccess('📊 Current Session Statistics'));
+      console.log('─'.repeat(80));
+      console.log(`Session ID: ${session.session_id}`);
+      console.log(`Mode: ${session.mode || 'unknown'}`);
+      console.log(`Duration: ${((Date.now() - session.start_time) / 1000).toFixed(1)}s`);
+      console.log(`Total Tokens: ${session.total_tokens.toLocaleString()}`);
+      console.log(`Total Cost: $${session.total_cost.toFixed(4)}`);
+      console.log(`Tool Calls: ${session.tool_calls}`);
+      console.log(`Cache Hits: ${session.cache_hits} / ${session.cache_hits + session.cache_misses} (${session.cache_hits > 0 ? ((session.cache_hits / (session.cache_hits + session.cache_misses)) * 100).toFixed(1) : 0}%)`); 
+      
+      if (session.agent_usage && Object.keys(session.agent_usage).length > 0) {
+        console.log('\nAgent Usage:');
+        Object.entries(session.agent_usage).forEach(([agentType, usage]) => {
+          console.log(`  ${agentType}: ${usage.tokens.toLocaleString()} tokens, $${usage.cost.toFixed(4)}`);
+        });
+      }
+      return;
+    }
+
+    // Cost reports
+    if (options.weekly) {
+      const costs = analytics.getWeeklyCosts();
+      console.log(formatSuccess('📊 Weekly Costs'));
+      console.log('─'.repeat(80));
+      costs.forEach((summary) => {
+        const date = new Date(summary.date).toLocaleDateString();
+        console.log(`Week ${date}:`);
+        console.log(`  Sessions: ${summary.sessions}`);
+        console.log(`  Total Cost: $${summary.total_cost.toFixed(4)}`);
+        console.log(`  Total Tokens: ${summary.total_tokens.toLocaleString()}`);
+        console.log('');
+      });
+      return;
+    }
+
+    if (options.monthly) {
+      const costs = analytics.getMonthlyCosts();
+      console.log(formatSuccess('📊 Monthly Costs'));
+      console.log('─'.repeat(80));
+      costs.forEach((summary) => {
+        const date = new Date(summary.date).toLocaleDateString();
+        console.log(`Month ${date}:`);
+        console.log(`  Sessions: ${summary.sessions}`);
+        console.log(`  Total Cost: $${summary.total_cost.toFixed(4)}`);
+        console.log(`  Total Tokens: ${summary.total_tokens.toLocaleString()}`);
+        console.log('');
+      });
+      return;
+    }
+
+    // Daily costs (default)
+    const days = parseInt(options.daily || '7', 10);
+    const costs = analytics.getDailyCosts(days);
+    console.log(formatSuccess(`📊 Daily Costs (Last ${days} days)`));
+    console.log('─'.repeat(80));
+    costs.forEach((summary) => {
+      const date = new Date(summary.date).toLocaleDateString();
+      console.log(`${date}:`);
+      console.log(`  Sessions: ${summary.sessions}`);
+      console.log(`  Total Cost: $${summary.total_cost.toFixed(4)}`);
+      console.log(`  Total Tokens: ${summary.total_tokens.toLocaleString()}`);
+      console.log('');
+    });
+  }
+
+  /**
+   * Handle sessions command
+   */
+  private async handleSessions(options: any): Promise<void> {
+    const fs = await import('fs/promises');
+    const path = await import('path');
+
+    const stateDir = '.samwise/state';
+    
+    try {
+      await fs.mkdir(stateDir, { recursive: true });
+      
+      if (options.cleanup) {
+        const { SessionReplay } = await import('../monitoring/index.js');
+        await SessionReplay.cleanupOldReplays();
+        console.log(formatSuccess('✅ Cleaned up old session replays'));
+        return;
+      }
+
+      const files = await fs.readdir(stateDir);
+      const replayFiles = files.filter(f => f.startsWith('session-replay-'));
+
+      if (replayFiles.length === 0) {
+        console.log(formatInfo('No session replays found'));
+        return;
+      }
+
+      if (options.view) {
+        // View specific session
+        const sessionFile = `session-replay-${options.view}.jsonl`;
+        const sessionPath = path.join(stateDir, sessionFile);
+        
+        try {
+          const content = await fs.readFile(sessionPath, 'utf-8');
+          const events = content.trim().split('\n').map(line => JSON.parse(line));
+
+          console.log(formatSuccess(`📹 Session Replay: ${options.view}`));
+          console.log('─'.repeat(80));
+
+          // Calculate summary
+          const agents = new Map();
+          const tools = new Map();
+          let startTime = Infinity;
+          let endTime = 0;
+
+          events.forEach(event => {
+            if (event.timestamp < startTime) startTime = event.timestamp;
+            if (event.timestamp > endTime) endTime = event.timestamp;
+
+            if (event.type === 'agent_start') {
+              agents.set(event.agentId, { type: event.agentType, start: event.timestamp });
+            } else if (event.type === 'tool_end') {
+              const toolKey = `${event.agentId}:${event.toolName}`;
+              const calls = tools.get(toolKey) || { name: event.toolName, count: 0, totalDuration: 0 };
+              calls.count++;
+              calls.totalDuration += event.durationMs || 0;
+              tools.set(toolKey, calls);
+            }
+          });
+
+          const duration = (endTime - startTime) / 1000;
+          console.log(`Duration: ${duration.toFixed(2)}s`);
+          console.log(`Agents: ${agents.size}`);
+          console.log(`Events: ${events.length}`);
+          console.log('');
+
+          console.log('Agent Activity:');
+          agents.forEach((agent, agentId) => {
+            console.log(`  ${agentId} (${agent.type})`);
+          });
+
+          if (tools.size > 0) {
+            console.log('\nTool Usage:');
+            tools.forEach((tool, key) => {
+              const avgDuration = tool.totalDuration / tool.count;
+              console.log(`  ${tool.name}: ${tool.count} calls, avg ${avgDuration.toFixed(0)}ms`);
+            });
+          }
+
+          console.log('\n─'.repeat(80));
+          console.log(`Total Events: ${events.length}`);
+
+        } catch (error) {
+          console.log(formatError(`Session not found: ${options.view}`));
+        }
+        return;
+      }
+
+      // List all sessions
+      console.log(formatSuccess('📹 Session Replays'));
+      console.log('─'.repeat(80));
+      
+      for (const file of replayFiles.slice(0, 20)) {
+        const sessionId = file.replace('session-replay-', '').replace('.jsonl', '');
+        const filePath = path.join(stateDir, file);
+        const stats = await fs.stat(filePath);
+        const date = stats.mtime.toLocaleString();
+        
+        console.log(`${sessionId}`);
+        console.log(`  Date: ${date}`);
+        console.log(`  Size: ${(stats.size / 1024).toFixed(1)} KB`);
+        console.log('');
+      }
+
+      if (replayFiles.length > 20) {
+        console.log(formatInfo(`... and ${replayFiles.length - 20} more`));
+      }
+
+    } catch (error) {
+      console.log(formatError(`Failed to list sessions: ${error}`));
+    }
+  }
+
+  /**
+   * Handle export command
+   */
+  private async handleExport(options: any): Promise<void> {
+    const { getAnalytics } = await import('../monitoring/index.js');
+    const analytics = getAnalytics();
+
+    try {
+      const outputFile = options.output || 'analytics.csv';
+      const days = parseInt(options.days || '30', 10);
+      
+      await analytics.exportToCSV(outputFile);
+      
+      console.log(formatSuccess(`✅ Exported analytics to ${outputFile}`));
+      console.log(formatInfo(`  Last ${days} days of data`));
+    } catch (error) {
+      console.log(formatError(`Export failed: ${error}`));
+    }
+  }
+
+  /**
+   * Handle observatory command
+   */
+  private async handleObservatory(options: any): Promise<void> {
+    const { getObservatory, getInterventionSystem } = await import('../monitoring/index.js');
+    
+    const observatory = getObservatory();
+    const display = observatory.getDisplay();
+
+    console.log(formatSuccess('🔭 Agent Observatory'));
+    console.log('─'.repeat(80));
+    console.log(display.header);
+    console.log('');
+    display.lines.forEach(line => console.log(line));
+    console.log('');
+    console.log(display.summary);
+
+    if (options.check) {
+      console.log('');
+      console.log('🚨 Checking for interventions...');
+      const intervention = getInterventionSystem();
+      const interventions = intervention.suggestInterventions(observatory);
+      
+      if (interventions.length === 0) {
+        console.log(formatSuccess('✅ No interventions needed'));
+      } else {
+        const formatted = intervention.formatInterventions(interventions);
+        formatted.forEach(line => console.log(line));
+      }
     }
   }
 

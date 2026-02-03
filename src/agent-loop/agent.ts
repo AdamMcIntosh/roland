@@ -10,6 +10,7 @@ import { SessionConfig, Message, ToolCall } from './types.js';
 import { logger } from '../utils/logger.js';
 import * as readline from 'readline';
 import { BudgetManager } from '../utils/budget-manager.js';
+import { createMonitoring, PerformanceMonitoring } from '../monitoring/index.js';
 
 export interface AgentOptions {
   config: SessionConfig;
@@ -31,9 +32,14 @@ export class AutonomousAgent {
   private conversationCache: ConversationCache;
   private isRunning = false;
   private rl?: readline.Interface;
+  private monitoring: PerformanceMonitoring;
 
   constructor(options: AgentOptions) {
     this.options = options;
+
+    // Initialize monitoring
+    this.monitoring = createMonitoring();
+    this.monitoring.startSession();
 
     // Initialize session
     this.session = new SessionManager(options.config, options.workspaceDirectory);
@@ -511,6 +517,7 @@ export class AutonomousAgent {
       this.rl.close();
     }
     await this.session.end();
+    this.monitoring.endSession();
     this.isRunning = false;
   }
 }
