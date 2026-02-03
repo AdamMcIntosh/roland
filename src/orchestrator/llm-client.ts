@@ -8,6 +8,7 @@
 import { getConfig } from '../config/config-loader.js';
 import { logger } from '../utils/logger.js';
 import { BudgetManager } from '../utils/budget-manager.js';
+import { rateLimitHandler } from '../utils/rate-limit-handler.js';
 import {
   ApiError,
   ApiAuthenticationError,
@@ -138,14 +139,18 @@ export class LLMClient {
 
       logger.debug(`[LLM] Calling ${provider} model: ${model} (attempt ${attemptNumber})`);
 
-      const response = await this.callProvider(
-        provider,
-        model,
-        apiKey,
-        prompt,
-        systemPrompt,
-        temperature,
-        maxTokens
+      // Wrap API call with rate limit handler
+      const response = await rateLimitHandler.executeWithRetry(
+        () => this.callProvider(
+          provider,
+          model,
+          apiKey,
+          prompt,
+          systemPrompt,
+          temperature,
+          maxTokens
+        ),
+        `LLM call to ${model}`
       );
 
       // Record actual spending
