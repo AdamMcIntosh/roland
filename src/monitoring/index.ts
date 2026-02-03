@@ -9,11 +9,14 @@ export * from './agent-observatory.js';
 export * from './session-replay.js';
 export * from './analytics.js';
 export * from './intervention.js';
+export * from './token-extractor.js';
+export * from './analytics-summary.js';
 
 import { getObservatory, resetObservatory } from './agent-observatory.js';
 import { getSessionReplay, resetSessionReplay } from './session-replay.js';
 import { getAnalytics } from './analytics.js';
 import { getInterventionSystem } from './intervention.js';
+import { getSummaryCache } from './analytics-summary.js';
 
 /**
  * Integrated monitoring facade

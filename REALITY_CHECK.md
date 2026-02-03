@@ -38,9 +38,14 @@
 - **Agent Observatory** - Real-time agent activity tracking
 - **Session Replay** - JSONL event logging for post-session analysis
 - **Analytics System** - Token/cost tracking with daily/weekly/monthly reports
+- **Token Extraction** - Automatic token tracking with delta calculation
+- **Output Estimation** - Model-specific estimation (Haiku 30%, Sonnet 40%, Opus 50%)
+- **Agent Correlation** - Associate tokens with specific agents
+- **Summary Caching** - Fast loading (<10ms) with mtime caching
 - **Intervention System** - Automatic problem detection (timeouts, costs, conflicts)
+- **Budget Warnings** - Visual alerts in HUD (>$2 warning, >$5 critical)
 - CLI commands:
-  - `samwise stats` - Performance statistics (daily/weekly/monthly)
+  - `samwise stats` - Performance statistics (--daily, --weekly, --monthly, --session, --agents)
   - `samwise sessions` - Session replay history
   - `samwise observatory` - Real-time agent monitoring
   - `samwise export` - Export analytics to CSV
@@ -179,7 +184,10 @@ These are optional enhancements beyond v1.0.0:
 | **Rate Limit Handling** | ✅ omc wait daemon | ✅ **DONE** |
 | **Performance Monitoring** | ✅ Agent observatory | ✅ **DONE** (4-component system) |
 | **Session Replay** | ✅ Event logging | ✅ **DONE** (JSONL format) |
-| **Analytics Dashboard** | ✅ Cost tracking UI | ✅ **CLI-based** (stats/export commands) |
+| **Token Extraction** | ✅ Auto-tracking | ✅ **DONE** (Delta calc + estimation) |
+| **Analytics Dashboard** | ✅ Cost tracking UI | ✅ **CLI-based** (stats/export/agents) |
+| **Agent Correlation** | ✅ Token attribution | ✅ **DONE** (Automatic tracking) |
+| **Budget Warnings** | ✅ Visual alerts | ✅ **DONE** (HUD: >$2, >$5) |
 | **Skills Library** | ✅ 37+ skills | ✅ **10 skills** + learning system |
 | **Agent Library** | ✅ 32 specialized agents | ✅ **32 agents** (FULL PARITY) |
 | **Planning Mode** | ✅ Interactive planning | ✅ **DONE** (plan:, samwise:) |
@@ -200,6 +208,10 @@ These are optional enhancements beyond v1.0.0:
 - ✅ **4-component monitoring** (Observatory, Replay, Analytics, Intervention)
 - ✅ **JSONL event logging** for debugging
 - ✅ **CSV export** for analytics
+- ✅ **Token extraction** with automatic estimation
+- ✅ **Agent correlation** for cost attribution
+- ✅ **Summary caching** for <10ms load times
+- ✅ **Budget warnings** in HUD (>$2 yellow, >$5 red)
 
 ### Future Roadmap (Optional Enhancements)
 

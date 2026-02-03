@@ -12,11 +12,16 @@ import {
   DailyCostSummary,
 } from './types.js';
 import { logger } from '../utils/logger.js';
+import { getSummaryCache, AnalyticsSummary } from './analytics-summary.js';
+import { estimateOutputTokens, EstimatedTokenUsage } from './token-extractor.js';
 
 export class AnalyticsSystem {
   private stateDir: string;
   private trackingFile: string;
   private currentSession: SessionAnalytics | null = null;
+  private summaryCache = getSummaryCache();
+  private currentAgent: string | null = null;
+  private previousTokens: { input: number; output: number } = { input: 0, output: 0 };
 
   constructor(stateDir: string = './.samwise/state') {
     this.stateDir = stateDir;
@@ -25,6 +30,13 @@ export class AnalyticsSystem {
     if (!fs.existsSync(stateDir)) {
       fs.mkdirSync(stateDir, { recursive: true });
     }
+  }
+
+  /**
+   * Set current active agent for token correlation
+   */
+  setCurrentAgent(agentType: string | null): void {
+    this.currentAgent = agentType;
   }
 
   /**
@@ -45,12 +57,99 @@ export class AnalyticsSystem {
       mode,
       agent_usage: {},
     };
+    
+    this.previousTokens = { input: 0, output: 0 };
 
     logger.debug(`[Analytics] Started session ${sessionId}`);
   }
 
   /**
-   * Record tokens and cost
+   * Record tokens with automatic estimation if needed
+   */
+  recordTokensWithEstimation(
+    inputTokens: number,
+    outputTokens: number | undefined,
+    model: string,
+    cost: number,
+    cacheHit: boolean = false
+  ): void {
+    if (!this.currentSession) {
+      logger.warn('[Analytics] No active session');
+      return;
+    }
+
+    // Use estimation if output tokens not provided
+    let actualOutput = outputTokens;
+    if (actualOutput === undefined) {
+      const estimated = estimateOutputTokens(inputTokens, model);
+      actualOutput = estimated.outputTokens;
+    }
+
+    const totalTokens = inputTokens + actualOutput;
+    const agentType = this.currentAgent || 'unknown';
+
+    // Calculate delta from previous
+    const deltaInput = inputTokens - this.previousTokens.input;
+    const deltaOutput = actualOutput - this.previousTokens.output;
+    const deltaTotal = deltaInput + deltaOutput;
+
+    // Update session
+    this.currentSession.total_tokens += deltaTotal;
+    this.currentSession.total_cost += cost;
+
+    if (cacheHit) {
+      this.currentSession.cache_hits++;
+    } else {
+      this.currentSession.cache_misses++;
+    }
+
+    // Track agent-specific usage with delta
+    if (deltaTotal > 0) {
+      if (!this.currentSession.agent_usage) {
+        this.currentSession.agent_usage = {};
+      }
+      
+      if (!this.currentSession.agent_usage[agentType]) {
+        this.currentSession.agent_usage[agentType] = { tokens: 0, cost: 0 };
+      }
+      
+      this.currentSession.agent_usage[agentType].tokens += deltaTotal;
+      this.currentSession.agent_usage[agentType].cost += cost;
+    }
+
+    // Update previous counters
+    this.previousTokens.input = inputTokens;
+    this.previousTokens.output = actualOutput;
+
+    this.updateCacheEfficiency();
+    
+    // Log JSONL entry
+    this.logTokenUsage({
+      sessionId: this.currentSession.session_id,
+      timestamp: Date.now(),
+      agentType,
+      inputTokens: deltaInput,
+      outputTokens: deltaOutput,
+      totalTokens: deltaTotal,
+      cost,
+      model,
+      cacheHit,
+    });
+  }
+
+  /**
+   * Log token usage to JSONL
+   */
+  private logTokenUsage(entry: any): void {
+    try {
+      fs.appendFileSync(this.trackingFile, JSON.stringify(entry) + '\n');
+    } catch (error) {
+      logger.error('[Analytics] Failed to log token usage', error);
+    }
+  }
+
+  /**
+   * Record usage (original method for backwards compatibility)
    */
   recordUsage(
     tokens: number,

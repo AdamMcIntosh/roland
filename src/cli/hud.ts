@@ -121,9 +121,18 @@ export class HudStatusLine {
       parts.push(chalk.yellow(`🔧 ${toolsStr}`));
     }
 
-    // Cost
+    // Cost (with ~ prefix for estimates)
     if (metrics.cost !== undefined && metrics.cost > 0) {
-      parts.push(chalk.green(`$${metrics.cost.toFixed(4)}`));
+      const costStr = `~$${metrics.cost.toFixed(4)}`;
+      
+      // Budget warnings
+      if (metrics.cost > 5.0) {
+        parts.push(chalk.red(`⚠️ ${costStr}`)); // Critical: >$5
+      } else if (metrics.cost > 2.0) {
+        parts.push(chalk.yellow(`⚠️ ${costStr}`)); // Warning: >$2
+      } else {
+        parts.push(chalk.green(costStr));
+      }
     }
 
     // Additional details

@@ -182,6 +182,7 @@ export class CliInterface {
       .option('-w, --weekly', 'Show weekly costs')
       .option('-m, --monthly', 'Show monthly costs')
       .option('-s, --session', 'Show current session stats')
+      .option('-a, --agents', 'Show agent breakdown')
       .action((options) => this.handleMonitoringStats(options));
 
     this.program
@@ -998,7 +999,7 @@ Format your response clearly with sections and bullet points.`;
    * Handle monitoring stats command
    */
   private async handleMonitoringStats(options: any): Promise<void> {
-    const { getAnalytics } = await import('../monitoring/index.js');
+    const { getAnalytics, getSummaryCache } = await import('../monitoring/index.js');
     const analytics = getAnalytics();
 
     if (options.session) {
@@ -1015,16 +1016,58 @@ Format your response clearly with sections and bullet points.`;
       console.log(`Mode: ${session.mode || 'unknown'}`);
       console.log(`Duration: ${((Date.now() - session.start_time) / 1000).toFixed(1)}s`);
       console.log(`Total Tokens: ${session.total_tokens.toLocaleString()}`);
-      console.log(`Total Cost: $${session.total_cost.toFixed(4)}`);
+      console.log(`Total Cost: ~$${session.total_cost.toFixed(4)}`);
       console.log(`Tool Calls: ${session.tool_calls}`);
       console.log(`Cache Hits: ${session.cache_hits} / ${session.cache_hits + session.cache_misses} (${session.cache_hits > 0 ? ((session.cache_hits / (session.cache_hits + session.cache_misses)) * 100).toFixed(1) : 0}%)`); 
       
       if (session.agent_usage && Object.keys(session.agent_usage).length > 0) {
         console.log('\nAgent Usage:');
         Object.entries(session.agent_usage).forEach(([agentType, usage]) => {
-          console.log(`  ${agentType}: ${usage.tokens.toLocaleString()} tokens, $${usage.cost.toFixed(4)}`);
+          console.log(`  ${agentType}: ${usage.tokens.toLocaleString()} tokens, ~$${usage.cost.toFixed(4)}`);
         });
       }
+      return;
+    }
+
+    if (options.agents) {
+      // Agent breakdown across all sessions
+      console.log(formatSuccess('📊 Agent Cost Breakdown'));
+      console.log('─'.repeat(80));
+      
+      const allSessions = analytics.getAllSessions();
+      const agentTotals = new Map<string, { tokens: number; cost: number; sessions: number }>();
+      
+      allSessions.forEach(session => {
+        if (session.agent_usage) {
+          Object.entries(session.agent_usage).forEach(([agentType, usage]) => {
+            const existing = agentTotals.get(agentType) || { tokens: 0, cost: 0, sessions: 0 };
+            existing.tokens += usage.tokens;
+            existing.cost += usage.cost;
+            existing.sessions++;
+            agentTotals.set(agentType, existing);
+          });
+        }
+      });
+
+      // Sort by cost (descending)
+      const sorted = Array.from(agentTotals.entries())
+        .sort((a, b) => b[1].cost - a[1].cost);
+
+      if (sorted.length === 0) {
+        console.log(formatInfo('No agent usage data available'));
+        return;
+      }
+
+      sorted.forEach(([agentType, totals]) => {
+        const avgCost = totals.cost / totals.sessions;
+        console.log(`${agentType}:`);
+        console.log(`  Total Cost: ~$${totals.cost.toFixed(4)}`);
+        console.log(`  Total Tokens: ${totals.tokens.toLocaleString()}`);
+        console.log(`  Sessions: ${totals.sessions}`);
+        console.log(`  Avg Cost/Session: ~$${avgCost.toFixed(4)}`);
+        console.log('');
+      });
+      
       return;
     }
 
@@ -1037,7 +1080,7 @@ Format your response clearly with sections and bullet points.`;
         const date = new Date(summary.date).toLocaleDateString();
         console.log(`Week ${date}:`);
         console.log(`  Sessions: ${summary.sessions}`);
-        console.log(`  Total Cost: $${summary.total_cost.toFixed(4)}`);
+        console.log(`  Total Cost: ~$${summary.total_cost.toFixed(4)}`);
         console.log(`  Total Tokens: ${summary.total_tokens.toLocaleString()}`);
         console.log('');
       });
@@ -1052,7 +1095,7 @@ Format your response clearly with sections and bullet points.`;
         const date = new Date(summary.date).toLocaleDateString();
         console.log(`Month ${date}:`);
         console.log(`  Sessions: ${summary.sessions}`);
-        console.log(`  Total Cost: $${summary.total_cost.toFixed(4)}`);
+        console.log(`  Total Cost: ~$${summary.total_cost.toFixed(4)}`);
         console.log(`  Total Tokens: ${summary.total_tokens.toLocaleString()}`);
         console.log('');
       });
@@ -1064,11 +1107,18 @@ Format your response clearly with sections and bullet points.`;
     const costs = analytics.getDailyCosts(days);
     console.log(formatSuccess(`📊 Daily Costs (Last ${days} days)`));
     console.log('─'.repeat(80));
+    
+    if (costs.length === 0) {
+      console.log(formatInfo('No cost data available yet'));
+      console.log('Run some sessions to start tracking costs!');
+      return;
+    }
+    
     costs.forEach((summary) => {
       const date = new Date(summary.date).toLocaleDateString();
       console.log(`${date}:`);
       console.log(`  Sessions: ${summary.sessions}`);
-      console.log(`  Total Cost: $${summary.total_cost.toFixed(4)}`);
+      console.log(`  Total Cost: ~$${summary.total_cost.toFixed(4)}`);
       console.log(`  Total Tokens: ${summary.total_tokens.toLocaleString()}`);
       console.log('');
     });
