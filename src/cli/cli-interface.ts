@@ -35,7 +35,7 @@ import { logger } from '../utils/logger.js';
 import { WorkflowEngine } from '../workflows/engine.js';
 import { AutonomousAgent } from '../agent-loop/agent.js';
 import { SessionConfig } from '../agent-loop/types.js';
-import { AgentManager } from '../agents/agent-manager.js';
+import { getAgentManager } from '../agents/agent-manager.js';
 import { HudStatusLine } from './hud.js';
 import { SkillLearner, SessionAnalysis } from '../skills/skill-learner.js';
 
@@ -43,14 +43,13 @@ export class CliInterface {
   private program: Command;
   private spinner: Ora;
   private workflowEngine: WorkflowEngine;
-  private agentManager: AgentManager;
+  private agentManager = getAgentManager();
   private skillLearner: SkillLearner;
 
   constructor() {
     this.program = new Command();
     this.spinner = ora();
     this.workflowEngine = new WorkflowEngine(true); // Enable cache
-    this.agentManager = new AgentManager('./agents');
     this.skillLearner = new SkillLearner('./learned-skills');
     this.setupProgram();
     this.initializeSkillLearner();

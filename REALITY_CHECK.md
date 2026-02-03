@@ -56,10 +56,16 @@
   - RESTfulAPI.yaml - API development
   - SecurityAudit.yaml - Security review
   - WebAppFullStack.yaml - Full-stack development
-- Skills framework (**10 skills** across 3 categories):
+- Skills framework (**10 skills** across 6 categories):
   - Core (3): refactoring, documentation, testing
   - Advanced (2): security_scan, performance
   - Extended (5): code_review, api_design, database_schema, debugging, migration
+- Agent library (**32 agents** across 16 domains with tiering):
+  - Architecture (3 tiers), Execution (3 tiers), Search (3 tiers)
+  - Research (2 tiers), Frontend (3 tiers), Testing (2 tiers)
+  - Security (2 tiers), Build (2 tiers), TDD (2 tiers)
+  - Code Review (2 tiers), Data Science (3 tiers)
+  - Plus: Analysis, Critique, Planning, Documentation, Visual
 
 ### Documentation ✅ (NEW)
 - ✅ **README.md** - Updated with all new features
@@ -88,8 +94,9 @@
 - ✅ Skill learning system initializes
 - ✅ Cache statistics command works
 - ✅ Recipe listing shows all 6 recipes
-- ✅ Agent loader finds 10 agents
+- ✅ Agent loader finds **32 agents** across 16 domains
 - ✅ Skills loader finds 10 skills (grouped by category)
+- ✅ Agent tiering system (low/medium/high) working correctly
 
 ---
 
@@ -152,8 +159,8 @@ These are optional enhancements beyond v1.0.0:
 | **Skill Learning** | ✅ Auto-extract patterns | ✅ **DONE** |
 | **Rate Limit Handling** | ✅ omc wait daemon | ✅ **DONE** |
 | **Analytics Dashboard** | ✅ Cost tracking UI | ⚠️ CLI-based (WebUI future) |
-| **Skills Library** | ✅ 31+ skills | ⚠️ 5 skills + learning system |
-| **Agent Library** | ✅ 32 specialized agents | ✅ 10 agents |
+| **Skills Library** | ✅ 37+ skills | ✅ **10 skills** + learning system |
+| **Agent Library** | ✅ 32 specialized agents | ✅ **32 agents** (FULL PARITY) |
 | **Planning Mode** | ✅ Interactive planning | ✅ **DONE** (plan:, samwise:) |
 | **Persistence Mode** | ✅ ralph (won't give up) | ✅ **DONE** (samwise: alias) |
 | **Web Documentation** | ✅ Interactive site | ✅ Comprehensive Markdown docs |
