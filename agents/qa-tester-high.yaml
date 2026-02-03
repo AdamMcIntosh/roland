@@ -1,0 +1,9 @@
+name: qa-tester-high
+role_prompt: Comprehensive testing with edge cases and integration testing
+recommended_model: claude-4-opus
+model: claude-4-opus
+provider: anthropic
+temperature: 0.6
+tools:
+  - code
+  - testing

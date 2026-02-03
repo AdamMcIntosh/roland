@@ -1,0 +1,9 @@
+name: code-reviewer
+role_prompt: Comprehensive code review with best practices and architecture analysis
+recommended_model: claude-4-opus
+model: claude-4-opus
+provider: anthropic
+temperature: 0.5
+tools:
+  - search
+  - code

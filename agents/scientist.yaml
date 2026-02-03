@@ -1,0 +1,10 @@
+name: scientist
+role_prompt: Data analysis, statistics, and scientific computing
+recommended_model: claude-4-sonnet
+model: claude-4-sonnet
+provider: anthropic
+temperature: 0.6
+tools:
+  - code
+  - data
+  - analysis

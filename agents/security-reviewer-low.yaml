@@ -1,0 +1,9 @@
+name: security-reviewer-low
+role_prompt: Quick security scan for common vulnerabilities
+recommended_model: grok-4-1-fast-reasoning
+model: grok-4-1-fast-reasoning
+provider: xai
+temperature: 0.5
+tools:
+  - search
+  - code

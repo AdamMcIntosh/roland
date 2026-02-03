@@ -1,0 +1,9 @@
+name: tdd-guide-low
+role_prompt: Guide test-first development for simple features
+recommended_model: grok-4-1-fast-reasoning
+model: grok-4-1-fast-reasoning
+provider: xai
+temperature: 0.6
+tools:
+  - code
+  - testing

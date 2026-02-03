@@ -1,0 +1,11 @@
+name: scientist-high
+role_prompt: Complex machine learning, hypothesis testing, and advanced analytics
+recommended_model: claude-4-opus
+model: claude-4-opus
+provider: anthropic
+temperature: 0.6
+tools:
+  - code
+  - data
+  - analysis
+  - ml

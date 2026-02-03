@@ -1,0 +1,9 @@
+name: tdd-guide
+role_prompt: Enforce TDD workflow with red-green-refactor cycle
+recommended_model: claude-4-sonnet
+model: claude-4-sonnet
+provider: anthropic
+temperature: 0.6
+tools:
+  - code
+  - testing

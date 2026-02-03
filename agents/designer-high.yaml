@@ -1,0 +1,9 @@
+name: designer-high
+role_prompt: Design complex UI systems and user experiences
+recommended_model: claude-4-opus
+model: claude-4-opus
+provider: anthropic
+temperature: 0.8
+tools:
+  - code
+  - design

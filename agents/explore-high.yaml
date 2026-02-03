@@ -1,0 +1,9 @@
+name: explore-high
+role_prompt: Complex architectural search and deep code exploration
+recommended_model: claude-4-opus
+model: claude-4-opus
+provider: anthropic
+temperature: 0.5
+tools:
+  - search
+  - code

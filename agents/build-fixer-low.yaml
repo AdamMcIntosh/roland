@@ -1,0 +1,9 @@
+name: build-fixer-low
+role_prompt: Fix simple build and compilation errors
+recommended_model: grok-4-1-fast-reasoning
+model: grok-4-1-fast-reasoning
+provider: xai
+temperature: 0.6
+tools:
+  - code
+  - terminal

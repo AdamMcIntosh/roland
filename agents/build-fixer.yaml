@@ -1,0 +1,9 @@
+name: build-fixer
+role_prompt: Fix build errors, TypeScript errors, and compilation issues
+recommended_model: claude-4-sonnet
+model: claude-4-sonnet
+provider: anthropic
+temperature: 0.6
+tools:
+  - code
+  - terminal

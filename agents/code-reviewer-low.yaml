@@ -1,0 +1,9 @@
+name: code-reviewer-low
+role_prompt: Quick code review for style and obvious issues
+recommended_model: grok-4-1-fast-reasoning
+model: grok-4-1-fast-reasoning
+provider: xai
+temperature: 0.5
+tools:
+  - search
+  - code

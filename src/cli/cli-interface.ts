@@ -408,18 +408,7 @@ export class CliInterface {
    * Handle agents command
    */
   private handleAgents(): void {
-    const agents = [
-      'architect',
-      'researcher',
-      'designer',
-      'writer',
-      'vision',
-      'critic',
-      'analyst',
-      'executor',
-      'planner',
-      'qa-tester',
-    ];
+    const allAgents = this.agentManager.getAllAgents();
 
     console.log(
       '\n' +
@@ -428,11 +417,66 @@ export class CliInterface {
         '\n'
     );
 
-    agents.forEach((agent, idx) => {
-      console.log(`  ${idx + 1}. ${agent}`);
+    if (allAgents.length === 0) {
+      console.log('  No agents loaded yet.\n');
+      return;
+    }
+
+    // Group agents by domain
+    const domains = new Map<string, typeof allAgents>();
+    
+    // Domain mapping based on agent name patterns
+    const getDomain = (name: string): string => {
+      if (name.startsWith('architect')) return 'Architecture';
+      if (name.startsWith('executor')) return 'Execution';
+      if (name.startsWith('explore')) return 'Search';
+      if (name.startsWith('researcher')) return 'Research';
+      if (name.startsWith('designer')) return 'Frontend';
+      if (name.startsWith('writer')) return 'Documentation';
+      if (name.startsWith('vision')) return 'Visual';
+      if (name.startsWith('planner')) return 'Planning';
+      if (name.startsWith('critic')) return 'Critique';
+      if (name.startsWith('analyst')) return 'Analysis';
+      if (name.startsWith('qa-tester')) return 'Testing';
+      if (name.startsWith('security')) return 'Security';
+      if (name.startsWith('build-fixer')) return 'Build';
+      if (name.startsWith('tdd-guide')) return 'TDD';
+      if (name.startsWith('code-reviewer')) return 'Code Review';
+      if (name.startsWith('scientist')) return 'Data Science';
+      return 'Other';
+    };
+
+    allAgents.forEach((agent) => {
+      const domain = getDomain(agent.name);
+      if (!domains.has(domain)) {
+        domains.set(domain, []);
+      }
+      domains.get(domain)!.push(agent);
     });
 
-    console.log();
+    // Sort domains and display
+    const sortedDomains = Array.from(domains.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    
+    sortedDomains.forEach(([domain, agents]) => {
+      console.log(`\n📁 ${domain.toUpperCase()}`);
+      agents
+        .sort((a, b) => {
+          // Sort by tier: base, low, medium, high
+          const getTier = (name: string) => {
+            if (name.endsWith('-low')) return 0;
+            if (name.endsWith('-medium')) return 2;
+            if (name.endsWith('-high')) return 3;
+            return 1; // base tier
+          };
+          return getTier(a.name) - getTier(b.name);
+        })
+        .forEach((agent) => {
+          const model = agent.model || 'default';
+          console.log(`  ${agent.name.padEnd(25)} → ${model}`);
+        });
+    });
+
+    console.log(`\nTotal: ${allAgents.length} agents\n`);
   }
 
   /**

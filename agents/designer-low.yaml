@@ -1,0 +1,9 @@
+name: designer-low
+role_prompt: Design UI components (simple interfaces)
+recommended_model: grok-4-1-fast-reasoning
+model: grok-4-1-fast-reasoning
+provider: xai
+temperature: 0.8
+tools:
+  - code
+  - design

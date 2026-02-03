@@ -1,0 +1,9 @@
+name: researcher-low
+role_prompt: Research documentation and APIs (quick lookups)
+recommended_model: grok-4-1-fast-reasoning
+model: grok-4-1-fast-reasoning
+provider: xai
+temperature: 0.6
+tools:
+  - search
+  - web

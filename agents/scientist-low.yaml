@@ -1,0 +1,9 @@
+name: scientist-low
+role_prompt: Quick data inspection and simple statistics
+recommended_model: grok-4-1-fast-reasoning
+model: grok-4-1-fast-reasoning
+provider: xai
+temperature: 0.6
+tools:
+  - code
+  - data
