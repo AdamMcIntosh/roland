@@ -6,6 +6,7 @@
 
 import { Command } from 'commander';
 import ora, { Ora } from 'ora';
+import { performance } from 'perf_hooks';
 import {
   parseQuery,
   getComplexity,
@@ -34,19 +35,35 @@ import { WorkflowEngine } from '../workflows/engine.js';
 import { AutonomousAgent } from '../agent-loop/agent.js';
 import { SessionConfig } from '../agent-loop/types.js';
 import { AgentManager } from '../agents/agent-manager.js';
+import { HudStatusLine } from './hud.js';
+import { SkillLearner, SessionAnalysis } from '../skills/skill-learner.js';
 
 export class CliInterface {
   private program: Command;
   private spinner: Ora;
   private workflowEngine: WorkflowEngine;
   private agentManager: AgentManager;
+  private skillLearner: SkillLearner;
 
   constructor() {
     this.program = new Command();
     this.spinner = ora();
     this.workflowEngine = new WorkflowEngine(true); // Enable cache
     this.agentManager = new AgentManager('./agents');
+    this.skillLearner = new SkillLearner('./learned-skills');
     this.setupProgram();
+    this.initializeSkillLearner();
+  }
+
+  /**
+   * Initialize skill learner
+   */
+  private async initializeSkillLearner(): Promise<void> {
+    try {
+      await this.skillLearner.initialize();
+    } catch (error) {
+      logger.error('Failed to initialize skill learner', error);
+    }
   }
 
   /**
@@ -66,6 +83,8 @@ export class CliInterface {
       .option('--verbose', 'Show detailed output')
       .option('--model <name>', 'Force specific model')
       .option('--cost-only', 'Show cost info only')
+      .option('--hud', 'Enable HUD status line (default: auto-detect TTY)')
+      .option('--no-hud', 'Disable HUD status line')
       .action((query: string[], options) => this.handleRun(query, options));
 
     // Help command
@@ -79,6 +98,15 @@ export class CliInterface {
       .command('skills')
       .description('List available skills')
       .action(() => this.handleSkills());
+
+    // Learned skills command
+    this.program
+      .command('learned')
+      .description('Show learned skills from session history')
+      .option('-s, --stats', 'Show learning statistics')
+      .option('-f, --find <query>', 'Find skills matching query')
+      .option('-e, --export <id>', 'Export learned skill to framework')
+      .action((options) => this.handleLearnedSkills(options));
 
     // Agents command
     this.program
@@ -107,6 +135,8 @@ export class CliInterface {
       .option('--auto-confirm', 'Auto-approve file/terminal/skill operations')
       .option('--max-tools <number>', 'Max tool calls (default: 20)', '20')
       .option('--max-commands <number>', 'Max terminal commands (default: 10)', '10')
+      .option('--hud', 'Enable HUD status line')
+      .option('--no-hud', 'Disable HUD status line')
       .action((query: string[], options) => this.handleAgent(query, options));
 
     // Budget command
@@ -278,6 +308,96 @@ export class CliInterface {
   }
 
   /**
+   * Handle learned skills command
+   */
+  private async handleLearnedSkills(options: any): Promise<void> {
+    // Show statistics
+    if (options.stats) {
+      const stats = this.skillLearner.getStatistics();
+      
+      console.log('\n📊 Skill Learning Statistics');
+      console.log('─'.repeat(60));
+      console.log(`Total Learned Skills: ${stats.totalSkills}`);
+      console.log(`Average Confidence: ${(stats.averageConfidence * 100).toFixed(1)}%`);
+      console.log(`Total Usage: ${stats.totalUsage} times\n`);
+      
+      console.log('By Category:');
+      Object.entries(stats.byCategory).forEach(([cat, count]) => {
+        console.log(`  ${cat}: ${count}`);
+      });
+      
+      console.log('\nBy Difficulty:');
+      Object.entries(stats.byDifficulty).forEach(([diff, count]) => {
+        console.log(`  ${diff}: ${count}`);
+      });
+      console.log('');
+      return;
+    }
+
+    // Find matching skills
+    if (options.find) {
+      const matches = this.skillLearner.findMatchingSkills(options.find);
+      
+      console.log(`\n🔍 Skills matching "${options.find}":`);
+      console.log('─'.repeat(60));
+      
+      if (matches.length === 0) {
+        console.log('No matching skills found.\n');
+        return;
+      }
+
+      matches.forEach(skill => {
+        console.log(`\n  ${skill.name}`);
+        console.log(`    ${skill.description}`);
+        console.log(`    Confidence: ${(skill.confidence * 100).toFixed(0)}%`);
+        console.log(`    Used: ${skill.usageCount} times`);
+        console.log(`    Category: ${skill.metadata.category}`);
+        console.log(`    Triggers: ${skill.pattern.triggers?.join(', ') || 'none'}`);
+      });
+      console.log('');
+      return;
+    }
+
+    // Export skill
+    if (options.export) {
+      const outputPath = `./skills/implementations/${options.export}.ts`;
+      await this.skillLearner.exportSkillToFramework(options.export, outputPath);
+      console.log(formatSuccess(`Exported skill to ${outputPath}`));
+      return;
+    }
+
+    // List all learned skills
+    const skills = this.skillLearner.getLearnedSkills();
+    
+    console.log('\n🎓 Learned Skills');
+    console.log('─'.repeat(60));
+    console.log(`Found ${skills.length} learned skills\n`);
+
+    if (skills.length === 0) {
+      console.log('No learned skills yet. Skills are automatically extracted from');
+      console.log('successful agent sessions and saved for reuse.\n');
+      return;
+    }
+
+    skills.forEach(skill => {
+      console.log(`  ${skill.name}`);
+      console.log(`    ${skill.description}`);
+      console.log(`    Confidence: ${(skill.confidence * 100).toFixed(0)}% | Used: ${skill.usageCount}x | Success: ${(skill.successRate * 100).toFixed(0)}%`);
+      console.log(`    Category: ${skill.metadata.category} | Difficulty: ${skill.metadata.difficulty}`);
+      
+      if (skill.pattern.triggers && skill.pattern.triggers.length > 0) {
+        console.log(`    Triggers: ${skill.pattern.triggers.join(', ')}`);
+      }
+      
+      console.log('');
+    });
+
+    console.log('Use --stats for learning statistics');
+    console.log('Use --find <query> to search for specific skills');
+    console.log('Use --export <id> to export a skill to the framework\n');
+  }
+
+  /**
    * Handle agents command
    */
   private handleAgents(): void {
@@ -388,6 +508,10 @@ export class CliInterface {
       this.spinner.stop();
 
       const queryText = query.join(' ');
+      
+      // Initialize HUD
+      const hudEnabled = options.hud !== false; // Default true unless --no-hud
+      const hud = new HudStatusLine(hudEnabled);
 
       // Configuration for this session
       const config: SessionConfig = {
@@ -413,9 +537,14 @@ export class CliInterface {
       const onConfirmation = async (question: string): Promise<boolean> => {
         if (config.autoConfirm?.files) return true;
         
+        // Pause HUD for user interaction
+        hud.pause();
+        
         // For CLI, use simple prompt (would need to implement proper prompt in real version)
         console.log(`⚠️  ${question}`);
         console.log('    (Auto-confirm disabled in CLI - operation skipped for safety)');
+        
+        hud.resume();
         return false; // Skip operations requiring confirmation in CLI mode
       };
 
@@ -432,24 +561,37 @@ export class CliInterface {
         console.log('');
         await agent.startInteractive();
       } else {
-        // Single query mode
-        console.log(formatProcessing('agent', queryText));
-        console.log('');
-
+        // Single query mode with HUD
+        hud.start('Processing query', config.model);
+        
+        const startTime = performance.now();
         const response = await agent.processInput(queryText);
+        const duration = (performance.now() - startTime) / 1000;
+
+        const summary = agent.getSessionSummary();
+        
+        // Update HUD with final metrics
+        hud.update({
+          toolCalls: summary.toolCalls,
+          maxToolCalls: config.maxToolCalls,
+          cost: summary.totalCost,
+        });
+        hud.stop('success');
 
         console.log(formatSuccess('Agent Response:'));
         console.log('─'.repeat(60));
         console.log(response);
         console.log('─'.repeat(60));
 
-        const summary = agent.getSessionSummary();
         console.log('');
         console.log(formatInfo(`Session Summary:`));
         console.log(`  Duration: ${summary.duration.toFixed(2)}s`);
-        console.log(`  Tool Calls: ${summary.toolCalls}/${summary.model === 'claude-opus' ? 20 : 20}`);
+        console.log(`  Tool Calls: ${summary.toolCalls}/${config.maxToolCalls}`);
         console.log(`  Total Cost: $${summary.totalCost.toFixed(4)}`);
         console.log('');
+
+        // Learn from this session
+        await this.learnFromSession(queryText, summary, duration, true);
 
         await agent.end();
       }
@@ -457,6 +599,8 @@ export class CliInterface {
       const message = error instanceof Error ? error.message : String(error);
       console.log(formatError(`Agent Error: ${message}`));
       logger.error('Agent execution failed', message);
+      
+      // Don't learn from failed sessions (success = false)
     }
   }
 
@@ -674,6 +818,10 @@ export class CliInterface {
   private async handlePlanningMode(query: string, options: any): Promise<void> {
     try {
       this.spinner.stop();
+      
+      // Initialize HUD
+      const hudEnabled = options.hud !== false;
+      const hud = new HudStatusLine(hudEnabled);
 
       console.log(formatInfo('🎯 Planning Mode'));
       console.log(formatInfo('Using Planner agent for structured planning'));
@@ -694,7 +842,9 @@ export class CliInterface {
       };
 
       const onConfirmation = async (question: string): Promise<boolean> => {
+        hud.pause();
         console.log(`⚠️  ${question}`);
+        hud.resume();
         return false;
       };
 
@@ -717,17 +867,26 @@ Please provide:
 
 Format your response clearly with sections and bullet points.`;
 
-      console.log(formatProcessing('PLANNING', query));
-      console.log('');
+      // Start HUD
+      hud.start('Planning', 'claude-4-sonnet');
 
       const response = await agent.processInput(planningPrompt);
+
+      const summary = agent.getSessionSummary();
+      
+      // Update and stop HUD
+      hud.update({
+        toolCalls: summary.toolCalls,
+        maxToolCalls: config.maxToolCalls,
+        cost: summary.totalCost,
+      });
+      hud.stop('success');
 
       console.log(formatSuccess('📋 Implementation Plan:'));
       console.log('─'.repeat(80));
       console.log(response);
       console.log('─'.repeat(80));
 
-      const summary = agent.getSessionSummary();
       console.log('');
       console.log(formatInfo(`Planning Session:`));
       console.log(`  Duration: ${summary.duration.toFixed(2)}s`);
@@ -741,6 +900,44 @@ Format your response clearly with sections and bullet points.`;
       console.log(formatError(`Planning Error: ${message}`));
       logger.error('Planning mode failed', message);
       process.exit(1);
+    }
+  }
+
+  /**
+   * Learn from a completed session
+   * Extracts patterns and saves them as learned skills
+   */
+  private async learnFromSession(
+    query: string,
+    summary: any,
+    duration: number,
+    success: boolean
+  ): Promise<void> {
+    try {
+      // Create session analysis (would need actual tool call data from agent)
+      const sessionAnalysis: SessionAnalysis = {
+        sessionId: `session-${Date.now()}`,
+        query,
+        toolCalls: [], // TODO: Get actual tool calls from agent
+        duration,
+        cost: summary.totalCost || 0,
+        success,
+        model: summary.model || 'unknown',
+      };
+
+      // Analyze and potentially create learned skills
+      const learnedSkills = await this.skillLearner.analyzeSession(sessionAnalysis);
+
+      if (learnedSkills.length > 0) {
+        console.log(formatInfo(`🎓 Learned ${learnedSkills.length} new pattern(s) from this session`));
+        learnedSkills.forEach(skill => {
+          console.log(`   • ${skill.name} (${(skill.confidence * 100).toFixed(0)}% confidence)`);
+        });
+        console.log('');
+      }
+    } catch (error) {
+      logger.error('Failed to learn from session', error);
+      // Don't fail the main operation if learning fails
     }
   }
 

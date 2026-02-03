@@ -200,6 +200,7 @@ export function formatHelp(): string {
   help += '  recipe <name>                        Execute a recipe\n';
   help += '  recipes                              List available recipes\n';
   help += '  skills                               List available skills\n';
+  help += '  learned                              Show learned skills (auto-extracted)\n';
   help += '  agents                               List loaded agents\n';
   help += '  modes                                List execution modes\n';
   help += '  stats                                Show session statistics\n';
@@ -208,10 +209,17 @@ export function formatHelp(): string {
   help += '  perf                                 Show performance dashboard\n';
   help += '  help                                 Show this help\n\n';
 
+  help += chalk.bold('LEARNED SKILLS OPTIONS:\n');
+  help += '  -s, --stats                          Show learning statistics\n';
+  help += '  -f, --find <query>                   Find skills matching query\n';
+  help += '  -e, --export <id>                    Export skill to framework\n\n';
+
   help += chalk.bold('WORKFLOW OPTIONS:\n');
   help += '  -v, --version <version>              Workflow version (default: 1.0.0)\n';
   help += '  -i, --input <json>                   Input parameters as JSON\n';
-  help += '  --no-cache                           Disable caching\n\n';
+  help += '  --no-cache                           Disable caching\n';
+  help += '  --hud                                Enable HUD status line\n';
+  help += '  --no-hud                             Disable HUD status line\n\n';
 
   help += chalk.bold('CACHE OPTIONS:\n');
   help += '  -s, --stats                          Show cache statistics\n';
@@ -221,8 +229,9 @@ export function formatHelp(): string {
   help += chalk.bold('EXAMPLES:\n');
   help += '  samwise run "eco: refactor this function"\n';
   help += '  samwise run "autopilot: build a todo app"\n';
-  help += '  samwise run "plan: create REST API for user management"\n';
+  help += '  samwise run "plan: create REST API for user management" --hud\n';
   help += '  samwise run "samwise: implement authentication system"\n';
+  help += '  samwise agent "analyze codebase" --hud\n';
   help += '  samwise workflow CodeRefactoring --input \'{"file": "app.ts"}\'\n';
   help += '  samwise recipe "Plan Execute Review"\n';
   help += '  samwise cache --stats\n';
