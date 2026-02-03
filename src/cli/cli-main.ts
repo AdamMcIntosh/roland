@@ -13,7 +13,7 @@ import { logger } from '../utils/logger.js';
 
 async function main() {
   try {
-    logger.info('🦢 Initializing samwise CLI...');
+    logger.info(' Initializing samwise CLI...');
 
     // Load configuration
     await loadConfig();

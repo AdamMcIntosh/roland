@@ -1,15 +1,15 @@
 import { LLMClientWithTools } from '../orchestrator/llm-client.js';
-import { SessionManager } from './session';
-import { getToolRegistry } from './tool-registry';
-import { FileTools } from './file-tools';
-import { TerminalTools } from './terminal-tools';
-import { SkillTools } from './skill-tools';
-import { ModeTools } from './mode-tools';
-import { ConversationCache } from './conversation-cache';
-import { SessionConfig, Message, ToolCall } from './types';
-import { logger } from '../utils/logger';
+import { SessionManager } from './session.js';
+import { getToolRegistry } from './tool-registry.js';
+import { FileTools } from './file-tools.js';
+import { TerminalTools } from './terminal-tools.js';
+import { SkillTools } from './skill-tools.js';
+import { ModeTools } from './mode-tools.js';
+import { ConversationCache } from './conversation-cache.js';
+import { SessionConfig, Message, ToolCall } from './types.js';
+import { logger } from '../utils/logger.js';
 import * as readline from 'readline';
-import { BudgetManager } from '../utils/budget-manager';
+import { BudgetManager } from '../utils/budget-manager.js';
 
 export interface AgentOptions {
   config: SessionConfig;

@@ -11,7 +11,7 @@ A powerful orchestration framework for **[Goose](https://github.com/block/goose)
 
 > **✅ Production Status**: v1.0.0 complete with workflows, caching, CLI, skills, MCP server, and Goose integration. Ready for production use!
 
-## 🦢 Two Ways to Use
+##  Two Ways to Use
 
 1. **Standalone CLI** - Use samwise directly via command line
 2. **Goose Extension** - Add as an MCP extension to [Goose](https://github.com/block/goose) for enhanced capabilities ⭐ **Recommended**
@@ -128,14 +128,14 @@ npm run cli
 
     ╔═══════════════════════════════════════╗
     ║                                       ║
-    ║       🦢  samwise  🦢               ║
+    ║         samwise                 ║
     ║       Workflow Orchestration CLI      ║
     ║                                       ║
     ║         v1.0.0 - Phase Complete       ║
     ║                                       ║
     ╚═══════════════════════════════════════╝
 
-Welcome to samwise! 🦢
+Welcome to samwise! 
 ════════════════════════════════════════════════════════════════════════════════
 
 Quick Start:
@@ -437,4 +437,4 @@ For issues, questions, or feature requests:
 
 ---
 
-**samwise** — Orchestration made simple. 🦢
+**samwise** — Orchestration made simple. 

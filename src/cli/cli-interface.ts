@@ -33,16 +33,19 @@ import { logger } from '../utils/logger.js';
 import { WorkflowEngine } from '../workflows/engine.js';
 import { AutonomousAgent } from '../agent-loop/agent.js';
 import { SessionConfig } from '../agent-loop/types.js';
+import { AgentManager } from '../agents/agent-manager.js';
 
 export class CliInterface {
   private program: Command;
   private spinner: Ora;
   private workflowEngine: WorkflowEngine;
+  private agentManager: AgentManager;
 
   constructor() {
     this.program = new Command();
     this.spinner = ora();
     this.workflowEngine = new WorkflowEngine(true); // Enable cache
+    this.agentManager = new AgentManager('./agents');
     this.setupProgram();
   }
 
@@ -52,7 +55,7 @@ export class CliInterface {
   private setupProgram(): void {
     this.program
       .name('samwise')
-      .description('🦢 samwise - Ecomode AI Assistant')
+      .description(' samwise - Ecomode AI Assistant')
       .version('0.1.0');
 
     // Main run command
@@ -171,6 +174,12 @@ export class CliInterface {
     try {
       // Parse query for keywords and mode
       const parsed = parseQuery(fullQuery);
+
+      // Route planning mode separately
+      if (parsed.mode === 'planning') {
+        await this.handlePlanningMode(parsed.query, options);
+        return;
+      }
 
       // Show processing message with mode
       const modeDisplay = parsed.mode === 'default' ? 'ECOMODE' : parsed.mode.toUpperCase();
@@ -656,6 +665,83 @@ export class CliInterface {
 
     // Show updated status
     console.log('\n' + BudgetManager.formatStatus() + '\n');
+  }
+
+  /**
+   * Planning Mode - Interactive planning with planner agent
+   * Uses planner agent to create structured implementation plans
+   */
+  private async handlePlanningMode(query: string, options: any): Promise<void> {
+    try {
+      this.spinner.stop();
+
+      console.log(formatInfo('🎯 Planning Mode'));
+      console.log(formatInfo('Using Planner agent for structured planning'));
+      console.log('');
+
+      // Configuration for planner session
+      const config: SessionConfig = {
+        model: 'claude-4-sonnet',
+        autoConfirm: {
+          files: false,
+          terminal: false,
+          skills: false,
+        },
+        maxToolCalls: 15,
+        maxTerminalCommands: 0, // Planning doesn't execute commands
+        workspaceDirectory: process.cwd(),
+        logActions: true,
+      };
+
+      const onConfirmation = async (question: string): Promise<boolean> => {
+        console.log(`⚠️  ${question}`);
+        return false;
+      };
+
+      // Initialize agent with planner configuration
+      const agent = new AutonomousAgent({
+        config,
+        workspaceDirectory: process.cwd(),
+        onConfirmation,
+      });
+
+      // Enhanced planning prompt
+      const planningPrompt = `You are a planning expert. Create a detailed, actionable plan for: ${query}
+
+Please provide:
+1. **Goal Analysis** - Break down the objective
+2. **Step-by-Step Plan** - Clear, numbered steps
+3. **Considerations** - Potential issues and dependencies
+4. **Success Criteria** - How to know when done
+5. **Estimated Effort** - Time/complexity assessment
+
+Format your response clearly with sections and bullet points.`;
+
+      console.log(formatProcessing('PLANNING', query));
+      console.log('');
+
+      const response = await agent.processInput(planningPrompt);
+
+      console.log(formatSuccess('📋 Implementation Plan:'));
+      console.log('─'.repeat(80));
+      console.log(response);
+      console.log('─'.repeat(80));
+
+      const summary = agent.getSessionSummary();
+      console.log('');
+      console.log(formatInfo(`Planning Session:`));
+      console.log(`  Duration: ${summary.duration.toFixed(2)}s`);
+      console.log(`  Tool Calls: ${summary.toolCalls}`);
+      console.log(`  Cost: $${summary.totalCost.toFixed(4)}`);
+      console.log('');
+
+      await agent.end();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(formatError(`Planning Error: ${message}`));
+      logger.error('Planning mode failed', message);
+      process.exit(1);
+    }
   }
 
   /**

@@ -1,5 +1,5 @@
 name: 4-Agent Coding Team with Grok Explanation
-description: Autonomous loop: Claude plans → GPT executes → Gemini reviews → Grok explains
+description: "Autonomous loop: Claude plans → GPT executes → Gemini reviews → Grok explains"
 lead_model: claude-4-sonnet
 subagents:
   - name: Planner

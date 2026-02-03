@@ -1,6 +1,6 @@
-import { CacheManager } from '../orchestrator/cache-manager';
-import { Message } from './types';
-import { logger } from '../utils/logger';
+import { CacheManager } from '../orchestrator/cache-manager.js';
+import { Message } from './types.js';
+import { logger } from '../utils/logger.js';
 import crypto from 'crypto';
 
 export interface CachedConversationTurn {

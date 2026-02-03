@@ -1,13 +1,13 @@
-import { AutopilotMode } from '../modes/autopilot-mode';
-import { UltrapilotMode } from '../modes/ultrapilot-mode';
-import { SwarmMode } from '../modes/swarm-mode';
-import { PipelineMode } from '../modes/pipeline-mode';
-import { Ecomode } from '../modes/ecomode';
-import { ModelRouter } from '../orchestrator/model-router';
-import { CostCalculator } from '../orchestrator/cost-calculator';
-import { CacheManager } from '../orchestrator/cache-manager';
-import { logger } from '../utils/logger';
-import { SessionConfig } from './types';
+import { AutopilotMode } from '../modes/autopilot-mode.js';
+import { UltrapilotMode } from '../modes/ultrapilot-mode.js';
+import { SwarmMode } from '../modes/swarm-mode.js';
+import { PipelineMode } from '../modes/pipeline-mode.js';
+import { Ecomode } from '../modes/ecomode.js';
+import { ModelRouter } from '../orchestrator/model-router.js';
+import { CostCalculator } from '../orchestrator/cost-calculator.js';
+import { CacheManager } from '../orchestrator/cache-manager.js';
+import { logger } from '../utils/logger.js';
+import { SessionConfig } from './types.js';
 
 export interface ModeToolsConfig {
   config: SessionConfig;

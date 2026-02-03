@@ -1,8 +1,8 @@
 import { exec, execSync } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
-import { logger } from '../utils/logger';
-import { SessionConfig } from './types';
+import { logger } from '../utils/logger.js';
+import { SessionConfig } from './types.js';
 
 const execAsync = promisify(exec);
 

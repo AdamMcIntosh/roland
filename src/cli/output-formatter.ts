@@ -20,7 +20,7 @@ function getGooseLogo(): string {
   return chalk.cyan(`
     ╔═══════════════════════════════════════╗
     ║                                       ║
-    ║       🦢  samwise  🦢               ║
+    ║         samwise                 ║
     ║       Workflow Orchestration CLI      ║
     ║                                       ║
     ║         v1.0.0 - Phase Complete       ║
@@ -50,7 +50,7 @@ export function formatWelcome(): string {
   let welcome = '\n';
   welcome += getGooseLogo();
   welcome += '\n';
-  welcome += chalk.bold.cyan('Welcome to samwise! 🦢\n');
+  welcome += chalk.bold.cyan('Welcome to samwise! \n');
   welcome += chalk.gray('═'.repeat(80)) + '\n\n';
   
   welcome += chalk.bold('Quick Start:\n');
@@ -64,7 +64,9 @@ export function formatWelcome(): string {
   welcome += chalk.yellow('  autopilot:') + '    3-agent sequential\n';
   welcome += chalk.magenta('  ultrapilot:') + '   5 parallel agents\n';
   welcome += chalk.blue('  swarm:') + '         8 dynamic agents\n';
-  welcome += chalk.green('  pipeline:') + '     4-step workflow\n\n';
+  welcome += chalk.green('  pipeline:') + '     4-step workflow\n';
+  welcome += chalk.white('  plan:') + '         Planning mode (structured plans)\n';
+  welcome += chalk.white('  samwise:') + '      Alias for plan: (persistence mode)\n\n';
   
   welcome += chalk.gray('═'.repeat(80)) + '\n';
   welcome += chalk.dim('Type "samwise help" for detailed documentation\n\n');
@@ -174,7 +176,7 @@ export function formatWarning(message: string): string {
  */
 export function formatHelp(): string {
   let help = '\n';
-  help += chalk.bold.cyan('🦢 samwise v1.0.0\n');
+  help += chalk.bold.cyan(' samwise v1.0.0\n');
   help += chalk.gray('═'.repeat(80)) + '\n\n';
 
   help += chalk.bold('BASIC USAGE:\n');
@@ -188,7 +190,9 @@ export function formatHelp(): string {
   help += '  ' + chalk.yellow('autopilot:') + '      Autopilot mode (3-agent sequential)\n';
   help += '  ' + chalk.magenta('ultrapilot:') + '     Ultrapilot mode (5 parallel agents)\n';
   help += '  ' + chalk.cyan('swarm:') + '           Swarm mode (8 dynamic agents)\n';
-  help += '  ' + chalk.blue('pipeline:') + '        Pipeline mode (4-step sequential)\n\n';
+  help += '  ' + chalk.blue('pipeline:') + '        Pipeline mode (4-step sequential)\n';
+  help += '  ' + chalk.white('plan:') + '           Planning mode (structured implementation plans)\n';
+  help += '  ' + chalk.white('samwise:') + '        Alias for plan: (persistence planning)\n\n';
 
   help += chalk.bold('COMMANDS:\n');
   help += '  run <query>                          Execute a task\n';
@@ -217,6 +221,8 @@ export function formatHelp(): string {
   help += chalk.bold('EXAMPLES:\n');
   help += '  samwise run "eco: refactor this function"\n';
   help += '  samwise run "autopilot: build a todo app"\n';
+  help += '  samwise run "plan: create REST API for user management"\n';
+  help += '  samwise run "samwise: implement authentication system"\n';
   help += '  samwise workflow CodeRefactoring --input \'{"file": "app.ts"}\'\n';
   help += '  samwise recipe "Plan Execute Review"\n';
   help += '  samwise cache --stats\n';

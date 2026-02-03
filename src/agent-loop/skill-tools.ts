@@ -1,6 +1,6 @@
-import { getSkillExecutor } from '../skills/skill-executor';
-import { logger } from '../utils/logger';
-import { SessionConfig } from './types';
+import { getSkillExecutor } from '../skills/skill-executor.js';
+import { logger } from '../utils/logger.js';
+import { SessionConfig } from './types.js';
 
 export interface SkillToolsConfig {
   config: SessionConfig;

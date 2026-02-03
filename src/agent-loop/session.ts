@@ -1,6 +1,6 @@
-import { Message, SessionConfig, ConversationContext } from './types';
-import { AuditLogger } from './audit-logger';
-import { logger } from '../utils/logger';
+import { Message, SessionConfig, ConversationContext } from './types.js';
+import { AuditLogger } from './audit-logger.js';
+import { logger } from '../utils/logger.js';
 
 export class SessionManager {
   private config: SessionConfig;

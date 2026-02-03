@@ -12,7 +12,7 @@ import { initializeSkills, registerSkillsAsTools } from './skills/index.js';
 
 async function main() {
   try {
-    logger.info('🦢 Starting samwise MCP Server...');
+    logger.info(' Starting samwise MCP Server...');
 
     // Load configuration
     const config = await loadConfig();

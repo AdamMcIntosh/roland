@@ -1,8 +1,8 @@
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
-import { logger } from '../utils/logger';
-import { SessionConfig } from './types';
+import { logger } from '../utils/logger.js';
+import { SessionConfig } from './types.js';
 
 export interface FileToolsConfig {
   workspaceDirectory: string;

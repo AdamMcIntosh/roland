@@ -7,78 +7,13 @@
 
 import fs from 'fs';
 import path from 'path';
-import { Recipe, Workflow } from './types.js';
+import YAML from 'yaml';
+import { Recipe, WorkflowStep } from './types.js';
 import { WorkflowEngine } from './engine.js';
 import { logger } from '../utils/logger.js';
 
-/**
- * Simple YAML parser (subset of YAML for our use case)
- * For production, would use full js-yaml library
- */
-function parseYAML(content: string): Record<string, any> {
-  // This is a simplified parser for basic YAML structure
-  // In production, integrate full js-yaml library
-  const result: Record<string, any> = {};
-  let currentKey: string | null = null;
-  let currentValue: string = '';
-  let inArray: boolean = false;
-  let arrayItems: string[] = [];
-
-  const lines = content.split('\n');
-  for (const line of lines) {
-    const trimmed = line.trim();
-
-    if (!trimmed || trimmed.startsWith('#')) continue;
-
-    if (trimmed.endsWith(':')) {
-      // Key without value
-      const key = trimmed.slice(0, -1).trim();
-      if (inArray) {
-        arrayItems.push(key);
-      } else {
-        if (currentKey && currentValue) {
-          result[currentKey] = currentValue;
-        }
-        currentKey = key;
-        currentValue = '';
-      }
-    } else if (trimmed.includes(':')) {
-      // Key-value pair
-      const [key, ...valueParts] = trimmed.split(':');
-      const value = valueParts.join(':').trim();
-
-      if (value.startsWith('[') && value.endsWith(']')) {
-        // Inline array
-        result[key.trim()] = value.slice(1, -1).split(',').map((s) => s.trim());
-      } else if (value === 'true') {
-        result[key.trim()] = true;
-      } else if (value === 'false') {
-        result[key.trim()] = false;
-      } else if (!isNaN(Number(value))) {
-        result[key.trim()] = Number(value);
-      } else {
-        result[key.trim()] = value;
-      }
-    } else if (trimmed.startsWith('- ')) {
-      // Array item
-      inArray = true;
-      arrayItems.push(trimmed.slice(2));
-    } else if (inArray && !trimmed.startsWith('-')) {
-      inArray = false;
-      if (currentKey) {
-        result[currentKey] = arrayItems;
-        arrayItems = [];
-      }
-    }
-  }
-
-  if (inArray && arrayItems.length > 0 && currentKey) {
-    result[currentKey] = arrayItems;
-  } else if (currentKey && currentValue) {
-    result[currentKey] = currentValue;
-  }
-
-  return result;
+function normalizeAgentName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, '-');
 }
 
 /**
@@ -140,14 +75,15 @@ export class RecipeLoader {
       }
 
       const content = fs.readFileSync(filePath, 'utf-8');
-      const parsed = parseYAML(content) as Record<string, any>;
+      const parsed = YAML.parse(content) as Record<string, any>;
 
       if (!parsed) {
         throw new Error('Empty recipe file');
       }
 
       // Validate recipe structure
-      const recipe = this.validateRecipe(parsed);
+      const defaultName = path.basename(filename, path.extname(filename));
+      const recipe = this.validateRecipe(parsed, defaultName);
       logger.debug(`[RecipeLoader] Loaded recipe: ${recipe.name} v${recipe.version || '1.0.0'}`);
 
       return recipe;
@@ -187,18 +123,58 @@ export class RecipeLoader {
   /**
    * Validate and normalize recipe structure
    */
-  private validateRecipe(data: Record<string, any>): Recipe {
+  private validateRecipe(data: Record<string, any>, defaultName?: string): Recipe {
+    const workflowSteps = data.steps || data.workflow?.steps || [];
+    const normalizedSteps: WorkflowStep[] = workflowSteps.map((step: any, index: number) => {
+      const agentName = typeof step.agent === 'string' ? normalizeAgentName(step.agent) : undefined;
+      const loopIf =
+        typeof step.loop_if === 'string'
+          ? { condition: step.loop_if }
+          : step.loop_if;
+
+      return {
+        name: step.name || step.id || agentName || `step-${index + 1}`,
+        description: step.description,
+        agent: agentName,
+        action: step.action,
+        input: step.input,
+        output_to: step.output_to,
+        skip_if: step.skip_if,
+        loop_if: loopIf,
+        mode: step.mode,
+        max_cost: step.max_cost,
+        timeout_seconds: step.timeout_seconds,
+        retry: step.retry,
+      };
+    });
+
+    const derivedAgents = (data.subagents || [])
+      .map((a: any) => (typeof a?.name === 'string' ? normalizeAgentName(a.name) : undefined))
+      .filter(Boolean) as string[];
+
+    const agentsFromSteps = normalizedSteps
+      .map((s) => s.agent)
+      .filter((s): s is string => Boolean(s));
+
+    const agents = data.agents || derivedAgents || agentsFromSteps;
+
+    const hasUserTask = normalizedSteps.some(
+      (step) => typeof step.input === 'string' && step.input.includes('{{user_task}}')
+    );
+
+    const recipeName = defaultName || data.name || 'untitled';
+
     const recipe: Recipe = {
-      name: data.name || 'untitled',
-      recipe: data.recipe || data.name,
+      name: recipeName,
+      recipe: data.recipe || data.name || recipeName,
       description: data.description,
       version: data.version || '1.0.0',
       author: data.author,
-      agents: data.agents || [],
+      agents: agents || [],
       modes: data.modes,
-      steps: data.steps || [],
+      steps: normalizedSteps,
       variables: data.variables,
-      input_variables: data.input_variables,
+      input_variables: data.input_variables || (hasUserTask ? ['user_task'] : undefined),
       outputs: data.outputs,
       max_total_cost: data.max_total_cost,
       max_duration_seconds: data.max_duration_seconds,

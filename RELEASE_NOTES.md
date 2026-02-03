@@ -373,6 +373,6 @@ After installing v1.0.0:
 
 ---
 
-**samwise v1.0.0** — Cost-optimized AI orchestration. 🦢
+**samwise v1.0.0** — Cost-optimized AI orchestration. 
 
 Thank you for using samwise!

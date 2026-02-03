@@ -19,6 +19,7 @@ export type ExecutionMode =
   | 'ultrapilot'
   | 'swarm'
   | 'pipeline'
+  | 'planning'
   | 'default';
 
 const MODE_PATTERNS: Record<string, ExecutionMode> = {
@@ -29,6 +30,8 @@ const MODE_PATTERNS: Record<string, ExecutionMode> = {
   'ulw:': 'ultrapilot',
   'swarm:': 'swarm',
   'pipeline:': 'pipeline',
+  'plan:': 'planning',
+  'samwise:': 'planning',
 };
 
 /**
