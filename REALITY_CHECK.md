@@ -34,6 +34,17 @@
 - Persistent storage in `./learned-skills/`
 - CLI commands: `samwise learned`, `--stats`, `--find`, `--export`
 
+### Performance Monitoring System ✅ (NEW)
+- **Agent Observatory** - Real-time agent activity tracking
+- **Session Replay** - JSONL event logging for post-session analysis
+- **Analytics System** - Token/cost tracking with daily/weekly/monthly reports
+- **Intervention System** - Automatic problem detection (timeouts, costs, conflicts)
+- CLI commands:
+  - `samwise stats` - Performance statistics (daily/weekly/monthly)
+  - `samwise sessions` - Session replay history
+  - `samwise observatory` - Real-time agent monitoring
+  - `samwise export` - Export analytics to CSV
+
 ### CLI Interface ✅
 - `samwise run <query>` - Execute with mode keywords
 - `samwise agent <query>` - Autonomous agent with tool calling
@@ -41,6 +52,10 @@
 - `samwise recipe <name>` - Execute pre-built recipes
 - `samwise recipes` - List all 6 recipes
 - `samwise learned` - View/manage learned skills (NEW)
+- `samwise stats` - Performance analytics (NEW)
+- `samwise sessions` - Replay history (NEW)
+- `samwise observatory` - Real-time monitoring (NEW)
+- `samwise export` - Export data to CSV (NEW)
 - `samwise cache --stats` - Cache statistics
 - `samwise budget` - Cost management
 - Budget, cache, skills, agents, modes commands
@@ -113,12 +128,16 @@
 - [x] **Implement skill learning**
 - [x] **Implement rate limit handler**
 - [x] **Create troubleshooting guide**
+- [x] **Implement performance monitoring** (Observatory, Replay, Analytics, Intervention)
 
 ### Medium Priority - DONE
 - [x] Performance profiling tools
 - [x] Error handling comprehensive
 - [x] Budget enforcement working
 - [x] Cache performance measurement
+- [x] **Real-time agent monitoring**
+- [x] **Session replay with JSONL logging**
+- [x] **Cost analytics with CSV export**
 
 ---
 
@@ -158,7 +177,9 @@ These are optional enhancements beyond v1.0.0:
 | **Magic Keywords** | ✅ ralph, ulw, plan | ✅ **7 modes** (eco:, autopilot:, ultrapilot:, swarm:, pipeline:, plan:, samwise:) |
 | **Skill Learning** | ✅ Auto-extract patterns | ✅ **DONE** |
 | **Rate Limit Handling** | ✅ omc wait daemon | ✅ **DONE** |
-| **Analytics Dashboard** | ✅ Cost tracking UI | ⚠️ CLI-based (WebUI future) |
+| **Performance Monitoring** | ✅ Agent observatory | ✅ **DONE** (4-component system) |
+| **Session Replay** | ✅ Event logging | ✅ **DONE** (JSONL format) |
+| **Analytics Dashboard** | ✅ Cost tracking UI | ✅ **CLI-based** (stats/export commands) |
 | **Skills Library** | ✅ 37+ skills | ✅ **10 skills** + learning system |
 | **Agent Library** | ✅ 32 specialized agents | ✅ **32 agents** (FULL PARITY) |
 | **Planning Mode** | ✅ Interactive planning | ✅ **DONE** (plan:, samwise:) |
@@ -176,6 +197,9 @@ These are optional enhancements beyond v1.0.0:
 - ✅ **Persistent cache** with 24h TTL
 - ✅ **Budget enforcement** system
 - ✅ **TypeScript foundation** (type-safe)
+- ✅ **4-component monitoring** (Observatory, Replay, Analytics, Intervention)
+- ✅ **JSONL event logging** for debugging
+- ✅ **CSV export** for analytics
 
 ### Future Roadmap (Optional Enhancements)
 
@@ -199,6 +223,9 @@ All core features are implemented, tested, and documented:
 - ✅ Skill learning system that gets smarter over time
 - ✅ Rate limit handling with automatic retry
 - ✅ Planning mode for structured implementation
+- ✅ Performance monitoring (Observatory, Replay, Analytics, Intervention)
+- ✅ 32 agents with tiering across 16 domains
+- ✅ 10 skills across 6 categories
 - ✅ 6 pre-built recipes for common workflows
 - ✅ Complete documentation (README, recipes, troubleshooting)
 - ✅ CLI fully functional with all commands
@@ -238,6 +265,8 @@ Add GitHub Actions CI/CD
 Set up npm publishing workflow
 Create release notes for v1.0.0
 Add badges to README (build status, npm version)
+
+
 Option 3: Production Usage 🚀
 Actually use samwise for real work
 
@@ -246,6 +275,8 @@ Use planning mode to structure a feature
 Test skill learning by doing repeated tasks
 Generate real documentation/tests
 Validate cost tracking with actual work
+
+
 Option 4: Advanced Features 🔬
 Continue expanding capabilities
 
