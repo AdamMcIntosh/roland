@@ -7,16 +7,9 @@
 [![Status](https://img.shields.io/badge/agents-multi--agent-blue.svg)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)]()
 
-A powerful orchestration framework for **[Goose](https://github.com/block/goose)** that provides intelligent AI workflow management through MCP (Model Context Protocol) integration. Inspired by **oh-my-claudecode**, samwise extends Goose with specialized agents, reusable skills, cost-optimized execution modes, and workflow automation.
+A powerful orchestration framework for intelligent AI workflow management through MCP (Model Context Protocol) integration. Inspired by **oh-my-claudecode**, samwise provides specialized agents, reusable skills, cost-optimized execution modes, and workflow automation.
 
-> **✅ Production Status**: v1.0.0 complete with workflows, caching, CLI, skills, MCP server, and Goose integration. Ready for production use!
-
-##  Two Ways to Use
-
-1. **Standalone CLI** - Use samwise directly via command line
-2. **Goose Extension** - Add as an MCP extension to [Goose](https://github.com/block/goose) for enhanced capabilities ⭐ **Recommended**
-
-See [GOOSE_INTEGRATION.md](GOOSE_INTEGRATION.md) for complete integration guide.
+> **✅ Production Status**: v1.0.0 complete with workflows, caching, CLI, skills, and MCP server. Ready for production use!
 
 ## ✨ Features (v1.0.0)
 
@@ -102,36 +95,7 @@ See [GOOSE_INTEGRATION.md](GOOSE_INTEGRATION.md) for complete integration guide.
 
 ## 🚀 Quick Start
 
-### Option 1: Use as Goose Extension (Recommended)
-
-Integrate samwise with Goose for the best experience:
-
-```bash
-# 1. Build samwise
-git clone https://github.com/yourusername/samwise.git
-cd samwise
-npm install
-npm run build
-
-# 2. Configure API keys
-echo "SAMWISE_API_KEYS_XAI=your_xai_key" > .env
-
-# 3. Add to Goose config (~/.config/goose/config.yaml)
-# See GOOSE_INTEGRATION.md for detailed instructions
-
-# 4. Start Goose
-goose session
-
-# 5. Use samwise tools from Goose
-> Use samwise refactoring skill to improve this code
-> Execute BugFix recipe to fix the login issue
-```
-
-See **[GOOSE_INTEGRATION.md](GOOSE_INTEGRATION.md)** for complete setup guide.
-
-### Option 2: Standalone CLI
-
-Use samwise directly without Goose:
+### Installation
 
 ```bash
 # Clone the repository
@@ -286,16 +250,6 @@ routing:
     - grok-4.1-full
   explain:
     - grok-4-1-fast-reasoning
-
-goose:
-  api_keys:
-    anthropic: "YOUR_ANTHROPIC_KEY"
-    openai: "YOUR_OPENAI_KEY"
-    google: "YOUR_GOOGLE_KEY"
-    xai: "YOUR_XAI_KEY"
-  mcp_defaults:
-    temperature: 0.7
-    max_tokens: 2000
 ```
 
 ## 📁 Architecture
@@ -478,7 +432,6 @@ npm test
 - [ ] **Web UI Dashboard**: Analytics and workflow monitoring
 - [ ] **Advanced Scheduling**: Cron-like workflow triggers
 - [ ] **Multi-workspace Support**: Workspace-aware configs and cache
-- [ ] **Goose Adapter Enhancements**: Full runtime integration
 - [ ] **Community Plugins**: Extend skills and agents via plugins
 
 ### 📅 Version History
@@ -506,7 +459,6 @@ Distributed under the MIT License. See [LICENSE](LICENSE) for details.
 ## 🙏 Acknowledgments
 
 - Inspired by **[oh-my-claudecode](https://github.com/ldavidson45/oh-my-claudecode)**
-- Built on **[Goose](https://github.com/block/goose)** by Block
 - Powered by **[Model Context Protocol (MCP)](https://modelcontextprotocol.io/)**
 - Thanks to the open-source AI community
 
