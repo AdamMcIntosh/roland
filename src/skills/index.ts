@@ -6,6 +6,13 @@
 
 import { RefactoringSkill, DocumentationSkill, TestingSkill } from './implementations/core-skills.js';
 import { SecurityScanSkill, PerformanceSkill } from './implementations/advanced-skills.js';
+import {
+  CodeReviewSkill,
+  APIDesignSkill,
+  DatabaseSchemaSkill,
+  DebuggingSkill,
+  MigrationSkill,
+} from './implementations/extended-skills.js';
 import { skillRegistry } from './skill-framework.js';
 import { SkillExecutor, getSkillExecutor } from './skill-executor.js';
 import { logger } from '../utils/logger.js';
@@ -22,8 +29,17 @@ export async function initializeSkills(): Promise<void> {
     skillRegistry.register(new RefactoringSkill());
     skillRegistry.register(new DocumentationSkill());
     skillRegistry.register(new TestingSkill());
+    
+    // Register advanced skills
     skillRegistry.register(new SecurityScanSkill());
     skillRegistry.register(new PerformanceSkill());
+    
+    // Register extended skills
+    skillRegistry.register(new CodeReviewSkill());
+    skillRegistry.register(new APIDesignSkill());
+    skillRegistry.register(new DatabaseSchemaSkill());
+    skillRegistry.register(new DebuggingSkill());
+    skillRegistry.register(new MigrationSkill());
 
     logger.info(`Loaded ${skillRegistry.count()} skills`);
     logger.debug(`Skill registry: ${skillRegistry.getSkillNames().join(', ')}`);

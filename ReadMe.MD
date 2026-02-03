@@ -57,12 +57,16 @@ See [GOOSE_INTEGRATION.md](GOOSE_INTEGRATION.md) for complete integration guide.
 - Ready for multi-agent orchestration
 
 ### ⚡ Core Skills System
-- **5 production skills** with auto-detection:
-  - **refactoring**: Code optimization, performance improvements, readability
-  - **documentation**: JSDoc, Markdown, Docstring generation
-  - **testing**: Vitest/Jest compatible test generation
-  - **security_scan**: Vulnerability analysis and secure coding checks
-  - **performance**: Hot-path analysis and optimization suggestions
+- **10 production skills** across 3 categories:
+  - **Core** (3): refactoring, documentation, testing
+  - **Advanced** (2): security_scan, performance
+  - **Extended** (5): code_review, api_design, database_schema, debugging, migration
+- **Skills overview**:
+  - **code_review**: Best practices analysis with rating system
+  - **api_design**: RESTful API endpoint and schema generation
+  - **database_schema**: Database design with migrations
+  - **debugging**: Error analysis with root cause and fix suggestions
+  - **migration**: Framework/version upgrade planning
 - Keyword-based skill detection from queries
 - Extensible skill framework for custom skills
 
@@ -315,7 +319,9 @@ samwise/
 │   ├── skills/                 # ✅ Skills framework (Phase 3)
 │   │   ├── skill-framework.ts  # Base Skill class & registry
 │   │   ├── implementations/
-│   │   │   └── core-skills.ts  # 3 core skills
+│   │   │   ├── core-skills.ts      # 3 core skills
+│   │   │   ├── advanced-skills.ts  # 2 advanced skills
+│   │   │   └── extended-skills.ts  # 5 extended skills
 │   │   └── index.ts            # Skill initialization
 │   ├── config/                 # ✅ Configuration (Phase 1)
 │   │   └── config-loader.ts    # YAML config loader

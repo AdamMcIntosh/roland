@@ -28,6 +28,7 @@ import {
 import { agentExecutor, ExecutionRequest, ExecutionResult } from '../orchestrator/agent-executor.js';
 import { costCalculator } from '../orchestrator/cost-calculator.js';
 import { cacheManager } from '../orchestrator/cache-manager.js';
+import { skillRegistry } from '../skills/skill-framework.js';
 import { PerformanceMonitor } from '../utils/performance-monitor.js';
 import { BudgetManager } from '../utils/budget-manager.js';
 import { logger } from '../utils/logger.js';
@@ -275,23 +276,8 @@ export class CliInterface {
    * Handle skills command
    */
   private handleSkills(): void {
-    const skills = [
-      {
-        name: 'refactoring',
-        description: 'Refactor code for improved quality',
-        keywords: 'refactor, improve',
-      },
-      {
-        name: 'documentation',
-        description: 'Generate comprehensive documentation',
-        keywords: 'document, doc, explain',
-      },
-      {
-        name: 'testing',
-        description: 'Generate test cases',
-        keywords: 'test, unit test, test cases',
-      },
-    ];
+    const skillsMap = skillRegistry.getAllSkills();
+    const allSkills = Array.from(skillsMap.values());
 
     console.log(
       '\n' +
@@ -300,11 +286,32 @@ export class CliInterface {
         '\n'
     );
 
-    skills.forEach((skill) => {
-      console.log(`  ${skill.name}`);
-      console.log(`    ${skill.description}`);
-      console.log(`    Keywords: ${skill.keywords}\n`);
+    if (allSkills.length === 0) {
+      console.log('  No skills registered yet.\n');
+      return;
+    }
+
+    // Group by category
+    const categories = new Map<string, typeof allSkills>();
+    allSkills.forEach((skill) => {
+      const category = skill.metadata.category;
+      if (!categories.has(category)) {
+        categories.set(category, []);
+      }
+      categories.get(category)!.push(skill);
     });
+
+    // Display skills grouped by category
+    categories.forEach((skills, category) => {
+      console.log(`\n📁 ${category.toUpperCase()}`);
+      skills.forEach((skill) => {
+        const metadata = skill.metadata;
+        console.log(`  ${metadata.name}`);
+        console.log(`    ${metadata.description}\n`);
+      });
+    });
+
+    console.log(`Total: ${allSkills.length} skills\n`);
   }
 
   /**

@@ -56,7 +56,10 @@
   - RESTfulAPI.yaml - API development
   - SecurityAudit.yaml - Security review
   - WebAppFullStack.yaml - Full-stack development
-- Skills framework (5 core skills: refactoring, documentation, testing, security, performance)
+- Skills framework (**10 skills** across 3 categories):
+  - Core (3): refactoring, documentation, testing
+  - Advanced (2): security_scan, performance
+  - Extended (5): code_review, api_design, database_schema, debugging, migration
 
 ### Documentation ✅ (NEW)
 - ✅ **README.md** - Updated with all new features
@@ -86,7 +89,7 @@
 - ✅ Cache statistics command works
 - ✅ Recipe listing shows all 6 recipes
 - ✅ Agent loader finds 10 agents
-- ✅ Skills loader finds 5 skills
+- ✅ Skills loader finds 10 skills (grouped by category)
 
 ---
 
