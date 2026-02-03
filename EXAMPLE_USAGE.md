@@ -1,6 +1,6 @@
 # Ecomode MVP - Example Usage Guide
 
-This guide demonstrates real-world usage of the oh-my-goose Ecomode MVP.
+This guide demonstrates real-world usage of the samwise Ecomode MVP.
 
 ## Quick Start
 
@@ -299,7 +299,7 @@ Missing API key for xAI provider.
 
 How to fix:
 1. Create a .env file in the project root
-2. Add: OMG_GOOSE_API_KEYS_XAI=your_key_here
+2. Add: SAMWISE_API_KEYS_XAI=your_key_here
 3. Restart the CLI
 
 Documentation: See config.yaml for all supported providers

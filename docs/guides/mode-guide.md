@@ -1,12 +1,12 @@
 # Mode Execution Guide
 
-**Complete Guide to oh-my-goose Execution Modes**
+**Complete Guide to samwise Execution Modes**
 
 ---
 
 ## Quick Overview
 
-oh-my-goose provides 5 execution modes for different use cases:
+samwise provides 5 execution modes for different use cases:
 
 | Mode | Agents | Speed | Cost | Best For |
 |------|--------|-------|------|----------|

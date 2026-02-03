@@ -1,6 +1,6 @@
-# Installation Guide - oh-my-goose
+# Installation Guide - samwise
 
-Complete installation and setup guide for oh-my-goose with standalone CLI and Goose extension modes.
+Complete installation and setup guide for samwise with standalone CLI and Goose extension modes.
 
 ## Table of Contents
 
@@ -23,8 +23,8 @@ Complete installation and setup guide for oh-my-goose with standalone CLI and Go
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/oh-my-goose.git
-cd oh-my-goose
+git clone https://github.com/yourusername/samwise.git
+cd samwise
 ```
 
 ### 2. Install Dependencies
@@ -54,16 +54,16 @@ Add your API keys:
 
 ```bash
 # xAI (recommended for Ecomode - cheapest models)
-OMG_GOOSE_API_KEYS_XAI=your_xai_api_key_here
+SAMWISE_GOOSE_API_KEYS_XAI=your_xai_api_key_here
 
 # Anthropic (Claude models)
-OMG_GOOSE_API_KEYS_ANTHROPIC=your_anthropic_api_key_here
+SAMWISE_GOOSE_API_KEYS_ANTHROPIC=your_anthropic_api_key_here
 
 # OpenAI (GPT models)
-OMG_GOOSE_API_KEYS_OPENAI=your_openai_api_key_here
+SAMWISE_GOOSE_API_KEYS_OPENAI=your_openai_api_key_here
 
 # Google (Gemini models)
-OMG_GOOSE_API_KEYS_GOOGLE=your_google_api_key_here
+SAMWISE_GOOSE_API_KEYS_GOOGLE=your_google_api_key_here
 ```
 
 **Note**: For Ecomode MVP, only **xAI API key** is required as it provides the cheapest models (grok-code-fast-1 and grok-4-1-fast-reasoning).
@@ -78,7 +78,7 @@ This compiles TypeScript source files from `src/` to JavaScript in `dist/`.
 
 Expected output:
 ```
-> oh-my-goose@0.1.0 build
+> samwise@1.0.0 build
 > tsc
 
 (no errors)
@@ -91,7 +91,7 @@ Expected output:
 npm run cli
 
 # You should see the CLI prompt
-oh-my-goose>
+samwise>
 ```
 
 Type `help` to see available commands.
@@ -100,7 +100,7 @@ Type `help` to see available commands.
 
 ### What is Goose?
 
-[Goose](https://github.com/block/goose) is Block's open-source AI agent that automates coding tasks. oh-my-goose can extend Goose with advanced orchestration capabilities.
+[Goose](https://github.com/block/goose) is Block's open-source AI agent that automates coding tasks. samwise can extend Goose with advanced orchestration capabilities.
 
 ### Setup as Goose Extension
 
@@ -113,10 +113,10 @@ brew install --cask block-goose
 # Or download from: https://github.com/block/goose/releases
 ```
 
-**Step 2:** Build oh-my-goose (must be done first)
+**Step 2:** Build samwise (must be done first)
 
 ```bash
-cd oh-my-goose
+cd samwise
 npm run build
 ```
 
@@ -130,19 +130,19 @@ Add this extension block:
 
 ```yaml
 extensions:
-  oh-my-goose:
-    name: "oh-my-goose"
-    display_name: "Oh My Goose"
+  samwise:
+    name: "samwise"
+    display_name: "Samwise"
     description: "Multi-agent orchestration with workflows and cost optimization"
     type: "stdio"
     cmd: "node"
-    args: ["/absolute/path/to/oh-my-goose/dist/index.js"]  # Change this!
+    args: ["/absolute/path/to/samwise/dist/index.js"]  # Change this!
     enabled: true
     timeout: 600
     bundled: false
 ```
 
-**Important:** Use the **absolute path** to your oh-my-goose installation!
+**Important:** Use the **absolute path** to your samwise installation!
 
 **Step 4:** Start or restart Goose
 
@@ -150,7 +150,7 @@ extensions:
 goose session
 
 # Test integration
-> Can you list available tools from oh-my-goose?
+> Can you list available tools from samwise?
 ```
 
 For complete integration guide with examples, see **[GOOSE_INTEGRATION.md](GOOSE_INTEGRATION.md)**.
@@ -227,10 +227,10 @@ All API keys can be configured via environment variables:
 
 ```bash
 # Provider API keys
-OMG_GOOSE_API_KEYS_XAI=...
-OMG_GOOSE_API_KEYS_ANTHROPIC=...
-OMG_GOOSE_API_KEYS_OPENAI=...
-OMG_GOOSE_API_KEYS_GOOGLE=...
+SAMWISE_API_KEYS_XAI=...
+SAMWISE_API_KEYS_ANTHROPIC=...
+SAMWISE_API_KEYS_OPENAI=...
+SAMWISE_API_KEYS_GOOGLE=...
 
 # Optional: Override config file location
 OMG_CONFIG_PATH=/path/to/config.yaml
@@ -290,14 +290,14 @@ You should see 10 loaded agents:
 
 ### Error: "Missing API key for xAI provider"
 
-**Solution**: Ensure you have set `OMG_GOOSE_API_KEYS_XAI` in your `.env` file.
+**Solution**: Ensure you have set `SAMWISE_API_KEYS_XAI` in your `.env` file.
 
 ```bash
 # Check if .env exists
 cat .env  # or: Get-Content .env on Windows
 
 # Add the key if missing
-echo "OMG_GOOSE_API_KEYS_XAI=your_key_here" >> .env
+echo "SAMWISE_API_KEYS_XAI=your_key_here" >> .env
 ```
 
 ### Error: "Cannot find module 'dist/cli/cli-main.js'"
@@ -404,11 +404,11 @@ After successful installation:
 
 ## Uninstallation
 
-To remove oh-my-goose:
+To remove samwise:
 
 ```bash
 # Navigate to project directory
-cd oh-my-goose
+cd samwise
 
 # Remove dependencies
 rm -rf node_modules
@@ -418,7 +418,7 @@ rm -rf .cache
 
 # Remove the entire project (optional)
 cd ..
-rm -rf oh-my-goose
+rm -rf samwise
 ```
 
 ## Support
@@ -437,7 +437,7 @@ If you encounter issues during installation:
 
 **Installation Complete!** 🎉
 
-Start using oh-my-goose with:
+Start using samwise with:
 ```bash
 npm run cli
 ```

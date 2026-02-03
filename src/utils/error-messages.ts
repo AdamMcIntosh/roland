@@ -32,7 +32,7 @@ export const ErrorScenarios = {
       new UserFacingError(
         `Missing API key for ${provider}`,
         'MISSING_API_KEY',
-        `Set environment variable: OMG_GOOSE_API_KEYS_${provider.toUpperCase()}=your_api_key`,
+        `Set environment variable: SAMWISE_API_KEYS_${provider.toUpperCase()}=your_api_key`,
       ),
   },
 
@@ -41,7 +41,7 @@ export const ErrorScenarios = {
       new UserFacingError(
         'Query is empty or invalid',
         'INVALID_QUERY',
-        'Try: goose run "eco: refactor this code"',
+        'Try: samwise run "eco: refactor this code"',
       ),
   },
 
@@ -50,7 +50,7 @@ export const ErrorScenarios = {
       new UserFacingError(
         `Model not found: ${model}`,
         'MODEL_NOT_FOUND',
-        `Use: goose skills to see available options`,
+        `Use: samwise skills to see available options`,
       ),
   },
 
@@ -59,7 +59,7 @@ export const ErrorScenarios = {
       new UserFacingError(
         `Skill not found: ${skill}`,
         'SKILL_NOT_FOUND',
-        `Run: goose skills to see available skills`,
+        `Run: samwise skills to see available skills`,
       ),
   },
 
@@ -68,7 +68,7 @@ export const ErrorScenarios = {
       new UserFacingError(
         `Agent not found: ${agent}`,
         'AGENT_NOT_FOUND',
-        `Run: goose agents to see available agents`,
+        `Run: samwise agents to see available agents`,
       ),
   },
 
@@ -86,7 +86,7 @@ export const ErrorScenarios = {
       new UserFacingError(
         `Cache ${operation} failed`,
         'CACHE_ERROR',
-        'Try: goose run --no-cache to disable caching',
+        'Try: samwise run --no-cache to disable caching',
       ),
   },
 

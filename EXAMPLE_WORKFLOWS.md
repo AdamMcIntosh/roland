@@ -1,6 +1,6 @@
 # Example Workflows
 
-This guide shows how to create and use workflows with oh-my-goose. Workflows are composable units of automation that orchestrate multiple agents to accomplish complex tasks.
+This guide shows how to create and use workflows with samwise. Workflows are composable units of automation that orchestrate multiple agents to accomplish complex tasks.
 
 ## Table of Contents
 

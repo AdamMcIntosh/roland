@@ -121,7 +121,7 @@ export class AgentExecutor {
     if (!config || !config.goose.api_keys[modelSelection.provider]) {
       throw new Error(
         `Missing API key for ${modelSelection.provider}. ` +
-        `Set OMG_GOOSE_API_KEYS_${modelSelection.provider.toUpperCase()} environment variable`
+        `Set SAMWISE_API_KEYS_${modelSelection.provider.toUpperCase()} environment variable`
       );
     }
 

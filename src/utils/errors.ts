@@ -1,8 +1,8 @@
 /**
- * Custom error classes for oh-my-goose
+ * Custom error classes for samwise
  */
 
-export class OhMyGooseError extends Error {
+export class SamwiseError extends Error {
   constructor(
     message: string,
     public code: string = 'UNKNOWN_ERROR',
@@ -28,7 +28,7 @@ export class OhMyGooseError extends Error {
 // Configuration Errors
 // ============================================================================
 
-export class ConfigError extends OhMyGooseError {
+export class ConfigError extends SamwiseError {
   constructor(message: string, details?: Record<string, unknown>) {
     super(message, 'CONFIG_ERROR', details);
   }
@@ -56,7 +56,7 @@ export class ConfigValidationError extends ConfigError {
 // Agent Errors
 // ============================================================================
 
-export class AgentError extends OhMyGooseError {
+export class AgentError extends SamwiseError {
   constructor(message: string, details?: Record<string, unknown>) {
     super(message, 'AGENT_ERROR', details);
   }
@@ -78,7 +78,7 @@ export class AgentLoadError extends AgentError {
 // Skill Errors
 // ============================================================================
 
-export class SkillError extends OhMyGooseError {
+export class SkillError extends SamwiseError {
   constructor(message: string, details?: Record<string, unknown>) {
     super(message, 'SKILL_ERROR', details);
   }
@@ -106,7 +106,7 @@ export class SkillValidationError extends SkillError {
 // MCP Server Errors
 // ============================================================================
 
-export class McpError extends OhMyGooseError {
+export class McpError extends SamwiseError {
   constructor(message: string, details?: Record<string, unknown>) {
     super(message, 'MCP_ERROR', details);
   }
@@ -134,7 +134,7 @@ export class McpServerError extends McpError {
 // Model Routing Errors
 // ============================================================================
 
-export class RoutingError extends OhMyGooseError {
+export class RoutingError extends SamwiseError {
   constructor(message: string, details?: Record<string, unknown>) {
     super(message, 'ROUTING_ERROR', details);
   }
@@ -156,7 +156,7 @@ export class ModelNotConfiguredError extends RoutingError {
 // Cache Errors
 // ============================================================================
 
-export class CacheError extends OhMyGooseError {
+export class CacheError extends SamwiseError {
   constructor(message: string, details?: Record<string, unknown>) {
     super(message, 'CACHE_ERROR', details);
   }
@@ -178,7 +178,7 @@ export class CacheWriteError extends CacheError {
 // Workflow Errors
 // ============================================================================
 
-export class WorkflowError extends OhMyGooseError {
+export class WorkflowError extends SamwiseError {
   constructor(message: string, details?: Record<string, unknown>) {
     super(message, 'WORKFLOW_ERROR', details);
   }
@@ -200,7 +200,7 @@ export class WorkflowExecutionError extends WorkflowError {
 // API Errors
 // ============================================================================
 
-export class ApiError extends OhMyGooseError {
+export class ApiError extends SamwiseError {
   constructor(message: string, public statusCode?: number, details?: Record<string, unknown>) {
     super(message, 'API_ERROR', details);
   }

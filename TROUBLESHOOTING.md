@@ -1,6 +1,6 @@
 # Troubleshooting Guide
 
-Common issues and solutions for oh-my-goose workflow orchestration.
+Common issues and solutions for samwise workflow orchestration.
 
 ## Table of Contents
 
@@ -16,7 +16,7 @@ Common issues and solutions for oh-my-goose workflow orchestration.
 
 ### Issue: Module not found errors
 
-**Error**: `Cannot find module 'oh-my-goose'` or similar
+**Error**: `Cannot find module 'samwise'` or similar
 
 **Solutions**:
 1. Ensure all dependencies are installed: `npm install`
@@ -42,37 +42,37 @@ Common issues and solutions for oh-my-goose workflow orchestration.
 
 ## CLI Issues
 
-### Issue: `goose` command not found
+### Issue: `samwise` command not found
 
-**Error**: `command not found: goose` or `'goose' is not recognized`
+**Error**: `command not found: samwise` or `'samwise' is not recognized`
 
 **Solutions**:
 1. Build the project: `npm run build`
 2. Run directly: `node dist/cli/cli-main.js help`
 3. Create an alias in your shell:
    ```bash
-   alias goose='node /path/to/dist/cli/cli-main.js'
+   alias samwise='node /path/to/dist/cli/cli-main.js'
    ```
 4. Install globally: `npm install -g` (if published)
 
 ### Issue: CLI help text not displaying
 
-**Error**: No output or garbled text when running `goose help`
+**Error**: No output or garbled text when running `samwise help`
 
 **Solutions**:
 1. Rebuild the project: `npm run build`
 2. Clear terminal and try again
-3. Check terminal supports UTF-8 (for goose ASCII art)
-4. Try a simpler command: `goose --version`
+3. Check terminal supports UTF-8 (for samwise ASCII art)
+4. Try a simpler command: `samwise --version`
 
 ### Issue: Workflow execution command fails silently
 
-**Error**: `goose workflow MyWorkflow` returns nothing
+**Error**: `samwise workflow MyWorkflow` returns nothing
 
 **Solutions**:
-1. Verify the workflow exists: `goose recipes`
-2. Check the workflow name exactly: `goose workflow MyWorkflow:1.0.0`
-3. Check for errors in your shell: `goose workflow MyWorkflow 2>&1`
+1. Verify the workflow exists: `samwise recipes`
+2. Check the workflow name exactly: `samwise workflow MyWorkflow:1.0.0`
+3. Check for errors in your shell: `samwise workflow MyWorkflow 2>&1`
 4. Run in verbose mode if available
 
 ## Workflow Execution
@@ -425,7 +425,7 @@ If you can't find the solution here:
 
 When reporting issues, include:
 
-- oh-my-goose version: `cat package.json | grep version`
+- samwise version: `cat package.json | grep version`
 - Node.js version: `node --version`
 - Exact error message and stack trace
 - Minimal reproduction code

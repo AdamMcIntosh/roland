@@ -1,4 +1,4 @@
-# Release Notes - oh-my-goose v1.0.0
+# Release Notes - samwise v1.0.0
 
 **Release Date**: January 30, 2026
 
@@ -6,9 +6,9 @@
 
 ---
 
-## 🎉 Welcome to oh-my-goose v1.0.0!
+## 🎉 Welcome to samwise v1.0.0!
 
-We're excited to announce the first production release of **oh-my-goose**, a cost-optimized AI orchestration framework for Goose with Model Context Protocol (MCP) integration.
+We're excited to announce the first production release of **samwise**, a cost-optimized AI orchestration framework for Goose with Model Context Protocol (MCP) integration.
 
 This MVP focuses on **Ecomode** - an intelligent execution mode that delivers **85% cost savings** through automatic cheapest model selection, aggressive caching, and smart task routing.
 
@@ -50,14 +50,14 @@ Powerful command-line interface with 5 commands:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/oh-my-goose.git
-cd oh-my-goose
+git clone https://github.com/yourusername/samwise.git
+cd samwise
 
 # Install dependencies
 npm install
 
 # Configure API key (xAI recommended)
-echo "OMG_GOOSE_API_KEYS_XAI=your_key_here" > .env
+echo "SAMWISE_API_KEYS_XAI=your_key_here" > .env
 
 # Build and run
 npm run build
@@ -249,10 +249,10 @@ Process multiple files with cost tracking:
 
 ```bash
 # Required: At least one provider API key
-OMG_GOOSE_API_KEYS_XAI=your_xai_key
-OMG_GOOSE_API_KEYS_ANTHROPIC=your_anthropic_key
-OMG_GOOSE_API_KEYS_OPENAI=your_openai_key
-OMG_GOOSE_API_KEYS_GOOGLE=your_google_key
+SAMWISE_API_KEYS_XAI=your_xai_key
+SAMWISE_API_KEYS_ANTHROPIC=your_anthropic_key
+SAMWISE_API_KEYS_OPENAI=your_openai_key
+SAMWISE_API_KEYS_GOOGLE=your_google_key
 ```
 
 ### config.yaml
@@ -356,8 +356,8 @@ MIT License - see [LICENSE](LICENSE) file for details.
 Need help? We're here for you:
 
 - **Documentation**: See [INSTALLATION.md](INSTALLATION.md) and [EXAMPLE_USAGE.md](EXAMPLE_USAGE.md)
-- **Issues**: [GitHub Issues](https://github.com/yourusername/oh-my-goose/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/oh-my-goose/discussions)
+- **Issues**: [GitHub Issues](https://github.com/yourusername/samwise/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yourusername/samwise/discussions)
 
 ---
 
@@ -373,6 +373,6 @@ After installing v1.0.0:
 
 ---
 
-**oh-my-goose v1.0.0** — Cost-optimized AI orchestration. 🦢
+**samwise v1.0.0** — Cost-optimized AI orchestration. 🦢
 
-Thank you for using oh-my-goose!
+Thank you for using samwise!

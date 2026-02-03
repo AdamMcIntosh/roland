@@ -1,6 +1,6 @@
 /**
  * Agent Type Definitions
- * Defines the structure and types for agents used in oh-my-goose
+ * Defines the structure and types for agents used in samwise
  */
 
 import { z } from 'zod';

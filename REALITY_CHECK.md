@@ -1,5 +1,7 @@
 # Reality Check: Progress vs Vision
 
+**Project:** Samwise - Autonomous agent orchestration for developers
+
 **Vision:** Help developers automate coding tasks with recipes and workflows (PlanExecRevEx, BugFix, etc.)
 
 ---
@@ -20,7 +22,7 @@
 - EcoMode (budget-conscious)
 
 ### CLI Interface ✅
-- `goose agent <query>` command with options
+- `samwise agent <query>` command with options
 - Interactive mode for multi-turn conversations
 - Recipe and workflow commands (scaffolded)
 - Budget, cache, and stats commands
@@ -42,7 +44,7 @@
 ## What's Untested (Critical Blocker)
 
 ### Runtime Testing Needed
-1. Does `goose agent <query>` actually execute without errors?
+1. Does `samwise agent <query>` actually execute without errors?
 2. Does conversational caching actually work?
 3. Can agent invoke modes and get results?
 4. Do recipes load and execute?
@@ -58,8 +60,8 @@
 ### User-Facing Features Untested
 - Single query execution
 - Interactive multi-turn session
-- Recipe execution (`goose recipe "Plan Exec Review"`)
-- Workflow execution (`goose workflow <name>`)
+- Recipe execution (`samwise recipe "Plan Exec Review"`)
+- Workflow execution (`samwise workflow <name>`)
 - Cache statistics and performance gains
 
 ---
@@ -80,7 +82,6 @@
 - [ ] Cache performance measurement
 
 ### Nice to Have
-- [ ] Goose integration (can add back later)
 - [ ] WebUI dashboard
 - [ ] Advanced analytics
 - [ ] Custom recipe builder
@@ -106,3 +107,53 @@
 - **Goose Integration:** Deferred (can add later if needed)
 
 **Blocker:** Need to actually run the system and verify it works end-to-end.
+
+---
+
+## Comparison to oh-my-claudecode
+
+**oh-my-claudecode** is a similar system for Claude Code. Here's how you compare:
+
+### What They Have That You Don't (Yet)
+
+| Feature | oh-my-claudecode | samwise |
+|---------|------------------|------------|
+| **HUD Status Line** | ✅ Real-time metrics | ❌ |
+| **Magic Keywords** | ✅ ralph, ulw, plan | ✅ autopilot:, eco: |
+| **Skill Learning** | ✅ Auto-extract patterns | ❌ |
+| **Rate Limit Handling** | ✅ omc wait daemon | ❌ |
+| **Analytics Dashboard** | ✅ Cost tracking UI | ❌ |
+| **Skills Library** | ✅ 31+ skills | ⚠️ 5 skills |
+| **Agent Library** | ✅ 32 specialized agents | ⚠️ 10 agents |
+| **Planning Mode** | ✅ Interactive planning | ❌ |
+| **Persistence Mode** | ✅ ralph (won't give up) | ⚠️ Concept only |
+| **Web Documentation** | ✅ Interactive site | ⚠️ Markdown docs |
+
+### What You Already Have (That's Good!)
+
+- ✅ 5 execution modes (similar structure)
+- ✅ Multi-agent orchestration
+- ✅ Cost optimization (EcoMode)
+- ✅ Recipes/workflows for automation
+- ✅ MCP server integration
+- ✅ CLI interface
+- ✅ Caching layer
+- ✅ Budget management
+
+### Priority Features to Add (After Testing)
+
+**🔴 High Priority** - Define your UX
+- [ ] HUD status line (real-time progress in terminal)
+- [ ] Planning mode (`plan: build REST API`)
+- [ ] Skill learning (extract reusable patterns)
+- [ ] Expand magic keywords (`ralph:`, `ulw:`, `plan:`)
+
+**🟡 Medium Priority** - Polish
+- [ ] Persistence mode (agent that won't give up)
+- [ ] Rate limit handler (auto-resume on rate limits)
+- [ ] Expanded skills library (10+ skills)
+- [ ] Analytics UI (cost/performance dashboard)
+
+**🟢 Low Priority** - Nice to Have
+- [ ] Interactive documentation website
+- [ ] Advanced agent library (20+ agents)

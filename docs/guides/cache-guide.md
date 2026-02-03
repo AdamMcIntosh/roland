@@ -1,6 +1,6 @@
 # Cache Management Guide
 
-**Complete Guide to Caching Strategy with oh-my-goose**
+**Complete Guide to Caching Strategy with samwise**
 
 ---
 

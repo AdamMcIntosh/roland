@@ -118,7 +118,7 @@ export class Ecomode extends BaseMode {
       if (!apiKeys || !apiKeys[modelSelection.provider]) {
         throw new Error(
           `Missing API key for ${modelSelection.provider}. ` +
-          `Set environment variable: OMG_GOOSE_API_KEYS_${modelSelection.provider.toUpperCase()}`
+          `Set environment variable: SAMWISE_API_KEYS_${modelSelection.provider.toUpperCase()}`
         );
       }
 

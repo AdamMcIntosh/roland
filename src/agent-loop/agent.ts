@@ -1,4 +1,4 @@
-import { LLMClientWithTools } from '../orchestrator/llm-client';
+import { LLMClientWithTools } from '../orchestrator/llm-client.js';
 import { SessionManager } from './session';
 import { getToolRegistry } from './tool-registry';
 import { FileTools } from './file-tools';
@@ -460,7 +460,7 @@ export class AutonomousAgent {
       output: process.stdout,
     });
 
-    console.log('🦆 Oh My Goose Agent Started');
+    console.log('🦆 Samwise Agent Started');
     console.log('Type "exit" to quit, "clear" to clear conversation');
     console.log('');
 

@@ -1,6 +1,6 @@
 # Integration Guide & Code Examples
 
-**Real-world examples for integrating oh-my-goose**
+**Real-world examples for integrating samwise**
 
 ---
 
@@ -16,7 +16,7 @@
 
 ## Basic Integration
 
-### Initialize oh-my-goose
+### Initialize samwise
 
 ```typescript
 import { loadConfig } from '../src/config/config-loader';
@@ -34,7 +34,7 @@ BudgetManager.setMaxBudget(5.00);
 const cache = new CacheManager('.cache/responses.json');
 
 // 4. Ready to use
-console.log('✅ oh-my-goose initialized');
+console.log('✅ samwise initialized');
 ```
 
 ### Simple Query
@@ -505,8 +505,8 @@ const program = new Command();
 const cache = new CacheManager();
 
 program
-  .name('goose')
-  .description('oh-my-goose CLI tool')
+  .name('samwise')
+  .description('samwise CLI tool')
   .version('1.0.0');
 
 program

@@ -1,7 +1,7 @@
 {
-  "name": "oh-my-goose",
+  "name": "samwise",
   "version": "1.0.0",
-  "description": "Orchestration framework for Goose with MCP integration",
+  "description": "Persistent autonomous agent orchestration with recipes and workflows",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {

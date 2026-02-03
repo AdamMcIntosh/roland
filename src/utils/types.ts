@@ -1,5 +1,5 @@
 /**
- * Core type definitions for oh-my-goose
+ * Core type definitions for samwise
  */
 
 // ============================================================================

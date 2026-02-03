@@ -1,7 +1,7 @@
 /**
  * Example: Using Ecomode for Documentation Generation
  * 
- * This script demonstrates how to use the oh-my-goose MVP
+ * This script demonstrates how to use the samwise MVP
  * to automatically generate documentation for code using
  * the Ecomode optimization and DocumentationSkill.
  * 

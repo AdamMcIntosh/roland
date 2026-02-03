@@ -124,7 +124,7 @@ export class LLMClient {
         }
       }
       throw new ApiAuthenticationError(
-        `Missing API key for ${provider}. Set OMG_GOOSE_API_KEYS_${provider.toUpperCase()}`
+        `Missing API key for ${provider}. Set SAMWISE_GOOSE_API_KEYS_${provider.toUpperCase()}`
       );
     }
 
@@ -567,7 +567,7 @@ export class LLMClientWithTools {
     const apiKey = config.goose.api_keys[provider];
     if (!apiKey) {
       throw new ApiAuthenticationError(
-        `Missing API key for ${provider}. Set OMG_GOOSE_API_KEYS_${provider.toUpperCase()}`
+        `Missing API key for ${provider}. Set SAMWISE_API_KEYS_${provider.toUpperCase()}`
       );
     }
 

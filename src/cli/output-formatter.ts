@@ -20,7 +20,7 @@ function getGooseLogo(): string {
   return chalk.cyan(`
     ╔═══════════════════════════════════════╗
     ║                                       ║
-    ║       🦢  oh-my-goose  🦢            ║
+    ║       🦢  samwise  🦢               ║
     ║       Workflow Orchestration CLI      ║
     ║                                       ║
     ║         v1.0.0 - Phase Complete       ║
@@ -50,14 +50,14 @@ export function formatWelcome(): string {
   let welcome = '\n';
   welcome += getGooseLogo();
   welcome += '\n';
-  welcome += chalk.bold.cyan('Welcome to oh-my-goose! 🦢\n');
+  welcome += chalk.bold.cyan('Welcome to samwise! 🦢\n');
   welcome += chalk.gray('═'.repeat(80)) + '\n\n';
   
   welcome += chalk.bold('Quick Start:\n');
-  welcome += chalk.green('  • Run a task:') + '        goose run "eco: your task"\n';
-  welcome += chalk.green('  • View help:') + '         goose help\n';
-  welcome += chalk.green('  • List recipes:') + '      goose recipes\n';
-  welcome += chalk.green('  • View cache stats:') + '  goose cache --stats\n\n';
+  welcome += chalk.green('  • Run a task:') + '        samwise run "eco: your task"\n';
+  welcome += chalk.green('  • View help:') + '         samwise help\n';
+  welcome += chalk.green('  • List recipes:') + '      samwise recipes\n';
+  welcome += chalk.green('  • View cache stats:') + '  samwise cache --stats\n\n';
   
   welcome += chalk.bold('5 Execution Modes:\n');
   welcome += chalk.cyan('  eco:') + '          Single agent (cheapest)\n';
@@ -67,7 +67,7 @@ export function formatWelcome(): string {
   welcome += chalk.green('  pipeline:') + '     4-step workflow\n\n';
   
   welcome += chalk.gray('═'.repeat(80)) + '\n';
-  welcome += chalk.dim('Type "goose help" for detailed documentation\n\n');
+  welcome += chalk.dim('Type "samwise help" for detailed documentation\n\n');
   
   return welcome;
 }
@@ -174,14 +174,14 @@ export function formatWarning(message: string): string {
  */
 export function formatHelp(): string {
   let help = '\n';
-  help += chalk.bold.cyan('🦢 oh-my-goose v1.0.0\n');
+  help += chalk.bold.cyan('🦢 samwise v1.0.0\n');
   help += chalk.gray('═'.repeat(80)) + '\n\n';
 
   help += chalk.bold('BASIC USAGE:\n');
-  help += '  goose run <query>                    Execute a task with Ecomode\n';
-  help += '  goose run "eco: your task here"      Explicitly use Ecomode\n';
-  help += '  goose workflow <name>                Execute a workflow\n';
-  help += '  goose recipe <name>                  Execute a pre-built recipe\n\n';
+  help += '  samwise run <query>                  Execute a task with Ecomode\n';
+  help += '  samwise run "eco: your task here"    Explicitly use Ecomode\n';
+  help += '  samwise workflow <name>              Execute a workflow\n';
+  help += '  samwise recipe <name>                Execute a pre-built recipe\n\n';
 
   help += chalk.bold('EXECUTION MODES:\n');
   help += '  ' + chalk.green('eco:') + '           Ecomode (cheapest model, single agent)\n';
@@ -215,14 +215,14 @@ export function formatHelp(): string {
   help += '  -i, --invalidate <workflow>          Invalidate specific workflow\n\n';
 
   help += chalk.bold('EXAMPLES:\n');
-  help += '  goose run "eco: refactor this function"\n';
-  help += '  goose run "autopilot: build a todo app"\n';
-  help += '  goose workflow CodeRefactoring --input \'{"file": "app.ts"}\'\n';
-  help += '  goose recipe "Plan Execute Review"\n';
-  help += '  goose cache --stats\n';
-  help += '  goose budget --set 10.00\n\n';
+  help += '  samwise run "eco: refactor this function"\n';
+  help += '  samwise run "autopilot: build a todo app"\n';
+  help += '  samwise workflow CodeRefactoring --input \'{"file": "app.ts"}\'\n';
+  help += '  samwise recipe "Plan Execute Review"\n';
+  help += '  samwise cache --stats\n';
+  help += '  samwise budget --set 10.00\n\n';
 
-  help += chalk.gray('Documentation: https://github.com/oh-my-goose\n');
+  help += chalk.gray('Documentation: https://github.com/yourusername/samwise\n');
 
   return help;
 }

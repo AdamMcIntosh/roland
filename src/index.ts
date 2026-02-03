@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * oh-my-goose MCP Server Entry Point
+ * samwise MCP Server Entry Point
  * Starts the Model Context Protocol server for Goose integration
  */
 
@@ -12,7 +12,7 @@ import { initializeSkills, registerSkillsAsTools } from './skills/index.js';
 
 async function main() {
   try {
-    logger.info('🦢 Starting oh-my-goose MCP Server...');
+    logger.info('🦢 Starting samwise MCP Server...');
 
     // Load configuration
     const config = await loadConfig();

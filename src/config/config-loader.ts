@@ -1,5 +1,5 @@
 /**
- * Configuration loader for oh-my-goose
+ * Configuration loader for samwise
  * Handles loading, parsing, and validating configuration from YAML and environment variables
  */
 
@@ -55,7 +55,7 @@ const AppConfigSchema = z.object({
 
 export class ConfigLoader {
   private static readonly DEFAULT_CONFIG_PATH = 'config.yaml';
-  private static readonly ENV_PREFIX = 'OMG_';
+  private static readonly ENV_PREFIX = 'SAMWISE_';
 
   /**
    * Load and validate configuration from YAML file and environment variables
@@ -117,7 +117,7 @@ export class ConfigLoader {
 
   /**
    * Merge environment variables into configuration
-   * Format: OMG_GOOSE_API_KEYS_ANTHROPIC=key
+  * Format: SAMWISE_API_KEYS_ANTHROPIC=key
    */
   private static mergeEnvironmentVariables(config: Record<string, unknown>): void {
     const goose = (config.goose as Record<string, unknown>) || {};

@@ -1,7 +1,7 @@
 /**
  * Example: Using Ecomode for Code Refactoring
  * 
- * This script demonstrates how to use the oh-my-goose MVP
+ * This script demonstrates how to use the samwise MVP
  * to refactor a poorly-written function using the Ecomode
  * optimization and RefactoringSkill.
  * 

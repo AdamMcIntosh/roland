@@ -1,6 +1,6 @@
 # API Reference Documentation
 
-**oh-my-goose v1.2.0**  
+**samwise v1.2.0**  
 **Complete API Reference for Developers**
 
 ---
@@ -515,7 +515,7 @@ logger.error('❌ Error occurred');
 
 **Supports:**
 - Info, debug, success, warn, error levels
-- Prefix tagging: `[oh-my-goose]`
+- Prefix tagging: `[samwise]`
 - Debug mode: Set `DEBUG=true` environment variable
 
 ---

@@ -5,7 +5,7 @@
 name: WebAppFullStack
 recipe: web-app-full-stack
 version: 1.0.0
-author: oh-my-goose
+author: samwise
 description: |
   End-to-end workflow for designing and implementing a full-stack web application.
   Covers architecture, frontend, backend, database, authentication, and deployment.

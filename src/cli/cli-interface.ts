@@ -51,8 +51,8 @@ export class CliInterface {
    */
   private setupProgram(): void {
     this.program
-      .name('goose')
-      .description('🦢 oh-my-goose - Ecomode AI Assistant')
+      .name('samwise')
+      .description('🦢 samwise - Ecomode AI Assistant')
       .version('0.1.0');
 
     // Main run command

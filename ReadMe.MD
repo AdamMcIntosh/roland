@@ -1,17 +1,19 @@
-# oh-my-goose 🦢
+# Samwise 🧑‍🌾
+
+> Persistent autonomous agent orchestration for developers. Named after Sam from LOTR—never gives up.
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Goose](https://img.shields.io/badge/goose-MCP%20Extension-blue.svg)](https://github.com/block/goose)
-[![Status](https://img.shields.io/badge/status-Production%20Ready-brightgreen.svg)]()
+[![Status](https://img.shields.io/badge/status-Alpha-yellow.svg)]()
+[![Status](https://img.shields.io/badge/agents-multi--agent-blue.svg)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)]()
 
-A powerful orchestration framework for **[Goose](https://github.com/block/goose)** that provides intelligent AI workflow management through MCP (Model Context Protocol) integration. Inspired by **oh-my-claudecode**, oh-my-goose extends Goose with specialized agents, reusable skills, cost-optimized execution modes, and workflow automation.
+A powerful orchestration framework for **[Goose](https://github.com/block/goose)** that provides intelligent AI workflow management through MCP (Model Context Protocol) integration. Inspired by **oh-my-claudecode**, samwise extends Goose with specialized agents, reusable skills, cost-optimized execution modes, and workflow automation.
 
 > **✅ Production Status**: v1.0.0 complete with workflows, caching, CLI, skills, MCP server, and Goose integration. Ready for production use!
 
 ## 🦢 Two Ways to Use
 
-1. **Standalone CLI** - Use oh-my-goose directly via command line
+1. **Standalone CLI** - Use samwise directly via command line
 2. **Goose Extension** - Add as an MCP extension to [Goose](https://github.com/block/goose) for enhanced capabilities ⭐ **Recommended**
 
 See [GOOSE_INTEGRATION.md](GOOSE_INTEGRATION.md) for complete integration guide.
@@ -65,17 +67,17 @@ See [GOOSE_INTEGRATION.md](GOOSE_INTEGRATION.md) for complete integration guide.
 
 ### Option 1: Use as Goose Extension (Recommended)
 
-Integrate oh-my-goose with Goose for the best experience:
+Integrate samwise with Goose for the best experience:
 
 ```bash
-# 1. Build oh-my-goose
-git clone https://github.com/yourusername/oh-my-goose.git
-cd oh-my-goose
+# 1. Build samwise
+git clone https://github.com/yourusername/samwise.git
+cd samwise
 npm install
 npm run build
 
 # 2. Configure API keys
-echo "OMG_GOOSE_API_KEYS_XAI=your_xai_key" > .env
+echo "SAMWISE_API_KEYS_XAI=your_xai_key" > .env
 
 # 3. Add to Goose config (~/.config/goose/config.yaml)
 # See GOOSE_INTEGRATION.md for detailed instructions
@@ -83,8 +85,8 @@ echo "OMG_GOOSE_API_KEYS_XAI=your_xai_key" > .env
 # 4. Start Goose
 goose session
 
-# 5. Use oh-my-goose tools from Goose
-> Use oh-my-goose refactoring skill to improve this code
+# 5. Use samwise tools from Goose
+> Use samwise refactoring skill to improve this code
 > Execute BugFix recipe to fix the login issue
 ```
 
@@ -92,18 +94,18 @@ See **[GOOSE_INTEGRATION.md](GOOSE_INTEGRATION.md)** for complete setup guide.
 
 ### Option 2: Standalone CLI
 
-Use oh-my-goose directly without Goose:
+Use samwise directly without Goose:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/oh-my-goose.git
-cd oh-my-goose
+git clone https://github.com/yourusername/samwise.git
+cd samwise
 
 # Install dependencies
 npm install
 
 # Configure API keys
-echo "OMG_GOOSE_API_KEYS_XAI=your_xai_key" > .env
+echo "SAMWISE_API_KEYS_XAI=your_xai_key" > .env
 
 # Build the project
 npm run build
@@ -126,21 +128,21 @@ npm run cli
 
     ╔═══════════════════════════════════════╗
     ║                                       ║
-    ║       🦢  oh-my-goose  🦢            ║
+    ║       🦢  samwise  🦢               ║
     ║       Workflow Orchestration CLI      ║
     ║                                       ║
     ║         v1.0.0 - Phase Complete       ║
     ║                                       ║
     ╚═══════════════════════════════════════╝
 
-Welcome to oh-my-goose! 🦢
+Welcome to samwise! 🦢
 ════════════════════════════════════════════════════════════════════════════════
 
 Quick Start:
-  • Run a task:        goose run "eco: your task"
-  • View help:         goose help
-  • List recipes:      goose recipes
-  • View cache stats:  goose cache --stats
+  • Run a task:        samwise run "eco: your task"
+  • View help:         samwise help
+  • List recipes:      samwise recipes
+  • View cache stats:  samwise cache --stats
 
 > run "eco: refactor legacy authentication code"
 ✓ Ecomode Result
@@ -219,7 +221,7 @@ goose:
 ## 📁 Architecture
 
 ```
-oh-my-goose/
+samwise/
 ├── src/
 │   ├── cli/                    # ✅ CLI interface (Phase 4)
 │   │   ├── keyword-parser.ts   # Magic keyword detection (eco:, etc.)
@@ -354,7 +356,7 @@ npm test
 
 ### Cost-First Optimization
 
-**oh-my-goose** prioritizes cost efficiency without sacrificing quality:
+**samwise** prioritizes cost efficiency without sacrificing quality:
 
 - **Ecomode MVP**: Focuses on cheapest model selection as proof-of-concept
 - **Intelligent routing**: Matches task complexity to appropriate model tier
@@ -430,9 +432,9 @@ Distributed under the MIT License. See [LICENSE](LICENSE) for details.
 
 For issues, questions, or feature requests:
 
-- **GitHub Issues**: [Open an issue](https://github.com/yourusername/oh-my-goose/issues)
-- **Discussions**: [Start a discussion](https://github.com/yourusername/oh-my-goose/discussions)
+- **GitHub Issues**: [Open an issue](https://github.com/yourusername/samwise/issues)
+- **Discussions**: [Start a discussion](https://github.com/yourusername/samwise/discussions)
 
 ---
 
-**oh-my-goose** — Orchestration made simple. 🦢
+**samwise** — Orchestration made simple. 🦢

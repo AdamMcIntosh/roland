@@ -1,6 +1,6 @@
 # Budget Management Guide
 
-**Complete Guide to Managing API Spending with oh-my-goose**
+**Complete Guide to Managing API Spending with samwise**
 
 ---
 

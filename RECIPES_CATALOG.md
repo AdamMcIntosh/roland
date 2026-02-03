@@ -412,24 +412,24 @@ Future CLI commands will enable easy recipe execution:
 
 ```bash
 # List available recipes
-oh-my-goose list-recipes
+samwise list-recipes
 
 # Execute a recipe with variables
-oh-my-goose execute-recipe WebAppFullStack \
+samwise execute-recipe WebAppFullStack \
   --project_name "MyApp" \
   --framework "React" \
   --deployment "AWS"
 
 # Create custom recipe
-oh-my-goose create-recipe MyCustomRecipe \
+samwise create-recipe MyCustomRecipe \
   --base PlanExecRevEx \
   --variables "{...}"
 
 # View recipe details
-oh-my-goose describe-recipe WebAppFullStack
+samwise describe-recipe WebAppFullStack
 
 # Run workflow from YAML
-oh-my-goose run-workflow ./my-workflow.yaml \
+samwise run-workflow ./my-workflow.yaml \
   --variables "{...}"
 ```
 

@@ -42,7 +42,7 @@ export class McpServer {
 
     // Initialize MCP server with stdio transport
     this.server = new Server({
-      name: 'oh-my-goose',
+      name: 'samwise',
       version: '0.1.0',
     });
 
@@ -56,7 +56,7 @@ export class McpServer {
     // Health check tool
     this.registerTool(
       'health_check',
-      'Check the health status of the oh-my-goose MCP server',
+      'Check the health status of the samwise MCP server',
       async () => {
         return {
           status: 'healthy',

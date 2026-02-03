@@ -14,7 +14,7 @@ interface LogContext {
 }
 
 class Logger {
-  private prefix = '[oh-my-goose]';
+  private prefix = '[samwise]';
   private logLevel: LogLevel = 'info';
   private context: LogContext = {};
   private logHistory: Array<{
