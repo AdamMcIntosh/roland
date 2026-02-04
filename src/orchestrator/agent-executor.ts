@@ -182,24 +182,18 @@ export class AgentExecutor {
   ): Promise<string> {
     logger.debug(`Calling ${model} with agent: ${agentName}`);
 
-    try {
-      // Call the real LLM API
-      const response = await LLMClient.call({
-        model: model,
-        prompt: query,
-        temperature: 0.7,
-        maxTokens: 2000,
-        systemPrompt: `You are ${agentName}, an AI coding assistant. Provide helpful, accurate, and concise responses.`,
-      });
+    // Call the real LLM API (no fallback - let errors propagate)
+    const systemPrompt = `You are ${agentName}, an AI coding assistant. Provide helpful, accurate, and concise responses.`;
+    
+    const response = await LLMClient.call({
+      model: model,
+      prompt: query,
+      temperature: 0.7,
+      maxTokens: 2000,
+      systemPrompt: systemPrompt,
+    });
 
-      return response.content;
-    } catch (error) {
-      logger.error(`LLM call failed for ${model}: ${error}`);
-      
-      // Fallback to mock response if API call fails
-      logger.warn('Falling back to mock response due to API error');
-      return this.generateAgentResponse(query, agentName);
-    }
+    return response.content;
   }
 
   /**

@@ -21,8 +21,7 @@
 import { BaseMode, ModeConfig, ModeExecutionResult, AgentTaskOutput } from './base-mode.js';
 import { ModelRouter } from '../orchestrator/model-router.js';
 import { CostCalculator } from '../orchestrator/cost-calculator.js';
-import { CacheManager } from '../orchestrator/cache-manager.js';
-import { agentLoader } from '../agents/index.js';
+import { CacheManager } from '../orchestrator/cache-manager.js';import { LLMClient } from '../orchestrator/llm-client.js';import { agentLoader } from '../agents/index.js';
 import { logger } from '../utils/logger.js';
 
 const SWARM_CONFIG: ModeConfig = {
@@ -202,29 +201,38 @@ export class SwarmMode extends BaseMode {
 
       let result: string;
       let cachedHit = false;
+      let costUsed = 0;
 
       if (cached) {
         result = cached as string;
         cachedHit = true;
         logger.debug(`[Swarm] Cache hit for ${agent.name}`);
       } else {
-        // Simulate execution with shared memory awareness
-        result = `[${agent.name} - ${specialization}]\n${taskQuery.substring(0, 100)}...\n\n[Result from ${modelSelection.model}]`;
+        // Make real LLM API call (no fallback - let errors propagate)
+        const systemPrompt = agent.system_prompt || agent.role_prompt || `You are ${agent.name}. ${specialization}`;
+        const response = await LLMClient.call({
+          model: modelSelection.model,
+          prompt: taskQuery,
+          systemPrompt: systemPrompt,
+          temperature: 0.7,
+          maxTokens: 2000,
+        });
+        
+        result = response.content;
+        costUsed = (modelSelection.costPer1kTokens / 1000) * response.totalTokens;
 
         // Store insight in shared memory
         sharedMemory.insights.set(agent.name, result.substring(0, 50));
 
         // Cache the result
-        const costEstimate = (taskQuery.length / 4 / 1000) * modelSelection.costPer1kTokens;
-        this.cacheManager.set(cacheKey, result, modelSelection.model, costEstimate);
+        this.cacheManager.set(cacheKey, result, modelSelection.model, costUsed);
       }
 
-      // Calculate cost
-      const estimatedTokens = Math.ceil(taskQuery.length / 4);
-      const cost = (estimatedTokens / 1000) * modelSelection.costPer1kTokens;
+      // Calculate cost (use actual from API if available)
+      const cost = cachedHit ? 0 : costUsed;
       this.costCalculator.recordCost(
         modelSelection.model,
-        estimatedTokens,
+        Math.ceil(taskQuery.length / 4),
         Math.ceil(result.length / 4),
         `swarm-${agent.name}`
       );

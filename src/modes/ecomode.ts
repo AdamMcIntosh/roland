@@ -16,6 +16,7 @@ import { BaseMode, ModeConfig, ModeExecutionResult, AgentTaskOutput } from './ba
 import { ModelRouter } from '../orchestrator/model-router.js';
 import { CostCalculator } from '../orchestrator/cost-calculator.js';
 import { CacheManager } from '../orchestrator/cache-manager.js';
+import { LLMClient } from '../orchestrator/llm-client.js';
 import { logger } from '../utils/logger.js';
 import { RoutingContext } from '../utils/types.js';
 import { agentLoader } from '../agents/agent-loader.js';
@@ -210,8 +211,7 @@ export class Ecomode extends BaseMode {
   }
 
   /**
-   * Execute agent with specified model
-   * MVP: Mock implementation - will integrate with actual LLM integration in future phases
+   * Execute agent with specified model using real LLM API
    */
   private async executeAgentWithModel(
     query: string,
@@ -231,9 +231,18 @@ export class Ecomode extends BaseMode {
       }
     }
 
-    // Fallback: Mock response based on agent
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    return `[${agent.name}] Processing: "${query.substring(0, 50)}..."`;
+    // Call real LLM API (no fallback - let errors propagate)
+    const systemPrompt = agent.system_prompt || agent.role_prompt || `You are ${agent.name}. Provide helpful and accurate responses.`;
+    
+    const response = await LLMClient.call({
+      model: model,
+      prompt: query,
+      systemPrompt: systemPrompt,
+      temperature: 0.7,
+      maxTokens: 2000,
+    });
+
+    return response.content;
   }
 
   /**
