@@ -690,4 +690,279 @@ All recipes are:
 
 ---
 
-**Phase 6 Recipes Complete** ✅ Ready for CLI integration and real-world use
+# How Recipes Work in Samwise
+
+Recipes are <strong>pre-built multi-step workflows</strong> that coordinate multiple agents in sequence to accomplish complex tasks. Think of them as "playbooks" or "automation scripts."
+
+Recipe Anatomy
+A recipe YAML file has:
+
+```name: MicroservicesArchitecture
+version: 1.0.0
+description: Design, implement, and deploy microservices
+tags: [microservices, architecture, distributed]
+
+# Which agents will be used
+agents: [architect, executor, critic, writer]
+
+# Which execution mode (pipeline = sequential steps)
+modes: [pipeline]
+
+# User must provide these when running the recipe
+input_variables:
+  - system_name
+  - business_domain
+  - scale_requirements
+
+# Sequential steps with variable passing
+steps:
+  - name: ServiceDecomposition
+    agent: architect              # Who does this step
+    mode: ecomode                 # How (cheap/fast/powerful)
+    input: |                      # Prompt with variable substitution
+      System: {{system_name}}
+      Design microservices...
+    output_to: service_design     # Save result as this variable
+    timeout_seconds: 300
+
+  - name: ServiceImplementation
+    agent: executor
+    mode: swarm                   # This step uses 8 agents!
+    input: |
+      Service Design: {{service_design}}  # Use previous step's output
+      Implement services...
+    output_to: services_code
+    
+  # ... more steps
+
+# Final outputs mapped to step variables
+outputs:
+  architecture_design: service_design
+  service_implementations: services_code
+```
+
+Execution Flow
+
+1. Recipe Loading (cli-interface.ts:762)
+
+```samwise recipe MicroservicesArchitecture --input '{"system_name":"E-commerce"}'```
+
+
+CLI loads the YAML file from recipes
+Parses the structure and validates required inputs
+2. Workflow Engine Orchestration (engine.ts)
+The workflow engine executes each step sequentially:
+
+```
+// For each step in order:
+for (const step of recipe.steps) {
+  // 1. Interpolate variables from previous steps
+  const input = interpolate(step.input, context.variables);
+  // "System: {{system_name}}" → "System: E-commerce"
+  
+  // 2. Execute with specified agent + mode
+  const result = await executeStep(step.agent, step.mode, input);
+  
+  // 3. Store output for next step
+  context.variables.set(step.output_to, result);
+  
+  // 4. Track cost and duration
+  context.totalCost += result.cost;
+}
+```
+
+3. Variable Passing Between Steps
+Each step can reference outputs from previous steps using {{variable_name}}:
+
+Step 1: Architect designs system
+
+```output_to: service_design```
+
+
+Result: "Use API Gateway pattern with 5 microservices..."
+
+Step 2: Executor implements using that design
+
+```
+input: |
+  Service Design: {{service_design}}  # ← Gets architect's output
+  Implement services...
+output_to: services_code
+```
+
+Step 3: Critic tests using both previous output
+
+```input: |
+  Services Code: {{services_code}}      # ← Step 2 output
+  Service Design: {{service_design}}    # ← Step 1 output
+  Test integration...
+  ```
+
+4. Mode Flexibility Per Step
+Each step can use a different execution mode:
+
+| Step |	Agent | Mode|	Purpose |	Cost |
+| ---- | ----  | --- |  -----   |   ---- |
+| ServiceDecomposition |	architect |	ecomode |	Fast, cheap design |	~$0.001 |
+ServiceImplementation |	executor	| swarm| 	8 agents for complex code |	~$0.05 | 
+IntegrationTesting | 	critic |	swarm | 	Thorough testing |	~$0.03 |
+DeploymentStrategy |	writer |	ecomode |	Simple docs |	~$0.001 |
+
+
+Total estimated cost: ~$0.08 for entire microservices architecture!
+
+Recipe Catalog (6 Pre-built)
+1. PlanExecRevEx (PlanExecRevEx.yaml)
+
+```Planner (Claude) → Executor (GPT) → Reviewer (Gemini) → Explainer (Grok)```
+
+
+Use: General coding with 4-model diversity
+Loop: Reviewer can send back to Executor if issues found
+Cost: ~$0.02-0.05
+
+2. BugFix (BugFix.yaml)
+
+``
+Analyst (triage) → Researcher (root cause) → Architect (solution) 
+  → Executor (fix) → QA-Tester (verify) → Critic (review) 
+``
+
+Use: Systematic bug resolution
+Steps: 6-step pipeline with quality gates
+Cost: ~$0.03-0.08
+
+3. MicroservicesArchitecture (MicroservicesArchitecture.yaml)
+
+``Architect (design) → Executor (implement) → Critic (test) → Writer (docs)
+``
+
+Use: Full microservices system design
+Modes: Ecomode + Swarm + Ecomode (mixed)
+Cost: ~$0.05-0.10
+
+4. RESTfulAPI (RESTfulAPI.yaml)
+
+``Architect (design) → Executor (implement) → Critic (test) → Writer (docs)``
+
+Use: Production-ready REST API
+Focus: Security, validation, error handling
+Cost: ~$0.02-0.05
+
+5. SecurityAudit (not shown but in recipes/)
+``Security reviews, penetration testing, compliance checks``
+
+6. WebAppFullStack (not shown but in recipes/)
+
+```Frontend + Backend + Database + Deployment```
+
+Key Features
+
+✅ Sequential Execution
+Steps run one after another, not parallel (unlike swarm mode)
+
+✅ Variable Interpolation
+``{{variable_name}}`` gets replaced with actual values from:
+
+- User inputs (``--input``)
+- Previous step outputs (``output_to:``)
+- Recipe variables
+
+✅ Mixed Modes
+Each step can use different execution modes:
+
+- ``ecomode``: Single cheap agent
+- ``autopilot``: 3 agents sequential
+- ``swarm``: 8 agents parallel
+- ``pipeline``: Nested pipeline
+
+✅ Loop Support (in workflow engine)
+
+```
+loop_if:
+  condition: "{{test_status}} == 'failed'"
+  max_iterations: 3
+  ```
+
+If tests fail, loop back and retry
+
+✅ Caching
+Entire recipe execution is cached by:
+
+- Recipe name + version
+- Input variables
+- 24-hour TTL
+Re-running with same inputs = instant + $0 cost!
+
+✅ Cost Tracking
+```
+Total Cost: $0.089
+  Step 1 (ServiceDecomposition): $0.001
+  Step 2 (ServiceImplementation): $0.052
+  Step 3 (IntegrationTesting): $0.028
+  Step 4 (DeploymentStrategy): $0.008
+  ```
+
+### Comparison: Direct Command vs Recipe
+
+Direct Swarm Command
+
+- What happens: 8 agents work in parallel, each giving their perspective
+- Output: 8 different viewpoints synthesized
+- Cost: ~$0.02-0.10 (one burst)
+- Use case: Quick ideation, brainstorming
+
+Recipe Execution
+```
+samwise recipe MicroservicesArchitecture \
+  --input '{"system_name":"E-commerce","business_domain":"Retail","scale_requirements":"10k users"}'
+```
+
+- What happens: 4 sequential steps with variable passing
+   - Architect designs → saves to service_design
+   - Executor implements using service_design → saves to services_code
+   - Critic tests using both → saves to integration_tests
+   - Writer documents everything → saves to deployment_guide
+- Output: 4 structured deliverables (design docs, code, tests, deployment guide)
+- Cost: ~$0.05-0.10 (spread across 4 steps)
+- Use case: Production implementation with quality gates
+
+### Current Status
+
+Note: Recipe execution via CLI is not yet fully implemented (cli-interface.ts:799-801):
+```
+private async handleExecuteRecipe(name: string, options: any): Promise<void> {
+  console.log('Recipe execution via CLI is not yet implemented.');
+  console.log('Use workflow command instead: samwise workflow <name>\n');
+}
+```
+The infrastructure is complete:
+
+✅ Recipe YAML files exist (6 recipes)
+
+✅ Workflow engine can execute them
+
+✅ Variable interpolation works
+
+✅ Caching works
+
+✅ Cost tracking works
+Missing: CLI command hookup to workflow engine (would be ~20 lines of code to wire up).
+
+How to Use Recipes (when implemented)
+```
+# List available recipes
+samwise recipes
+
+# Execute with inputs
+samwise recipe BugFix \
+  --input '{"user_task":"Login button crashes on mobile"}'
+
+# Execute MicroservicesArchitecture
+samwise recipe MicroservicesArchitecture \
+  --input '{"system_name":"Payment System","business_domain":"FinTech","scale_requirements":"100k TPS"}'
+
+# Results cached automatically - re-run = instant!
+```
+
+Recipes are your production-grade automation playbooks for complex multi-step tasks!
