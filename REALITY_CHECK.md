@@ -297,3 +297,18 @@ Build analytics dashboard (WebUI)
 Add advanced scheduling/automation
 Create plugin system for community extensions
 Multi-workspace support
+
+
+# Simple ecomode tests (~$0.0001-0.0005 each)
+> eco: what is the capital of France?
+> eco: explain what recursion is
+> eco: write a hello world in Python
+
+# Autopilot (3 agents, ~$0.01-0.05)
+> autopilot: design a REST API for a todo app
+
+# Swarm (8 agents, ~$0.02-0.10)
+> swarm: create an architecture for a microservices platform
+
+# Pipeline (4 steps, ~$0.01-0.05)
+> pipeline: build a complete user authentication system
