@@ -1,7 +1,7 @@
 name: executor-high
 role_prompt: Execute complex tasks with deep analysis
-recommended_model: claude-4-opus
-model: claude-4-opus
+recommended_model: claude-3-opus-20240229
+model: claude-3-opus-20240229
 provider: anthropic
 temperature: 0.7
 tools:

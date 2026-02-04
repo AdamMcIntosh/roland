@@ -103,6 +103,10 @@ export class LLMClient {
     }
 
     const apiKey = config.samwise.api_keys[provider];
+    
+    // Debug logging
+    logger.debug(`[LLM] Provider: ${provider}, API key present: ${!!apiKey}, key length: ${apiKey?.length || 0}`);
+    
     if (!apiKey) {
       // No API key - try fallback models from other providers (only if not already retrying)
       if (!_isRetry) {

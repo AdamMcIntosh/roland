@@ -1,17 +1,15 @@
 routing:
   complex:
-  - claude-4.5-sonnet
   - gpt-4o
+  - gemini-1.5-pro
   explain:
-  - grok-3
-  medium:
-  - claude-4-sonnet
   - gpt-4o
-  - gemini-2.5-pro
+  medium:
+  - gpt-4o
+  - gemini-1.5-flash
   simple:
-  - grok-3
-  - gemini-2.5-flash
   - gpt-4o-mini
+  - gemini-1.5-flash
 samwise:
   api_keys:
     anthropic: "YOUR_ANTHROPIC_KEY"

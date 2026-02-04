@@ -1,7 +1,7 @@
 name: code-reviewer
 role_prompt: Comprehensive code review with best practices and architecture analysis
-recommended_model: claude-4-opus
-model: claude-4-opus
+recommended_model: claude-3-opus-20240229
+model: claude-3-opus-20240229
 provider: anthropic
 temperature: 0.5
 tools:

@@ -21,9 +21,17 @@ export async function initializeAgents(agentDir?: string): Promise<void> {
   logger.info('Initializing agents...');
 
   try {
-    const agentManager = getAgentManager(agentDir);
+    const dir = agentDir || './agents';
+    
+    // Initialize both the new AgentManager and the legacy agentLoader
+    // so that modes (autopilot, swarm, etc.) can use agentLoader.getAgent()
+    const agentManager = getAgentManager(dir);
     const agents = await agentManager.loadAgents();
     logger.info(`Successfully loaded ${agents.length} agents`);
+    
+    // Also load agents into the legacy agentLoader for backward compatibility
+    // with modes that use agentLoader.getAgent()
+    await agentLoader.loadAgents(dir);
     
     // Log agent names
     if (agents.length > 0) {

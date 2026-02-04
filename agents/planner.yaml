@@ -1,7 +1,7 @@
 name: planner
 role_prompt: Plan projects and strategies
-recommended_model: claude-4-sonnet
-model: claude-4-sonnet
+recommended_model: claude-3-5-sonnet-20240620
+model: claude-3-5-sonnet-20240620
 provider: anthropic
 temperature: 0.7
 tools:
