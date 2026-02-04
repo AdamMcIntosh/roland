@@ -114,7 +114,7 @@ export class Ecomode extends BaseMode {
 
       // Step 3: Validate API key
       const config = await loadConfig();
-      const apiKeys = config?.goose.api_keys as Record<string, string>;
+      const apiKeys = config?.samwise.api_keys as Record<string, string>;
       if (!apiKeys || !apiKeys[modelSelection.provider]) {
         throw new Error(
           `Missing API key for ${modelSelection.provider}. ` +

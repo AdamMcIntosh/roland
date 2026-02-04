@@ -46,7 +46,7 @@ const SessionConfigSchema = z.object({
 
 const AppConfigSchema = z.object({
   routing: RoutingConfigSchema,
-  goose: SessionConfigSchema,
+  samwise: SessionConfigSchema,
 });
 
 // ============================================================================
@@ -120,8 +120,8 @@ export class ConfigLoader {
   * Format: SAMWISE_API_KEYS_ANTHROPIC=key
    */
   private static mergeEnvironmentVariables(config: Record<string, unknown>): void {
-    const goose = (config.goose as Record<string, unknown>) || {};
-    const apiKeys = (goose.api_keys as Record<string, unknown>) || {};
+    const samwise = (config.samwise as Record<string, unknown>) || {};
+    const apiKeys = (samwise.api_keys as Record<string, unknown>) || {};
 
     // Map environment variables to config
     const providers = ['anthropic', 'openai', 'google', 'xai'] as const;
@@ -136,8 +136,8 @@ export class ConfigLoader {
       }
     }
 
-    goose.api_keys = apiKeys;
-    config.goose = goose;
+    samwise.api_keys = apiKeys;
+    config.samwise = samwise;
   }
 
   /**
@@ -184,7 +184,7 @@ export class ConfigLoader {
    * Check if an API key is configured for a provider
    */
   static hasApiKey(config: AppConfig, provider: 'anthropic' | 'openai' | 'google' | 'xai'): boolean {
-    const key = config.goose.api_keys[provider];
+    const key = config.samwise.api_keys[provider];
     return Boolean(key && key.trim());
   }
 
@@ -192,7 +192,7 @@ export class ConfigLoader {
    * Get API key for a provider (safely - for logging/debugging only)
    */
   static getApiKey(config: AppConfig, provider: 'anthropic' | 'openai' | 'google' | 'xai'): string | undefined {
-    return config.goose.api_keys[provider];
+    return config.samwise.api_keys[provider];
   }
 
   /**

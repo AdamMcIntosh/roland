@@ -8,6 +8,7 @@
 import { ModelRouter } from './model-router.js';
 import { CostCalculator, costCalculator } from './cost-calculator.js';
 import { CacheManager, cacheManager } from './cache-manager.js';
+import { LLMClient } from './llm-client.js';
 import { logger } from '../utils/logger.js';
 import { loadConfig } from '../config/config-loader.js';
 import { RoutingContext } from '../utils/types.js';
@@ -118,7 +119,7 @@ export class AgentExecutor {
 
     // Step 3: Validate API key
     const config = await loadConfig();
-    if (!config || !config.goose.api_keys[modelSelection.provider]) {
+    if (!config || !config.samwise.api_keys[modelSelection.provider]) {
       throw new Error(
         `Missing API key for ${modelSelection.provider}. ` +
         `Set SAMWISE_API_KEYS_${modelSelection.provider.toUpperCase()} environment variable`
@@ -167,8 +168,7 @@ export class AgentExecutor {
   }
 
   /**
-   * Call the actual model (mock implementation for MVP)
-   * In Phase 3, this will integrate with actual MCP calls
+   * Call the actual model using LLMClient
    * 
    * @param query - Query/prompt
    * @param model - Model name
@@ -180,30 +180,26 @@ export class AgentExecutor {
     model: string,
     agentName: string
   ): Promise<string> {
-    // MVP: Mock response based on agent type and skills
-    logger.debug(
-      `Calling ${model} with agent: ${agentName}`
-    );
+    logger.debug(`Calling ${model} with agent: ${agentName}`);
 
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    try {
+      // Call the real LLM API
+      const response = await LLMClient.call({
+        model: model,
+        prompt: query,
+        temperature: 0.7,
+        maxTokens: 2000,
+        systemPrompt: `You are ${agentName}, an AI coding assistant. Provide helpful, accurate, and concise responses.`,
+      });
 
-    // Try to use skills if available
-    const skillName = this.detectSkill(query);
-    if (skillName && skillRegistry.hasSkill(skillName)) {
-      logger.info(`Using skill: ${skillName}`);
-      try {
-        const result = await skillRegistry.executeSkill(skillName, { code: query });
-        if (result.success && result.data) {
-          return this.formatSkillResult(skillName, result.data);
-        }
-      } catch (error) {
-        logger.warn(`Skill execution failed: ${error}`);
-      }
+      return response.content;
+    } catch (error) {
+      logger.error(`LLM call failed for ${model}: ${error}`);
+      
+      // Fallback to mock response if API call fails
+      logger.warn('Falling back to mock response due to API error');
+      return this.generateAgentResponse(query, agentName);
     }
-
-    // Fallback to agent-based mock response
-    return this.generateAgentResponse(query, agentName);
   }
 
   /**

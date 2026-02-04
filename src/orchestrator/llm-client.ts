@@ -102,7 +102,7 @@ export class LLMClient {
       throw new ApiError('Configuration not loaded');
     }
 
-    const apiKey = config.goose.api_keys[provider];
+    const apiKey = config.samwise.api_keys[provider];
     if (!apiKey) {
       // No API key - try fallback models from other providers (only if not already retrying)
       if (!_isRetry) {
@@ -110,7 +110,7 @@ export class LLMClient {
         const autoFallbacks = this.generateFallbackModels(model, 'medium');
         for (const fallback of autoFallbacks.slice(0, 2)) {
           const fallbackProvider = this.getProvider(fallback);
-          if (config.goose.api_keys[fallbackProvider]) {
+          if (config.samwise.api_keys[fallbackProvider]) {
             logger.info(`[LLM] Using fallback model: ${fallback}`);
             return this.call({
               model: fallback,
@@ -220,7 +220,7 @@ export class LLMClient {
           logger.info(`[LLM] Attempting auto-generated fallbacks: ${autoFallbacks.slice(0, 2).join(', ')}`);
           for (const fallbackModel of autoFallbacks.slice(0, 2)) {
             const fallbackProvider = this.getProvider(fallbackModel);
-            if (config.goose.api_keys[fallbackProvider]) {
+            if (config.samwise.api_keys[fallbackProvider]) {
               try {
                 return await this.call({
                   model: fallbackModel,
@@ -569,7 +569,7 @@ export class LLMClientWithTools {
       throw new ApiError('Configuration not loaded');
     }
 
-    const apiKey = config.goose.api_keys[provider];
+    const apiKey = config.samwise.api_keys[provider];
     if (!apiKey) {
       throw new ApiAuthenticationError(
         `Missing API key for ${provider}. Set SAMWISE_API_KEYS_${provider.toUpperCase()}`

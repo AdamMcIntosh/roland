@@ -9,6 +9,7 @@
     "dev": "tsc --watch",
     "start": "node dist/index.js",
     "cli": "node dist/cli/cli-main.js",
+    "samwise": "node dist/cli/cli-interactive-main.js",
     "mcp": "node dist/server/mcp-server.js",
     "lint": "eslint src/**/*.ts",
     "format": "prettier --write src/**/*.ts",

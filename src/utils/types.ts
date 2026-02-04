@@ -32,7 +32,7 @@ export interface SessionConfig {
 
 export interface AppConfig {
   routing: RoutingConfig;
-  goose: SessionConfig;
+  samwise: SessionConfig;
   configPath?: string;
 }
 

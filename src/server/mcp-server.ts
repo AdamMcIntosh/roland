@@ -108,7 +108,7 @@ export class McpServer {
       async () => {
         return {
           routing: this.config.routing,
-          mcp_defaults: this.config.goose.mcp_defaults,
+          mcp_defaults: this.config.samwise.mcp_defaults,
           configPath: this.config.configPath,
         };
       },
