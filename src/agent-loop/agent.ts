@@ -11,6 +11,7 @@ import { logger } from '../utils/logger.js';
 import * as readline from 'readline';
 import { BudgetManager } from '../utils/budget-manager.js';
 import { createMonitoring, PerformanceMonitoring } from '../monitoring/index.js';
+import { extractFileArtifactsFromOutput, writeFileArtifactsToDirectory } from '../utils/codegen.js';
 
 export interface AgentOptions {
   config: SessionConfig;
@@ -18,6 +19,11 @@ export interface AgentOptions {
   interactive?: boolean;
   onMessage?: (message: string) => void;
   onConfirmation?: (question: string) => Promise<boolean>;
+  codegen?: {
+    enforceDirective?: boolean;
+    overwrite?: boolean;
+    baseDir?: string;
+  };
 }
 
 export class AutonomousAgent {
@@ -33,9 +39,16 @@ export class AutonomousAgent {
   private isRunning = false;
   private rl?: readline.Interface;
   private monitoring: PerformanceMonitoring;
+  private codegenConfig: Required<AgentOptions['codegen']>;
 
   constructor(options: AgentOptions) {
     this.options = options;
+
+    this.codegenConfig = {
+      enforceDirective: options.codegen?.enforceDirective !== false,
+      overwrite: options.codegen?.overwrite === true,
+      baseDir: options.codegen?.baseDir || options.workspaceDirectory,
+    };
 
     // Initialize monitoring
     this.monitoring = createMonitoring();
@@ -75,6 +88,31 @@ export class AutonomousAgent {
     this.registerTools();
 
     logger.info('Autonomous agent initialized', { sessionId: this.session.getSessionId() });
+  }
+
+  /**
+   * Append code generation directive to force file-based outputs
+   */
+  private appendCodeGenerationDirective(query: string): string {
+    if (!this.codegenConfig.enforceDirective) {
+      return query;
+    }
+
+    const directive =
+      '\n\n' +
+      'When generating code or project files, output ONLY fenced code blocks for each file, ' +
+      'and include the relative file path in the fence info like:\n' +
+      '```ts file=src/index.ts\n' +
+      '// filepath: src/index.ts\n' +
+      '...file contents...\n' +
+      '```\n' +
+      'Use one fenced block per file. Paths must be relative to the current working directory.';
+
+    if (query.includes('file=') || query.includes('filepath:')) {
+      return query;
+    }
+
+    return query + directive;
   }
 
   /**
@@ -327,6 +365,8 @@ export class AutonomousAgent {
    */
   async processInput(userInput: string): Promise<string> {
     try {
+      const preparedInput = this.appendCodeGenerationDirective(userInput);
+
       // Check budget
       // TODO: Budget checking - implement when BudgetManager is fully available
       // if (!this.budget.isWithinBudget()) {
@@ -335,19 +375,19 @@ export class AutonomousAgent {
 
       // Check conversation cache first
       const conversationLength = this.session.getConversationHistory().length;
-      const cachedTurn = await this.conversationCache.getCachedResponse(userInput, conversationLength);
+      const cachedTurn = await this.conversationCache.getCachedResponse(preparedInput, conversationLength);
 
       if (cachedTurn) {
         logger.info('Using cached conversation response', { userInput: userInput.substring(0, 50) });
-        this.session.addUserMessage(userInput);
+        this.session.addUserMessage(preparedInput);
         this.session.addAssistantMessage(cachedTurn.assistantResponse);
 
         return cachedTurn.assistantResponse;
       }
 
       // Add to conversation
-      this.session.addUserMessage(userInput);
-      this.session.getAuditLogger().logToolCall('user_input', { text: userInput });
+      this.session.addUserMessage(preparedInput);
+      this.session.getAuditLogger().logToolCall('user_input', { text: preparedInput });
 
       // Get conversation history
       const history = this.session.getConversationHistory(20); // Last 20 messages
@@ -434,7 +474,7 @@ export class AutonomousAgent {
 
       // Cache this conversation turn
       await this.conversationCache.cacheResponse(
-        userInput,
+        preparedInput,
         conversationLength,
         finalResponse,
         toolResults,
@@ -490,6 +530,28 @@ export class AutonomousAgent {
         try {
           const response = await this.processInput(input);
           console.log(`\nAgent: ${response}\n`);
+
+          // Materialize generated code to files if present
+          const artifacts = extractFileArtifactsFromOutput(response);
+          if (artifacts.length > 0) {
+            const writeSummary = await writeFileArtifactsToDirectory(artifacts, {
+              baseDir: this.codegenConfig.baseDir,
+              overwrite: this.codegenConfig.overwrite,
+            });
+
+            if (writeSummary.written.length > 0) {
+              console.log(
+                `✅ Created ${writeSummary.written.length} file(s) in ${this.codegenConfig.baseDir}`
+              );
+            }
+
+            if (writeSummary.skipped.length > 0) {
+              console.log(
+                `ℹ️  Skipped ${writeSummary.skipped.length} file(s): ` +
+                  writeSummary.skipped.map((s) => `${s.filePath} (${s.reason})`).join(', ')
+              );
+            }
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           console.error(`Error: ${message}\n`);

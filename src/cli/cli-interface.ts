@@ -32,6 +32,7 @@ import { skillRegistry } from '../skills/skill-framework.js';
 import { PerformanceMonitor } from '../utils/performance-monitor.js';
 import { BudgetManager } from '../utils/budget-manager.js';
 import { logger } from '../utils/logger.js';
+import { extractFileArtifactsFromOutput, writeFileArtifactsToDirectory } from '../utils/codegen.js';
 import { WorkflowEngine } from '../workflows/engine.js';
 import { AutonomousAgent } from '../agent-loop/agent.js';
 import { SessionConfig } from '../agent-loop/types.js';
@@ -53,6 +54,27 @@ export class CliInterface {
     this.skillLearner = new SkillLearner('./learned-skills');
     this.setupProgram();
     this.initializeSkillLearner();
+  }
+
+  /**
+   * Append code generation directive to force file-based outputs
+   */
+  private appendCodeGenerationDirective(query: string): string {
+    const directive =
+      '\n\n' +
+      'When generating code or project files, output ONLY fenced code blocks for each file, ' +
+      'and include the relative file path in the fence info like:\n' +
+      '```ts file=src/index.ts\n' +
+      '// filepath: src/index.ts\n' +
+      '...file contents...\n' +
+      '```\n' +
+      'Use one fenced block per file. Paths must be relative to the current working directory.';
+
+    if (query.includes('file=') || query.includes('filepath:')) {
+      return query;
+    }
+
+    return query + directive;
   }
 
   /**
@@ -83,6 +105,7 @@ export class CliInterface {
       .option('--verbose', 'Show detailed output')
       .option('--model <name>', 'Force specific model')
       .option('--cost-only', 'Show cost info only')
+      .option('--overwrite', 'Allow generated files to overwrite existing files')
       .option('--hud', 'Enable HUD status line (default: auto-detect TTY)')
       .option('--no-hud', 'Disable HUD status line')
       .action((query: string[], options) => this.handleRun(query, options));
@@ -129,9 +152,23 @@ export class CliInterface {
       .option('--auto-confirm', 'Auto-approve file/terminal/skill operations')
       .option('--max-tools <number>', 'Max tool calls (default: 20)', '20')
       .option('--max-commands <number>', 'Max terminal commands (default: 10)', '10')
+      .option('--overwrite', 'Allow generated files to overwrite existing files')
       .option('--hud', 'Enable HUD status line')
       .option('--no-hud', 'Disable HUD status line')
       .action((query: string[], options) => this.handleAgent(query, options));
+
+    // Chat command - Interactive session with auto file materialization
+    this.program
+      .command('chat [query...]')
+      .description('Start interactive chat session (Copilot-style)')
+      .option('--model <name>', 'Specify LLM model (default: claude-opus)')
+      .option('--auto-confirm', 'Auto-approve file/terminal/skill operations')
+      .option('--max-tools <number>', 'Max tool calls (default: 20)', '20')
+      .option('--max-commands <number>', 'Max terminal commands (default: 10)', '10')
+      .option('--overwrite', 'Allow generated files to overwrite existing files')
+      .option('--hud', 'Enable HUD status line')
+      .option('--no-hud', 'Disable HUD status line')
+      .action((query: string[], options) => this.handleChat(query, options));
 
     // Budget command
     this.program
@@ -237,6 +274,8 @@ export class CliInterface {
         return;
       }
 
+      const codegenQuery = this.appendCodeGenerationDirective(parsed.query);
+
       // Show processing message with mode
       const modeDisplay = parsed.mode === 'default' ? 'ECOMODE' : parsed.mode.toUpperCase();
       console.log(formatProcessing(modeDisplay, parsed.query));
@@ -247,7 +286,7 @@ export class CliInterface {
       // Build execution request - map 'default' to 'ecomode'
       const executionMode = parsed.mode === 'default' ? 'ecomode' : parsed.mode;
       const request: ExecutionRequest = {
-        query: parsed.query,
+        query: codegenQuery,
         complexity: getComplexity(parsed.query),
         agentName: parsed.agent || 'default',
         useCache: options.cache !== false,
@@ -275,6 +314,32 @@ export class CliInterface {
           result.duration
         );
         console.log(formatted.full);
+      }
+
+      // Materialize generated code to files if present
+      const artifacts = extractFileArtifactsFromOutput(result.result);
+      if (artifacts.length > 0) {
+        const writeSummary = await writeFileArtifactsToDirectory(artifacts, {
+          baseDir: process.cwd(),
+          overwrite: options.overwrite === true,
+        });
+
+        if (writeSummary.written.length > 0) {
+          console.log(
+            formatSuccess(
+              `Created ${writeSummary.written.length} file(s) in ${process.cwd()}`
+            )
+          );
+        }
+
+        if (writeSummary.skipped.length > 0 && options.verbose) {
+          console.log(
+            formatInfo(
+              `Skipped ${writeSummary.skipped.length} file(s): ` +
+                writeSummary.skipped.map((s) => `${s.filePath} (${s.reason})`).join(', ')
+            )
+          );
+        }
       }
 
       if (options.verbose) {
@@ -561,7 +626,7 @@ export class CliInterface {
     try {
       this.spinner.stop();
 
-      const queryText = query.join(' ');
+      const queryText = this.appendCodeGenerationDirective(query.join(' '));
       
       // Initialize HUD
       const hudEnabled = options.hud !== false; // Default true unless --no-hud
@@ -607,6 +672,11 @@ export class CliInterface {
         config,
         workspaceDirectory: process.cwd(),
         onConfirmation,
+        codegen: {
+          enforceDirective: true,
+          overwrite: options.overwrite === true,
+          baseDir: process.cwd(),
+        },
       });
 
       if (options.interactive) {
@@ -637,6 +707,32 @@ export class CliInterface {
         console.log(response);
         console.log('─'.repeat(60));
 
+        // Materialize generated code to files if present
+        const artifacts = extractFileArtifactsFromOutput(response);
+        if (artifacts.length > 0) {
+          const writeSummary = await writeFileArtifactsToDirectory(artifacts, {
+            baseDir: process.cwd(),
+            overwrite: options.overwrite === true,
+          });
+
+          if (writeSummary.written.length > 0) {
+            console.log(
+              formatSuccess(
+                `Created ${writeSummary.written.length} file(s) in ${process.cwd()}`
+              )
+            );
+          }
+
+          if (writeSummary.skipped.length > 0) {
+            console.log(
+              formatInfo(
+                `Skipped ${writeSummary.skipped.length} file(s): ` +
+                  writeSummary.skipped.map((s) => `${s.filePath} (${s.reason})`).join(', ')
+              )
+            );
+          }
+        }
+
         console.log('');
         console.log(formatInfo(`Session Summary:`));
         console.log(`  Duration: ${summary.duration.toFixed(2)}s`);
@@ -655,6 +751,108 @@ export class CliInterface {
       logger.error('Agent execution failed', message);
       
       // Don't learn from failed sessions (success = false)
+    }
+  }
+
+  /**
+   * Handle chat command - Interactive session with auto file materialization
+   */
+  private async handleChat(query: string[], options: any): Promise<void> {
+    try {
+      this.spinner.stop();
+
+      const queryText = query.join(' ');
+
+      // Initialize HUD
+      const hudEnabled = options.hud !== false;
+      const hud = new HudStatusLine(hudEnabled);
+
+      // Configuration for this session
+      const config: SessionConfig = {
+        model: options.model || 'claude-opus',
+        autoConfirm: {
+          files: options.autoConfirm || false,
+          terminal: options.autoConfirm || false,
+          skills: options.autoConfirm || false,
+        },
+        maxToolCalls: parseInt(options.maxTools, 10) || 20,
+        maxTerminalCommands: parseInt(options.maxCommands, 10) || 10,
+        workspaceDirectory: process.cwd(),
+        logActions: true,
+      };
+
+      console.log(formatWelcome());
+      console.log(formatInfo(`Model: ${config.model}`));
+      console.log(formatInfo(`Max tool calls: ${config.maxToolCalls}`));
+      console.log(formatInfo(`Auto-confirm: ${config.autoConfirm?.files ? 'enabled' : 'disabled'}`));
+      console.log('');
+
+      // Confirmation handler for file/terminal operations
+      const onConfirmation = async (question: string): Promise<boolean> => {
+        if (config.autoConfirm?.files) return true;
+
+        hud.pause();
+        console.log(`⚠️  ${question}`);
+        console.log('    (Auto-confirm disabled in CLI - operation skipped for safety)');
+        hud.resume();
+        return false;
+      };
+
+      // Initialize agent
+      const agent = new AutonomousAgent({
+        config,
+        workspaceDirectory: process.cwd(),
+        onConfirmation,
+        codegen: {
+          enforceDirective: true,
+          overwrite: options.overwrite === true,
+          baseDir: process.cwd(),
+        },
+      });
+
+      if (queryText.trim()) {
+        hud.start('Processing query', config.model);
+        const response = await agent.processInput(queryText);
+        hud.stop('success');
+
+        console.log(formatSuccess('Agent Response:'));
+        console.log('─'.repeat(60));
+        console.log(response);
+        console.log('─'.repeat(60));
+
+        const artifacts = extractFileArtifactsFromOutput(response);
+        if (artifacts.length > 0) {
+          const writeSummary = await writeFileArtifactsToDirectory(artifacts, {
+            baseDir: process.cwd(),
+            overwrite: options.overwrite === true,
+          });
+
+          if (writeSummary.written.length > 0) {
+            console.log(
+              formatSuccess(
+                `Created ${writeSummary.written.length} file(s) in ${process.cwd()}`
+              )
+            );
+          }
+
+          if (writeSummary.skipped.length > 0) {
+            console.log(
+              formatInfo(
+                `Skipped ${writeSummary.skipped.length} file(s): ` +
+                  writeSummary.skipped.map((s) => `${s.filePath} (${s.reason})`).join(', ')
+              )
+            );
+          }
+        }
+
+        console.log('');
+      }
+
+      await agent.startInteractive();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(formatError(`Chat Error: ${message}`));
+      logger.error('Chat execution failed', message);
     }
   }
 
