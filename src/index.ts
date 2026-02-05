@@ -21,7 +21,7 @@ async function main() {
     // Initialize Phase 3 components
     logger.info('Initializing Phase 3 components...');
     await initializeSkills();
-    await initializeAgents('./agents');
+    await initializeAgents();
     logger.info('✅ Phase 3 components initialized');
 
     // Initialize MCP server

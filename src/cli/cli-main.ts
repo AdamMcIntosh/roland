@@ -54,7 +54,7 @@ async function main() {
     await initializeSkills();
     logger.debug('✅ Skills loaded');
 
-    await initializeAgents('./agents');
+    await initializeAgents();
     logger.debug('✅ Agents loaded');
 
     // Run CLI

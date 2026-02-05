@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 /**
  * Pipeline Mode - 4-Step Sequential Processing
  * 
@@ -39,6 +41,36 @@ export class PipelineMode extends BaseMode {
     cacheManager: CacheManager
   ) {
     super(PIPELINE_CONFIG, modelRouter, costCalculator, cacheManager);
+  }
+
+  /**
+   * Save pipeline results to individual markdown files
+   */
+  private savePipelineResultsToFiles(results: AgentTaskOutput[], query: string): void {
+    try {
+      const cwd = process.cwd();
+      const stepNames = ['01-planning', '02-execution', '03-review', '04-documentation'];
+      const stepTitles = ['Planning', 'Execution', 'Review', 'Documentation'];
+      
+      results.slice(0, 4).forEach((result, idx) => {
+        const fileName = `${stepNames[idx]}.md`;
+        const filePath = path.join(cwd, fileName);
+        const content = `# ${stepTitles[idx]} Output\n\n## Original Query\n${query}\n\n## Result\n${result.result}\n\n---\n\n**Metadata**: Model: ${result.model} | Cost: $${result.cost.toFixed(6)} | Duration: ${result.duration}ms\n`;
+        fs.writeFileSync(filePath, content, 'utf-8');
+        logger.info(`[Pipeline] Saved: ${fileName}`);
+      });
+      
+      const summaryPath = path.join(cwd, '00-pipeline-summary.md');
+      const totalCost = results.reduce((sum, r) => sum + r.cost, 0);
+      const totalDuration = results.reduce((sum, r) => sum + r.duration, 0);
+      const summary = `# Pipeline Execution Summary\n\n## Query\n${query}\n\n## Results\n- **Total Cost**: $${totalCost.toFixed(6)}\n- **Total Duration**: ${totalDuration}ms\n- **Steps Completed**: ${Math.min(results.length, 4)}\n\n## Output Files\n- 01-planning.md - Architect's analysis and planning\n- 02-execution.md - Executor's implementation\n- 03-review.md - Critic's review and feedback  \n- 04-documentation.md - Writer's documentation\n`;
+      fs.writeFileSync(summaryPath, summary, 'utf-8');
+      logger.info(`[Pipeline] Saved: 00-pipeline-summary.md`);
+      
+      console.log(`\n✅ Pipeline results saved to current directory:\n   📋 00-pipeline-summary.md\n   📄 01-planning.md\n   📄 02-execution.md\n   📄 03-review.md\n   📄 04-documentation.md\n`);
+    } catch (error) {
+      logger.warn(`[Pipeline] Could not save results to files: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   async execute(
@@ -136,6 +168,9 @@ export class PipelineMode extends BaseMode {
 
       const totalCost = results.reduce((sum, r) => sum + r.cost, 0);
       
+      // Save results to files
+      this.savePipelineResultsToFiles(results, query);
+
       // Print completion message
       console.log(progress.stop());
 

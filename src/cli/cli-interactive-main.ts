@@ -54,20 +54,21 @@ function loadEnvFile() {
 }
 
 /**
- * Check for missing API keys and prompt user to enter them
+ * Check for at least one API key and prompt user to enter one if missing
  */
 async function checkAndPromptAPIKeys(): Promise<void> {
-  const requiredKeys = [
+  const availableKeys = [
     { env: 'SAMWISE_API_KEYS_XAI', name: 'xAI (Grok)', url: 'https://console.x.ai' },
     { env: 'SAMWISE_API_KEYS_ANTHROPIC', name: 'Anthropic (Claude)', url: 'https://console.anthropic.com' },
     { env: 'SAMWISE_API_KEYS_OPENAI', name: 'OpenAI (GPT)', url: 'https://platform.openai.com/api-keys' },
     { env: 'SAMWISE_API_KEYS_GOOGLE', name: 'Google (Gemini)', url: 'https://ai.google.dev' },
   ];
 
-  const missingKeys = requiredKeys.filter(key => !process.env[key.env]);
+  // Check if at least one API key is configured
+  const hasAnyKey = availableKeys.some(key => process.env[key.env]);
 
-  if (missingKeys.length === 0) {
-    return; // All keys present
+  if (hasAnyKey) {
+    return; // At least one key is present, we're good
   }
 
   // Only prompt if running in interactive mode (has TTY)
@@ -76,17 +77,17 @@ async function checkAndPromptAPIKeys(): Promise<void> {
   }
 
   console.log('');
-  console.log('⚠️  Missing API keys for some providers');
+  console.log('⚠️  No API keys configured');
   console.log('');
-  console.log('The following providers are not configured:');
-  missingKeys.forEach(key => {
-    console.log(`  • ${key.name}`);
+  console.log('Samwise requires at least one API key from one of these providers:');
+  availableKeys.forEach(key => {
+    console.log(`  • ${key.name}: ${key.url}`);
   });
   console.log('');
   console.log('You can configure them in multiple ways:');
   console.log('  1. Create a .env file in your home directory with your API keys');
   console.log('  2. Set environment variables (e.g., export SAMWISE_API_KEYS_XAI=...)');
-  console.log('  3. Enter them now when prompted');
+  console.log('  3. Enter one now when prompted');
   console.log('');
 
   const rl = readline.createInterface({
@@ -100,36 +101,41 @@ async function checkAndPromptAPIKeys(): Promise<void> {
     });
   };
 
-  let shouldSave = false;
-  const newEnvVars: Record<string, string> = {};
-
-  console.log('Do you want to enter API keys now? (y/n): ');
+  console.log('Do you want to enter an API key now? (y/n): ');
   const response = await question('> ');
 
   if (response.toLowerCase() !== 'y' && response.toLowerCase() !== 'yes') {
     rl.close();
     console.log('');
-    console.log('You can add API keys later by creating a .env file in your home directory.');
+    console.log('You can add an API key later by creating a .env file in your home directory.');
     console.log('');
     return;
   }
 
   console.log('');
-  console.log('Enter your API keys (press Enter to skip):');
+  console.log('Which provider would you like to configure?');
+  availableKeys.forEach((key, index) => {
+    console.log(`  ${index + 1}. ${key.name}`);
+  });
   console.log('');
 
-  for (const key of missingKeys) {
-    const apiKey = await question(`${key.name} API key: `);
-    if (apiKey.trim()) {
-      newEnvVars[key.env] = apiKey.trim();
-      process.env[key.env] = apiKey.trim();
-      shouldSave = true;
+  let selectedIndex = -1;
+  while (selectedIndex < 0 || selectedIndex >= availableKeys.length) {
+    const choice = await question(`Enter number (1-${availableKeys.length}): `);
+    const num = parseInt(choice, 10);
+    if (!isNaN(num) && num >= 1 && num <= availableKeys.length) {
+      selectedIndex = num - 1;
+    } else {
+      console.log('Invalid choice, please try again.');
     }
   }
 
-  rl.close();
+  const selectedKey = availableKeys[selectedIndex];
+  const apiKey = await question(`\n${selectedKey.name} API key: `);
 
-  if (shouldSave) {
+  if (apiKey.trim()) {
+    process.env[selectedKey.env] = apiKey.trim();
+
     // Save to home directory .env file
     const homeDir = process.env.HOME || process.env.USERPROFILE || '';
     const envPath = path.join(homeDir, '.env');
@@ -142,23 +148,22 @@ async function checkAndPromptAPIKeys(): Promise<void> {
         envContent = fs.readFileSync(envPath, 'utf-8');
       }
 
-      // Add new keys
-      for (const [key, value] of Object.entries(newEnvVars)) {
-        // Check if key already exists in file
-        if (!envContent.includes(key + '=')) {
-          envContent += (envContent.endsWith('\n') ? '' : '\n') + `${key}=${value}\n`;
-        }
+      // Add the key
+      if (!envContent.includes(selectedKey.env + '=')) {
+        envContent += (envContent.endsWith('\n') ? '' : '\n') + `${selectedKey.env}=${apiKey.trim()}\n`;
       }
 
       fs.writeFileSync(envPath, envContent, 'utf-8');
-      console.log(`✅ API keys saved to ${envPath}`);
+      console.log(`✅ API key saved to ${envPath}`);
       console.log('');
     } catch (error) {
-      console.log(`⚠️  Could not save API keys to ${envPath}: ${error}`);
-      console.log('   You can manually add them to your .env file later.');
+      console.log(`⚠️  Could not save API key to ${envPath}: ${error}`);
+      console.log('   You can manually add it to your .env file later.');
       console.log('');
     }
   }
+
+  rl.close();
 }
 
 async function main() {
@@ -174,7 +179,7 @@ async function main() {
     
     // Initialize components
     await initializeSkills();
-    await initializeAgents('./agents');
+    await initializeAgents();
 
     // Start interactive CLI
     await runInteractiveCLI();

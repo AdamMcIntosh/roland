@@ -236,8 +236,47 @@ export class ModelRouter {
     return this.selectCheapestModel({ queryLength: 1, complexity: 'simple' });
   }
   /**
+   * Get which providers have API keys configured
+   */
+  static getConfiguredProviders(): Set<string> {
+    const config = getConfig();
+    if (!config) {
+      return new Set();
+    }
+
+    const providers = new Set<string>();
+    
+    // Check if each provider has an API key
+    const apiKeys = config.samwise.api_keys as Record<string, string>;
+    if (apiKeys.xai) providers.add('xai');
+    if (apiKeys.anthropic) providers.add('anthropic');
+    if (apiKeys.openai) providers.add('openai');
+    if (apiKeys.google) providers.add('google');
+
+    return providers;
+  }
+
+  /**
+   * Filter models to only include those from configured providers
+   */
+  static filterModelsByConfiguredProviders(models: string[]): string[] {
+    const configuredProviders = this.getConfiguredProviders();
+    
+    // If no providers configured, return all models (will fail with clear error later)
+    if (configuredProviders.size === 0) {
+      return models;
+    }
+
+    return models.filter(model => {
+      const provider = this.getProvider(model);
+      return configuredProviders.has(provider);
+    });
+  }
+
+  /**
    * Select the cheapest model for Ecomode
    * MVP: Always use the first (cheapest) model from the configured complexity level
+   * Filters to only use models from providers with API keys configured
    * 
    * @param context - Routing context (complexity level, etc.)
    * @returns Selected model info
@@ -252,11 +291,21 @@ export class ModelRouter {
     const complexity = context.complexity || 'simple';
 
     // Get models for this complexity level
-    const models = config.routing[complexity as keyof typeof config.routing];
+    let models = config.routing[complexity as keyof typeof config.routing];
     
     if (!models || models.length === 0) {
       throw new RoutingError(
         `No models configured for complexity level: ${complexity}`
+      );
+    }
+
+    // Filter to only use providers with API keys
+    models = this.filterModelsByConfiguredProviders(models);
+
+    if (models.length === 0) {
+      throw new RoutingError(
+        `No models available for complexity level "${complexity}" from configured providers. ` +
+        `Please configure at least one API key (xAI, Anthropic, OpenAI, or Google).`
       );
     }
 
@@ -278,7 +327,7 @@ export class ModelRouter {
 
   /**
    * Select a model with fallback options
-   * Prefers models that have configured API keys when required
+   * Filters to only use models from providers with configured API keys
    */
   static selectModelWithFallback(
     context: RoutingContext,
@@ -290,10 +339,20 @@ export class ModelRouter {
     }
 
     const complexity = context.complexity || 'simple';
-    const models = config.routing[complexity as keyof typeof config.routing];
+    let models = config.routing[complexity as keyof typeof config.routing];
 
     if (!models || models.length === 0) {
       throw new RoutingError(`No models configured for complexity level: ${complexity}`);
+    }
+
+    // Filter to only use providers with API keys
+    models = this.filterModelsByConfiguredProviders(models);
+
+    if (models.length === 0) {
+      throw new RoutingError(
+        `No models available for complexity level "${complexity}" from configured providers. ` +
+        `Please configure at least one API key (xAI, Anthropic, OpenAI, or Google).`
+      );
     }
 
     const selections = models.map((model) => {
