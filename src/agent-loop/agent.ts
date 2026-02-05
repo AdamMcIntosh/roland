@@ -11,7 +11,13 @@ import { logger } from '../utils/logger.js';
 import * as readline from 'readline';
 import { BudgetManager } from '../utils/budget-manager.js';
 import { createMonitoring, PerformanceMonitoring } from '../monitoring/index.js';
-import { extractFileArtifactsFromOutput, writeFileArtifactsToDirectory } from '../utils/codegen.js';
+import {
+  extractFileArtifactsFromOutput,
+  writeFileArtifactsToDirectory,
+  isPlanOutput,
+  generateFilenameFromQuery,
+  createPlanArtifact,
+} from '../utils/codegen.js';
 
 export interface AgentOptions {
   config: SessionConfig;
@@ -535,6 +541,13 @@ export class AutonomousAgent {
 
           // Materialize generated code to files if present
           const artifacts = extractFileArtifactsFromOutput(response);
+          
+          // Also check if this is a plan output and save it as markdown
+          if (isPlanOutput(response)) {
+            const planFilename = generateFilenameFromQuery(input);
+            artifacts.push(createPlanArtifact(response, planFilename));
+          }
+          
           if (artifacts.length > 0 && this.codegenConfig) {
             const writeSummary = await writeFileArtifactsToDirectory(artifacts, {
               baseDir: this.codegenConfig.baseDir,

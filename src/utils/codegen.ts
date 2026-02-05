@@ -100,6 +100,74 @@ export function extractFileArtifactsFromOutput(output: string): CodeArtifact[] {
   return artifacts;
 }
 
+/**
+ * Detect if output looks like a plan (structured steps, numbered lists, headers, etc.)
+ */
+export function isPlanOutput(output: string): boolean {
+  const indicators = [
+    /^#+\s+/m, // Markdown headers
+    /^\d+\.\s+/m, // Numbered lists
+    /^-\s+/m, // Bullet lists
+    /\*\*Step\s+\d+/i, // Bold step markers
+    /\*\*Phase\s+\d+/i, // Bold phase markers
+    /^#{2,}/m, // H2+ headers
+  ];
+
+  const planKeywords = [
+    'step',
+    'phase',
+    'stage',
+    'implementation',
+    'architecture',
+    'design',
+    'approach',
+    'strategy',
+    'outline',
+    'plan',
+  ];
+
+  let headerCount = 0;
+  let listCount = 0;
+  let keywordCount = 0;
+
+  for (const line of output.split('\n')) {
+    if (/^#{1,6}\s+/.test(line)) headerCount++;
+    if (/^[\d-]\.\s+|\^-\s+/.test(line)) listCount++;
+    if (planKeywords.some((kw) => line.toLowerCase().includes(kw))) keywordCount++;
+  }
+
+  return indicators.some((regex) => regex.test(output)) && (headerCount >= 2 || listCount >= 3 || keywordCount >= 5);
+}
+
+/**
+ * Generate a filename from a user query
+ */
+export function generateFilenameFromQuery(query: string): string {
+  // Remove mode keywords and special characters
+  let cleaned = query
+    .replace(/^(eco|autopilot|ultrapilot|ulw|swarm|pipeline|plan|samwise):\s*/i, '')
+    .replace(/[^a-z0-9\s]/gi, ' ')
+    .trim()
+    .toLowerCase();
+
+  // Limit to first 3-4 words and take first 50 chars
+  const words = cleaned.split(/\s+/).slice(0, 4).join('-');
+  const filename = words.substring(0, 50) || 'plan';
+
+  return `${filename}.md`;
+}
+
+/**
+ * Create a plan artifact from output
+ */
+export function createPlanArtifact(output: string, filename: string): CodeArtifact {
+  return {
+    filePath: filename,
+    content: output,
+    language: 'markdown',
+  };
+}
+
 export async function writeFileArtifactsToDirectory(
   artifacts: CodeArtifact[],
   options?: {

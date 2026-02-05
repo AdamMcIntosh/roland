@@ -32,7 +32,13 @@ import { skillRegistry } from '../skills/skill-framework.js';
 import { PerformanceMonitor } from '../utils/performance-monitor.js';
 import { BudgetManager } from '../utils/budget-manager.js';
 import { logger } from '../utils/logger.js';
-import { extractFileArtifactsFromOutput, writeFileArtifactsToDirectory } from '../utils/codegen.js';
+import {
+  extractFileArtifactsFromOutput,
+  writeFileArtifactsToDirectory,
+  isPlanOutput,
+  generateFilenameFromQuery,
+  createPlanArtifact,
+} from '../utils/codegen.js';
 import { WorkflowEngine } from '../workflows/engine.js';
 import { AutonomousAgent } from '../agent-loop/agent.js';
 import { SessionConfig } from '../agent-loop/types.js';
@@ -337,6 +343,13 @@ export class CliInterface {
 
       // Materialize generated code to files if present
       const artifacts = extractFileArtifactsFromOutput(result.result);
+      
+      // Also check if this is a plan output and save it as markdown
+      if (isPlanOutput(result.result)) {
+        const planFilename = generateFilenameFromQuery(fullQuery);
+        artifacts.push(createPlanArtifact(result.result, planFilename));
+      }
+      
       if (artifacts.length > 0) {
         const writeSummary = await writeFileArtifactsToDirectory(artifacts, {
           baseDir: process.cwd(),
@@ -725,6 +738,13 @@ export class CliInterface {
 
         // Materialize generated code to files if present
         const artifacts = extractFileArtifactsFromOutput(response);
+        
+        // Also check if this is a plan output and save it as markdown
+        if (isPlanOutput(response)) {
+          const planFilename = generateFilenameFromQuery(query.join(' '));
+          artifacts.push(createPlanArtifact(response, planFilename));
+        }
+        
         if (artifacts.length > 0) {
           const writeSummary = await writeFileArtifactsToDirectory(artifacts, {
             baseDir: process.cwd(),
@@ -838,6 +858,13 @@ export class CliInterface {
         console.log('─'.repeat(60));
 
         const artifacts = extractFileArtifactsFromOutput(response);
+        
+        // Also check if this is a plan output and save it as markdown
+        if (isPlanOutput(response)) {
+          const planFilename = generateFilenameFromQuery(queryText);
+          artifacts.push(createPlanArtifact(response, planFilename));
+        }
+        
         if (artifacts.length > 0) {
           const writeSummary = await writeFileArtifactsToDirectory(artifacts, {
             baseDir: process.cwd(),
