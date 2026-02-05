@@ -102,10 +102,15 @@ export function extractFileArtifactsFromOutput(output: string): CodeArtifact[] {
 
 export async function writeFileArtifactsToDirectory(
   artifacts: CodeArtifact[],
-  options?: { baseDir?: string; overwrite?: boolean }
+  options?: {
+    baseDir?: string;
+    overwrite?: boolean;
+    confirmOverwrite?: (filePath: string) => Promise<boolean>;
+  }
 ): Promise<WriteArtifactsResult> {
   const baseDir = options?.baseDir || process.cwd();
   const overwrite = options?.overwrite === true;
+  const confirmOverwrite = options?.confirmOverwrite;
   const written: string[] = [];
   const skipped: Array<{ filePath: string; reason: string }> = [];
 
@@ -120,9 +125,22 @@ export async function writeFileArtifactsToDirectory(
 
     try {
       const existing = await fs.stat(targetPath).then(() => true).catch(() => false);
-      if (existing && !overwrite) {
-        skipped.push({ filePath: artifact.filePath, reason: 'file exists' });
-        continue;
+      if (existing) {
+        if (!overwrite) {
+          skipped.push({ filePath: artifact.filePath, reason: 'file exists' });
+          continue;
+        }
+
+        if (!confirmOverwrite) {
+          skipped.push({ filePath: artifact.filePath, reason: 'overwrite requires confirmation' });
+          continue;
+        }
+
+        const approved = await confirmOverwrite(artifact.filePath);
+        if (!approved) {
+          skipped.push({ filePath: artifact.filePath, reason: 'overwrite not approved' });
+          continue;
+        }
       }
 
       await fs.mkdir(path.dirname(targetPath), { recursive: true });

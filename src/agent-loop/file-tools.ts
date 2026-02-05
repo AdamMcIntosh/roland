@@ -78,16 +78,17 @@ export class FileTools {
         exists = false;
       }
 
-      // Request confirmation if configured or file exists
-      if ((this.config.config.autoConfirm?.files !== true && exists) || 
-          (exists && !this.config.config.autoConfirm?.files)) {
-        if (this.config.onConfirmation) {
-          const confirmed = await this.config.onConfirmation(
-            `Overwrite existing file: ${filePath}?`
-          );
-          if (!confirmed) {
-            throw new Error(`Write cancelled by user: ${filePath}`);
-          }
+      // Request confirmation for overwriting existing files
+      if (exists) {
+        if (!this.config.onConfirmation) {
+          throw new Error(`Overwrite requires confirmation: ${filePath}`);
+        }
+
+        const confirmed = await this.config.onConfirmation(
+          `Overwrite existing file: ${filePath}?`
+        );
+        if (!confirmed) {
+          throw new Error(`Write cancelled by user: ${filePath}`);
         }
       }
 
@@ -123,16 +124,16 @@ export class FileTools {
         throw new Error(`Old content not found in file: ${filePath}`);
       }
 
-      // Request confirmation if configured
-      if (this.config.config.autoConfirm?.files !== true) {
-        if (this.config.onConfirmation) {
-          const confirmed = await this.config.onConfirmation(
-            `Edit file: ${filePath}?`
-          );
-          if (!confirmed) {
-            throw new Error(`Edit cancelled by user: ${filePath}`);
-          }
-        }
+      // Request confirmation for edits
+      if (!this.config.onConfirmation) {
+        throw new Error(`Edit requires confirmation: ${filePath}`);
+      }
+
+      const confirmed = await this.config.onConfirmation(
+        `Edit file: ${filePath}?`
+      );
+      if (!confirmed) {
+        throw new Error(`Edit cancelled by user: ${filePath}`);
       }
 
       const updatedContent = currentContent.replace(oldContent, newContent);

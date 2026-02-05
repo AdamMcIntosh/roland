@@ -142,15 +142,17 @@ export class TerminalTools {
         throw new Error(`Dangerous command blocked: ${command}`);
       }
 
-      // Check for confirmation requirement
-      const needsConfirmation = requiresConfirmation(command);
+      // Require confirmation for all terminal commands
+      const needsConfirmation = true;
 
-      if (needsConfirmation && this.config.config.autoConfirm?.terminal !== true) {
-        if (this.config.onConfirmation) {
-          const confirmed = await this.config.onConfirmation(`Execute command: ${command}?`);
-          if (!confirmed) {
-            throw new Error(`Command cancelled by user: ${command}`);
-          }
+      if (needsConfirmation) {
+        if (!this.config.onConfirmation) {
+          throw new Error(`Command requires confirmation: ${command}`);
+        }
+
+        const confirmed = await this.config.onConfirmation(`Execute command: ${command}?`);
+        if (!confirmed) {
+          throw new Error(`Command cancelled by user: ${command}`);
         }
       }
 

@@ -39,6 +39,7 @@ import { SessionConfig } from '../agent-loop/types.js';
 import { getAgentManager } from '../agents/agent-manager.js';
 import { HudStatusLine } from './hud.js';
 import { SkillLearner, SessionAnalysis } from '../skills/skill-learner.js';
+import * as readline from 'readline';
 
 export class CliInterface {
   private program: Command;
@@ -86,6 +87,24 @@ export class CliInterface {
     } catch (error) {
       logger.error('Failed to initialize skill learner', error);
     }
+  }
+
+  /**
+   * Prompt user for confirmation
+   */
+  private async promptConfirmation(question: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+
+      rl.question(`${question} (y/N): `, (answer) => {
+        rl.close();
+        const normalized = answer.trim().toLowerCase();
+        resolve(normalized === 'y' || normalized === 'yes');
+      });
+    });
   }
 
   /**
@@ -322,6 +341,8 @@ export class CliInterface {
         const writeSummary = await writeFileArtifactsToDirectory(artifacts, {
           baseDir: process.cwd(),
           overwrite: options.overwrite === true,
+          confirmOverwrite: (filePath) =>
+            this.promptConfirmation(`Overwrite existing file: ${filePath}?`),
         });
 
         if (writeSummary.written.length > 0) {
@@ -636,8 +657,8 @@ export class CliInterface {
       const config: SessionConfig = {
         model: options.model || 'claude-opus',
         autoConfirm: {
-          files: options.autoConfirm || false,
-          terminal: options.autoConfirm || false,
+          files: false,
+          terminal: false,
           skills: options.autoConfirm || false,
         },
         maxToolCalls: parseInt(options.maxTools, 10) || 20,
@@ -649,22 +670,15 @@ export class CliInterface {
       console.log(formatWelcome());
       console.log(formatInfo(`Model: ${config.model}`));
       console.log(formatInfo(`Max tool calls: ${config.maxToolCalls}`));
-      console.log(formatInfo(`Auto-confirm: ${config.autoConfirm?.files ? 'enabled' : 'disabled'}`));
+      console.log(formatInfo(`Auto-confirm (skills): ${config.autoConfirm?.skills ? 'enabled' : 'disabled'}`));
       console.log('');
 
       // Confirmation handler for file/terminal operations
       const onConfirmation = async (question: string): Promise<boolean> => {
-        if (config.autoConfirm?.files) return true;
-        
-        // Pause HUD for user interaction
         hud.pause();
-        
-        // For CLI, use simple prompt (would need to implement proper prompt in real version)
-        console.log(`⚠️  ${question}`);
-        console.log('    (Auto-confirm disabled in CLI - operation skipped for safety)');
-        
+        const confirmed = await this.promptConfirmation(question);
         hud.resume();
-        return false; // Skip operations requiring confirmation in CLI mode
+        return confirmed;
       };
 
       // Initialize agent
@@ -676,6 +690,8 @@ export class CliInterface {
           enforceDirective: true,
           overwrite: options.overwrite === true,
           baseDir: process.cwd(),
+          confirmOverwrite: (filePath) =>
+            this.promptConfirmation(`Overwrite existing file: ${filePath}?`),
         },
       });
 
@@ -713,6 +729,8 @@ export class CliInterface {
           const writeSummary = await writeFileArtifactsToDirectory(artifacts, {
             baseDir: process.cwd(),
             overwrite: options.overwrite === true,
+            confirmOverwrite: (filePath) =>
+              this.promptConfirmation(`Overwrite existing file: ${filePath}?`),
           });
 
           if (writeSummary.written.length > 0) {
@@ -771,8 +789,8 @@ export class CliInterface {
       const config: SessionConfig = {
         model: options.model || 'claude-opus',
         autoConfirm: {
-          files: options.autoConfirm || false,
-          terminal: options.autoConfirm || false,
+          files: false,
+          terminal: false,
           skills: options.autoConfirm || false,
         },
         maxToolCalls: parseInt(options.maxTools, 10) || 20,
@@ -784,18 +802,15 @@ export class CliInterface {
       console.log(formatWelcome());
       console.log(formatInfo(`Model: ${config.model}`));
       console.log(formatInfo(`Max tool calls: ${config.maxToolCalls}`));
-      console.log(formatInfo(`Auto-confirm: ${config.autoConfirm?.files ? 'enabled' : 'disabled'}`));
+      console.log(formatInfo(`Auto-confirm (skills): ${config.autoConfirm?.skills ? 'enabled' : 'disabled'}`));
       console.log('');
 
       // Confirmation handler for file/terminal operations
       const onConfirmation = async (question: string): Promise<boolean> => {
-        if (config.autoConfirm?.files) return true;
-
         hud.pause();
-        console.log(`⚠️  ${question}`);
-        console.log('    (Auto-confirm disabled in CLI - operation skipped for safety)');
+        const confirmed = await this.promptConfirmation(question);
         hud.resume();
-        return false;
+        return confirmed;
       };
 
       // Initialize agent
@@ -807,6 +822,8 @@ export class CliInterface {
           enforceDirective: true,
           overwrite: options.overwrite === true,
           baseDir: process.cwd(),
+          confirmOverwrite: (filePath) =>
+            this.promptConfirmation(`Overwrite existing file: ${filePath}?`),
         },
       });
 
@@ -825,6 +842,8 @@ export class CliInterface {
           const writeSummary = await writeFileArtifactsToDirectory(artifacts, {
             baseDir: process.cwd(),
             overwrite: options.overwrite === true,
+            confirmOverwrite: (filePath) =>
+              this.promptConfirmation(`Overwrite existing file: ${filePath}?`),
           });
 
           if (writeSummary.written.length > 0) {

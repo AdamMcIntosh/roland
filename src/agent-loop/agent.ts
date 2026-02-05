@@ -23,6 +23,7 @@ export interface AgentOptions {
     enforceDirective?: boolean;
     overwrite?: boolean;
     baseDir?: string;
+    confirmOverwrite?: (filePath: string) => Promise<boolean>;
   };
 }
 
@@ -39,7 +40,7 @@ export class AutonomousAgent {
   private isRunning = false;
   private rl?: readline.Interface;
   private monitoring: PerformanceMonitoring;
-  private codegenConfig: Required<AgentOptions['codegen']>;
+  private codegenConfig?: AgentOptions['codegen'];
 
   constructor(options: AgentOptions) {
     this.options = options;
@@ -48,6 +49,7 @@ export class AutonomousAgent {
       enforceDirective: options.codegen?.enforceDirective !== false,
       overwrite: options.codegen?.overwrite === true,
       baseDir: options.codegen?.baseDir || options.workspaceDirectory,
+      confirmOverwrite: options.codegen?.confirmOverwrite,
     };
 
     // Initialize monitoring
@@ -94,7 +96,7 @@ export class AutonomousAgent {
    * Append code generation directive to force file-based outputs
    */
   private appendCodeGenerationDirective(query: string): string {
-    if (!this.codegenConfig.enforceDirective) {
+    if (!this.codegenConfig?.enforceDirective) {
       return query;
     }
 
@@ -533,10 +535,11 @@ export class AutonomousAgent {
 
           // Materialize generated code to files if present
           const artifacts = extractFileArtifactsFromOutput(response);
-          if (artifacts.length > 0) {
+          if (artifacts.length > 0 && this.codegenConfig) {
             const writeSummary = await writeFileArtifactsToDirectory(artifacts, {
               baseDir: this.codegenConfig.baseDir,
               overwrite: this.codegenConfig.overwrite,
+              confirmOverwrite: this.codegenConfig.confirmOverwrite,
             });
 
             if (writeSummary.written.length > 0) {
