@@ -355,34 +355,21 @@ export class CliInterface {
 
       // Materialize generated code to files if present
       const artifacts = extractFileArtifactsFromOutput(result.result);
-      console.log(`[DEBUG] Extracted ${artifacts.length} code artifacts`);
       
       // Also check if this is a plan/design output and save it as markdown
-      const isPlan = isPlanOutput(result.result);
-      console.log(`[DEBUG] isPlanOutput: ${isPlan}`);
-      
-      if (isPlan) {
+      if (isPlanOutput(result.result)) {
         const isDesign = isDesignDocument(result.result);
-        console.log(`[DEBUG] isDesignDocument: ${isDesign}`);
         const planFilename = generateFilenameFromQuery(fullQuery, isDesign);
-        console.log(`[DEBUG] Generated filename: ${planFilename}`);
         artifacts.push(createPlanArtifact(result.result, planFilename));
       }
       
-      console.log(`[DEBUG] Total artifacts to write: ${artifacts.length}`);
-      
       if (artifacts.length > 0) {
-        console.log(`[DEBUG] Writing to: ${process.cwd()}`);
-        console.log(`[DEBUG] Overwrite mode: ${options.overwrite === true}`);
-        
         const writeSummary = await writeFileArtifactsToDirectory(artifacts, {
           baseDir: process.cwd(),
           overwrite: options.overwrite === true,
           confirmOverwrite: (filePath) =>
             this.promptConfirmation(`Overwrite existing file: ${filePath}?`),
         });
-
-        console.log(`[DEBUG] Written: ${writeSummary.written.length}, Skipped: ${writeSummary.skipped.length}`);
 
         if (writeSummary.written.length > 0) {
           console.log(

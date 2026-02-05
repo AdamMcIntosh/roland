@@ -69,6 +69,23 @@ function extractFilePathFromContent(content: string): { filePath?: string; strip
   return { strippedContent: content };
 }
 
+function isPlaceholderPath(filePath: string): boolean {
+  // Reject placeholder/example paths
+  const placeholders = [
+    /^path(\/|\\)to(\/|\\)file/i,  // path/to/file.*
+    /^example/i,                    // example.*
+    /^sample/i,                     // sample.*
+    /^test-file/i,                  // test-file.*
+    /^placeholder/i,                // placeholder.*
+    /^your-/i,                      // your-*
+    /^my-/i,                        // my-*
+    /\[.*\]/,                       // [anything]
+    /\{.*\}/,                       // {anything}
+  ];
+  
+  return placeholders.some(regex => regex.test(filePath));
+}
+
 export function extractFileArtifactsFromOutput(output: string): CodeArtifact[] {
   const artifacts: CodeArtifact[] = [];
   const fenceRegex = /```([^\n]*)\n([\s\S]*?)```/g;
@@ -82,6 +99,11 @@ export function extractFileArtifactsFromOutput(output: string): CodeArtifact[] {
     const filePath = infoPath || contentPath;
 
     if (!filePath) {
+      continue;
+    }
+
+    // Skip placeholder/example paths
+    if (isPlaceholderPath(filePath)) {
       continue;
     }
 
@@ -244,16 +266,15 @@ export async function writeFileArtifactsToDirectory(
           continue;
         }
 
-        if (!confirmOverwrite) {
-          skipped.push({ filePath: artifact.filePath, reason: 'overwrite requires confirmation' });
-          continue;
+        // If overwrite is true but confirmOverwrite is provided, ask for approval
+        if (confirmOverwrite) {
+          const approved = await confirmOverwrite(artifact.filePath);
+          if (!approved) {
+            skipped.push({ filePath: artifact.filePath, reason: 'overwrite not approved' });
+            continue;
+          }
         }
-
-        const approved = await confirmOverwrite(artifact.filePath);
-        if (!approved) {
-          skipped.push({ filePath: artifact.filePath, reason: 'overwrite not approved' });
-          continue;
-        }
+        // If overwrite is true and no confirmation handler, proceed anyway
       }
 
       await fs.mkdir(path.dirname(targetPath), { recursive: true });

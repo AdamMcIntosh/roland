@@ -1,8 +1,14 @@
 /**
- * CLI Entry Point - Alternative to MCP server for direct CLI usage
+ * CLI Entry Point - DEPRECATED
  * 
- * Provides command-line interface for Ecomode tasks
- * Can run standalone or alongside MCP server
+ * This non-interactive CLI is deprecated. Use the interactive CLI instead:
+ * 
+ *   npm run samwise
+ *   or
+ *   samwise (if installed globally)
+ * 
+ * The interactive CLI provides better UX and supports all features including
+ * automatic file generation for code and design documents.
  */
 
 import * as fs from 'fs';

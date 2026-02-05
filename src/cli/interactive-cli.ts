@@ -216,6 +216,9 @@ export class InteractiveCLI {
         return;
       }
 
+      // Append code generation directive to enforce file-based outputs
+      const enhancedQuery = this.appendCodeGenerationDirective(parsed.query);
+
       // Execute using actual agent executor
       const normalizedMode = parsed.mode === 'planning' ? 'ecomode' : 
                             parsed.mode === 'default' ? 'ecomode' :
@@ -227,7 +230,7 @@ export class InteractiveCLI {
         : this.inferComplexity(parsed.query);
       
       const executionResult = await agentExecutor.execute({
-        query: parsed.query,
+        query: enhancedQuery,
         mode: normalizedMode as 'ecomode' | 'autopilot' | 'ultrapilot' | 'swarm' | 'pipeline',
         complexity: complexity,
         useCache: true,
@@ -305,6 +308,14 @@ export class InteractiveCLI {
       console.log(chalk.gray('    ' + '━'.repeat(65)));
       console.log();
     }
+  }
+
+  /**
+   * Append code generation directive to force file-based outputs
+   */
+  private appendCodeGenerationDirective(query: string): string {
+    const directive = '\n\nIMPORTANT: When generating code, plans, or design documents, format each file using markdown code blocks with the file path. Use this exact format:\n\n```language file=path/to/file.ext\n<file contents>\n```\n\nFor plans or designs without specific code files, output the full content as structured markdown with clear headings and sections.';
+    return query + directive;
   }
 
   /**
