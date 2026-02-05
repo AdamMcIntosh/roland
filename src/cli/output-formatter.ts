@@ -59,8 +59,9 @@ export function formatWelcome(): string {
   welcome += chalk.green('  • List recipes:') + '      samwise recipes\n';
   welcome += chalk.green('  • View cache stats:') + '  samwise cache --stats\n\n';
   
-  welcome += chalk.bold('5 Execution Modes:\n');
+  welcome += chalk.bold('6 Execution Modes:\n');
   welcome += chalk.cyan('  eco:') + '          Single agent (cheapest)\n';
+  welcome += chalk.cyan('  ask:') + '          Conversational Q&A\n';
   welcome += chalk.yellow('  autopilot:') + '    3-agent sequential\n';
   welcome += chalk.magenta('  ultrapilot:') + '   5 parallel agents\n';
   welcome += chalk.blue('  swarm:') + '         8 dynamic agents\n';
@@ -187,6 +188,7 @@ export function formatHelp(): string {
 
   help += chalk.bold('EXECUTION MODES:\n');
   help += '  ' + chalk.green('eco:') + '           Ecomode (cheapest model, single agent)\n';
+  help += '  ' + chalk.cyan('ask:') + '           Ask mode (conversational Q&A assistant)\n';
   help += '  ' + chalk.yellow('autopilot:') + '      Autopilot mode (3-agent sequential)\n';
   help += '  ' + chalk.magenta('ultrapilot:') + '     Ultrapilot mode (5 parallel agents)\n';
   help += '  ' + chalk.cyan('swarm:') + '           Swarm mode (8 dynamic agents)\n';

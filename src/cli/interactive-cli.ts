@@ -322,6 +322,7 @@ export class InteractiveCLI {
     console.log();
     console.log(chalk.white('    Execution Modes:'));
     console.log(chalk.cyan('      eco:          ') + 'Single agent (cheapest)');
+    console.log(chalk.cyan('      ask:          ') + 'Conversational Q&A');
     console.log(chalk.yellow('      autopilot:    ') + '3-agent sequential');
     console.log(chalk.magenta('      ultrapilot:   ') + '5 parallel agents');
     console.log(chalk.blue('      swarm:        ') + '8 dynamic agents');
