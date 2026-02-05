@@ -281,10 +281,21 @@ export class InteractiveCLI {
       }
       
       if (artifacts.length > 0) {
+        const confirmOverwrite = (filePath: string): Promise<boolean> => {
+          return new Promise((resolve) => {
+            this.rl.question(
+              chalk.yellow(`    ? File exists: ${filePath}. Overwrite? (y/n) `),
+              (answer) => {
+                resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
+              }
+            );
+          });
+        };
+
         const writeSummary = await writeFileArtifactsToDirectory(artifacts, {
           baseDir: process.cwd(),
-          overwrite: true, // Auto-approve in interactive mode
-          confirmOverwrite: undefined,
+          overwrite: true,
+          confirmOverwrite,
         });
 
         if (writeSummary.written.length > 0) {
