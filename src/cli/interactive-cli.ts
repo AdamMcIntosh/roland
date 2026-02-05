@@ -118,18 +118,16 @@ export class InteractiveCLI {
     console.clear();
     
     // ASCII Art Banner
-    console.log(chalk.cyan.bold(`
-    ┌─────────────────────────────────────────────────────────────────┐
-    │                                                                 │
-    │   ███████  █████  ███    ███ ██     ██ ██ ███████ ███████      │
-    │   ██      ██   ██ ████  ████ ██     ██ ██ ██      ██           │
-    │   ███████ ███████ ██ ████ ██ ██  █  ██ ██ ███████ █████        │
-    │        ██ ██   ██ ██  ██  ██ ██ ███ ██ ██      ██ ██           │
-    │   ███████ ██   ██ ██      ██  ███ ███  ██ ███████ ███████      │
-    │                                                                 │
-    │                   Command-line interface                        │
-    └─────────────────────────────────────────────────────────────────┘
-    `));
+   console.log(`
+          ____    _    __  ____        _____ ____  _____ 
+        / ___|  / \  |  \/  \ \      / /_ _/ ___|| ____|
+        \___ \ / _ \ | |\/| |\ \ /\ / / | |\___ \|  _|  
+        ___) / ___ \| |  | | \ V  V /  | | ___) | |___ 
+        |____/_/   \_\_|  |_|  \_/\_/  |___|____/|_____|
+
+        S A M W I S E    CLI
+         Version 1.o.o
+`);
 
     console.log(chalk.gray('    Samwise can write, test and debug code right from your terminal.'));
     console.log(chalk.gray('    Describe a task to get started or enter ? for help.\n'));

@@ -77,14 +77,9 @@ export class AskMode extends BaseMode {
         };
       }
 
-      // Select the best model for conversational quality
-      // For ask mode, use complex routing for best model
-      const modelSelection = ModelRouter.selectCheapestModel({
-        queryLength: query.length,
-        complexity: 'complex', // Use best available model for conversational quality
-      });
-
-      logger.debug(`[Ask] Using model: ${modelSelection.model}`);
+      // Use cheapest Grok model for ask mode
+      const cheapestModel = 'grok-code-fast-1';
+      logger.debug(`[Ask] Using model: ${cheapestModel}`);
 
       // Create conversational prompt
       const systemPrompt = `You are a helpful, knowledgeable assistant. Answer questions clearly and concisely. 
@@ -94,7 +89,7 @@ Be friendly and engaging in your responses.`;
 
       // Execute the query
       const response = await LLMClient.call({
-        model: modelSelection.model,
+        model: cheapestModel,
         prompt: query,
         systemPrompt,
         temperature: 0.7, // Slightly creative for conversational tone
@@ -107,7 +102,7 @@ Be friendly and engaging in your responses.`;
 
       // Calculate cost
       const cost = this.costCalculator.recordCost(
-        modelSelection.model,
+        cheapestModel,
         response.inputTokens,
         response.outputTokens,
         'ask'
@@ -117,7 +112,7 @@ Be friendly and engaging in your responses.`;
       this.cacheManager.set(
         cacheKey,
         result,
-        modelSelection.model,
+        cheapestModel,
         cost,
         {
           agent: 'analyst',
@@ -131,7 +126,7 @@ Be friendly and engaging in your responses.`;
         result,
         cost,
         duration,
-        model: modelSelection.model,
+        model: cheapestModel,
         cachedHit: false,
       };
 

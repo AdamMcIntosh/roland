@@ -1,15 +1,20 @@
 routing:
-  complex:
-  - gpt-4o
-  - gemini-1.5-pro
-  explain:
-  - gpt-4o
-  medium:
-  - gpt-4o
-  - gemini-1.5-flash
   simple:
-  - gpt-4o-mini
-  - gemini-1.5-flash
+    - grok-code-fast-1      # Cheapest Grok model
+    - gpt-4o-mini
+    - gemini-1.5-flash
+  medium:
+    - grok-3-mini            # Mid-range Grok model
+    - gpt-4o
+    - gemini-1.5-pro
+  complex:
+    - grok-3                 # Most capable Grok model
+    - gpt-4o
+    - claude-3-5-sonnet-20240620
+  explain:
+    - grok-3                 # Best for explanations
+    - gpt-4o
+    - claude-3-5-sonnet-20240620
 samwise:
   api_keys:
     anthropic: "YOUR_ANTHROPIC_KEY"
