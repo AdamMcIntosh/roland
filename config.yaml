@@ -1,20 +1,24 @@
 routing:
   simple:
-    - grok-code-fast-1      # Cheapest Grok model
-    - gpt-4o-mini
-    - gemini-1.5-flash
+    - grok-code-fast-1              # Cheapest Grok
+    - gemini-2.5-flash              # Google Gemini 2.5 Flash
+    - claude-haiku-4-5-20251001     # Claude Haiku (lightweight)
+    - gpt-4o-mini                   # OpenAI Lightweight
   medium:
-    - grok-3-mini            # Mid-range Grok model
-    - gpt-4o
-    - gemini-1.5-pro
+    - grok-3-mini                   # Mid-range Grok
+    - gemini-2.5-pro                # Google Gemini 2.5 Pro
+    - claude-sonnet-4-5-20250929    # Claude Sonnet (balanced)
+    - gpt-4o                        # OpenAI Latest
   complex:
-    - grok-3                 # Most capable Grok model
-    - gpt-4o
-    - claude-3-5-sonnet-20240620
+    - grok-3                        # Most capable Grok
+    - gemini-2.5-pro                # Google Gemini 2.5 Pro
+    - claude-opus-4-5-20251101      # Claude Opus (most capable)
+    - gpt-4o                        # OpenAI Latest
   explain:
-    - grok-3                 # Best for explanations
-    - gpt-4o
-    - claude-3-5-sonnet-20240620
+    - claude-sonnet-4-5-20250929    # Sonnet best for explanations
+    - gemini-2.5-pro                # Google for comprehensive explanations
+    - grok-3                        # Grok fallback
+    - gpt-4o                        # OpenAI fallback
 samwise:
   api_keys:
     anthropic: "YOUR_ANTHROPIC_KEY"
