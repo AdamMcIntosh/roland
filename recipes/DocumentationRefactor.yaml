@@ -1,0 +1,137 @@
+name: DocumentationRefactor
+version: "1.0.0"
+description: "Comprehensive documentation review, refactoring, and improvement workflow"
+
+metadata:
+  category: "Documentation"
+  complexity: "medium"
+  estimatedCost: 0.015
+  estimatedDuration: "5-10 minutes"
+  tags: ["documentation", "refactoring", "quality", "automation"]
+
+inputs:
+  - name: "documentationPath"
+    type: "string"
+    description: "Path to the documentation file(s) to refactor"
+    required: true
+  - name: "docType"
+    type: "string"
+    description: "Type of documentation (README, API, User Guide, etc.)"
+    default: "General"
+  - name: "targetAudience"
+    type: "string"
+    description: "Target audience for the documentation"
+    default: "Developers"
+
+steps:
+  # Step 1: Analyze current documentation
+  - id: analyze-docs
+    type: agent
+    agent: analyst
+    prompt: |
+      Analyze this {{ docType }} documentation for:
+      1. Clarity and readability
+      2. Completeness of information
+      3. Structural organization
+      4. Consistency of formatting
+      5. Target audience appropriateness ({{ targetAudience }})
+      6. Missing sections or outdated information
+      
+      Provide specific feedback on what works well and what needs improvement.
+    inputs:
+      documentation: "{{ documentation }}"
+      docType: "{{ docType }}"
+      audience: "{{ targetAudience }}"
+
+  # Step 2: Generate improvement recommendations
+  - id: plan-improvements
+    type: agent
+    agent: planner
+    prompt: |
+      Based on the analysis feedback, create a detailed improvement plan for the documentation:
+      1. Priority improvements (what has the most impact)
+      2. Structural reorganization suggestions
+      3. New sections to add
+      4. Examples or clarity improvements needed
+      5. Implementation sequence
+      
+      Create an actionable step-by-step plan.
+    inputs:
+      analysis: "{{ analyze-docs.output }}"
+      documentation: "{{ documentation }}"
+
+  # Step 3: Refactor and rewrite
+  - id: refactor-docs
+    type: agent
+    agent: writer
+    prompt: |
+      Rewrite and refactor the documentation following this improvement plan:
+      
+      {{ plan-improvements.output }}
+      
+      Requirements:
+      - Improve clarity and readability
+      - Add missing sections
+      - Use consistent formatting and style
+      - Add practical examples where helpful
+      - Ensure it's appropriate for {{ targetAudience }}
+      - Maintain accurate technical information
+      - Use clear headings and organization
+      
+      Output the complete refactored documentation.
+    inputs:
+      documentation: "{{ documentation }}"
+      improvements: "{{ plan-improvements.output }}"
+      audience: "{{ targetAudience }}"
+
+  # Step 4: Verify quality and consistency
+  - id: review-quality
+    type: agent
+    agent: critic
+    prompt: |
+      Review the refactored documentation for:
+      1. Technical accuracy
+      2. Clarity and understandability
+      3. Consistency with best practices
+      4. Completeness
+      5. Appropriate tone for the audience
+      
+      Provide constructive feedback and suggest any final improvements.
+    inputs:
+      refactored: "{{ refactor-docs.output }}"
+      original: "{{ documentation }}"
+
+  # Step 5: Final polish and validation
+  - id: final-validation
+    type: agent
+    agent: qa-tester
+    prompt: |
+      Perform final validation on the refactored documentation:
+      1. Check for grammar, spelling, and punctuation errors
+      2. Verify all links and references work correctly
+      3. Ensure code examples are syntactically correct
+      4. Validate formatting consistency
+      5. Create a summary of all changes made
+      
+      Output the final, production-ready documentation with a changelog.
+    inputs:
+      documentation: "{{ refactor-docs.output }}"
+      feedback: "{{ review-quality.output }}"
+
+outputs:
+  - name: "refactored_documentation"
+    description: "The final refactored and improved documentation"
+    source: "final-validation.output"
+  - name: "improvement_summary"
+    description: "Summary of all changes and improvements made"
+    source: "plan-improvements.output"
+  - name: "quality_feedback"
+    description: "Quality review and validation feedback"
+    source: "review-quality.output"
+
+success_criteria:
+  - "Documentation is more clear and readable"
+  - "Missing information has been added"
+  - "Structure is logical and easy to navigate"
+  - "No grammatical or spelling errors"
+  - "Examples and code are accurate"

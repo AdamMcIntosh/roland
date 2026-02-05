@@ -201,6 +201,7 @@ export function formatHelp(): string {
   help += '  workflow <name>                      Run a specific workflow\n';
   help += '  recipe <name>                        Execute a recipe\n';
   help += '  recipes                              List available recipes\n';
+  help += '  docs <filePath>                      Refactor/improve documentation\n';
   help += '  skills                               List available skills\n';
   help += '  learned                              Show learned skills (auto-extracted)\n';
   help += '  agents                               List loaded agents\n';
@@ -223,6 +224,13 @@ export function formatHelp(): string {
   help += '  --hud                                Enable HUD status line\n';
   help += '  --no-hud                             Disable HUD status line\n\n';
 
+  help += chalk.bold('DOCUMENTATION OPTIONS:\n');
+  help += '  -t, --type <type>                    Doc type (README, API, UserGuide, etc)\n';
+  help += '  -a, --audience <audience>            Target audience (default: Developers)\n';
+  help += '  -m, --model <model>                  Model to use (default: claude-opus)\n';
+  help += '  --hud                                Enable HUD status line\n';
+  help += '  --no-hud                             Disable HUD status line\n\n';
+
   help += chalk.bold('CACHE OPTIONS:\n');
   help += '  -s, --stats                          Show cache statistics\n';
   help += '  -c, --clear                          Clear all cache\n';
@@ -236,6 +244,8 @@ export function formatHelp(): string {
   help += '  samwise agent "analyze codebase" --hud\n';
   help += '  samwise workflow CodeRefactoring --input \'{"file": "app.ts"}\'\n';
   help += '  samwise recipe "Plan Execute Review"\n';
+  help += '  samwise docs README.md --type README --audience "Developers"\n';
+  help += '  samwise docs api.md --type API --audience "API Users"\n';
   help += '  samwise cache --stats\n';
   help += '  samwise budget --set 10.00\n\n';
 

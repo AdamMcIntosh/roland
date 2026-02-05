@@ -268,6 +268,17 @@ export class CliInterface {
       .option('--check', 'Check for interventions')
       .action((options) => this.handleObservatory(options));
 
+    // Documentation refactoring command
+    this.program
+      .command('docs <filePath>')
+      .description('Refactor and improve documentation')
+      .option('-t, --type <type>', 'Documentation type (README, API, UserGuide, etc)', 'General')
+      .option('-a, --audience <audience>', 'Target audience for documentation', 'Developers')
+      .option('-m, --model <model>', 'Model to use', 'claude-opus')
+      .option('--hud', 'Show HUD status line', true)
+      .option('--no-hud', 'Disable HUD status line')
+      .action((filePath, options) => this.handleDocumentationRefactor(filePath, options));
+
     // Default help
     this.program.on('-h,--help', () => {
       console.log(formatHelp());
@@ -1530,6 +1541,167 @@ Format your response clearly with sections and bullet points.`;
         const formatted = intervention.formatInterventions(interventions);
         formatted.forEach(line => console.log(line));
       }
+    }
+  }
+
+  /**
+   * Handle documentation refactoring command
+   */
+  private async handleDocumentationRefactor(filePath: string, options: any): Promise<void> {
+    try {
+      this.spinner.stop();
+
+      // Check if file exists
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      
+      const resolvedPath = path.resolve(process.cwd(), filePath);
+      let documentation: string;
+
+      try {
+        documentation = await fs.readFile(resolvedPath, 'utf-8');
+      } catch (error) {
+        console.log(
+          formatError(
+            `Documentation file not found: ${filePath}\nMake sure the file exists and the path is correct.`
+          )
+        );
+        return;
+      }
+
+      const docType = options.type || 'General';
+      const audience = options.audience || 'Developers';
+
+      console.log(formatWelcome());
+      console.log(formatInfo(`📚 Documentation Refactoring`));
+      console.log(formatInfo(`File: ${filePath}`));
+      console.log(formatInfo(`Type: ${docType}`));
+      console.log(formatInfo(`Audience: ${audience}`));
+      console.log('');
+
+      // Initialize HUD
+      const hudEnabled = options.hud !== false;
+      const hud = new HudStatusLine(hudEnabled);
+
+      // Configuration for this session
+      const config: SessionConfig = {
+        model: options.model || 'claude-opus',
+        autoConfirm: {
+          files: false,
+          terminal: false,
+          skills: false,
+        },
+        maxToolCalls: 50, // More calls needed for multi-agent workflow
+        maxTerminalCommands: 0,
+        workspaceDirectory: process.cwd(),
+        logActions: true,
+      };
+
+      // Confirmation handler
+      const onConfirmation = async (question: string): Promise<boolean> => {
+        hud.pause();
+        const confirmed = await this.promptConfirmation(question);
+        hud.resume();
+        return confirmed;
+      };
+
+      // Initialize agent
+      const agent = new AutonomousAgent({
+        config,
+        workspaceDirectory: process.cwd(),
+        onConfirmation,
+        codegen: {
+          enforceDirective: true,
+          overwrite: options.overwrite === true,
+          baseDir: process.cwd(),
+          confirmOverwrite: (refactoredFile) =>
+            this.promptConfirmation(`Overwrite ${path.basename(refactoredFile)}?`),
+        },
+      });
+
+      // Build the prompt with documentation content
+      const refactorQuery = `You are a documentation expert. Analyze and refactor this ${docType} documentation for ${audience}. 
+
+DOCUMENTATION TO REFACTOR:
+\`\`\`
+${documentation}
+\`\`\`
+
+Please:
+1. Analyze the current documentation for clarity, completeness, and organization
+2. Identify what's working well and what needs improvement
+3. Rewrite and improve the documentation for better clarity and completeness
+4. Ensure it's appropriate for ${audience}
+5. Add any missing sections or examples
+6. Provide the complete refactored documentation
+
+Output the final refactored documentation in the same format as the input.`;
+
+      hud.start('Refactoring documentation', config.model);
+      const startTime = performance.now();
+      const response = await agent.processInput(refactorQuery);
+      const duration = (performance.now() - startTime) / 1000;
+
+      const summary = agent.getSessionSummary();
+      hud.update({
+        toolCalls: summary.toolCalls,
+        maxToolCalls: config.maxToolCalls,
+        cost: summary.totalCost,
+      });
+      hud.stop('success');
+
+      console.log(formatSuccess('✨ Documentation Refactoring Complete'));
+      console.log('─'.repeat(60));
+      console.log(response);
+      console.log('─'.repeat(60));
+
+      // Check for refactored documentation in output
+      const artifacts = extractFileArtifactsFromOutput(response);
+      
+      // If output looks like a plan/summary, save it as markdown
+      if (isPlanOutput(response)) {
+        const summaryFilename = `${path.basename(filePath, path.extname(filePath))}-refactoring-summary.md`;
+        artifacts.push(createPlanArtifact(response, summaryFilename));
+      }
+
+      if (artifacts.length > 0) {
+        const writeSummary = await writeFileArtifactsToDirectory(artifacts, {
+          baseDir: process.cwd(),
+          overwrite: options.overwrite === true,
+          confirmOverwrite: (targetFile) =>
+            this.promptConfirmation(`Overwrite existing file: ${path.basename(targetFile)}?`),
+        });
+
+        if (writeSummary.written.length > 0) {
+          console.log(
+            formatSuccess(
+              `Created ${writeSummary.written.length} file(s)`
+            )
+          );
+        }
+
+        if (writeSummary.skipped.length > 0) {
+          console.log(
+            formatInfo(
+              `Skipped ${writeSummary.skipped.length} file(s): ` +
+                writeSummary.skipped.map((s) => `${s.filePath} (${s.reason})`).join(', ')
+            )
+          );
+        }
+      }
+
+      console.log('');
+      console.log(formatInfo(`Session Summary:`));
+      console.log(`  Duration: ${summary.duration.toFixed(2)}s`);
+      console.log(`  Tool Calls: ${summary.toolCalls}/${config.maxToolCalls}`);
+      console.log(`  Total Cost: $${summary.totalCost.toFixed(4)}`);
+      console.log('');
+
+      await agent.end();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.log(formatError(`Documentation Refactoring Error: ${message}`));
+      logger.error('Documentation refactoring failed', message);
     }
   }
 
