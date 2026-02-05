@@ -20,7 +20,7 @@ export interface ExecutionRequest {
   complexity?: 'simple' | 'medium' | 'explain' | 'complex';
   agentName?: string;
   useCache?: boolean;
-  mode?: 'ecomode' | 'autopilot' | 'ultrapilot' | 'swarm' | 'pipeline';
+  mode?: 'ecomode' | 'ask' | 'autopilot' | 'ultrapilot' | 'swarm' | 'pipeline';
   skipCache?: boolean;
 }
 
@@ -60,6 +60,8 @@ export class AgentExecutor {
     
     if (normalizedMode === 'ecomode' || normalizedMode === 'default') {
       return this.executeEcomode(query, complexity as any, agentName, useCache && !skipCache);
+    } else if (normalizedMode === 'ask') {
+      return this.executeAsk(query, complexity as any);
     } else if (normalizedMode === 'autopilot') {
       return this.executeAutopilot(query, complexity as any);
     } else if (normalizedMode === 'ultrapilot') {
@@ -509,6 +511,47 @@ Expected behavior confirmed.
       } as any;
     } catch (error) {
       logger.error('[Pipeline] Mode execution failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Execute in Ask mode (conversational Q&A)
+   * Single agent answering natural questions
+   */
+  private async executeAsk(
+    query: string,
+    complexity: 'simple' | 'medium' | 'complex' | 'explain'
+  ): Promise<ExecutionResult> {
+    logger.info(`[Ask] Starting conversational Q&A`);
+
+    try {
+      const { AskMode } = await import('../modes/ask-mode.js');
+      const askMode = new AskMode(
+        new ModelRouter(),
+        costCalculator,
+        cacheManager
+      );
+
+      const modeResult = await askMode.execute(query, complexity);
+
+      const duration = Date.now() - this.startTime;
+
+      return {
+        query,
+        result: modeResult.synthesizedResult,
+        model: 'ask (analyst agent)',
+        cost: modeResult.totalCost,
+        cachedHit: false,
+        duration,
+        modeDetails: {
+          mode: 'ask',
+          agents: ['analyst'],
+          totalCost: modeResult.totalCost,
+        }
+      } as any;
+    } catch (error) {
+      logger.error('[Ask] Mode execution failed:', error);
       throw error;
     }
   }

@@ -15,6 +15,7 @@ export interface ParsedQuery {
 
 export type ExecutionMode =
   | 'ecomode'
+  | 'ask'
   | 'autopilot'
   | 'ultrapilot'
   | 'swarm'
@@ -25,6 +26,7 @@ export type ExecutionMode =
 const MODE_PATTERNS: Record<string, ExecutionMode> = {
   'eco:': 'ecomode',
   'ecomode:': 'ecomode',
+  'ask:': 'ask',
   'autopilot:': 'autopilot',
   'ultrapilot:': 'ultrapilot',
   'ulw:': 'ultrapilot',
