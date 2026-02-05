@@ -303,6 +303,7 @@ Multi-workspace support
 > eco: what is the capital of France?
 > eco: explain what recursion is
 > eco: write a hello world in Python
+> eco: create a basic C# .NET 6 console application with solution file, project file, and hello world program
 
 # Autopilot (3 agents, ~$0.01-0.05)
 > autopilot: design a REST API for a todo app
