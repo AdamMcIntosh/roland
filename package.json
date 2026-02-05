@@ -4,8 +4,11 @@
   "description": "Persistent autonomous agent orchestration with recipes and workflows",
   "main": "dist/index.js",
   "type": "module",
+  "bin": {
+    "samwise": "./dist/cli/cli-interactive-main.js"
+  },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-assets.js",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
     "cli": "node dist/cli/cli-main.js",

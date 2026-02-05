@@ -59,10 +59,33 @@ export class ConfigLoader {
 
   /**
    * Load and validate configuration from YAML file and environment variables
+   * Searches in multiple locations:
+   * 1. Provided path or current directory (config.yaml)
+   * 2. Samwise installation directory
+   * 3. User home directory (~/.samwise/config.yaml)
    */
   static async loadConfig(configPath?: string): Promise<AppConfig> {
     try {
-      const resolvedPath = configPath || this.DEFAULT_CONFIG_PATH;
+      let resolvedPath = configPath || this.DEFAULT_CONFIG_PATH;
+      
+      logger.debug(`[ConfigLoader] Searching for config at: ${resolvedPath}`);
+      
+      // If default path doesn't exist, try other locations
+      if (!fs.existsSync(resolvedPath)) {
+        logger.debug(`[ConfigLoader] Config not found at ${resolvedPath}, searching alternatives...`);
+        const alternativePaths = this.getAlternativeConfigPaths();
+        logger.debug(`[ConfigLoader] Searching paths: ${alternativePaths.join(', ')}`);
+        
+        for (const altPath of alternativePaths) {
+          logger.debug(`[ConfigLoader] Trying: ${altPath}`);
+          if (fs.existsSync(altPath)) {
+            resolvedPath = altPath;
+            logger.debug(`[ConfigLoader] Found config at: ${altPath}`);
+            break;
+          }
+        }
+      }
+
       logger.debug(`Loading configuration from: ${resolvedPath}`);
 
       // Read YAML file
@@ -85,6 +108,42 @@ export class ConfigLoader {
       }
       throw new ConfigError(`Failed to load configuration: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  /**
+   * Get alternative config paths to search
+   */
+  private static getAlternativeConfigPaths(): string[] {
+    const paths: string[] = [];
+
+    // Try samwise package installation directory
+    // When installed globally, config will be in node_modules/samwise/dist/
+    try {
+      const currentFile = new URL(import.meta.url).pathname;
+      // Handle Windows paths that start with /C:/...
+      const normalizedPath = currentFile.startsWith('/') && currentFile[2] === ':' 
+        ? currentFile.slice(1) 
+        : currentFile;
+      
+      const currentDir = path.dirname(normalizedPath);
+      paths.push(path.join(currentDir, 'config.yaml'));
+      paths.push(path.join(currentDir, '..', 'config.yaml'));
+      
+      // Also try the dist directory specifically
+      const distDir = path.join(currentDir, '..');
+      paths.push(path.join(distDir, 'config.yaml'));
+    } catch (e) {
+      // Fallback if URL parsing fails
+    }
+
+    // Try user home directory
+    const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+    if (homeDir) {
+      paths.push(path.join(homeDir, '.samwise', 'config.yaml'));
+      paths.push(path.join(homeDir, '.config', 'samwise', 'config.yaml'));
+    }
+
+    return paths;
   }
 
   /**

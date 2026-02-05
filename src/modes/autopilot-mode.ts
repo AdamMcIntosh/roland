@@ -14,6 +14,7 @@ import { CostCalculator } from '../orchestrator/cost-calculator.js';
 import { CacheManager } from '../orchestrator/cache-manager.js';
 import { agentLoader } from '../agents/agent-loader.js';
 import { logger } from '../utils/logger.js';
+import { ProgressTracker } from '../cli/progress-tracker.js';
 
 /**
  * Autopilot Mode Configuration
@@ -50,6 +51,10 @@ export class AutopilotMode extends BaseMode {
     const startTime = Date.now();
     logger.info(`[Autopilot] Starting mode execution for: "${query.substring(0, 50)}..."`);
 
+    // Initialize progress tracker
+    const progress = new ProgressTracker(true);
+    progress.start('autopilot:', ['executor', 'architect', 'qa-tester'], query);
+
     try {
       const agents = [
         agentLoader.getAgent('executor'),
@@ -58,6 +63,7 @@ export class AutopilotMode extends BaseMode {
       ].filter((a) => a !== null) as any[];
 
       if (agents.length === 0) {
+        progress.errorAgent('executor', 'Agents not found');
         throw new Error('Required agents for Autopilot mode not found');
       }
 
@@ -65,18 +71,21 @@ export class AutopilotMode extends BaseMode {
       let totalCost = 0;
 
       // Step 1: Lead Agent (Executor) - Process original query
-      logger.debug('[Autopilot] Step 1/4: Lead agent (Executor) processing query');
+      logger.debug('[Autopilot] Step 1/3: Lead agent (Executor) processing query');
+      progress.updateAgent('executor', 'running');
       const leadResult = await this.executeAgentTask(
         agents[0],
         query,
         complexity,
         'execution'
       );
+      progress.completeAgent('executor', leadResult.cost, leadResult.duration);
       results.push(leadResult);
       totalCost += leadResult.cost;
 
       // Step 2: Subagent 1 (Architect) - Review and refine approach
-      logger.debug('[Autopilot] Step 2/4: Architect reviewing approach');
+      logger.debug('[Autopilot] Step 2/3: Architect reviewing approach');
+      progress.updateAgent('architect', 'running');
       const architectQuery = `Review and refine the approach for: ${query}\n\nPrevious result:\n${leadResult.result}`;
       const architectResult = await this.executeAgentTask(
         agents[1],
@@ -84,13 +93,16 @@ export class AutopilotMode extends BaseMode {
         'medium',
         'architectural_review'
       );
+      progress.completeAgent('architect', architectResult.cost, architectResult.duration);
       results.push(architectResult);
       totalCost += architectResult.cost;
 
       // Step 3: Subagent 2 (QA-Tester) - Validate and test
-      logger.debug('[Autopilot] Step 3/4: QA-Tester validating quality');
+      logger.debug('[Autopilot] Step 3/3: QA-Tester validating quality');
+      progress.updateAgent('qa-tester', 'running');
       const qaQuery = `Test and validate the solution for: ${query}\n\nImplementation:\n${leadResult.result}\n\nReview:\n${architectResult.result}`;
       const qaResult = await this.executeAgentTask(agents[2], qaQuery, 'medium', 'quality_assurance');
+      progress.completeAgent('qa-tester', qaResult.cost, qaResult.duration);
       results.push(qaResult);
       totalCost += qaResult.cost;
 
@@ -100,6 +112,9 @@ export class AutopilotMode extends BaseMode {
 
       const endTime = Date.now();
       const duration = endTime - startTime;
+
+      // Print completion message
+      console.log(progress.stop());
 
       logger.info(
         `[Autopilot] Execution complete. Total cost: $${totalCost.toFixed(6)}, Duration: ${duration}ms`
@@ -118,6 +133,7 @@ export class AutopilotMode extends BaseMode {
     } catch (error) {
       const endTime = Date.now();
       logger.error('[Autopilot] Execution failed:', error);
+      console.log(progress.stop());
 
       throw new Error(`Autopilot mode execution failed: ${error instanceof Error ? error.message : String(error)}`);
     }

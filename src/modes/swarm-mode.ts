@@ -23,6 +23,7 @@ import { ModelRouter } from '../orchestrator/model-router.js';
 import { CostCalculator } from '../orchestrator/cost-calculator.js';
 import { CacheManager } from '../orchestrator/cache-manager.js';import { LLMClient } from '../orchestrator/llm-client.js';import { agentLoader } from '../agents/index.js';
 import { logger } from '../utils/logger.js';
+import { ProgressTracker } from '../cli/progress-tracker.js';
 
 const SWARM_CONFIG: ModeConfig = {
   name: 'Swarm',
@@ -67,19 +68,21 @@ export class SwarmMode extends BaseMode {
   ): Promise<ModeExecutionResult> {
     const startTime = Date.now();
 
-    try {
-      // Swarm mode uses fixed 8-agent pool with shared memory
-      const swarmAgentNames = [
-        'architect',
-        'researcher',
-        'designer',
-        'writer',
-        'vision',
-        'critic',
-        'analyst',
-        'executor',
-      ];
+    // Initialize progress tracker
+    const swarmAgentNames = [
+      'architect',
+      'researcher',
+      'designer',
+      'writer',
+      'vision',
+      'critic',
+      'analyst',
+      'executor',
+    ];
+    const progress = new ProgressTracker(true);
+    progress.start('swarm:', swarmAgentNames, query);
 
+    try {
       const normalizedComplexity =
         complexity === 'explain' ? 'complex' : complexity;
 
@@ -132,6 +135,9 @@ export class SwarmMode extends BaseMode {
         { agentName: 'executor', specialization: 'Implementation and execution' },
       ];
 
+      // Update all agents to running status
+      swarmAgentNames.forEach((name) => progress.updateAgent(name, 'running'));
+
       // Execute selected agents in parallel with shared memory
       logger.debug(`[Swarm] Launching ${agentContexts.length} parallel tasks with shared memory`);
       const parallelPromises = agentContexts.map((ctx) =>
@@ -140,11 +146,17 @@ export class SwarmMode extends BaseMode {
           query,
           complexity,
           ctx.specialization,
-          sharedMemory
+          sharedMemory,
+          progress
         )
       );
 
       const results = await Promise.all(parallelPromises);
+
+      // Update progress for all completed agents
+      results.forEach((result) => {
+        progress.completeAgent(result.agentName, result.cost, result.duration);
+      });
 
       // Synthesize results with shared memory insights
       const synthesized = this.synthesizeSwarmResults(results, query, sharedMemory);
@@ -153,6 +165,10 @@ export class SwarmMode extends BaseMode {
       const duration = endTime - startTime;
 
       const totalCost = results.reduce((sum, r) => sum + r.cost, 0);
+      
+      // Print completion message
+      console.log(progress.stop());
+
       logger.info(
         `[Swarm] Execution complete. Total cost: $${totalCost.toFixed(6)}, Duration: ${duration}ms`
       );
@@ -169,6 +185,7 @@ export class SwarmMode extends BaseMode {
       };
     } catch (error) {
       logger.error(`[Swarm] Execution failed:`, error);
+      console.log(progress.stop());
       throw new Error(`Swarm mode execution failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -181,7 +198,8 @@ export class SwarmMode extends BaseMode {
     taskQuery: string,
     complexity: 'simple' | 'medium' | 'complex' | 'explain',
     specialization: string,
-    sharedMemory: SharedMemory
+    sharedMemory: SharedMemory,
+    progress: ProgressTracker
   ): Promise<AgentTaskOutput> {
     const taskStartTime = Date.now();
 

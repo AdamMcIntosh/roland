@@ -16,6 +16,7 @@ import { ModelRouter } from '../orchestrator/model-router.js';
 import { CostCalculator } from '../orchestrator/cost-calculator.js';
 import { CacheManager } from '../orchestrator/cache-manager.js';import { LLMClient } from '../orchestrator/llm-client.js';import { agentLoader } from '../agents/index.js';
 import { logger } from '../utils/logger.js';
+import { ProgressTracker } from '../cli/progress-tracker.js';
 
 const PIPELINE_CONFIG: ModeConfig = {
   name: 'Pipeline',
@@ -46,6 +47,10 @@ export class PipelineMode extends BaseMode {
   ): Promise<ModeExecutionResult> {
     const startTime = Date.now();
     logger.info(`[Pipeline] Starting 4-step sequential processing`);
+
+    // Initialize progress tracker
+    const progress = new ProgressTracker(true);
+    progress.start('pipeline:', ['architect', 'executor', 'critic', 'writer'], query);
 
     try {
       // Load agents for pipeline
@@ -105,6 +110,7 @@ export class PipelineMode extends BaseMode {
         }
 
         logger.debug(`[Pipeline] Step ${i + 1}/${steps.length}: ${step.name}`);
+        progress.updateAgent(step.agent, 'running');
 
         // Execute step with accumulated context
         const stepResult = await this.executePipelineStep(
@@ -115,6 +121,7 @@ export class PipelineMode extends BaseMode {
           i + 1
         );
 
+        progress.completeAgent(step.agent, stepResult.cost, stepResult.duration);
         results.push(stepResult);
 
         // Flow output to next step as context
@@ -128,6 +135,10 @@ export class PipelineMode extends BaseMode {
       const duration = endTime - startTime;
 
       const totalCost = results.reduce((sum, r) => sum + r.cost, 0);
+      
+      // Print completion message
+      console.log(progress.stop());
+
       logger.info(
         `[Pipeline] Execution complete. Total cost: $${totalCost.toFixed(6)}, Duration: ${duration}ms`
       );
@@ -144,6 +155,7 @@ export class PipelineMode extends BaseMode {
       };
     } catch (error) {
       logger.error(`[Pipeline] Execution failed:`, error);
+      console.log(progress.stop());
       throw new Error(`Pipeline mode execution failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }

@@ -20,6 +20,7 @@ import { CostCalculator } from '../orchestrator/cost-calculator.js';
 import { CacheManager } from '../orchestrator/cache-manager.js';
 import { agentLoader } from '../agents/index.js';
 import { logger } from '../utils/logger.js';
+import { ProgressTracker } from '../cli/progress-tracker.js';
 
 const ULTRAPILOT_CONFIG: ModeConfig = {
   name: 'Ultrapilot',
@@ -48,6 +49,11 @@ export class UltrapilotMode extends BaseMode {
   ): Promise<ModeExecutionResult> {
     const startTime = Date.now();
 
+    // Initialize progress tracker
+    const agentNames = ['architect', 'researcher', 'designer', 'writer', 'executor'];
+    const progress = new ProgressTracker(true);
+    progress.start('ultrapilot:', agentNames, query);
+
     try {
       const normalizedComplexity = complexity === 'explain' ? 'complex' : complexity;
 
@@ -56,7 +62,6 @@ export class UltrapilotMode extends BaseMode {
       );
 
       // Fixed 5 agents for Ultrapilot (no dynamic selection)
-      const agentNames = ['architect', 'researcher', 'designer', 'writer', 'executor'];
       const agentMap = new Map<string, any>();
       
       for (const agentName of agentNames) {
@@ -79,6 +84,9 @@ export class UltrapilotMode extends BaseMode {
         { agentName: 'executor', context: 'Implementation and execution' },
       ].filter(ctx => agentMap.has(ctx.agentName));
 
+      // Update all agents to running
+      taskContexts.forEach((ctx) => progress.updateAgent(ctx.agentName, 'running'));
+
       // Execute all agents in parallel
       logger.debug(`[Ultrapilot] Launching ${taskContexts.length} parallel tasks`);
       const parallelPromises = taskContexts.map((ctx) => {
@@ -89,6 +97,11 @@ export class UltrapilotMode extends BaseMode {
 
       const results = await Promise.all(parallelPromises);
 
+      // Update progress for completed agents
+      results.forEach((result) => {
+        progress.completeAgent(result.agentName, result.cost, result.duration);
+      });
+
       // Synthesize results
       const synthesized = this.synthesizeUltrapilotResults(results, query);
 
@@ -96,6 +109,10 @@ export class UltrapilotMode extends BaseMode {
       const duration = endTime - startTime;
 
       const totalCost = results.reduce((sum, r) => sum + r.cost, 0);
+      
+      // Print completion message
+      console.log(progress.stop());
+
       logger.info(
         `[Ultrapilot] Execution complete. Total cost: $${totalCost.toFixed(6)}, Duration: ${duration}ms`
       );
@@ -112,6 +129,7 @@ export class UltrapilotMode extends BaseMode {
       };
     } catch (error) {
       logger.error(`[Ultrapilot] Execution failed:`, error);
+      console.log(progress.stop());
       throw new Error(`Ultrapilot mode execution failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }

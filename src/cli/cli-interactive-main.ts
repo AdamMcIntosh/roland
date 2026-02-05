@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 /**
  * Interactive CLI Entry Point
  * 

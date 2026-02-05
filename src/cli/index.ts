@@ -15,3 +15,5 @@ export {
   formatWelcome,
   formatConnectionStatus,
 } from './output-formatter.js';
+export { ProgressTracker } from './progress-tracker.js';
+
