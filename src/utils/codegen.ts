@@ -101,7 +101,8 @@ export function extractFileArtifactsFromOutput(output: string): CodeArtifact[] {
 }
 
 /**
- * Detect if output looks like a plan (structured steps, numbered lists, headers, etc.)
+ * Detect if output looks like a plan or design document
+ * (structured steps, numbered lists, headers, API specs, etc.)
  */
 export function isPlanOutput(output: string): boolean {
   const indicators = [
@@ -124,11 +125,28 @@ export function isPlanOutput(output: string): boolean {
     'strategy',
     'outline',
     'plan',
+    'endpoint',
+    'api',
+    'specification',
+    'requirements',
+  ];
+
+  // Design document specific patterns
+  const designPatterns = [
+    /\*\*Endpoint\*\*/i,
+    /\*\*Method\*\*/i,
+    /\*\*Request\*\*/i,
+    /\*\*Response\*\*/i,
+    /\*\*API\s+/i,
+    /REST\s+API/i,
+    /System\s+Architecture/i,
+    /Design\s+Document/i,
   ];
 
   let headerCount = 0;
   let listCount = 0;
   let keywordCount = 0;
+  let designPatternCount = 0;
 
   for (const line of output.split('\n')) {
     if (/^#{1,6}\s+/.test(line)) headerCount++;
@@ -136,13 +154,35 @@ export function isPlanOutput(output: string): boolean {
     if (planKeywords.some((kw) => line.toLowerCase().includes(kw))) keywordCount++;
   }
 
-  return indicators.some((regex) => regex.test(output)) && (headerCount >= 2 || listCount >= 3 || keywordCount >= 5);
+  // Check for design patterns in full text
+  designPatternCount = designPatterns.filter(pattern => pattern.test(output)).length;
+
+  return indicators.some((regex) => regex.test(output)) && (headerCount >= 2 || listCount >= 3 || keywordCount >= 5 || designPatternCount >= 2);
+}
+
+/**
+ * Detect if output is specifically a design document
+ */
+export function isDesignDocument(output: string): boolean {
+  const designIndicators = [
+    /REST\s+API/i,
+    /API\s+Design/i,
+    /System\s+Architecture/i,
+    /Design\s+Document/i,
+    /Technical\s+Specification/i,
+    /Architecture\s+Design/i,
+    /\*\*Endpoint\*\*/i,
+    /Database\s+Schema/i,
+    /Component\s+Design/i,
+  ];
+
+  return designIndicators.filter(pattern => pattern.test(output)).length >= 2;
 }
 
 /**
  * Generate a filename from a user query
  */
-export function generateFilenameFromQuery(query: string): string {
+export function generateFilenameFromQuery(query: string, isDesign: boolean = false): string {
   // Remove mode keywords and special characters
   let cleaned = query
     .replace(/^(eco|autopilot|ultrapilot|ulw|swarm|pipeline|plan|samwise):\s*/i, '')
@@ -152,7 +192,12 @@ export function generateFilenameFromQuery(query: string): string {
 
   // Limit to first 3-4 words and take first 50 chars
   const words = cleaned.split(/\s+/).slice(0, 4).join('-');
-  const filename = words.substring(0, 50) || 'plan';
+  let filename = words.substring(0, 50) || 'document';
+
+  // Add prefix for design documents
+  if (isDesign && !filename.includes('design')) {
+    filename = `design-${filename}`;
+  }
 
   return `${filename}.md`;
 }

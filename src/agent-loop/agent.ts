@@ -15,6 +15,7 @@ import {
   extractFileArtifactsFromOutput,
   writeFileArtifactsToDirectory,
   isPlanOutput,
+  isDesignDocument,
   generateFilenameFromQuery,
   createPlanArtifact,
 } from '../utils/codegen.js';
@@ -46,7 +47,12 @@ export class AutonomousAgent {
   private isRunning = false;
   private rl?: readline.Interface;
   private monitoring: PerformanceMonitoring;
-  private codegenConfig?: AgentOptions['codegen'];
+  private codegenConfig: {
+    enforceDirective: boolean;
+    overwrite: boolean;
+    baseDir: string;
+    confirmOverwrite?: (filePath: string) => Promise<boolean>;
+  };
 
   constructor(options: AgentOptions) {
     this.options = options;
@@ -102,7 +108,7 @@ export class AutonomousAgent {
    * Append code generation directive to force file-based outputs
    */
   private appendCodeGenerationDirective(query: string): string {
-    if (!this.codegenConfig?.enforceDirective) {
+    if (!this.codegenConfig.enforceDirective) {
       return query;
     }
 
@@ -542,9 +548,10 @@ export class AutonomousAgent {
           // Materialize generated code to files if present
           const artifacts = extractFileArtifactsFromOutput(response);
           
-          // Also check if this is a plan output and save it as markdown
+          // Also check if this is a plan/design output and save it as markdown
           if (isPlanOutput(response)) {
-            const planFilename = generateFilenameFromQuery(input);
+            const isDesign = isDesignDocument(response);
+            const planFilename = generateFilenameFromQuery(input, isDesign);
             artifacts.push(createPlanArtifact(response, planFilename));
           }
           

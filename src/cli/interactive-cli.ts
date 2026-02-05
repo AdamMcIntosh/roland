@@ -13,6 +13,14 @@ import { cacheManager } from '../orchestrator/cache-manager.js';
 import { skillRegistry } from '../skills/skill-framework.js';
 import { getAgentManager } from '../agents/agent-manager.js';
 import { logger } from '../utils/logger.js';
+import {
+  extractFileArtifactsFromOutput,
+  writeFileArtifactsToDirectory,
+  isPlanOutput,
+  isDesignDocument,
+  generateFilenameFromQuery,
+  createPlanArtifact,
+} from '../utils/codegen.js';
 
 interface SessionInfo {
   user: string;
@@ -256,6 +264,39 @@ export class InteractiveCLI {
         chalk.dim(`Duration: ${durationStr}`)
       );
       console.log();
+
+      // Materialize generated code to files if present
+      const artifacts = extractFileArtifactsFromOutput(executionResult.result);
+      
+      // Also check if this is a plan/design output and save it as markdown
+      const isPlan = isPlanOutput(executionResult.result);
+      
+      if (isPlan) {
+        const isDesign = isDesignDocument(executionResult.result);
+        const planFilename = generateFilenameFromQuery(query, isDesign);
+        artifacts.push(createPlanArtifact(executionResult.result, planFilename));
+      }
+      
+      if (artifacts.length > 0) {
+        const writeSummary = await writeFileArtifactsToDirectory(artifacts, {
+          baseDir: process.cwd(),
+          overwrite: true, // Auto-approve in interactive mode
+          confirmOverwrite: undefined,
+        });
+
+        if (writeSummary.written.length > 0) {
+          console.log(chalk.green(`    ✓ Created ${writeSummary.written.length} file(s) in ${process.cwd()}`));
+          console.log();
+        }
+
+        if (writeSummary.skipped.length > 0) {
+          console.log(chalk.yellow(`    ⚠ Skipped ${writeSummary.skipped.length} file(s)`));
+          writeSummary.skipped.forEach(s => {
+            console.log(chalk.dim(`      ${s.filePath}: ${s.reason}`));
+          });
+          console.log();
+        }
+      }
 
     } catch (error) {
       console.log(chalk.red('    ✗ ') + chalk.white('Error'));
