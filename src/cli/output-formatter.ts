@@ -201,7 +201,7 @@ export function formatHelp(): string {
   help += '  workflow <name>                      Run a specific workflow\n';
   help += '  recipe <name>                        Execute a recipe\n';
   help += '  recipes                              List available recipes\n';
-  help += '  docs <filePath>                      Refactor/improve documentation\n';
+  help += '  docs <filePath>                      Refactor and improve documentation\n';
   help += '  skills                               List available skills\n';
   help += '  learned                              Show learned skills (auto-extracted)\n';
   help += '  agents                               List loaded agents\n';
