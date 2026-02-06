@@ -9,6 +9,8 @@ import { Workflow, WorkflowStep, WorkflowContext, WorkflowResult, ValidationResu
 import { AutonomousAgent } from '../agent-loop/agent.js';
 import { SessionConfig } from '../agent-loop/types.js';
 import { getAgentManager } from '../agents/agent-manager.js';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 import { logger } from '../utils/logger.js';
 import { CacheManager } from '../cache/index.js';
 
@@ -333,7 +335,7 @@ export class WorkflowEngine {
 
     const composedInput = [
       typeof repoContext === 'string' && repoContext.trim().length > 0
-        ? `Repository Context (use only these facts):\n${repoContext}`
+        ? `Repository Context (use only these facts; do not assume anything else):\n${repoContext}`
         : null,
       rolePrompt ? `Role:\n${rolePrompt}` : null,
       systemPrompt ? `System:\n${systemPrompt}` : null,
@@ -347,7 +349,7 @@ export class WorkflowEngine {
       maxToolCalls: 40,
       maxTerminalCommands: 5,
       autoConfirm: {
-        files: true,
+        files: false,
         terminal: false,
         skills: true,
       },
@@ -357,7 +359,7 @@ export class WorkflowEngine {
       config: sessionConfig,
       workspaceDirectory: process.cwd(),
       interactive: false,
-      onConfirmation: async () => true,
+      onConfirmation: async () => false,
       codegen: {
         enforceDirective: false,
       },
@@ -383,49 +385,106 @@ export class WorkflowEngine {
       return existing;
     }
 
-    await this.ensureAgentsLoaded();
+    const baseDir = process.cwd();
+    const maxCharsPerFile = 3000;
+    const maxTotalChars = 60000;
 
-    const analystConfig = this.agentManager.getAgent('analyst');
-    const sessionConfig: SessionConfig = {
-      model: analystConfig?.model || 'claude-opus',
-      maxToolCalls: 50,
-      maxTerminalCommands: 0,
-      autoConfirm: {
-        files: true,
-        terminal: false,
-        skills: true,
-      },
-    };
+    const rootEntries = await fs.readdir(baseDir);
 
-    const agent = new AutonomousAgent({
-      config: sessionConfig,
-      workspaceDirectory: process.cwd(),
-      interactive: false,
-      onConfirmation: async () => true,
-      codegen: {
-        enforceDirective: false,
-      },
-    });
+    const importantFiles = [
+      'package.json',
+      'tsconfig.json',
+      'config.yaml',
+      'ReadMe.MD',
+      'README.md',
+      'CHANGELOG.md',
+      'EXAMPLE_USAGE.md',
+      'EXAMPLE_WORKFLOWS.md',
+      'RECIPES_CATALOG.md',
+      'TROUBLESHOOTING.md',
+      'INSTALLATION.md',
+      'RELEASE_NOTES.md',
+      'REALITY_CHECK.md',
+    ];
 
-    const prompt =
-      'You are preparing factual repository context for documentation.\n' +
-      'Use file tools to list the repository root and read key documentation files.\n' +
-      'Do not assume any technologies or features not present in files.\n\n' +
-      'Steps:\n' +
-      '1) List the repository root.\n' +
-      '2) Read package.json and config files (config.yaml if present).\n' +
-      '3) Read top-level markdowns (README, ReadMe.MD, CHANGELOG, TROUBLESHOOTING, EXAMPLE_USAGE, EXAMPLE_WORKFLOWS, RECIPES_CATALOG).\n' +
-      '4) Read docs/ and docs/guides markdowns.\n\n' +
-      'Output a concise, factual summary that includes:\n' +
-      '- Actual tech stack and tools (from package.json/config).\n' +
-      '- Existing docs list and what each covers.\n' +
-      '- Key entry points and modules with real paths.\n' +
-      '- Any notable gaps (only if confirmed missing).\n' +
-      'Also include a list of file paths you read.';
+    const markdownFiles: string[] = [];
+    for (const file of importantFiles) {
+      const fullPath = path.join(baseDir, file);
+      try {
+        await fs.access(fullPath);
+        markdownFiles.push(file);
+      } catch {
+        // ignore missing
+      }
+    }
 
-    const output = await agent.processInput(prompt);
+    const docsDir = path.join(baseDir, 'docs');
+    const docsMarkdowns = await this.collectMarkdownFiles(docsDir, 50);
+    const allMarkdowns = markdownFiles.concat(docsMarkdowns.map((p) => path.relative(baseDir, p)));
+
+    let totalChars = 0;
+    const sections: string[] = [];
+    sections.push('ROOT ENTRIES: ' + rootEntries.join(', '));
+
+    for (const relPath of allMarkdowns) {
+      const fullPath = path.join(baseDir, relPath);
+      const content = await this.safeReadText(fullPath, maxCharsPerFile);
+      if (!content) continue;
+      const nextBlock = `\nFILE: ${relPath}\n---\n${content}\n---`;
+      if (totalChars + nextBlock.length > maxTotalChars) {
+        sections.push('\nNOTE: Context truncated due to size limits.');
+        break;
+      }
+      sections.push(nextBlock);
+      totalChars += nextBlock.length;
+    }
+
+    const output = sections.join('\n');
     context.variables.set('repo_context', output);
     return output;
+  }
+
+  private async safeReadText(filePath: string, maxChars: number): Promise<string | null> {
+    try {
+      const raw = await fs.readFile(filePath, 'utf8');
+      if (raw.length <= maxChars) {
+        return raw;
+      }
+      return raw.slice(0, maxChars) + '\n\n[TRUNCATED]';
+    } catch {
+      return null;
+    }
+  }
+
+  private async collectMarkdownFiles(dirPath: string, limit: number): Promise<string[]> {
+    const results: string[] = [];
+    const visit = async (current: string) => {
+      if (results.length >= limit) return;
+      let entries: Array<string> = [];
+      try {
+        entries = await fs.readdir(current);
+      } catch {
+        return;
+      }
+      for (const entry of entries) {
+        if (results.length >= limit) break;
+        const fullPath = path.join(current, entry);
+        let stat;
+        try {
+          stat = await fs.stat(fullPath);
+        } catch {
+          continue;
+        }
+        if (stat.isDirectory()) {
+          await visit(fullPath);
+        } else if (entry.toLowerCase().endsWith('.md')) {
+          results.push(fullPath);
+        }
+      }
+    };
+
+    await visit(dirPath);
+    return results;
   }
 
   /**
