@@ -11,7 +11,6 @@
     "build": "tsc && node scripts/copy-assets.js",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
-    "cli": "node dist/cli/cli-main.js",
     "samwise": "node dist/cli/cli-interactive-main.js",
     "mcp": "node dist/server/mcp-server.js",
     "lint": "eslint src/**/*.ts",
@@ -30,9 +29,11 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "-": "^0.0.1",
     "@modelcontextprotocol/sdk": "^1.0.4",
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
+    "g": "^2.0.1",
     "ora": "^8.1.1",
     "yaml": "^2.6.1",
     "zod": "^3.24.1"

@@ -52,11 +52,11 @@ Common issues and solutions for samwise workflow orchestration.
 
 **Solutions**:
 1. Build the project: `npm run build`
-2. Run directly: `node dist/cli/cli-main.js help`
+2. Run directly: `node dist/cli/cli-interactive-main.js help`
 3. Create an alias in your shell:
    ```bash
    # PowerShell
-   function samwise { node D:\projects\samwise\dist\cli\cli-main.js $args }
+   function samwise { node C:\Users\amcintosh1\source\repos\samwise\dist\cli\cli-interactive-main.js $args }
    
    # Bash/Zsh
    alias samwise='node /path/to/dist/cli/cli-main.js'

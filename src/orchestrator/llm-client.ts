@@ -48,33 +48,107 @@ export class LLMClient {
   private static readonly BASE_RETRY_DELAY = 1000; // 1 second
 
   /**
-   * Generate fallback models based on the current model
-   * Returns cheaper/alternative models from the same or lower complexity tier
+   * Determine the complexity tier of a model
    */
-  private static generateFallbackModels(model: string, complexity: 'simple' | 'medium' | 'complex'): string[] {
-    const provider = this.getProvider(model);
+  private static getModelTier(model: string): 'simple' | 'medium' | 'complex' {
+    // Simple tier: fast, cheap models
+    if (model.includes('mini') || model.includes('flash') || model.includes('fast-non-reasoning')) {
+      return 'simple';
+    }
+    // Complex tier: powerful reasoning models
+    if (model.includes('opus') || model.includes('reasoning') || model.includes('pro') || model.includes('5')) {
+      return 'complex';
+    }
+    // Medium tier: balanced models
+    return 'medium';
+  }
+
+  /**
+   * Get available models for a tier from all providers
+   */
+  private static getModelsForTier(tier: 'simple' | 'medium' | 'complex', apiKeys: Record<string, string>): Map<string, string> {
+    const tierModels = new Map<string, string>(); // model -> provider
+
+    // Define tier-specific models for each provider
+    const tierMapping: Record<string, Record<'simple' | 'medium' | 'complex', string[]>> = {
+      xai: {
+        simple: ['grok-3-mini', 'grok-code-fast-1'],
+        medium: ['grok-3', 'grok-4-1-fast-non-reasoning'],
+        complex: ['grok-4-1-fast-reasoning', 'grok-4-0709'],
+      },
+      openai: {
+        simple: ['gpt-4o-mini'],
+        medium: ['gpt-4o'],
+        complex: ['gpt-4-turbo', 'gpt-5'],
+      },
+      google: {
+        simple: ['gemini-2.5-flash'],
+        medium: ['gemini-2.5-pro'],
+        complex: ['gemini-pro-latest'],
+      },
+      anthropic: {
+        simple: ['claude-haiku-4-5-20251001'],
+        medium: ['claude-sonnet-4-5-20250929'],
+        complex: ['claude-opus-4-5-20251101'],
+      },
+    };
+
+    // Collect models from available providers
+    for (const [provider, models] of Object.entries(tierMapping)) {
+      if (apiKeys[provider]) {
+        const tierModelsForProvider = models[tier];
+        for (const model of tierModelsForProvider) {
+          tierModels.set(model, provider);
+        }
+      }
+    }
+
+    return tierModels;
+  }
+
+  /**
+   * Generate fallback models based on the current model tier
+   * Returns alternative models from the same tier, then other providers
+   */
+  private static generateFallbackModels(model: string, apiKeys: Record<string, string>): string[] {
+    const currentProvider = this.getProvider(model);
+    const currentTier = this.getModelTier(model);
     const fallbacks: string[] = [];
 
-    // Try same provider, different tier
-    if (provider === 'anthropic') {
-      if (model === 'claude-4.5-sonnet') fallbacks.push('claude-4-sonnet');
-    } else if (provider === 'openai') {
-      if (model === 'gpt-4o') fallbacks.push('gpt-4o-mini');
-    } else if (provider === 'google') {
-      if (model === 'gemini-2.5-pro') fallbacks.push('gemini-2.5-flash');
-    } else if (provider === 'xai') {
-      if (model === 'grok-4.1-full') fallbacks.push('grok-4-1-fast-reasoning');
+    logger.debug(`[LLM] Generating fallbacks for ${model} (${currentTier} tier, ${currentProvider} provider)`);
+
+    // Get all models in the same tier from all providers
+    const tierModels = this.getModelsForTier(currentTier, apiKeys);
+
+    // First, try other models from the same provider in same tier
+    for (const [tierModel, tierProvider] of tierModels.entries()) {
+      if (tierModel !== model && tierProvider === currentProvider) {
+        fallbacks.push(tierModel);
+        logger.debug(`[LLM] Fallback: ${tierModel} (same provider, same tier)`);
+      }
     }
 
-    // Try cheapest models from other providers
-    if (complexity === 'complex' || complexity === 'medium') {
-      fallbacks.push('grok-4-1-fast-reasoning', 'gemini-2.5-flash', 'gpt-4o-mini');
-    } else {
-      fallbacks.push('grok-4-1-fast-reasoning', 'gemini-2.5-flash');
+    // Then, try models from other providers in same tier
+    for (const [tierModel, tierProvider] of tierModels.entries()) {
+      if (tierModel !== model && tierProvider !== currentProvider) {
+        fallbacks.push(tierModel);
+        logger.debug(`[LLM] Fallback: ${tierModel} (different provider, same tier)`);
+      }
     }
 
-    // Remove duplicates and the original model
-    return [...new Set(fallbacks)].filter(m => m !== model);
+    // If we only have complex tier, also offer medium tier fallbacks
+    if (currentTier === 'complex' && fallbacks.length < 2) {
+      const mediumTierModels = this.getModelsForTier('medium', apiKeys);
+      for (const [tierModel, tierProvider] of mediumTierModels.entries()) {
+        if (!fallbacks.includes(tierModel)) {
+          fallbacks.push(tierModel);
+          logger.debug(`[LLM] Fallback: ${tierModel} (same provider, lower tier)`);
+        }
+      }
+    }
+
+    logger.debug(`[LLM] Total fallbacks available: ${fallbacks.length}`);
+    return fallbacks;
   }
 
   /**
@@ -110,12 +184,13 @@ export class LLMClient {
     if (!apiKey) {
       // No API key - try fallback models from other providers (only if not already retrying)
       if (!_isRetry) {
-        logger.warn(`[LLM] No API key for ${provider}, trying fallbacks...`);
-        const autoFallbacks = this.generateFallbackModels(model, 'medium');
-        for (const fallback of autoFallbacks.slice(0, 2)) {
+        logger.warn(`[LLM] No API key for ${provider}, trying fallbacks in same tier...`);
+        const apiKeysObj = config.samwise.api_keys as Record<string, string>;
+        const autoFallbacks = this.generateFallbackModels(model, apiKeysObj);
+        for (const fallback of autoFallbacks.slice(0, 3)) {
           const fallbackProvider = this.getProvider(fallback);
-          if (config.samwise.api_keys[fallbackProvider]) {
-            logger.info(`[LLM] Using fallback model: ${fallback}`);
+          if (apiKeysObj[fallbackProvider]) {
+            logger.info(`[LLM] Using tier-matched fallback: ${fallback} (${fallbackProvider})`);
             return this.call({
               model: fallback,
               prompt,
@@ -219,13 +294,15 @@ export class LLMClient {
 
       // Try auto-generated fallback models (only if not already retrying)
       if (!_isRetry) {
-        const autoFallbacks = this.generateFallbackModels(model, 'medium');
+        const apiKeysObj = config.samwise.api_keys as Record<string, string>;
+        const autoFallbacks = this.generateFallbackModels(model, apiKeysObj);
         if (autoFallbacks.length > 0) {
-          logger.info(`[LLM] Attempting auto-generated fallbacks: ${autoFallbacks.slice(0, 2).join(', ')}`);
-          for (const fallbackModel of autoFallbacks.slice(0, 2)) {
+          logger.info(`[LLM] Attempting ${autoFallbacks.length} tier-matched fallbacks for ${model}`);
+          for (const fallbackModel of autoFallbacks.slice(0, 3)) {
             const fallbackProvider = this.getProvider(fallbackModel);
-            if (config.samwise.api_keys[fallbackProvider]) {
+            if (apiKeysObj[fallbackProvider]) {
               try {
+                logger.info(`[LLM] Trying fallback: ${fallbackModel} (${fallbackProvider})`);
                 return await this.call({
                   model: fallbackModel,
                   prompt,
@@ -236,7 +313,7 @@ export class LLMClient {
                   _isRetry: true,
                 });
               } catch (fallbackError) {
-                logger.warn(`[LLM] Auto-fallback ${fallbackModel} failed`);
+                logger.warn(`[LLM] Fallback ${fallbackModel} failed: ${(fallbackError as Error).message}`);
               }
             }
           }

@@ -5,6 +5,8 @@
  */
 
 import * as readline from 'readline';
+import * as fs from 'fs';
+import * as path from 'path';
 import chalk from 'chalk';
 import { parseQuery, ExecutionMode } from './keyword-parser.js';
 import { agentExecutor } from '../orchestrator/agent-executor.js';
@@ -93,6 +95,12 @@ export class InteractiveCLI {
 
       if (input === 'budget' || input.startsWith('budget ')) {
         this.handleBudget(input);
+        this.showPrompt();
+        return;
+      }
+
+      if (input === 'apikeys' || input === 'keys' || input.startsWith('apikeys ')) {
+        await this.handleApiKeys(input);
         this.showPrompt();
         return;
       }
@@ -403,6 +411,11 @@ export class InteractiveCLI {
     console.log(chalk.gray('      budget reset  ') + ' Reset spending to $0');
     console.log(chalk.gray('      budget        ') + ' Show budget status');
     console.log();
+    console.log(chalk.white('    API Keys:'));
+    console.log(chalk.gray('      apikeys       ') + ' Show API key status');
+    console.log(chalk.gray('      apikeys set   ') + ' Set/update API keys');
+    console.log(chalk.gray('      apikeys clear ') + ' Clear all API keys');
+    console.log();
     console.log(chalk.white('    Special:'));
     console.log(chalk.gray('      @file.ts      ') + 'Mention a file in context');
     console.log(chalk.gray('      exit/quit     ') + 'Exit the CLI');
@@ -611,6 +624,166 @@ export class InteractiveCLI {
     const bar = color('█'.repeat(filled)) + chalk.gray('░'.repeat(empty));
     
     return `${bar} ${percent.toFixed(1)}%`;
+  }
+
+  /**
+   * Handle API key commands
+   */
+  private async handleApiKeys(input: string): Promise<void> {
+    const availableKeys = [
+      { env: 'SAMWISE_API_KEYS_XAI', name: 'xAI (Grok)', url: 'https://console.x.ai' },
+      { env: 'SAMWISE_API_KEYS_ANTHROPIC', name: 'Anthropic (Claude)', url: 'https://console.anthropic.com' },
+      { env: 'SAMWISE_API_KEYS_OPENAI', name: 'OpenAI (GPT)', url: 'https://platform.openai.com/api-keys' },
+      { env: 'SAMWISE_API_KEYS_GOOGLE', name: 'Google (Gemini)', url: 'https://ai.google.dev' },
+    ];
+
+    const parts = input.split(' ');
+    
+    if (parts.length === 1) {
+      // Just "apikeys" - show status
+      this.showApiKeys(availableKeys);
+      return;
+    }
+
+    const command = parts[1];
+    
+    if (command === 'set') {
+      // Set API keys interactively
+      await this.setApiKeys(availableKeys);
+    } else if (command === 'clear') {
+      // Clear all API keys
+      this.clearApiKeys(availableKeys);
+    } else {
+      console.log(chalk.red('\n    Unknown apikeys command\n'));
+      console.log(chalk.gray('    Available commands:'));
+      console.log(chalk.white('      apikeys         ') + chalk.gray('Show API key status'));
+      console.log(chalk.white('      apikeys set     ') + chalk.gray('Set/update API keys'));
+      console.log(chalk.white('      apikeys clear   ') + chalk.gray('Clear all API keys'));
+      console.log();
+    }
+  }
+
+  /**
+   * Show API keys status
+   */
+  private showApiKeys(availableKeys: Array<{ env: string; name: string; url: string }>): void {
+    console.log(chalk.cyan.bold('\n    API Keys Status'));
+    console.log(chalk.gray('    ' + '─'.repeat(65)));
+    
+    availableKeys.forEach(key => {
+      const isSet = !!process.env[key.env];
+      const status = isSet ? chalk.green('✓ Configured') : chalk.gray('○ Not set');
+      const masked = isSet ? this.maskApiKey(process.env[key.env]!) : chalk.gray('—');
+      console.log(chalk.white(`      ${key.name.padEnd(22)}`), status, chalk.gray(masked));
+    });
+    
+    console.log(chalk.gray('    ' + '─'.repeat(65)));
+    console.log(chalk.gray('    Use ') + chalk.white('apikeys set') + chalk.gray(' to configure keys'));
+    console.log();
+  }
+
+  /**
+   * Set API keys interactively
+   */
+  private async setApiKeys(availableKeys: Array<{ env: string; name: string; url: string }>): Promise<void> {
+    console.log(chalk.cyan.bold('\n    Configure API Keys'));
+    console.log(chalk.gray('    ' + '─'.repeat(65)));
+    console.log(chalk.gray('    Enter new values or press Enter to skip\n'));
+
+    const question = (prompt: string): Promise<string> => {
+      return new Promise(resolve => {
+        this.rl.question(prompt, resolve);
+      });
+    };
+
+    const updates: Record<string, string> = {};
+
+    for (const key of availableKeys) {
+      const current = process.env[key.env];
+      const currentDisplay = current ? chalk.gray(this.maskApiKey(current)) : chalk.gray('(not set)');
+      
+      console.log(chalk.white(`\n    ${key.name}`) + ' ' + currentDisplay);
+      console.log(chalk.gray(`    Get yours at: ${key.url}`));
+      const newValue = await question(chalk.gray('    New value (or Enter to skip): '));
+      
+      if (newValue.trim()) {
+        updates[key.env] = newValue.trim();
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      console.log(chalk.yellow('\n    No changes made\n'));
+      return;
+    }
+
+    // Update environment variables
+    for (const [key, value] of Object.entries(updates)) {
+      process.env[key] = value;
+    }
+
+    // Save to home directory .env file
+    const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+    const envPath = path.join(homeDir, '.env');
+
+    try {
+      let envContent = '';
+      const envVars: Record<string, string> = {};
+
+      // Read existing .env if it exists
+      if (fs.existsSync(envPath)) {
+        envContent = fs.readFileSync(envPath, 'utf-8');
+        const lines = envContent.split('\n');
+        
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith('#')) continue;
+          
+          const [key, ...valueParts] = trimmed.split('=');
+          if (key) {
+            envVars[key] = valueParts.join('=');
+          }
+        }
+      }
+
+      // Update with new values
+      for (const [key, value] of Object.entries(updates)) {
+        envVars[key] = value;
+      }
+
+      // Write back
+      const newContent = Object.entries(envVars)
+        .map(([key, value]) => `${key}=${value}`)
+        .join('\n') + '\n';
+
+      fs.writeFileSync(envPath, newContent, 'utf-8');
+      console.log(chalk.green(`\n    ✓ API keys saved to ${envPath}`));
+      console.log(chalk.gray(`    Updated ${Object.keys(updates).length} key(s)\n`));
+    } catch (error) {
+      console.log(chalk.red(`\n    ⚠️  Could not save to ${envPath}: ${error}`));
+      console.log(chalk.gray('    Keys are set for this session only\n'));
+    }
+  }
+
+  /**
+   * Clear API keys
+   */
+  private clearApiKeys(availableKeys: Array<{ env: string; name: string; url: string }>): void {
+    availableKeys.forEach(key => {
+      delete process.env[key.env];
+    });
+    
+    console.log(chalk.yellow('\n    ⚠️  All API keys cleared from current session'));
+    console.log(chalk.gray('    Note: Keys in .env file are not deleted\n'));
+  }
+
+  /**
+   * Mask API key for display
+   */
+  private maskApiKey(key: string): string {
+    if (key.length <= 8) {
+      return '***';
+    }
+    return key.substring(0, 4) + '...' + key.substring(key.length - 4);
   }
 
   /**

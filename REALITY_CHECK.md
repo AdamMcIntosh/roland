@@ -17,6 +17,7 @@
 - Caching layer (SHA256 keys, 24h TTL)
 - **HUD status line** with real-time metrics (NEW)
 - **Rate limit handler** with exponential backoff (NEW)
+- **Tier-aware provider fallback** - Auto-switches to same-tier models from other providers on API failure (NEW)
 
 ### Execution Modes ✅
 - **EcoMode** (`eco:`) - Cost-optimized single agent
@@ -303,7 +304,7 @@ Multi-workspace support
 > eco: what is the capital of France?
 > eco: explain what recursion is
 > eco: write a hello world in Python
-> eco: create a basic C# .NET 6 console application with solution file, project file, and hello world program
+> eco: create a basic C# .NET 8 console application with solution file, project file, and hello world program
 
 # Autopilot (3 agents, ~$0.01-0.05)
 > autopilot: design a REST API for a todo app
