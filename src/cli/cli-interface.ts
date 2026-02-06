@@ -1000,7 +1000,8 @@ export class CliInterface {
       const version = options.version || '1.0.0';
 
       // Execute workflow
-      const result = await this.workflowEngine.executeWorkflow(name, inputs, version);
+      const useCache = options.cache !== false;
+      const result = await this.workflowEngine.executeWorkflow(name, inputs, version, useCache);
 
       this.spinner.stop();
 

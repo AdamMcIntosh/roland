@@ -449,11 +449,13 @@ export class InteractiveCLI {
     name: string | null;
     version: string;
     input: Record<string, unknown>;
+    useCache: boolean;
   } {
     const parts = command.trim().split(/\s+/);
     const name = parts.length >= 2 ? parts[1] : null;
     let version = '1.0.0';
     let input: Record<string, unknown> = {};
+    let useCache = true;
 
     const versionIndex = parts.findIndex((p) => p === '--version' || p === '-v');
     if (versionIndex !== -1 && parts[versionIndex + 1]) {
@@ -470,7 +472,11 @@ export class InteractiveCLI {
       }
     }
 
-    return { name, version, input };
+    if (parts.includes('--no-cache')) {
+      useCache = false;
+    }
+
+    return { name, version, input, useCache };
   }
 
   private async handleWorkflowCommand(command: string): Promise<void> {
@@ -487,7 +493,8 @@ export class InteractiveCLI {
       const result = await this.workflowEngine.executeWorkflow(
         parsed.name,
         parsed.input,
-        parsed.version
+        parsed.version,
+        parsed.useCache
       );
 
       if (result.status === 'failed') {

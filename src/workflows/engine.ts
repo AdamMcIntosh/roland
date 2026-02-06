@@ -135,7 +135,8 @@ export class WorkflowEngine {
   async executeWorkflow(
     workflowName: string,
     inputs: Record<string, any> = {},
-    version?: string
+    version?: string,
+    useCache: boolean = true
   ): Promise<WorkflowResult> {
     const workflow = this.getWorkflow(workflowName, version);
     if (!workflow) {
@@ -143,10 +144,12 @@ export class WorkflowEngine {
     }
 
     // Check cache first
-    const cacheHit = this.cacheManager.get(workflowName, version || '1.0.0', inputs);
-    if (cacheHit.hit) {
-      logger.success(`[WorkflowEngine] Cache HIT for ${workflowName} (saved $${cacheHit.costSaved?.toFixed(4)}, ${cacheHit.timeSaved}ms)`);
-      return cacheHit.result;
+    if (useCache) {
+      const cacheHit = this.cacheManager.get(workflowName, version || '1.0.0', inputs);
+      if (cacheHit.hit) {
+        logger.success(`[WorkflowEngine] Cache HIT for ${workflowName} (saved $${cacheHit.costSaved?.toFixed(4)}, ${cacheHit.timeSaved}ms)`);
+        return cacheHit.result;
+      }
     }
 
     // Validate workflow
@@ -189,6 +192,9 @@ export class WorkflowEngine {
     this.contexts.set(workflowId, context);
 
     try {
+      const repoContext = await this.buildRepoContext(context);
+      context.variables.set('repo_context', repoContext);
+
       logger.info(`[WorkflowEngine] Starting workflow execution: ${workflowName}`);
 
       // Execute steps sequentially
@@ -271,7 +277,9 @@ export class WorkflowEngine {
       };
 
       // Cache successful result
-      this.cacheManager.set(workflowName, version || '1.0.0', inputs, result);
+      if (useCache) {
+        this.cacheManager.set(workflowName, version || '1.0.0', inputs, result);
+      }
 
       return result;
     } catch (error) {
@@ -317,11 +325,16 @@ export class WorkflowEngine {
         ? interpolatedInput
         : JSON.stringify(interpolatedInput, null, 2);
 
+    const repoContext = context.variables.get('repo_context');
+
     const agentConfig = this.agentManager.getAgent(step.agent);
     const rolePrompt = agentConfig?.role_prompt?.trim();
     const systemPrompt = agentConfig?.system_prompt?.trim();
 
     const composedInput = [
+      typeof repoContext === 'string' && repoContext.trim().length > 0
+        ? `Repository Context (use only these facts):\n${repoContext}`
+        : null,
       rolePrompt ? `Role:\n${rolePrompt}` : null,
       systemPrompt ? `System:\n${systemPrompt}` : null,
       `Task:\n${queryText}`,
@@ -362,6 +375,57 @@ export class WorkflowEngine {
       cachedHit: false,
       duration: Date.now() - (context.stepStartTime.get(step.name) || Date.now()),
     };
+  }
+
+  private async buildRepoContext(context: WorkflowContext): Promise<string> {
+    const existing = context.variables.get('repo_context');
+    if (typeof existing === 'string' && existing.trim().length > 0) {
+      return existing;
+    }
+
+    await this.ensureAgentsLoaded();
+
+    const analystConfig = this.agentManager.getAgent('analyst');
+    const sessionConfig: SessionConfig = {
+      model: analystConfig?.model || 'claude-opus',
+      maxToolCalls: 50,
+      maxTerminalCommands: 0,
+      autoConfirm: {
+        files: true,
+        terminal: false,
+        skills: true,
+      },
+    };
+
+    const agent = new AutonomousAgent({
+      config: sessionConfig,
+      workspaceDirectory: process.cwd(),
+      interactive: false,
+      onConfirmation: async () => true,
+      codegen: {
+        enforceDirective: false,
+      },
+    });
+
+    const prompt =
+      'You are preparing factual repository context for documentation.\n' +
+      'Use file tools to list the repository root and read key documentation files.\n' +
+      'Do not assume any technologies or features not present in files.\n\n' +
+      'Steps:\n' +
+      '1) List the repository root.\n' +
+      '2) Read package.json and config files (config.yaml if present).\n' +
+      '3) Read top-level markdowns (README, ReadMe.MD, CHANGELOG, TROUBLESHOOTING, EXAMPLE_USAGE, EXAMPLE_WORKFLOWS, RECIPES_CATALOG).\n' +
+      '4) Read docs/ and docs/guides markdowns.\n\n' +
+      'Output a concise, factual summary that includes:\n' +
+      '- Actual tech stack and tools (from package.json/config).\n' +
+      '- Existing docs list and what each covers.\n' +
+      '- Key entry points and modules with real paths.\n' +
+      '- Any notable gaps (only if confirmed missing).\n' +
+      'Also include a list of file paths you read.';
+
+    const output = await agent.processInput(prompt);
+    context.variables.set('repo_context', output);
+    return output;
   }
 
   /**

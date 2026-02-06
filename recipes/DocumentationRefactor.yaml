@@ -24,16 +24,23 @@ steps:
       Focus areas: {{focusAreas}}
       Target audience: {{targetAudience}}
 
-      1. Directory structure and main modules
-      2. Key files and entry points
-      3. Architecture overview and data flows
-      4. Dependencies and their roles
-      5. Existing documentation and gaps
-      6. Code patterns and conventions
-      7. Technology stack and versions
-      8. Key features and configuration
+      REQUIREMENTS:
+      - Use the file tools to list and read real files in the repository.
+      - Start by listing the repository root, then read existing markdown docs (README, docs/, guides).
+      - Do not assume frameworks, stacks, or features not present in the files.
+      - Cite concrete file paths in your analysis.
 
-      Output structured analysis in Markdown.
+      Include:
+      1. Directory structure and main modules (from actual files)
+      2. Key files and entry points (by file path)
+      3. Architecture overview and data flows (from code/docs)
+      4. Dependencies and their roles (from package.json/lock files)
+      5. Existing documentation and gaps (from markdowns)
+      6. Code patterns and conventions (from code)
+      7. Technology stack and versions (from config files)
+      8. Key features and configuration (from config/README)
+
+      Output structured analysis in Markdown with file references.
     output_to: analyze_codebase
 
   - name: plan-documentation
@@ -47,6 +54,11 @@ steps:
       Focus areas: {{focusAreas}}
       Audience: {{targetAudience}}
 
+      REQUIREMENTS:
+      - Base all recommendations on actual files discovered.
+      - If a doc already exists, propose edits instead of inventing new content.
+      - Do not add technologies or features not present in the codebase.
+
       Include plans for README, API docs, architecture, setup, contributing, and inline comments.
     output_to: plan_documentation
 
@@ -59,6 +71,12 @@ steps:
       {{plan_documentation}}
 
       Audience: {{targetAudience}}
+
+      REQUIREMENTS:
+      - Use facts only from the repository and existing markdowns.
+      - If a doc exists, refine it; do not fabricate features.
+      - When referencing files, use actual paths.
+      - If a section is unknown, explicitly mark it as "Unknown" and explain what is missing.
 
       Produce:
       1. README.md
@@ -78,6 +96,10 @@ steps:
       {{generate_docs}}
 
       Audience: {{targetAudience}}
+
+      REQUIREMENTS:
+      - Flag any claims not backed by repository files.
+      - Ensure all technologies mentioned exist in package.json or code.
 
       Output a quality assessment and a list of issues by severity.
     output_to: review_quality
