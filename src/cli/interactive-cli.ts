@@ -787,15 +787,54 @@ export class InteractiveCLI {
   }
 
   /**
+   * Ensure a budget is set before starting
+   */
+  private async ensureBudgetSet(): Promise<void> {
+    const budgetStatus = BudgetManager.getStatus();
+
+    // If budget is already set, we're good
+    if (budgetStatus.enabled && budgetStatus.maxBudget > 0) {
+      return;
+    }
+
+    console.log(chalk.yellow('\n⚠️  No budget limit configured\n'));
+    console.log(chalk.white('Setting a budget helps prevent unexpected costs.'));
+    console.log(chalk.gray('You can always change it later with the "budget" command.\n'));
+
+    const question = (prompt: string): Promise<string> => {
+      return new Promise(resolve => {
+        this.rl.question(prompt, resolve);
+      });
+    };
+
+    let budgetAmount: number | null = null;
+
+    while (budgetAmount === null || budgetAmount <= 0) {
+      const input = await question(chalk.cyan('Set a budget limit (e.g., $10): '));
+      const parsed = parseFloat(input.replace(/[$,]/g, ''));
+
+      if (!isNaN(parsed) && parsed > 0) {
+        budgetAmount = parsed;
+      } else {
+        console.log(chalk.red('Invalid amount. Please enter a positive number.\n'));
+      }
+    }
+
+    BudgetManager.setMaxBudget(budgetAmount);
+    console.log(chalk.green(`✓ Budget set to $${budgetAmount.toFixed(2)}\n`));
+  }
+
+  /**
    * Start the interactive CLI
    */
-  public start(): void {
+  public async start(): Promise<void> {
     if (this.isRunning) {
       return;
     }
 
     this.isRunning = true;
     this.showWelcome();
+    await this.ensureBudgetSet();
     this.showPrompt();
   }
 }
@@ -805,5 +844,5 @@ export class InteractiveCLI {
  */
 export async function runInteractiveCLI(): Promise<void> {
   const cli = new InteractiveCLI();
-  cli.start();
+  await cli.start();
 }

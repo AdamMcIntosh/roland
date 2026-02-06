@@ -135,6 +135,8 @@
 - [x] **Implement rate limit handler**
 - [x] **Create troubleshooting guide**
 - [x] **Implement performance monitoring** (Observatory, Replay, Analytics, Intervention)
+- [x] **Tier-aware provider fallback** - Auto-switches to same-tier models on API failure
+- [x] **Mandatory budget setup** - Interactive CLI prompts to set budget at startup
 
 ### Medium Priority - DONE
 - [x] Performance profiling tools
