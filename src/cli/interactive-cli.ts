@@ -504,6 +504,14 @@ export class InteractiveCLI {
       if (result.outputs) {
         console.log(chalk.gray('\n    Outputs:'));
         console.log('    ' + JSON.stringify(result.outputs, null, 2).split('\n').join('\n    '));
+
+        const docPackage = result.outputs.documentation_package;
+        if (typeof docPackage === 'string' && docPackage.trim().length > 0) {
+          const safeName = parsed.name.replace(/[^a-z0-9-_]/gi, '_');
+          const outPath = path.join(process.cwd(), `${safeName}-output.md`);
+          fs.writeFileSync(outPath, docPackage, 'utf8');
+          console.log(chalk.green(`\n    ✓ Saved documentation to ${outPath}`));
+        }
       }
       console.log();
     } catch (error) {
