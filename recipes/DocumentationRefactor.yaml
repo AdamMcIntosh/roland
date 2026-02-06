@@ -1,137 +1,209 @@
-name: DocumentationRefactor
-version: "1.0.0"
-description: "Comprehensive documentation review, refactoring, and improvement workflow"
+name: Documentation Refactor & Generation
+version: "2.0.0"
+description: "Multi-agent workflow to analyze entire codebase, extract existing documentation, and generate/clean up comprehensive docs"
 
 metadata:
   category: "Documentation"
-  complexity: "medium"
-  estimatedCost: 0.015
-  estimatedDuration: "5-10 minutes"
-  tags: ["documentation", "refactoring", "quality", "automation"]
+  complexity: "high"
+  estimatedCost: 0.05
+  estimatedDuration: "10-20 minutes"
+  tags: ["documentation", "codebase-analysis", "generation", "refactoring", "quality"]
 
 inputs:
-  - name: "documentationPath"
+  - name: "codebasePath"
     type: "string"
-    description: "Path to the documentation file(s) to refactor"
+    description: "Root path of the project/codebase to document"
     required: true
-  - name: "docType"
+  - name: "focusAreas"
     type: "string"
-    description: "Type of documentation (README, API, User Guide, etc.)"
-    default: "General"
+    description: "Specific areas to focus on (e.g., API, Architecture, Setup, All)"
+    default: "All"
   - name: "targetAudience"
     type: "string"
-    description: "Target audience for the documentation"
+    description: "Target audience for documentation (Developers, Users, Contributors)"
     default: "Developers"
 
 steps:
-  # Step 1: Analyze current documentation
-  - id: analyze-docs
+  # Step 1: Analyze codebase structure and existing docs
+  - id: analyze-codebase
     type: agent
     agent: analyst
     prompt: |
-      Analyze this {{ docType }} documentation for:
-      1. Clarity and readability
-      2. Completeness of information
-      3. Structural organization
-      4. Consistency of formatting
-      5. Target audience appropriateness ({{ targetAudience }})
-      6. Missing sections or outdated information
+      Analyze the codebase at {{ codebasePath }} for documentation purposes:
       
-      Provide specific feedback on what works well and what needs improvement.
+      1. **Directory Structure**: Map the folder layout, identify main modules and packages
+      2. **Key Files & Their Purposes**: List main entry points, config files, important modules
+      3. **Architecture Overview**: Identify components, how they interact, data flows
+      4. **Dependencies**: External libraries and their roles in the project
+      5. **Current Documentation**: Scan for existing README, API docs, guides, inline comments
+      6. **Documentation Gaps**: What's missing or incomplete
+      7. **Code Patterns & Conventions**: Recurring patterns, naming conventions, standards
+      8. **Technology Stack**: Languages, frameworks, tools, and versions
+      9. **Key Features**: Main functionality and capabilities
+      10. **Configuration**: How the project is configured and deployed
+      
+      Output structured analysis in Markdown covering all above points.
     inputs:
-      documentation: "{{ documentation }}"
-      docType: "{{ docType }}"
+      codebase: "{{ codebasePath }}"
+      focusAreas: "{{ focusAreas }}"
+
+  # Step 2: Plan documentation improvements
+  - id: plan-documentation
+    type: agent
+    agent: architect
+    prompt: |
+      Based on the codebase analysis from Step 1, create a comprehensive documentation plan:
+      
+      1. **Documentation Roadmap**:
+         - Priority order (what to document first)
+         - Sections needed (README, API, Architecture, Setup, Contributing, etc)
+         - Target audience considerations
+      
+      2. **README Enhancement Plan**:
+         - What sections are needed
+         - Content priorities
+         - Examples to include
+      
+      3. **API Documentation Plan**:
+         - Public APIs/functions to document
+         - Format (JSDoc, Markdown, API spec)
+         - Examples needed
+      
+      4. **Architecture Documentation Plan**:
+         - Components to explain
+         - Diagrams/visualizations needed
+         - Data flow explanations
+      
+      5. **Setup & Installation Guide Plan**:
+         - Prerequisites, installation steps, configuration
+         - Common issues to address
+      
+      6. **Code Comments Plan**:
+         - Which files need inline documentation
+         - Complex logic that needs explanation
+      
+      Create an actionable implementation plan with clear steps.
+    inputs:
+      analysis: "{{ analyze-codebase.output }}"
+      focusAreas: "{{ focusAreas }}"
       audience: "{{ targetAudience }}"
 
-  # Step 2: Generate improvement recommendations
-  - id: plan-improvements
-    type: agent
-    agent: planner
-    prompt: |
-      Based on the analysis feedback, create a detailed improvement plan for the documentation:
-      1. Priority improvements (what has the most impact)
-      2. Structural reorganization suggestions
-      3. New sections to add
-      4. Examples or clarity improvements needed
-      5. Implementation sequence
-      
-      Create an actionable step-by-step plan.
-    inputs:
-      analysis: "{{ analyze-docs.output }}"
-      documentation: "{{ documentation }}"
-
-  # Step 3: Refactor and rewrite
-  - id: refactor-docs
+  # Step 3: Generate documentation
+  - id: generate-docs
     type: agent
     agent: writer
     prompt: |
-      Rewrite and refactor the documentation following this improvement plan:
+      Generate comprehensive, high-quality documentation following the plan from Step 2:
       
-      {{ plan-improvements.output }}
+      {{ plan-documentation.output }}
       
-      Requirements:
-      - Improve clarity and readability
-      - Add missing sections
-      - Use consistent formatting and style
-      - Add practical examples where helpful
-      - Ensure it's appropriate for {{ targetAudience }}
-      - Maintain accurate technical information
-      - Use clear headings and organization
+      **Requirements for all documentation:**
+      - Clear, concise, developer-friendly language
+      - Proper Markdown formatting with good structure
+      - Real code examples where appropriate
+      - Cross-references between related sections
+      - Consistent terminology and style
+      - Appropriate for {{ targetAudience }} audience
       
-      Output the complete refactored documentation.
+      **Specific documentation to generate:**
+      
+      1. **README.md**: Project overview, quick start, features, structure, contributing
+      2. **API_DOCUMENTATION.md**: All public functions/classes, parameters, returns, examples
+      3. **ARCHITECTURE.md**: System design, component interactions, design patterns, data flows
+      4. **SETUP_GUIDE.md**: Installation, configuration, troubleshooting
+      5. **CONTRIBUTING.md**: Contribution guidelines, code standards, workflow
+      6. **CODE_COMMENTS**: JSDoc/docstrings for key functions and complex logic
+      
+      Output complete, ready-to-use documentation files.
     inputs:
-      documentation: "{{ documentation }}"
-      improvements: "{{ plan-improvements.output }}"
-      audience: "{{ targetAudience }}"
+      codebase_analysis: "{{ analyze-codebase.output }}"
+      documentation_plan: "{{ plan-documentation.output }}"
 
-  # Step 4: Verify quality and consistency
+  # Step 4: Review documentation quality
   - id: review-quality
     type: agent
     agent: critic
     prompt: |
-      Review the refactored documentation for:
-      1. Technical accuracy
-      2. Clarity and understandability
-      3. Consistency with best practices
-      4. Completeness
-      5. Appropriate tone for the audience
+      Review all generated documentation from Step 3 for quality:
       
-      Provide constructive feedback and suggest any final improvements.
+      **Quality Checks:**
+      1. **Completeness**: Are all major features/APIs documented?
+      2. **Clarity**: Is the language clear, concise, accessible?
+      3. **Accuracy**: Are technical details correct? Do examples work?
+      4. **Consistency**: Same terminology, formatting, style throughout?
+      5. **Structure**: Logical flow, good headings, easy navigation?
+      6. **Audience Fit**: Appropriate for {{ targetAudience }}?
+      7. **Examples**: Are code examples correct and helpful?
+      8. **Organization**: Can readers easily find what they need?
+      
+      **Output:**
+      - Quality assessment (pass/needs improvement)
+      - Issues found by severity (critical/important/minor)
+      - Specific suggestions for improvement
+      - Sections that passed quality review
+      
+      If critical issues found, flag for revision loop.
     inputs:
-      refactored: "{{ refactor-docs.output }}"
-      original: "{{ documentation }}"
+      documentation: "{{ generate-docs.output }}"
+      analysis: "{{ analyze-codebase.output }}"
 
-  # Step 5: Final polish and validation
-  - id: final-validation
+  # Step 5: Optimize and finalize
+  - id: finalize-docs
     type: agent
-    agent: qa-tester
+    agent: executor
     prompt: |
-      Perform final validation on the refactored documentation:
-      1. Check for grammar, spelling, and punctuation errors
-      2. Verify all links and references work correctly
-      3. Ensure code examples are syntactically correct
-      4. Validate formatting consistency
-      5. Create a summary of all changes made
+      Finalize the documentation based on quality review feedback from Step 4:
       
-      Output the final, production-ready documentation with a changelog.
+      **Tasks:**
+      1. **Fix Critical Issues**: Address any critical issues from quality review
+      2. **Polish Quality**: 
+         - Grammar, spelling, punctuation checks
+         - Consistent formatting throughout
+         - Proper Markdown syntax validation
+      3. **Add Polish**:
+         - Table of contents for long documents
+         - Navigation links between docs
+         - Badges (build status, version, license)
+         - Status indicators where relevant
+      4. **Enhance Examples**:
+         - Verify all code examples are syntactically correct
+         - Add more real-world usage patterns
+         - Include common best practices
+      5. **Create Documentation Index**:
+         - Master guide linking all documentation
+         - Quick navigation table
+         - Search-friendly organization
+      6. **Final Validation**:
+         - Check all links work
+         - Verify file paths and references
+         - Test any provided commands/scripts
+      
+      Output production-ready documentation files with changelog.
     inputs:
-      documentation: "{{ refactor-docs.output }}"
-      feedback: "{{ review-quality.output }}"
+      documentation: "{{ generate-docs.output }}"
+      quality_feedback: "{{ review-quality.output }}"
 
 outputs:
-  - name: "refactored_documentation"
-    description: "The final refactored and improved documentation"
-    source: "final-validation.output"
-  - name: "improvement_summary"
-    description: "Summary of all changes and improvements made"
-    source: "plan-improvements.output"
-  - name: "quality_feedback"
+  - name: "documentation_package"
+    description: "Complete, production-ready documentation files"
+    source: "finalize-docs.output"
+  - name: "codebase_analysis"
+    description: "Detailed codebase structure and architecture analysis"
+    source: "analyze-codebase.output"
+  - name: "documentation_plan"
+    description: "Comprehensive plan for documentation improvements"
+    source: "plan-documentation.output"
+  - name: "quality_report"
     description: "Quality review and validation feedback"
     source: "review-quality.output"
 
 success_criteria:
-  - "Documentation is more clear and readable"
-  - "Missing information has been added"
-  - "Structure is logical and easy to navigate"
-  - "No grammatical or spelling errors"
-  - "Examples and code are accurate"
+  - "All major codebase components are documented"
+  - "README provides clear project overview and quick start"
+  - "API documentation is complete and accurate"
+  - "Architecture is clearly explained with diagrams/descriptions"
+  - "Setup guide enables new users to get started quickly"
+  - "No grammar or spelling errors"
+  - "Documentation is well-organized and easy to navigate"
+  - "Code examples are correct and helpful"
+  - "Documentation reflects current codebase state"
