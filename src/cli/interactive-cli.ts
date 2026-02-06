@@ -23,6 +23,8 @@ import {
   generateFilenameFromQuery,
   createPlanArtifact,
 } from '../utils/codegen.js';
+import { WorkflowEngine } from '../workflows/engine.js';
+import { RecipeLoader } from '../workflows/recipe-loader.js';
 
 interface SessionInfo {
   user: string;
@@ -36,6 +38,9 @@ export class InteractiveCLI {
   private session: SessionInfo;
   private commandHistory: string[] = [];
   private isRunning = false;
+  private workflowEngine: WorkflowEngine;
+  private recipeLoader: RecipeLoader;
+  private recipesLoaded = false;
 
   constructor() {
     this.rl = readline.createInterface({
@@ -52,7 +57,16 @@ export class InteractiveCLI {
       workingDir: process.cwd(),
     };
 
+    this.workflowEngine = new WorkflowEngine(true);
+    this.recipeLoader = new RecipeLoader(this.workflowEngine, './recipes');
+
     this.setupHandlers();
+  }
+
+  private async ensureRecipesLoaded(): Promise<void> {
+    if (this.recipesLoaded) return;
+    await this.recipeLoader.loadAllRecipes();
+    this.recipesLoaded = true;
   }
 
   /**
@@ -376,6 +390,10 @@ export class InteractiveCLI {
       this.showAgents();
     } else if (cmd === '/cache') {
       this.showCache();
+    } else if (cmd.startsWith('/workflow')) {
+      await this.handleWorkflowCommand(command);
+    } else if (cmd === '/recipes') {
+      await this.handleRecipesCommand();
     } else {
       console.log(chalk.red(`\n    Unknown command: ${command}`));
       console.log(chalk.gray('    Type /help to see available commands\n'));
@@ -404,6 +422,8 @@ export class InteractiveCLI {
     console.log(chalk.gray('      /skills       ') + 'List available skills');
     console.log(chalk.gray('      /agents       ') + 'List available agents');
     console.log(chalk.gray('      /cache        ') + 'Show cache statistics');
+    console.log(chalk.gray('      /recipes      ') + 'List available recipes');
+    console.log(chalk.gray('      /workflow     ') + 'Run workflow recipe');
     console.log(chalk.gray('      /clear        ') + 'Clear screen');
     console.log();
     console.log(chalk.white('    Budget Commands:'));
@@ -423,6 +443,95 @@ export class InteractiveCLI {
     console.log(chalk.gray('      Ctrl+D        ') + 'Exit the CLI');
     console.log(chalk.gray('    ' + '─'.repeat(65)));
     console.log();
+  }
+
+  private parseWorkflowCommand(command: string): {
+    name: string | null;
+    version: string;
+    input: Record<string, unknown>;
+  } {
+    const parts = command.trim().split(/\s+/);
+    const name = parts.length >= 2 ? parts[1] : null;
+    let version = '1.0.0';
+    let input: Record<string, unknown> = {};
+
+    const versionIndex = parts.findIndex((p) => p === '--version' || p === '-v');
+    if (versionIndex !== -1 && parts[versionIndex + 1]) {
+      version = parts[versionIndex + 1];
+    }
+
+    const inputIndex = parts.findIndex((p) => p === '--input' || p === '-i');
+    if (inputIndex !== -1) {
+      const inputToken = parts[inputIndex];
+      const raw = command.slice(command.indexOf(inputToken) + inputToken.length).trim();
+      const cleaned = raw.replace(/^["']/u, '').replace(/["']$/u, '').trim();
+      if (cleaned) {
+        input = JSON.parse(cleaned) as Record<string, unknown>;
+      }
+    }
+
+    return { name, version, input };
+  }
+
+  private async handleWorkflowCommand(command: string): Promise<void> {
+    try {
+      const parsed = this.parseWorkflowCommand(command);
+      if (!parsed.name) {
+        console.log(chalk.yellow('\n    Usage: /workflow <name> [-v <version>] --input <json>\n'));
+        return;
+      }
+
+      await this.ensureRecipesLoaded();
+
+      console.log(chalk.dim(`\n    Running workflow: ${parsed.name} (v${parsed.version})`));
+      const result = await this.workflowEngine.executeWorkflow(
+        parsed.name,
+        parsed.input,
+        parsed.version
+      );
+
+      if (result.status === 'failed') {
+        console.log(chalk.red('    ✗ Workflow failed'));
+        if (result.errorMessage) {
+          console.log(chalk.red(`    ${result.errorMessage}`));
+        }
+        return;
+      }
+
+      console.log(chalk.green('    ✓ Workflow completed'));
+      console.log(chalk.gray(`    Duration: ${result.totalDuration}ms | Cost: $${(result.totalCost || 0).toFixed(4)}`));
+
+      if (result.outputs) {
+        console.log(chalk.gray('\n    Outputs:'));
+        console.log('    ' + JSON.stringify(result.outputs, null, 2).split('\n').join('\n    '));
+      }
+      console.log();
+    } catch (error) {
+      console.log(chalk.red('\n    ✗ Workflow error'));
+      console.log(chalk.red(`    ${error instanceof Error ? error.message : String(error)}`));
+      console.log();
+    }
+  }
+
+  private async handleRecipesCommand(): Promise<void> {
+    try {
+      await this.ensureRecipesLoaded();
+      const recipes = this.recipeLoader.listRecipes();
+      console.log(chalk.cyan.bold('\n    Available Recipes'));
+      console.log(chalk.gray('    ' + '─'.repeat(65)));
+      if (recipes.length === 0) {
+        console.log(chalk.gray('    No recipes found.'));
+      } else {
+        recipes.forEach((r) => {
+          console.log(chalk.white(`    ${r.name} (v${r.version})`));
+        });
+      }
+      console.log();
+    } catch (error) {
+      console.log(chalk.red('\n    ✗ Failed to list recipes'));
+      console.log(chalk.red(`    ${error instanceof Error ? error.message : String(error)}`));
+      console.log();
+    }
   }
 
   /**
