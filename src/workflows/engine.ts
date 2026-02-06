@@ -6,7 +6,9 @@
  */
 
 import { Workflow, WorkflowStep, WorkflowContext, WorkflowResult, ValidationResult } from './types.js';
-import { agentExecutor } from '../orchestrator/agent-executor.js';
+import { AutonomousAgent } from '../agent-loop/agent.js';
+import { SessionConfig } from '../agent-loop/types.js';
+import { getAgentManager } from '../agents/agent-manager.js';
 import { logger } from '../utils/logger.js';
 import { CacheManager } from '../cache/index.js';
 
@@ -22,6 +24,8 @@ export class WorkflowEngine {
   private workflows: Map<string, Workflow> = new Map();
   private contexts: Map<string, WorkflowContext> = new Map();
   private cacheManager: CacheManager;
+  private agentManager = getAgentManager();
+  private agentsLoaded = false;
 
   constructor(enableCache: boolean = true) {
     this.cacheManager = new CacheManager({
@@ -30,6 +34,15 @@ export class WorkflowEngine {
       cachePath: './cache.json',
     });
     logger.info('[WorkflowEngine] Initialized with caching ' + (enableCache ? 'enabled' : 'disabled'));
+  }
+
+  private async ensureAgentsLoaded(): Promise<void> {
+    if (this.agentsLoaded) return;
+    const existing = this.agentManager.getAllAgents();
+    if (existing.length === 0) {
+      await this.agentManager.loadAgents();
+    }
+    this.agentsLoaded = true;
   }
 
   /**
@@ -297,31 +310,57 @@ export class WorkflowEngine {
       throw new Error(`Step "${step.name}" has no agent; action execution is not implemented.`);
     }
 
+    await this.ensureAgentsLoaded();
+
     const queryText =
       typeof interpolatedInput === 'string'
         ? interpolatedInput
         : JSON.stringify(interpolatedInput, null, 2);
 
-    const mode = step.mode || 'ecomode';
-    const complexity = queryText.length > 500 ? 'complex' : 'simple';
+    const agentConfig = this.agentManager.getAgent(step.agent);
+    const rolePrompt = agentConfig?.role_prompt?.trim();
+    const systemPrompt = agentConfig?.system_prompt?.trim();
 
-    const executionResult = await agentExecutor.execute({
-      query: queryText,
-      complexity,
-      agentName: step.agent,
-      useCache: true,
-      mode,
+    const composedInput = [
+      rolePrompt ? `Role:\n${rolePrompt}` : null,
+      systemPrompt ? `System:\n${systemPrompt}` : null,
+      `Task:\n${queryText}`,
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
+    const sessionConfig: SessionConfig = {
+      model: agentConfig?.model || 'claude-opus',
+      maxToolCalls: 40,
+      maxTerminalCommands: 5,
+      autoConfirm: {
+        files: true,
+        terminal: false,
+        skills: true,
+      },
+    };
+
+    const agent = new AutonomousAgent({
+      config: sessionConfig,
+      workspaceDirectory: process.cwd(),
+      interactive: false,
+      onConfirmation: async () => true,
+      codegen: {
+        enforceDirective: false,
+      },
     });
+
+    const output = await agent.processInput(composedInput);
 
     return {
       stepName: step.name,
       input: interpolatedInput,
-      output: executionResult.result,
-      result: executionResult.result,
-      model: executionResult.model,
-      cost: executionResult.cost,
-      cachedHit: executionResult.cachedHit,
-      duration: executionResult.duration,
+      output,
+      result: output,
+      model: sessionConfig.model || 'unknown',
+      cost: 0,
+      cachedHit: false,
+      duration: Date.now() - (context.stepStartTime.get(step.name) || Date.now()),
     };
   }
 
