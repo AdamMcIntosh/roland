@@ -6,6 +6,7 @@
  */
 
 import { Workflow, WorkflowStep, WorkflowContext, WorkflowResult, ValidationResult } from './types.js';
+import { agentExecutor } from '../orchestrator/agent-executor.js';
 import { logger } from '../utils/logger.js';
 import { CacheManager } from '../cache/index.js';
 
@@ -196,7 +197,6 @@ export class WorkflowEngine {
           context.stepStartTime.set(step.name, Date.now());
 
           try {
-            // Execute step (placeholder - would call agents/actions)
             const result = await this.executeStep(step, context);
             context.stepResults.set(step.name, result);
 
@@ -207,7 +207,11 @@ export class WorkflowEngine {
 
             // Store output
             if (step.output_to) {
-              context.variables.set(step.output_to, result);
+              const outputValue =
+                result && typeof result === 'object' && 'output' in result
+                  ? (result as { output: unknown }).output
+                  : result;
+              context.variables.set(step.output_to, outputValue);
             }
 
             loopCount++;
@@ -289,12 +293,35 @@ export class WorkflowEngine {
 
     logger.debug(`[WorkflowEngine] Step "${step.name}" - Input:`, interpolatedInput);
 
-    // For now, return mock result
+    if (!step.agent) {
+      throw new Error(`Step "${step.name}" has no agent; action execution is not implemented.`);
+    }
+
+    const queryText =
+      typeof interpolatedInput === 'string'
+        ? interpolatedInput
+        : JSON.stringify(interpolatedInput, null, 2);
+
+    const mode = step.mode || 'ecomode';
+    const complexity = queryText.length > 500 ? 'complex' : 'simple';
+
+    const executionResult = await agentExecutor.execute({
+      query: queryText,
+      complexity,
+      agentName: step.agent,
+      useCache: true,
+      mode,
+    });
+
     return {
       stepName: step.name,
       input: interpolatedInput,
-      result: `Executed ${step.agent || step.action}`,
-      cost: 0.001,
+      output: executionResult.result,
+      result: executionResult.result,
+      model: executionResult.model,
+      cost: executionResult.cost,
+      cachedHit: executionResult.cachedHit,
+      duration: executionResult.duration,
     };
   }
 

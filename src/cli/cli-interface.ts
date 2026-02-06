@@ -41,6 +41,7 @@ import {
   createPlanArtifact,
 } from '../utils/codegen.js';
 import { WorkflowEngine } from '../workflows/engine.js';
+import { RecipeLoader } from '../workflows/recipe-loader.js';
 import { AutonomousAgent } from '../agent-loop/agent.js';
 import { SessionConfig } from '../agent-loop/types.js';
 import { getAgentManager } from '../agents/agent-manager.js';
@@ -52,6 +53,8 @@ export class CliInterface {
   private program: Command;
   private spinner: Ora;
   private workflowEngine: WorkflowEngine;
+  private recipeLoader: RecipeLoader;
+  private recipesLoaded = false;
   private agentManager = getAgentManager();
   private skillLearner: SkillLearner;
 
@@ -59,9 +62,16 @@ export class CliInterface {
     this.program = new Command();
     this.spinner = ora();
     this.workflowEngine = new WorkflowEngine(true); // Enable cache
+    this.recipeLoader = new RecipeLoader(this.workflowEngine, './recipes');
     this.skillLearner = new SkillLearner('./learned-skills');
     this.setupProgram();
     this.initializeSkillLearner();
+  }
+
+  private async ensureRecipesLoaded(): Promise<void> {
+    if (this.recipesLoaded) return;
+    await this.recipeLoader.loadAllRecipes();
+    this.recipesLoaded = true;
   }
 
   /**
@@ -983,16 +993,14 @@ export class CliInterface {
       console.log(formatProcessing('WORKFLOW', `Executing ${name}...`));
       this.spinner.start('Running workflow...');
 
+      await this.ensureRecipesLoaded();
+
       // Parse inputs
       const inputs = options.input ? JSON.parse(options.input) : {};
       const version = options.version || '1.0.0';
 
       // Execute workflow
-      const result = await this.workflowEngine.executeWorkflow(
-        name,
-        version,
-        inputs
-      );
+      const result = await this.workflowEngine.executeWorkflow(name, inputs, version);
 
       this.spinner.stop();
 
@@ -1020,6 +1028,7 @@ export class CliInterface {
    */
   private async handleRecipes(): Promise<void> {
     try {
+      await this.ensureRecipesLoaded();
       // List recipe files
       const fs = await import('fs');
       const path = await import('path');
