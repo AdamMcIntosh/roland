@@ -20,102 +20,122 @@ steps:
   - name: analyze-codebase
     agent: analyst
     input: |
-      Analyze the codebase at {{codebasePath}} for documentation purposes.
+      You are analyzing a codebase for documentation purposes.
+      Codebase path: {{codebasePath}}
       Focus areas: {{focusAreas}}
       Target audience: {{targetAudience}}
 
-      REQUIREMENTS:
-      - Use the file tools to list and read real files in the repository.
-      - Start by listing the repository root, then read existing markdown docs (README, docs/, guides).
-      - Do not assume frameworks, stacks, or features not present in the files.
-      - Cite concrete file paths in your analysis.
+      STEP 1 — Use tools to read these files (do this BEFORE writing anything):
+        - Use read_file to read "package.json" (or requirements.txt, Cargo.toml, etc.)
+        - Use read_file to read "tsconfig.json" (or equivalent config)
+        - Use list_files to list the root directory
+        - Use list_files on the "src" directory (if it exists)
+        - Use read_file on the main README
 
-      Include:
-      1. Directory structure and main modules (from actual files)
-      2. Key files and entry points (by file path)
-      3. Architecture overview and data flows (from code/docs)
-      4. Dependencies and their roles (from package.json/lock files)
-      5. Existing documentation and gaps (from markdowns)
-      6. Code patterns and conventions (from code)
-      7. Technology stack and versions (from config files)
-      8. Key features and configuration (from config/README)
+      STEP 2 — Based ONLY on what the tools returned, write a structured analysis:
+        1. Project identity: name, language, runtime, package manager (from config files)
+        2. Dependencies: list actual deps from package.json/requirements.txt
+        3. Directory structure: from list_files results
+        4. Key modules and entry points: from src/ listing
+        5. Existing documentation: which .md files exist at root and docs/
+        6. Features: only those described in existing docs or inferable from code structure
+        7. Gaps: documentation that is missing or incomplete
 
-      Output structured analysis in Markdown with file references.
+      CRITICAL: Every claim must cite a file path. If you did not read a file, do not describe it.
     output_to: analyze_codebase
 
   - name: plan-documentation
     agent: architect
     input: |
-      Based on the analysis below, create a documentation plan with priorities and sections.
+      Create a documentation plan based on this codebase analysis.
 
-      Analysis:
+      Codebase Analysis (from actual file reads):
       {{analyze_codebase}}
 
       Focus areas: {{focusAreas}}
       Audience: {{targetAudience}}
 
-      REQUIREMENTS:
-      - Base all recommendations on actual files discovered.
-      - If a doc already exists, propose edits instead of inventing new content.
-      - Do not add technologies or features not present in the codebase.
+      RULES:
+      - Only plan docs for features/modules that appear in the analysis above.
+      - If a doc already exists, plan updates — not replacement.
+      - Use the exact technology names from the analysis (language, framework, package manager).
+      - Do not introduce technologies or features not mentioned in the analysis.
 
-      Include plans for README, API docs, architecture, setup, contributing, and inline comments.
+      Plan sections for: README, API docs, architecture overview, setup guide, contributing guide.
+      For each section specify: purpose, key content points, source files to reference.
     output_to: plan_documentation
 
   - name: generate-docs
     agent: writer
     input: |
-      Generate documentation following the plan below. Use clear Markdown, examples, and cross-links.
+      Generate documentation following this plan. Write in clear Markdown with examples.
 
-      Plan:
+      Documentation Plan:
       {{plan_documentation}}
+
+      Original Codebase Analysis:
+      {{analyze_codebase}}
 
       Audience: {{targetAudience}}
 
-      REQUIREMENTS:
-      - Use facts only from the repository and existing markdowns.
-      - If a doc exists, refine it; do not fabricate features.
-      - When referencing files, use actual paths.
-      - If a section is unknown, explicitly mark it as "Unknown" and explain what is missing.
+      RULES:
+      - You may use read_file to read additional source files for accuracy.
+      - All code examples must use the correct language from the analysis.
+      - All CLI commands must use the correct package manager from the analysis.
+      - All dependency names must match what is in the actual config files.
+      - If you are unsure about something, write "[NEEDS VERIFICATION]" instead of guessing.
+      - Do NOT write file tools or create files — only output documentation text.
 
-      Produce:
-      1. README.md
-      2. API_DOCUMENTATION.md
-      3. ARCHITECTURE.md
-      4. SETUP_GUIDE.md
-      5. CONTRIBUTING.md
-      6. CODE_COMMENTS guidance
+      Produce these documents as fenced markdown blocks:
+      1. README.md — project overview, features, quick start, architecture summary
+      2. API_DOCUMENTATION.md — key APIs, interfaces, usage patterns
+      3. SETUP_GUIDE.md — installation, configuration, first run
+      4. CONTRIBUTING.md — development setup, code style, PR process
     output_to: generate_docs
 
   - name: review-quality
     agent: critic
     input: |
-      Review the generated docs for completeness, clarity, accuracy, and consistency.
+      Review these generated docs for factual accuracy against the codebase analysis.
 
-      Docs:
+      Generated Documentation:
       {{generate_docs}}
+
+      Original Codebase Analysis (source of truth):
+      {{analyze_codebase}}
 
       Audience: {{targetAudience}}
 
-      REQUIREMENTS:
-      - Flag any claims not backed by repository files.
-      - Ensure all technologies mentioned exist in package.json or code.
+      CHECK EACH ITEM:
+      1. Does every technology name match what's in the analysis? (language, framework, deps)
+      2. Are CLI commands correct for the actual package manager?
+      3. Do file paths reference real files from the analysis?
+      4. Are described features actually present in the codebase?
+      5. Are code examples in the correct programming language?
 
-      Output a quality assessment and a list of issues by severity.
+      Output:
+      - PASS/FAIL for each document
+      - List of specific factual errors with corrections
+      - Overall quality score (1-10)
     output_to: review_quality
 
   - name: finalize-docs
     agent: executor
     input: |
-      Finalize the documentation based on the review feedback.
+      Finalize documentation by applying review corrections.
 
-      Review feedback:
+      Review Feedback:
       {{review_quality}}
 
-      Docs to finalize:
+      Documentation to Fix:
       {{generate_docs}}
 
-      Add polishing (TOC, links) and validate examples.
+      Original Analysis (ground truth):
+      {{analyze_codebase}}
+
+      Apply all corrections from the review. Fix any factual errors.
+      Add table of contents, cross-links between documents, and consistent formatting.
+      Output the final corrected documents as fenced markdown blocks.
     output_to: documentation_package
 
 outputs:
@@ -125,12 +145,9 @@ outputs:
   quality_report: review_quality
 
 success_criteria:
-  - "All major codebase components are documented"
-  - "README provides clear project overview and quick start"
-  - "API documentation is complete and accurate"
-  - "Architecture is clearly explained with diagrams/descriptions"
-  - "Setup guide enables new users to get started quickly"
-  - "No grammar or spelling errors"
-  - "Documentation is well-organized and easy to navigate"
-  - "Code examples are correct and helpful"
+  - "All technologies match actual project config files"
+  - "README provides accurate project overview and quick start"
+  - "No hallucinated features or incorrect language references"
+  - "Setup guide uses correct package manager and commands"
   - "Documentation reflects current codebase state"
+  - "Code examples are in the correct programming language"

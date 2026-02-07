@@ -308,7 +308,7 @@ export class WorkflowEngine {
   }
 
   /**
-   * Execute a single step (placeholder - to be extended with agent execution)
+   * Execute a single workflow step using an autonomous agent
    */
   private async executeStep(step: WorkflowStep, context: WorkflowContext): Promise<any> {
     // Interpolate input with variables
@@ -333,13 +333,24 @@ export class WorkflowEngine {
     const rolePrompt = agentConfig?.role_prompt?.trim();
     const systemPrompt = agentConfig?.system_prompt?.trim();
 
+    // Build grounding preamble
+    const preamble = [
+      'GROUNDING INSTRUCTIONS:',
+      'You have access to file tools (read_file, list_files, get_file_info).',
+      'You MUST use these tools to verify facts before making claims.',
+      'The repository context below was read directly from disk — treat it as ground truth.',
+      'DO NOT invent, assume, or hallucinate any technologies, features, classes, or modules.',
+      'If something is not in the provided context or readable via tools, state it is unknown.',
+    ].join('\n');
+
     const composedInput = [
+      preamble,
       typeof repoContext === 'string' && repoContext.trim().length > 0
-        ? `Repository Context (use only these facts; do not assume anything else):\n${repoContext}`
+        ? `\nREPOSITORY CONTEXT (read from actual files on disk):\n${repoContext}`
         : null,
-      rolePrompt ? `Role:\n${rolePrompt}` : null,
-      systemPrompt ? `System:\n${systemPrompt}` : null,
-      `Task:\n${queryText}`,
+      rolePrompt ? `\nRole:\n${rolePrompt}` : null,
+      systemPrompt ? `\nSystem:\n${systemPrompt}` : null,
+      `\nTask:\n${queryText}`,
     ]
       .filter(Boolean)
       .join('\n\n');
@@ -347,7 +358,7 @@ export class WorkflowEngine {
     const sessionConfig: SessionConfig = {
       model: agentConfig?.model || 'claude-opus',
       maxToolCalls: 40,
-      maxTerminalCommands: 5,
+      maxTerminalCommands: 0,
       autoConfirm: {
         files: false,
         terminal: false,
@@ -389,42 +400,65 @@ export class WorkflowEngine {
     const maxCharsPerFile = 3000;
     const maxTotalChars = 60000;
 
-    const rootEntries = await fs.readdir(baseDir);
+    let totalChars = 0;
+    const sections: string[] = [];
 
-    const importantFiles = [
+    // 1. Root directory listing
+    const rootEntries = await fs.readdir(baseDir);
+    sections.push('ROOT DIRECTORY LISTING:\n' + rootEntries.join(', '));
+    sections.push('');
+
+    // 2. Scan src/ tree (if it exists) to show actual modules
+    const srcTree = await this.buildDirectoryTree(path.join(baseDir, 'src'), 4);
+    if (srcTree) {
+      sections.push('SOURCE CODE STRUCTURE (src/):\n' + srcTree);
+      sections.push('');
+    }
+
+    // 3. Read config files FIRST — these establish project identity
+    const configFiles = [
       'package.json',
       'tsconfig.json',
       'config.yaml',
-      'ReadMe.MD',
-      'README.md',
-      'CHANGELOG.md',
-      'EXAMPLE_USAGE.md',
-      'EXAMPLE_WORKFLOWS.md',
-      'RECIPES_CATALOG.md',
-      'TROUBLESHOOTING.md',
-      'INSTALLATION.md',
-      'RELEASE_NOTES.md',
-      'REALITY_CHECK.md',
+      'requirements.txt',
+      'Cargo.toml',
+      'go.mod',
+      'pom.xml',
+      'build.gradle',
+      'setup.py',
+      'composer.json',
+    ];
+
+    for (const file of configFiles) {
+      const fullPath = path.join(baseDir, file);
+      const content = await this.safeReadText(fullPath, maxCharsPerFile);
+      if (!content) continue;
+      const block = `\nFILE: ${file} [PROJECT CONFIG]\n---\n${content}\n---`;
+      sections.push(block);
+      totalChars += block.length;
+    }
+
+    // 4. Read documentation files
+    const docFiles = [
+      'ReadMe.MD', 'README.md', 'REALITY_CHECK.md', 'CHANGELOG.md',
+      'EXAMPLE_USAGE.md', 'EXAMPLE_WORKFLOWS.md', 'RECIPES_CATALOG.md',
+      'TROUBLESHOOTING.md', 'INSTALLATION.md', 'RELEASE_NOTES.md',
     ];
 
     const markdownFiles: string[] = [];
-    for (const file of importantFiles) {
+    for (const file of docFiles) {
       const fullPath = path.join(baseDir, file);
       try {
         await fs.access(fullPath);
         markdownFiles.push(file);
       } catch {
-        // ignore missing
+        // skip missing
       }
     }
 
     const docsDir = path.join(baseDir, 'docs');
     const docsMarkdowns = await this.collectMarkdownFiles(docsDir, 50);
     const allMarkdowns = markdownFiles.concat(docsMarkdowns.map((p) => path.relative(baseDir, p)));
-
-    let totalChars = 0;
-    const sections: string[] = [];
-    sections.push('ROOT ENTRIES: ' + rootEntries.join(', '));
 
     for (const relPath of allMarkdowns) {
       const fullPath = path.join(baseDir, relPath);
@@ -442,6 +476,42 @@ export class WorkflowEngine {
     const output = sections.join('\n');
     context.variables.set('repo_context', output);
     return output;
+  }
+
+  /**
+   * Build a directory tree string showing file/folder structure
+   */
+  private async buildDirectoryTree(dirPath: string, maxDepth: number, prefix: string = '', depth: number = 0): Promise<string | null> {
+    if (depth >= maxDepth) return null;
+    let entries: string[];
+    try {
+      entries = await fs.readdir(dirPath);
+    } catch {
+      return null;
+    }
+
+    const lines: string[] = [];
+    const sorted = entries.sort();
+    for (let i = 0; i < sorted.length; i++) {
+      const entry = sorted[i];
+      if (entry === 'node_modules' || entry === '.git' || entry === 'dist') continue;
+      const fullPath = path.join(dirPath, entry);
+      const isLast = i === sorted.length - 1;
+      const connector = isLast ? '└── ' : '├── ';
+      const childPrefix = isLast ? '    ' : '│   ';
+
+      let stat;
+      try { stat = await fs.stat(fullPath); } catch { continue; }
+
+      if (stat.isDirectory()) {
+        lines.push(prefix + connector + entry + '/');
+        const subtree = await this.buildDirectoryTree(fullPath, maxDepth, prefix + childPrefix, depth + 1);
+        if (subtree) lines.push(subtree);
+      } else {
+        lines.push(prefix + connector + entry);
+      }
+    }
+    return lines.length > 0 ? lines.join('\n') : null;
   }
 
   private async safeReadText(filePath: string, maxChars: number): Promise<string | null> {

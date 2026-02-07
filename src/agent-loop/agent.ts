@@ -403,66 +403,19 @@ export class AutonomousAgent {
       this.session.addUserMessage(preparedInput);
       this.session.getAuditLogger().logToolCall('user_input', { text: preparedInput });
 
-      // Get conversation history
-      const history = this.session.getConversationHistory(20); // Last 20 messages
-
-      // Call LLM with tools
-      const response = await LLMClientWithTools.callWithTools({
-        messages: history.map((msg) => ({
-          role: msg.role as 'user' | 'assistant' | 'tool_result',
-          content: msg.content,
-        })),
-        tools: this.registry.getTools(),
-        model: this.session.getConfig().model || 'claude-opus',
-      });
-
-      // Process response
+      const maxToolRounds = this.session.getConfig().maxToolCalls || 40;
+      let totalToolCalls = 0;
       let finalResponse = '';
-      const toolCalls: ToolCall[] = [];
-      const toolResults: Array<{ toolName: string; result: string }> = [];
+      const allToolResults: Array<{ toolName: string; result: string }> = [];
 
-      // Parse content blocks to find tool uses
-      for (const block of response.content) {
-        if (block.type === 'tool_use' && block.name && block.id && block.input) {
-          toolCalls.push({
-            tool_name: block.name,
-            tool_use_id: block.id,
-            tool_input: block.input,
-          });
-        } else if (block.type === 'text' && block.text) {
-          finalResponse += block.text;
-        }
-      }
+      // Agentic loop: keep calling LLM until it stops requesting tools
+      while (totalToolCalls < maxToolRounds) {
+        // Get conversation history
+        const history = this.session.getConversationHistory(20); // Last 20 messages
 
-      // Process tool calls
-      if (toolCalls.length > 0) {
-        for (const toolCall of toolCalls) {
-          // Check tool call limit
-          if (!this.session.canExecuteTool()) {
-            throw new Error(`Tool call limit reached (max: ${this.session.getContext().maxToolCalls})`);
-          }
-
-          this.session.incrementToolCallCount();
-
-          // Execute tool
-          const toolResult = await this.registry.executeTool(toolCall);
-
-          // Track tool result for caching
-          toolResults.push({
-            toolName: toolCall.tool_name,
-            result: toolResult.content,
-          });
-
-          // Add result to conversation
-          this.session.addToolResult(toolCall.tool_name, toolCall.tool_use_id, toolResult.content);
-
-          logger.debug('Tool executed', { tool: toolCall.tool_name, success: !toolResult.is_error });
-        }
-
-        // Call LLM again to get final response after tool execution
-        const updatedHistory = this.session.getConversationHistory(20);
-        const finalResponse_data = await LLMClientWithTools.callWithTools({
-          messages: updatedHistory.map((msg) => ({
+        // Call LLM with tools
+        const response = await LLMClientWithTools.callWithTools({
+          messages: history.map((msg) => ({
             role: msg.role as 'user' | 'assistant' | 'tool_result',
             content: msg.content,
           })),
@@ -470,13 +423,58 @@ export class AutonomousAgent {
           model: this.session.getConfig().model || 'claude-opus',
         });
 
-        // Parse final response
-        finalResponse = '';
-        for (const block of finalResponse_data.content) {
-          if (block.type === 'text' && block.text) {
-            finalResponse += block.text;
+        // Parse content blocks
+        const toolCalls: ToolCall[] = [];
+        let textResponse = '';
+
+        for (const block of response.content) {
+          if (block.type === 'tool_use' && block.name && block.id && block.input) {
+            toolCalls.push({
+              tool_name: block.name,
+              tool_use_id: block.id,
+              tool_input: block.input,
+            });
+          } else if (block.type === 'text' && block.text) {
+            textResponse += block.text;
           }
         }
+
+        // If there are tool calls that accompany text, we need to add
+        // the assistant message with both text and tool_use blocks
+        if (toolCalls.length > 0) {
+          // Add assistant message with tool calls to history
+          this.session.addAssistantMessage(textResponse || '');
+
+          for (const toolCall of toolCalls) {
+            if (!this.session.canExecuteTool()) {
+              logger.warn('Tool call limit reached, stopping tool loop');
+              break;
+            }
+
+            totalToolCalls++;
+            this.session.incrementToolCallCount();
+
+            // Execute tool
+            const toolResult = await this.registry.executeTool(toolCall);
+
+            allToolResults.push({
+              toolName: toolCall.tool_name,
+              result: toolResult.content,
+            });
+
+            // Add result to conversation
+            this.session.addToolResult(toolCall.tool_name, toolCall.tool_use_id, toolResult.content);
+
+            logger.debug('Tool executed', { tool: toolCall.tool_name, round: totalToolCalls, success: !toolResult.is_error });
+          }
+
+          // Continue loop — LLM may want more tools
+          continue;
+        }
+
+        // No tool calls — LLM produced its final text response
+        finalResponse = textResponse;
+        break;
       }
 
       if (!finalResponse) {
@@ -491,7 +489,7 @@ export class AutonomousAgent {
         preparedInput,
         conversationLength,
         finalResponse,
-        toolResults,
+        allToolResults,
         0 // TODO: Track actual cost
       );
 
