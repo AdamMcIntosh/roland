@@ -723,6 +723,47 @@ export class LLMClientWithTools {
   ): Promise<LLMToolResponse> {
     const formattedTools = this.formatToolsForProvider('anthropic', tools);
 
+    // Format messages for Anthropic API
+    // Anthropic requires:
+    //   - tool_result messages to have role='user' with content=[{type:'tool_result', tool_use_id, content}]
+    //   - assistant messages with tool calls to include tool_use content blocks
+    const formattedMessages = messages.map(msg => {
+      if (msg.role === 'tool_result') {
+        return {
+          role: 'user' as const,
+          content: [{
+            type: 'tool_result' as const,
+            tool_use_id: msg.toolUseId || 'unknown',
+            content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+          }],
+        };
+      }
+      if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+        return {
+          role: 'assistant' as const,
+          content: msg.content,
+        };
+      }
+      return {
+        role: msg.role as 'user' | 'assistant',
+        content: typeof msg.content === 'string' ? msg.content : msg.content,
+      };
+    });
+
+    // Merge consecutive user messages (Anthropic doesn't allow them)
+    const mergedMessages: Array<{ role: string; content: any }> = [];
+    for (const msg of formattedMessages) {
+      const prev = mergedMessages[mergedMessages.length - 1];
+      if (prev && prev.role === 'user' && msg.role === 'user') {
+        // Merge content arrays/strings
+        const prevContent = Array.isArray(prev.content) ? prev.content : [{ type: 'text', text: prev.content as string }];
+        const msgContent = Array.isArray(msg.content) ? msg.content : [{ type: 'text', text: msg.content as string }];
+        prev.content = [...prevContent, ...msgContent];
+      } else {
+        mergedMessages.push({ role: msg.role, content: msg.content });
+      }
+    }
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -735,15 +776,13 @@ export class LLMClientWithTools {
         max_tokens: maxTokens,
         temperature,
         tools: formattedTools,
-        messages: messages.map(msg => ({
-          role: msg.role,
-          content: typeof msg.content === 'string' ? msg.content : msg.content,
-        })),
+        messages: mergedMessages,
       }),
     });
 
     if (!response.ok) {
-      throw new Error(`Anthropic API error: ${response.statusText}`);
+      const errBody = await response.text().catch(() => '');
+      throw new Error(`Anthropic API error: ${response.status} ${response.statusText} - ${errBody}`);
     }
 
     const data = (await response.json()) as any;

@@ -381,24 +381,6 @@ export class AutonomousAgent {
     try {
       const preparedInput = this.appendCodeGenerationDirective(userInput);
 
-      // Check budget
-      // TODO: Budget checking - implement when BudgetManager is fully available
-      // if (!this.budget.isWithinBudget()) {
-      //   throw new Error('Budget limit exceeded. Cannot process more requests.');
-      // }
-
-      // Check conversation cache first
-      const conversationLength = this.session.getConversationHistory().length;
-      const cachedTurn = await this.conversationCache.getCachedResponse(preparedInput, conversationLength);
-
-      if (cachedTurn) {
-        logger.info('Using cached conversation response', { userInput: userInput.substring(0, 50) });
-        this.session.addUserMessage(preparedInput);
-        this.session.addAssistantMessage(cachedTurn.assistantResponse);
-
-        return cachedTurn.assistantResponse;
-      }
-
       // Add to conversation
       this.session.addUserMessage(preparedInput);
       this.session.getAuditLogger().logToolCall('user_input', { text: preparedInput });
@@ -406,18 +388,19 @@ export class AutonomousAgent {
       const maxToolRounds = this.session.getConfig().maxToolCalls || 40;
       let totalToolCalls = 0;
       let finalResponse = '';
-      const allToolResults: Array<{ toolName: string; result: string }> = [];
 
       // Agentic loop: keep calling LLM until it stops requesting tools
       while (totalToolCalls < maxToolRounds) {
         // Get conversation history
-        const history = this.session.getConversationHistory(20); // Last 20 messages
+        const history = this.session.getConversationHistory(20);
 
         // Call LLM with tools
         const response = await LLMClientWithTools.callWithTools({
           messages: history.map((msg) => ({
             role: msg.role as 'user' | 'assistant' | 'tool_result',
             content: msg.content,
+            toolName: msg.toolName,
+            toolUseId: msg.toolUseId,
           })),
           tools: this.registry.getTools(),
           model: this.session.getConfig().model || 'claude-opus',
@@ -439,11 +422,10 @@ export class AutonomousAgent {
           }
         }
 
-        // If there are tool calls that accompany text, we need to add
-        // the assistant message with both text and tool_use blocks
         if (toolCalls.length > 0) {
-          // Add assistant message with tool calls to history
-          this.session.addAssistantMessage(textResponse || '');
+          // Add the FULL assistant response including tool_use blocks
+          // The Anthropic API requires this for proper conversation flow
+          this.session.addAssistantMessage(response.content);
 
           for (const toolCall of toolCalls) {
             if (!this.session.canExecuteTool()) {
@@ -456,11 +438,6 @@ export class AutonomousAgent {
 
             // Execute tool
             const toolResult = await this.registry.executeTool(toolCall);
-
-            allToolResults.push({
-              toolName: toolCall.tool_name,
-              result: toolResult.content,
-            });
 
             // Add result to conversation
             this.session.addToolResult(toolCall.tool_name, toolCall.tool_use_id, toolResult.content);
@@ -481,17 +458,8 @@ export class AutonomousAgent {
         finalResponse = 'Completed.';
       }
 
-      // Add to conversation
+      // Add final response to conversation
       this.session.addAssistantMessage(finalResponse);
-
-      // Cache this conversation turn
-      await this.conversationCache.cacheResponse(
-        preparedInput,
-        conversationLength,
-        finalResponse,
-        allToolResults,
-        0 // TODO: Track actual cost
-      );
 
       return finalResponse;
     } catch (error) {

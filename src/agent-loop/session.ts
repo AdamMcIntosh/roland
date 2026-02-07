@@ -1,4 +1,4 @@
-import { Message, SessionConfig, ConversationContext } from './types.js';
+import { Message, SessionConfig, ConversationContext, ContentBlock } from './types.js';
 import { AuditLogger } from './audit-logger.js';
 import { logger } from '../utils/logger.js';
 
@@ -71,7 +71,7 @@ export class SessionManager {
   /**
    * Add assistant message to conversation
    */
-  addAssistantMessage(content: string): Message {
+  addAssistantMessage(content: string | ContentBlock[]): Message {
     const message: Message = {
       role: 'assistant',
       content,
