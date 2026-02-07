@@ -625,6 +625,7 @@ export interface ToolCallingOptions {
   tools: ToolDefinition[];
   temperature?: number;
   maxTokens?: number;
+  systemPrompt?: string;
 }
 
 /**
@@ -641,6 +642,7 @@ export class LLMClientWithTools {
       tools,
       temperature = 0.7,
       maxTokens = 4096,
+      systemPrompt,
     } = options;
 
     const provider = LLMClient.getProvider(model);
@@ -671,7 +673,8 @@ export class LLMClientWithTools {
         messages,
         tools,
         temperature,
-        maxTokens
+        maxTokens,
+        systemPrompt
       );
 
       // Record spending
@@ -719,7 +722,8 @@ export class LLMClientWithTools {
     messages: Message[],
     tools: ToolDefinition[],
     temperature: number,
-    maxTokens: number
+    maxTokens: number,
+    systemPrompt?: string
   ): Promise<LLMToolResponse> {
     const formattedTools = this.formatToolsForProvider('anthropic', tools);
 
@@ -764,6 +768,20 @@ export class LLMClientWithTools {
       }
     }
 
+    const requestBody: Record<string, unknown> = {
+      model,
+      max_tokens: maxTokens,
+      temperature,
+      tools: formattedTools,
+      messages: mergedMessages,
+    };
+
+    if (systemPrompt) {
+      requestBody.system = systemPrompt;
+    }
+
+    logger.debug(`[LLM] Anthropic request: model=${model}, messages=${mergedMessages.length}, system=${systemPrompt ? 'yes (' + systemPrompt.length + ' chars)' : 'no'}`);
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -771,13 +789,7 @@ export class LLMClientWithTools {
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify({
-        model,
-        max_tokens: maxTokens,
-        temperature,
-        tools: formattedTools,
-        messages: mergedMessages,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
@@ -786,6 +798,8 @@ export class LLMClientWithTools {
     }
 
     const data = (await response.json()) as any;
+
+    logger.debug(`[LLM] Anthropic response: stop_reason=${data.stop_reason}, content_blocks=${data.content?.length}, usage=${JSON.stringify(data.usage)}`);
 
     return {
       stop_reason: data.stop_reason as 'tool_use' | 'end_turn' | 'max_tokens',
@@ -807,9 +821,19 @@ export class LLMClientWithTools {
     messages: Message[],
     tools: ToolDefinition[],
     temperature: number,
-    maxTokens: number
+    maxTokens: number,
+    systemPrompt?: string
   ): Promise<LLMToolResponse> {
     const formattedTools = this.formatToolsForProvider('openai', tools);
+
+    const openaiMessages: Array<Record<string, unknown>> = [];
+    if (systemPrompt) {
+      openaiMessages.push({ role: 'system', content: systemPrompt });
+    }
+    openaiMessages.push(...messages.map(msg => ({
+      role: msg.role,
+      content: typeof msg.content === 'string' ? msg.content : msg.content,
+    })));
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -819,10 +843,7 @@ export class LLMClientWithTools {
       },
       body: JSON.stringify({
         model,
-        messages: messages.map(msg => ({
-          role: msg.role,
-          content: typeof msg.content === 'string' ? msg.content : msg.content,
-        })),
+        messages: openaiMessages,
         tools: formattedTools,
         temperature,
         max_tokens: maxTokens,
@@ -857,12 +878,13 @@ export class LLMClientWithTools {
     messages: Message[],
     tools: ToolDefinition[],
     temperature: number,
-    maxTokens: number
+    maxTokens: number,
+    systemPrompt?: string
   ): Promise<LLMToolResponse> {
     if (provider === 'anthropic') {
-      return this.callAnthropicWithTools(model, apiKey, messages, tools, temperature, maxTokens);
+      return this.callAnthropicWithTools(model, apiKey, messages, tools, temperature, maxTokens, systemPrompt);
     } else if (provider === 'openai') {
-      return this.callOpenAIWithTools(model, apiKey, messages, tools, temperature, maxTokens);
+      return this.callOpenAIWithTools(model, apiKey, messages, tools, temperature, maxTokens, systemPrompt);
     } else {
       throw new Error(`Tool calling not yet supported for provider: ${provider}`);
     }

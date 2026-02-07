@@ -377,7 +377,7 @@ export class AutonomousAgent {
   /**
    * Process user input through the agent loop
    */
-  async processInput(userInput: string): Promise<string> {
+  async processInput(userInput: string, systemPrompt?: string): Promise<string> {
     try {
       const preparedInput = this.appendCodeGenerationDirective(userInput);
 
@@ -389,10 +389,14 @@ export class AutonomousAgent {
       let totalToolCalls = 0;
       let finalResponse = '';
 
+      logger.debug(`[Agent] processInput: model=${this.session.getConfig().model}, input=${preparedInput.length} chars, systemPrompt=${systemPrompt ? systemPrompt.length + ' chars' : 'none'}`);
+
       // Agentic loop: keep calling LLM until it stops requesting tools
       while (totalToolCalls < maxToolRounds) {
         // Get conversation history
-        const history = this.session.getConversationHistory(20);
+        const history = this.session.getConversationHistory();
+
+        logger.debug(`[Agent] LLM call: round=${totalToolCalls + 1}, history=${history.length} messages, tools=${this.registry.getTools().length}`);
 
         // Call LLM with tools
         const response = await LLMClientWithTools.callWithTools({
@@ -404,7 +408,11 @@ export class AutonomousAgent {
           })),
           tools: this.registry.getTools(),
           model: this.session.getConfig().model || 'claude-opus',
+          systemPrompt,
+          maxTokens: 8192,
         });
+
+        logger.debug(`[Agent] LLM response: stop_reason=${response.stop_reason}, content_blocks=${response.content.length}`);
 
         // Parse content blocks
         const toolCalls: ToolCall[] = [];
@@ -436,13 +444,15 @@ export class AutonomousAgent {
             totalToolCalls++;
             this.session.incrementToolCallCount();
 
+            logger.debug(`[Agent] Executing tool: ${toolCall.tool_name} (round ${totalToolCalls})`);
+
             // Execute tool
             const toolResult = await this.registry.executeTool(toolCall);
 
             // Add result to conversation
             this.session.addToolResult(toolCall.tool_name, toolCall.tool_use_id, toolResult.content);
 
-            logger.debug('Tool executed', { tool: toolCall.tool_name, round: totalToolCalls, success: !toolResult.is_error });
+            logger.debug(`[Agent] Tool result: ${toolCall.tool_name} success=${!toolResult.is_error}, length=${toolResult.content.length}`);
           }
 
           // Continue loop — LLM may want more tools
@@ -450,7 +460,11 @@ export class AutonomousAgent {
         }
 
         // No tool calls — LLM produced its final text response
+        if (response.stop_reason === 'max_tokens') {
+          logger.warn(`[Agent] Response truncated at max_tokens. Output may be incomplete.`);
+        }
         finalResponse = textResponse;
+        logger.debug(`[Agent] Final response: ${finalResponse.length} chars, first 200: ${finalResponse.slice(0, 200)}`);
         break;
       }
 

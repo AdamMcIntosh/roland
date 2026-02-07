@@ -331,29 +331,42 @@ export class WorkflowEngine {
 
     const agentConfig = this.agentManager.getAgent(step.agent);
     const rolePrompt = agentConfig?.role_prompt?.trim();
-    const systemPrompt = agentConfig?.system_prompt?.trim();
+    const systemPromptText = agentConfig?.system_prompt?.trim();
 
-    // Build grounding preamble
-    const preamble = [
+    // Build system prompt (always sent via the system parameter, never truncated)
+    const systemParts = [
       'GROUNDING INSTRUCTIONS:',
       'You have access to file tools (read_file, list_files, get_file_info).',
       'You MUST use these tools to verify facts before making claims.',
       'The repository context below was read directly from disk — treat it as ground truth.',
       'DO NOT invent, assume, or hallucinate any technologies, features, classes, or modules.',
       'If something is not in the provided context or readable via tools, state it is unknown.',
-    ].join('\n');
+    ];
 
-    const composedInput = [
-      preamble,
-      typeof repoContext === 'string' && repoContext.trim().length > 0
-        ? `\nREPOSITORY CONTEXT (read from actual files on disk):\n${repoContext}`
-        : null,
-      rolePrompt ? `\nRole:\n${rolePrompt}` : null,
-      systemPrompt ? `\nSystem:\n${systemPrompt}` : null,
-      `\nTask:\n${queryText}`,
-    ]
-      .filter(Boolean)
-      .join('\n\n');
+    if (typeof repoContext === 'string' && repoContext.trim().length > 0) {
+      systemParts.push('');
+      systemParts.push('REPOSITORY CONTEXT (read from actual files on disk):');
+      systemParts.push(repoContext);
+    }
+
+    if (rolePrompt) {
+      systemParts.push('');
+      systemParts.push(`Role: ${rolePrompt}`);
+    }
+
+    if (systemPromptText) {
+      systemParts.push('');
+      systemParts.push(systemPromptText);
+    }
+
+    const systemPrompt = systemParts.join('\n');
+
+    // User message is ONLY the task
+    const userMessage = queryText;
+
+    logger.info(`[WorkflowEngine] Step "${step.name}" — agent=${step.agent}, model=${agentConfig?.model || 'default'}`);
+    logger.debug(`[WorkflowEngine] System prompt: ${systemPrompt.length} chars`);
+    logger.debug(`[WorkflowEngine] User message: ${userMessage.length} chars, first 300: ${userMessage.slice(0, 300)}`);
 
     const sessionConfig: SessionConfig = {
       model: agentConfig?.model || 'claude-opus',
@@ -376,7 +389,10 @@ export class WorkflowEngine {
       },
     });
 
-    const output = await agent.processInput(composedInput);
+    const output = await agent.processInput(userMessage, systemPrompt);
+
+    logger.info(`[WorkflowEngine] Step "${step.name}" completed — output: ${output.length} chars`);
+    logger.debug(`[WorkflowEngine] Step "${step.name}" output first 300: ${output.slice(0, 300)}`);
 
     return {
       stepName: step.name,
@@ -474,6 +490,10 @@ export class WorkflowEngine {
     }
 
     const output = sections.join('\n');
+    const hasPackageJson = output.includes('"name":');
+    const hasTsConfig = output.includes('tsconfig');
+    logger.info(`[WorkflowEngine] buildRepoContext: ${output.length} chars, files read: ${sections.filter(s => s.includes('FILE:')).length}, hasPackageJson=${hasPackageJson}, hasTsConfig=${hasTsConfig}`);
+    logger.debug(`[WorkflowEngine] Repo context first 500 chars: ${output.slice(0, 500)}`);
     context.variables.set('repo_context', output);
     return output;
   }

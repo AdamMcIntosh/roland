@@ -11,6 +11,11 @@ metadata:
 
 agents: [analyst, architect, writer, critic, executor]
 
+variables:
+  codebasePath: "."
+  focusAreas: "all modules and features"
+  targetAudience: "developers"
+
 input_variables:
   - codebasePath
   - focusAreas
