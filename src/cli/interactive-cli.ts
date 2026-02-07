@@ -125,6 +125,13 @@ export class InteractiveCLI {
         return;
       }
 
+      // Also handle "workflow ..." without slash prefix
+      if (input.startsWith('workflow ') || input === 'workflow') {
+        await this.handleWorkflowCommand(input);
+        this.showPrompt();
+        return;
+      }
+
       // Execute as samwise query
       await this.executeQuery(input);
       this.showPrompt();
@@ -465,10 +472,16 @@ export class InteractiveCLI {
     const inputIndex = parts.findIndex((p) => p === '--input' || p === '-i');
     if (inputIndex !== -1) {
       const inputToken = parts[inputIndex];
-      const raw = command.slice(command.indexOf(inputToken) + inputToken.length).trim();
+      let raw = command.slice(command.indexOf(inputToken) + inputToken.length).trim();
+      // Remove trailing flags that aren't part of the JSON
+      raw = raw.replace(/\s+--no-cache\b/g, '');
       const cleaned = raw.replace(/^["']/u, '').replace(/["']$/u, '').trim();
       if (cleaned) {
-        input = JSON.parse(cleaned) as Record<string, unknown>;
+        try {
+          input = JSON.parse(cleaned) as Record<string, unknown>;
+        } catch (e) {
+          console.log(chalk.red(`\n    Invalid JSON for --input: ${cleaned}`));
+        }
       }
     }
 

@@ -108,13 +108,14 @@ export class WorkflowEngine {
 
     // Check variable references
     const allSteps = workflow.steps.map((s) => s.name);
+    const allOutputVars = new Set(workflow.steps.map((s) => s.output_to).filter(Boolean));
     workflow.steps.forEach((step) => {
       if (step.input && typeof step.input === 'string') {
         const matches = step.input.match(/\{\{(\w+)\}\}/g);
         if (matches) {
           matches.forEach((match) => {
             const varName = match.slice(2, -2);
-            if (!workflow.variables?.[varName] && !allSteps.includes(varName) && !workflow.input_variables?.includes(varName)) {
+            if (!workflow.variables?.[varName] && !allSteps.includes(varName) && !workflow.input_variables?.includes(varName) && !allOutputVars.has(varName)) {
               warnings.push(
                 `Step "${step.name}" references unknown variable or step: ${varName}`
               );
@@ -413,8 +414,8 @@ export class WorkflowEngine {
     }
 
     const baseDir = process.cwd();
-    const maxCharsPerFile = 3000;
-    const maxTotalChars = 60000;
+    const maxCharsPerFile = 1500;
+    const maxTotalChars = 12000;
 
     let totalChars = 0;
     const sections: string[] = [];
@@ -425,7 +426,7 @@ export class WorkflowEngine {
     sections.push('');
 
     // 2. Scan src/ tree (if it exists) to show actual modules
-    const srcTree = await this.buildDirectoryTree(path.join(baseDir, 'src'), 4);
+    const srcTree = await this.buildDirectoryTree(path.join(baseDir, 'src'), 2);
     if (srcTree) {
       sections.push('SOURCE CODE STRUCTURE (src/):\n' + srcTree);
       sections.push('');
@@ -454,19 +455,19 @@ export class WorkflowEngine {
       totalChars += block.length;
     }
 
-    // 4. Read documentation files
+    // 4. List documentation files (names only — agent will read via tools)
     const docFiles = [
       'ReadMe.MD', 'README.md', 'REALITY_CHECK.md', 'CHANGELOG.md',
       'EXAMPLE_USAGE.md', 'EXAMPLE_WORKFLOWS.md', 'RECIPES_CATALOG.md',
       'TROUBLESHOOTING.md', 'INSTALLATION.md', 'RELEASE_NOTES.md',
     ];
 
-    const markdownFiles: string[] = [];
+    const existingDocs: string[] = [];
     for (const file of docFiles) {
       const fullPath = path.join(baseDir, file);
       try {
         await fs.access(fullPath);
-        markdownFiles.push(file);
+        existingDocs.push(file);
       } catch {
         // skip missing
       }
@@ -474,19 +475,10 @@ export class WorkflowEngine {
 
     const docsDir = path.join(baseDir, 'docs');
     const docsMarkdowns = await this.collectMarkdownFiles(docsDir, 50);
-    const allMarkdowns = markdownFiles.concat(docsMarkdowns.map((p) => path.relative(baseDir, p)));
+    const allDocNames = existingDocs.concat(docsMarkdowns.map((p) => path.relative(baseDir, p)));
 
-    for (const relPath of allMarkdowns) {
-      const fullPath = path.join(baseDir, relPath);
-      const content = await this.safeReadText(fullPath, maxCharsPerFile);
-      if (!content) continue;
-      const nextBlock = `\nFILE: ${relPath}\n---\n${content}\n---`;
-      if (totalChars + nextBlock.length > maxTotalChars) {
-        sections.push('\nNOTE: Context truncated due to size limits.');
-        break;
-      }
-      sections.push(nextBlock);
-      totalChars += nextBlock.length;
+    if (allDocNames.length > 0) {
+      sections.push('\nEXISTING DOCUMENTATION FILES (use read_file to read them):\n' + allDocNames.join(', '));
     }
 
     const output = sections.join('\n');
