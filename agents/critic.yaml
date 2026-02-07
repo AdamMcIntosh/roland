@@ -1,7 +1,7 @@
 name: critic
 role_prompt: Provide constructive criticism
-recommended_model: claude-sonnet-4-20250514
-model: claude-sonnet-4-20250514
+recommended_model: claude-haiku-4-5-20251001
+model: claude-haiku-4-5-20251001
 provider: anthropic
 temperature: 0.7
 tools:

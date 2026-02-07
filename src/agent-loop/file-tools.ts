@@ -15,8 +15,13 @@ export interface FileToolsConfig {
  */
 function validatePath(filePath: string, workspaceDirectory: string): boolean {
   const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(workspaceDirectory, filePath);
-  const normalized = path.normalize(absolutePath);
-  const workspace = path.normalize(workspaceDirectory);
+  let normalized = path.normalize(absolutePath);
+  let workspace = path.normalize(workspaceDirectory);
+  // On Windows, drive letter case and slash direction can differ — normalize both
+  if (process.platform === 'win32') {
+    normalized = normalized.toLowerCase();
+    workspace = workspace.toLowerCase();
+  }
   return normalized.startsWith(workspace);
 }
 

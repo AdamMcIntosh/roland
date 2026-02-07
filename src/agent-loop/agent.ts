@@ -10,6 +10,7 @@ import { SessionConfig, Message, ToolCall } from './types.js';
 import { logger } from '../utils/logger.js';
 import * as readline from 'readline';
 import { BudgetManager } from '../utils/budget-manager.js';
+import { rateLimitHandler } from '../utils/rate-limit-handler.js';
 import { createMonitoring, PerformanceMonitoring } from '../monitoring/index.js';
 import {
   extractFileArtifactsFromOutput,
@@ -398,19 +399,22 @@ export class AutonomousAgent {
 
         logger.debug(`[Agent] LLM call: round=${totalToolCalls + 1}, history=${history.length} messages, tools=${this.registry.getTools().length}`);
 
-        // Call LLM with tools
-        const response = await LLMClientWithTools.callWithTools({
-          messages: history.map((msg) => ({
-            role: msg.role as 'user' | 'assistant' | 'tool_result',
-            content: msg.content,
-            toolName: msg.toolName,
-            toolUseId: msg.toolUseId,
-          })),
-          tools: this.registry.getTools(),
-          model: this.session.getConfig().model || 'claude-opus',
-          systemPrompt,
-          maxTokens: 8192,
-        });
+        // Call LLM with tools (retry on rate limits)
+        const response = await rateLimitHandler.executeWithRetry(
+          () => LLMClientWithTools.callWithTools({
+            messages: history.map((msg) => ({
+              role: msg.role as 'user' | 'assistant' | 'tool_result',
+              content: msg.content,
+              toolName: msg.toolName,
+              toolUseId: msg.toolUseId,
+            })),
+            tools: this.registry.getTools(),
+            model: this.session.getConfig().model || 'claude-opus',
+            systemPrompt,
+            maxTokens: 8192,
+          }),
+          'LLM tool call'
+        );
 
         logger.debug(`[Agent] LLM response: stop_reason=${response.stop_reason}, content_blocks=${response.content.length}`);
 
@@ -449,10 +453,18 @@ export class AutonomousAgent {
             // Execute tool
             const toolResult = await this.registry.executeTool(toolCall);
 
-            // Add result to conversation
-            this.session.addToolResult(toolCall.tool_name, toolCall.tool_use_id, toolResult.content);
+            // Truncate large tool results to keep conversation under token limits
+            const MAX_TOOL_RESULT_CHARS = 8000;
+            let resultContent = toolResult.content;
+            if (resultContent.length > MAX_TOOL_RESULT_CHARS) {
+              resultContent = resultContent.slice(0, MAX_TOOL_RESULT_CHARS) + '\n\n[TRUNCATED — use read_file to read specific sections]';
+              logger.debug(`[Agent] Truncated tool result from ${toolResult.content.length} to ${MAX_TOOL_RESULT_CHARS} chars`);
+            }
 
-            logger.debug(`[Agent] Tool result: ${toolCall.tool_name} success=${!toolResult.is_error}, length=${toolResult.content.length}`);
+            // Add result to conversation
+            this.session.addToolResult(toolCall.tool_name, toolCall.tool_use_id, resultContent);
+
+            logger.debug(`[Agent] Tool result: ${toolCall.tool_name} success=${!toolResult.is_error}, length=${resultContent.length}`);
           }
 
           // Continue loop — LLM may want more tools
