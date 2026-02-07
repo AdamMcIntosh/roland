@@ -171,7 +171,11 @@ export class AutonomousAgent {
         },
       },
       async (input) => {
-        await this.fileTools.writeFile(input.filePath as string, input.contents as string);
+        const fileContent = (input.contents ?? input.content) as string;
+        if (!fileContent) {
+          throw new Error('Missing file contents. Provide "contents" parameter with the file data.');
+        }
+        await this.fileTools.writeFile(input.filePath as string, fileContent);
         this.session.getAuditLogger().logToolCall('write_file', input);
         return `Successfully wrote ${input.filePath}`;
       }
@@ -411,7 +415,7 @@ export class AutonomousAgent {
             tools: this.registry.getTools(),
             model: this.session.getConfig().model || 'claude-opus',
             systemPrompt,
-            maxTokens: 8192,
+            maxTokens: 16384,
           }),
           'LLM tool call'
         );
