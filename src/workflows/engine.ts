@@ -227,13 +227,20 @@ export class WorkflowEngine {
             context.totalCost += stepCost;
             context.costPerStep.set(step.name, stepCost);
 
-            // Store output
+            // Store output (cap size for token budget in subsequent steps)
             if (step.output_to) {
               const outputValue =
                 result && typeof result === 'object' && 'output' in result
                   ? (result as { output: unknown }).output
                   : result;
-              context.variables.set(step.output_to, outputValue);
+              const MAX_STEP_OUTPUT_CHARS = 12000;
+              if (typeof outputValue === 'string' && outputValue.length > MAX_STEP_OUTPUT_CHARS) {
+                const truncated = outputValue.slice(0, MAX_STEP_OUTPUT_CHARS) + '\n\n[OUTPUT TRUNCATED — use read_file tools for additional details]';
+                context.variables.set(step.output_to, truncated);
+                logger.info(`[WorkflowEngine] Truncated step "${step.name}" output from ${outputValue.length} to ${MAX_STEP_OUTPUT_CHARS} chars for variable {{${step.output_to}}}`);
+              } else {
+                context.variables.set(step.output_to, outputValue);
+              }
             }
 
             loopCount++;

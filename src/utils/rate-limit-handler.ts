@@ -35,10 +35,10 @@ export interface RateLimitError {
 
 const DEFAULT_CONFIG: RateLimitConfig = {
   maxRetries: 5,
-  initialDelayMs: 1000,
-  maxDelayMs: 60000, // 1 minute max
-  backoffMultiplier: 2,
-  jitterMs: 500,
+  initialDelayMs: 61000, // 61 seconds — Anthropic/OpenAI enforce per-minute limits
+  maxDelayMs: 120000, // 2 minutes max
+  backoffMultiplier: 1.5,
+  jitterMs: 2000,
 };
 
 export class RateLimitHandler {

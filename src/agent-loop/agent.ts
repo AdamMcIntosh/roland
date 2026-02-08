@@ -415,7 +415,7 @@ export class AutonomousAgent {
             tools: this.registry.getTools(),
             model: this.session.getConfig().model || 'claude-opus',
             systemPrompt,
-            maxTokens: 16384,
+            maxTokens: 12288,
           }),
           'LLM tool call'
         );
