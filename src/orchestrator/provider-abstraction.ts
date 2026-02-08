@@ -105,6 +105,35 @@ const PROVIDER_CONFIGS: Record<LLMProvider, ProviderCapabilities> = {
       'grok-3-mini': 1.5,
     },
   },
+  openrouter: {
+    name: 'OpenRouter',
+    models: [
+      'meta-llama/llama-3.2-3b-instruct:free',
+      'openrouter/pony-alpha',
+      'nousresearch/hermes-3-llama-3.1-405b:free',
+      'stepfun/step-3.5-flash:free',
+      'arcee-ai/trinity-large-preview:free',
+    ],
+    maxTokens: 131072,
+    supportStreaming: true,
+    supportTools: true,
+    supportVision: false,
+    rateLimitPerMinute: 200,
+    costPerMillionInputTokens: {
+      'meta-llama/llama-3.2-3b-instruct:free': 0,
+      'openrouter/pony-alpha': 0,
+      'nousresearch/hermes-3-llama-3.1-405b:free': 0,
+      'stepfun/step-3.5-flash:free': 0,
+      'arcee-ai/trinity-large-preview:free': 0,
+    },
+    costPerMillionOutputTokens: {
+      'meta-llama/llama-3.2-3b-instruct:free': 0,
+      'openrouter/pony-alpha': 0,
+      'nousresearch/hermes-3-llama-3.1-405b:free': 0,
+      'stepfun/step-3.5-flash:free': 0,
+      'arcee-ai/trinity-large-preview:free': 0,
+    },
+  },
 };
 
 /**
@@ -178,6 +207,7 @@ export class ProviderAbstraction {
       openai: [...commonParams, 'frequency_penalty', 'presence_penalty'],
       google: [...commonParams, 'top_k'],
       xai: [...commonParams, 'top_k'],
+      openrouter: [...commonParams, 'frequency_penalty', 'presence_penalty', 'top_k'],
     };
     return providerSpecific[provider] || commonParams;
   }
