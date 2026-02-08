@@ -329,7 +329,7 @@ export class LLMClient {
    * Call a specific provider
    */
   private static async callProvider(
-    provider: 'xai' | 'anthropic' | 'openai' | 'google',
+    provider: 'xai' | 'anthropic' | 'openai' | 'google' | 'openrouter',
     model: string,
     apiKey: string,
     prompt: string,
@@ -346,6 +346,8 @@ export class LLMClient {
         return this.callOpenAI(model, apiKey, prompt, systemPrompt, temperature, maxTokens);
       case 'google':
         return this.callGoogle(model, apiKey, prompt, systemPrompt, temperature, maxTokens);
+      case 'openrouter':
+        return this.callOpenRouter(model, apiKey, prompt, systemPrompt, temperature, maxTokens);
       default:
         throw new ApiError(`Unknown provider: ${provider}`);
     }
@@ -537,6 +539,52 @@ export class LLMClient {
   }
 
   /**
+   * Call OpenRouter API (OpenAI-compatible)
+   */
+  private static async callOpenRouter(
+    model: string,
+    apiKey: string,
+    prompt: string,
+    systemPrompt: string,
+    temperature: number,
+    maxTokens: number
+  ): Promise<LLMResponse> {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://github.com/yourusername/samwise', // Optional: for rankings
+        'X-Title': 'Samwise', // Optional: for rankings
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+          { role: 'user', content: prompt },
+        ],
+        temperature,
+        max_tokens: maxTokens,
+      }),
+    });
+
+    if (!response.ok) {
+      await this.handleAPIError(response, 'OpenRouter');
+    }
+
+    const data = (await response.json()) as AnyRecord;
+
+    return {
+      content: data.choices[0].message.content as string,
+      model,
+      inputTokens: data.usage.prompt_tokens as number,
+      outputTokens: data.usage.completion_tokens as number,
+      totalTokens: data.usage.total_tokens as number,
+      cached: false,
+    };
+  }
+
+  /**
    * Handle API errors with appropriate exception types
    */
   private static async handleAPIError(response: Response, provider: string): Promise<never> {
@@ -565,11 +613,13 @@ export class LLMClient {
   /**
    * Get provider from model name
    */
-  public static getProvider(model: string): 'xai' | 'anthropic' | 'openai' | 'google' {
+  public static getProvider(model: string): 'xai' | 'anthropic' | 'openai' | 'google' | 'openrouter' {
     if (model.startsWith('grok-')) return 'xai';
     if (model.startsWith('claude-')) return 'anthropic';
     if (model.startsWith('gpt-')) return 'openai';
     if (model.startsWith('gemini-')) return 'google';
+    // OpenRouter models use provider/model format or have ':free' suffix
+    if (model.includes('/') || model.includes(':free')) return 'openrouter';
     throw new ApiError(`Unknown provider for model: ${model}`);
   }
 
@@ -591,6 +641,12 @@ export class LLMClient {
       'gpt-4o-mini': 0.00015,
       'gemini-1.5-flash': 0.00007,
       'gemini-1.5-pro': 0.00125,
+      // OpenRouter free tier models
+      'meta-llama/llama-3.2-3b-instruct:free': 0,
+      'openrouter/pony-alpha': 0,
+      'nousresearch/hermes-3-llama-3.1-405b:free': 0,
+      'stepfun/step-3.5-flash:free': 0,
+      'arcee-ai/trinity-large-preview:free': 0,
     };
 
     const cost = (costPer1k[model] || 0.001) * (estimatedTotalTokens / 1000);
@@ -610,6 +666,12 @@ export class LLMClient {
       'gpt-4o-mini': 0.00015,
       'gemini-1.5-flash': 0.00007,
       'gemini-1.5-pro': 0.00125,
+      // OpenRouter free tier models
+      'meta-llama/llama-3.2-3b-instruct:free': 0,
+      'openrouter/pony-alpha': 0,
+      'nousresearch/hermes-3-llama-3.1-405b:free': 0,
+      'stepfun/step-3.5-flash:free': 0,
+      'arcee-ai/trinity-large-preview:free': 0,
     };
 
     return (costPer1k[model] || 0.001) * (totalTokens / 1000);
@@ -835,12 +897,26 @@ export class LLMClientWithTools {
       content: typeof msg.content === 'string' ? msg.content : msg.content,
     })));
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    // Determine if this is OpenRouter based on model name
+    const isOpenRouter = model.includes('/') || model.includes(':free');
+    const baseUrl = isOpenRouter 
+      ? 'https://openrouter.ai/api/v1/chat/completions'
+      : 'https://api.openai.com/v1/chat/completions';
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    };
+
+    // Add OpenRouter-specific headers
+    if (isOpenRouter) {
+      headers['HTTP-Referer'] = 'https://github.com/yourusername/samwise';
+      headers['X-Title'] = 'Samwise';
+    }
+
+    const response = await fetch(baseUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers,
       body: JSON.stringify({
         model,
         messages: openaiMessages,
@@ -851,7 +927,8 @@ export class LLMClientWithTools {
     });
 
     if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.statusText}`);
+      const providerName = isOpenRouter ? 'OpenRouter' : 'OpenAI';
+      throw new Error(`${providerName} API error: ${response.statusText}`);
     }
 
     const data = (await response.json()) as any;
@@ -883,7 +960,8 @@ export class LLMClientWithTools {
   ): Promise<LLMToolResponse> {
     if (provider === 'anthropic') {
       return this.callAnthropicWithTools(model, apiKey, messages, tools, temperature, maxTokens, systemPrompt);
-    } else if (provider === 'openai') {
+    } else if (provider === 'openai' || provider === 'openrouter') {
+      // OpenRouter uses OpenAI-compatible API
       return this.callOpenAIWithTools(model, apiKey, messages, tools, temperature, maxTokens, systemPrompt);
     } else {
       throw new Error(`Tool calling not yet supported for provider: ${provider}`);

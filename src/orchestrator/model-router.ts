@@ -305,7 +305,7 @@ export class ModelRouter {
     if (models.length === 0) {
       throw new RoutingError(
         `No models available for complexity level "${complexity}" from configured providers. ` +
-        `Please configure at least one API key (xAI, Anthropic, OpenAI, or Google).`
+        `Please configure at least one API key (OpenRouter, xAI, Anthropic, OpenAI, or Google).`
       );
     }
 
@@ -351,7 +351,7 @@ export class ModelRouter {
     if (models.length === 0) {
       throw new RoutingError(
         `No models available for complexity level "${complexity}" from configured providers. ` +
-        `Please configure at least one API key (xAI, Anthropic, OpenAI, or Google).`
+        `Please configure at least one API key (OpenRouter, xAI, Anthropic, OpenAI, or Google).`
       );
     }
 
@@ -467,11 +467,13 @@ export class ModelRouter {
    */
   static getProvider(
     model: string
-  ): 'anthropic' | 'openai' | 'google' | 'xai' {
+  ): 'openrouter' | 'anthropic' | 'openai' | 'google' | 'xai' {
     if (model.startsWith('claude')) return 'anthropic';
     if (model.startsWith('gpt-')) return 'openai';
     if (model.startsWith('gemini-')) return 'google';
     if (model.startsWith('grok-')) return 'xai';
+    // OpenRouter models use provider/model format or have ':free' suffix
+    if (model.includes('/') || model.includes(':free')) return 'openrouter';
     throw new RoutingError(`Unknown provider for model: ${model}`);
   }
 

@@ -1,11 +1,11 @@
 /**
  * Provider Abstraction Layer
  * 
- * Abstracts differences between LLM providers (Anthropic, OpenAI, Google, XAI)
+ * Abstracts differences between LLM providers (Anthropic, OpenAI, Google, XAI, OpenRouter)
  * Provides unified interface for provider capabilities and constraints
  */
 
-export type LLMProvider = 'anthropic' | 'openai' | 'google' | 'xai';
+export type LLMProvider = 'openrouter' | 'anthropic' | 'openai' | 'google' | 'xai';
 
 export interface ProviderCapabilities {
   name: string;

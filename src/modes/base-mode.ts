@@ -189,7 +189,8 @@ export abstract class BaseMode {
       const provider = modelSelection.model.includes('grok') ? 'xai' :
                        modelSelection.model.includes('claude') ? 'anthropic' :
                        modelSelection.model.includes('gpt') ? 'openai' :
-                       modelSelection.model.includes('gemini') ? 'google' : 'unknown';
+                       modelSelection.model.includes('gemini') ? 'google' :
+                       (modelSelection.model.includes('/') || modelSelection.model.includes(':free')) ? 'openrouter' : 'unknown';
       
       PerformanceMonitor.record(
         agent.name,

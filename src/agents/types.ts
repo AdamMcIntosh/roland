@@ -13,7 +13,7 @@ export interface AgentConfig {
   role_prompt: string;
   recommended_model?: string;
   model: string;
-  provider: 'anthropic' | 'openai' | 'google' | 'xai';
+  provider: 'openrouter' | 'anthropic' | 'openai' | 'google' | 'xai';
   temperature: number;
   tools?: string[];
   skills?: string[];

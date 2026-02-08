@@ -27,7 +27,7 @@ export interface RateLimitConfig {
 }
 
 export interface RateLimitError {
-  provider: 'anthropic' | 'openai' | 'google' | 'xai' | 'unknown';
+  provider: 'openrouter' | 'anthropic' | 'openai' | 'google' | 'xai' | 'unknown';
   retryAfter?: number; // seconds
   message: string;
   statusCode?: number;

@@ -105,8 +105,8 @@ cd samwise
 # Install dependencies
 npm install
 
-# Configure API keys
-echo "SAMWISE_API_KEYS_XAI=your_xai_key" > .env
+# Configure API key (free tier available!)
+echo "SAMWISE_API_KEYS_OPENROUTER=your_openrouter_key" > .env
 
 # Build the project
 npm run build
@@ -119,6 +119,8 @@ npm run cli
 > run "eco: add JSDoc comments to this code"
 > stats
 ```
+
+Get your free OpenRouter API key at [https://openrouter.ai](https://openrouter.ai)
 
 See [EXAMPLE_USAGE.md](EXAMPLE_USAGE.md) for detailed CLI examples.
 

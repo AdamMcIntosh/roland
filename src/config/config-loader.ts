@@ -28,6 +28,7 @@ const RoutingConfigSchema = z.object({
 });
 
 const SessionApiKeysSchema = z.object({
+  openrouter: z.string().optional(),
   anthropic: z.string().optional(),
   openai: z.string().optional(),
   google: z.string().optional(),
@@ -183,7 +184,7 @@ export class ConfigLoader {
     const apiKeys = (samwise.api_keys as Record<string, unknown>) || {};
 
     // Map environment variables to config
-    const providers = ['anthropic', 'openai', 'google', 'xai'] as const;
+    const providers = ['openrouter', 'anthropic', 'openai', 'google', 'xai'] as const;
 
     for (const provider of providers) {
       const envKey = `${this.ENV_PREFIX}API_KEYS_${provider.toUpperCase()}`;
@@ -242,7 +243,7 @@ export class ConfigLoader {
   /**
    * Check if an API key is configured for a provider
    */
-  static hasApiKey(config: AppConfig, provider: 'anthropic' | 'openai' | 'google' | 'xai'): boolean {
+  static hasApiKey(config: AppConfig, provider: 'openrouter' | 'anthropic' | 'openai' | 'google' | 'xai'): boolean {
     const key = config.samwise.api_keys[provider];
     return Boolean(key && key.trim());
   }
@@ -250,7 +251,7 @@ export class ConfigLoader {
   /**
    * Get API key for a provider (safely - for logging/debugging only)
    */
-  static getApiKey(config: AppConfig, provider: 'anthropic' | 'openai' | 'google' | 'xai'): string | undefined {
+  static getApiKey(config: AppConfig, provider: 'openrouter' | 'anthropic' | 'openai' | 'google' | 'xai'): string | undefined {
     return config.samwise.api_keys[provider];
   }
 

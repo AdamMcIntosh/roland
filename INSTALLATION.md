@@ -49,23 +49,25 @@ Create a `.env` file in the project root:
 touch .env  # On Windows: New-Item .env -ItemType File
 ```
 
-Add your API keys:
+Add your OpenRouter API key:
 
 ```bash
-# xAI (recommended for Ecomode - cheapest models)
-SAMWISE_API_KEYS_XAI=your_xai_api_key_here
+# OpenRouter (recommended - free tier available)
+SAMWISE_API_KEYS_OPENROUTER=your_openrouter_api_key_here
 
-# Anthropic (Claude models)
+# Optional: Other providers (if you have keys)
 SAMWISE_API_KEYS_ANTHROPIC=your_anthropic_api_key_here
-
-# OpenAI (GPT models)
 SAMWISE_API_KEYS_OPENAI=your_openai_api_key_here
-
-# Google (Gemini models)
 SAMWISE_API_KEYS_GOOGLE=your_google_api_key_here
+SAMWISE_API_KEYS_XAI=your_xai_api_key_here
 ```
 
-**Note**: For Ecomode MVP, only **xAI API key** is required as it provides the cheapest models (grok-code-fast-1 and grok-4-1-fast-reasoning).
+**Note**: Only the **OpenRouter API key** is required. Multiple free tier models are available including:
+- `meta-llama/llama-3.2-3b-instruct:free` (3B, multilingual, fast)
+- `nousresearch/hermes-3-llama-3.1-405b:free` (405B flagship, most capable)
+- `arcee-ai/trinity-large-preview:free` (400B MoE, creative tasks)
+- `stepfun/step-3.5-flash:free` (reasoning, 196B MoE)
+- `openrouter/pony-alpha` (coding, roleplay)
 
 ### 4. Build the Project
 
@@ -97,19 +99,28 @@ Type `help` to see available commands.
 
 ## Getting Your API Keys
 
-### xAI (Grok - Recommended for Ecomode)
+### OpenRouter (Recommended - Free Tier Available)
 
-1. Visit [https://x.ai](https://x.ai)
-2. Sign up for an account
-3. Navigate to API section
-4. Generate a new API key
+1. Visit [https://openrouter.ai](https://openrouter.ai)
+2. Sign up for an account (can use Google, GitHub, or MetaMask)
+3. Navigate to Settings > API Keys
+4. Create a new API key
 5. Copy the key to your `.env` file
 
-**Cost**: Grok models are among the cheapest available:
-- grok-code-fast-1: ~$0.0001 per query
-- grok-4-1-fast-reasoning: ~$0.0002 per query
+**Cost**: OpenRouter provides multiple **completely free** models:
+- `meta-llama/llama-3.2-3b-instruct:free` - $0/query (3B multilingual)
+- `nousresearch/hermes-3-llama-3.1-405b:free` - $0/query (405B flagship)
+- `arcee-ai/trinity-large-preview:free` - $0/query (400B MoE, creative)
+- `stepfun/step-3.5-flash:free` - $0/query (reasoning, 196B MoE)
+- `openrouter/pony-alpha` - $0/query (coding, roleplay)
 
-### Anthropic (Claude)
+You can also access paid models from multiple providers through a single API key if needed later.
+
+### Optional: Other Providers
+
+If you have existing API keys from other providers, you can add them:
+
+#### Anthropic (Claude)
 
 1. Visit [https://console.anthropic.com](https://console.anthropic.com)
 2. Sign up for an account
@@ -117,7 +128,7 @@ Type `help` to see available commands.
 4. Create a new API key
 5. Copy the key to your `.env` file
 
-### OpenAI (GPT)
+#### OpenAI (GPT)
 
 1. Visit [https://platform.openai.com](https://platform.openai.com)
 2. Sign up for an account
@@ -125,12 +136,20 @@ Type `help` to see available commands.
 4. Create a new secret key
 5. Copy the key to your `.env` file
 
-### Google (Gemini)
+#### Google (Gemini)
 
 1. Visit [https://ai.google.dev](https://ai.google.dev)
 2. Sign up for an account
 3. Get an API key
 4. Copy the key to your `.env` file
+
+#### xAI (Grok)
+
+1. Visit [https://x.ai](https://x.ai)
+2. Sign up for an account
+3. Navigate to API section
+4. Generate a new API key
+5. Copy the key to your `.env` file
 
 ## Configuration
 

@@ -14,6 +14,7 @@ export interface RoutingConfig {
 }
 
 export interface SessionApiKeys {
+  openrouter?: string;
   anthropic?: string;
   openai?: string;
   google?: string;
@@ -123,7 +124,7 @@ export interface McpResponse {
 
 export interface ModelSelection {
   model: string;
-  provider: 'anthropic' | 'openai' | 'google' | 'xai';
+  provider: 'openrouter' | 'anthropic' | 'openai' | 'google' | 'xai';
   costPer1kTokens: number;
 }
 
