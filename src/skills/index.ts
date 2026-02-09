@@ -13,6 +13,7 @@ import {
   DebuggingSkill,
   MigrationSkill,
 } from './implementations/extended-skills.js';
+import { DocReviewSkill } from './implementations/doc-review-skill.js';
 import { skillRegistry } from './skill-framework.js';
 import { SkillExecutor, getSkillExecutor } from './skill-executor.js';
 import { logger } from '../utils/logger.js';
@@ -40,6 +41,9 @@ export async function initializeSkills(): Promise<void> {
     skillRegistry.register(new DatabaseSchemaSkill());
     skillRegistry.register(new DebuggingSkill());
     skillRegistry.register(new MigrationSkill());
+
+    // Register doc-review skill
+    skillRegistry.register(new DocReviewSkill());
 
     logger.info(`Loaded ${skillRegistry.count()} skills`);
     logger.debug(`Skill registry: ${skillRegistry.getSkillNames().join(', ')}`);

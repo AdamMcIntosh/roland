@@ -86,6 +86,9 @@ function detectSkill(query: string): string | undefined {
   if (lower.includes('refactor') || lower.includes('improve code')) {
     return 'refactoring';
   }
+  if (lower.includes('doc-review') || lower.includes('review docs') || lower.includes('review documentation')) {
+    return 'doc-review';
+  }
   if (lower.includes('document') || lower.includes('doc')) {
     return 'documentation';
   }
