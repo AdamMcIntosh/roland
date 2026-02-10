@@ -2,7 +2,7 @@ name: designer
 role_prompt: Create UI/UX designs
 recommended_model: meta-llama/llama-3.2-3b-instruct:free
 model: meta-llama/llama-3.2-3b-instruct:free
-provider: xai
+provider: openrouter
 temperature: 0.7
 tools:
   - search

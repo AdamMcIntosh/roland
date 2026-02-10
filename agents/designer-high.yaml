@@ -2,7 +2,7 @@ name: designer-high
 role_prompt: Design complex UI systems and user experiences
 recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
 model: nousresearch/hermes-3-llama-3.1-405b:free
-provider: anthropic
+provider: openrouter
 temperature: 0.8
 tools:
   - code

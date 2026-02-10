@@ -2,7 +2,7 @@ name: scientist
 role_prompt: Data analysis, statistics, and scientific computing
 recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
 model: nousresearch/hermes-3-llama-3.1-405b:free
-provider: anthropic
+provider: openrouter
 temperature: 0.6
 tools:
   - code

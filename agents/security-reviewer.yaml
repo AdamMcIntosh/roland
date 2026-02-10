@@ -2,7 +2,7 @@ name: security-reviewer
 role_prompt: Comprehensive security review and vulnerability detection
 recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
 model: nousresearch/hermes-3-llama-3.1-405b:free
-provider: anthropic
+provider: openrouter
 temperature: 0.5
 tools:
   - search

@@ -2,7 +2,7 @@ name: explore-high
 role_prompt: Complex architectural search and deep code exploration
 recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
 model: nousresearch/hermes-3-llama-3.1-405b:free
-provider: anthropic
+provider: openrouter
 temperature: 0.5
 tools:
   - search

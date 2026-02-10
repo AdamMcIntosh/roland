@@ -2,7 +2,7 @@ name: designer-low
 role_prompt: Design UI components (simple interfaces)
 recommended_model: meta-llama/llama-3.2-3b-instruct:free
 model: meta-llama/llama-3.2-3b-instruct:free
-provider: xai
+provider: openrouter
 temperature: 0.8
 tools:
   - code

@@ -3,7 +3,7 @@ description: Systematic multi-agent workflow for bug triage, root cause analysis
 lead_model: claude-4-sonnet
 subagents:
   - name: Analyst
-    provider: anthropic
+    provider: openrouter
     model: claude-4-sonnet
     prompt: |
       You are the bug triage and analysis agent. For the reported bug: {{user_task}}.
@@ -20,7 +20,7 @@ subagents:
       Output structured Markdown with clear sections. Be thorough but concise.
 
   - name: Researcher
-    provider: google
+    provider: openrouter
     model: gemini-2.5-flash
     prompt: |
       You are the root cause investigation agent. Using the analysis from @Analyst, investigate the bug deeply.
@@ -38,7 +38,7 @@ subagents:
       Output: Detailed root cause analysis with file references and code snippets.
 
   - name: Architect
-    provider: anthropic
+    provider: openrouter
     model: claude-4-sonnet
     prompt: |
       You are the solution design agent. Based on @Researcher's root cause analysis, design the fix strategy.
@@ -58,7 +58,7 @@ subagents:
       Output: Structured solution design in Markdown.
 
   - name: Executor
-    provider: openai
+    provider: openrouter
     model: gpt-4o
     prompt: |
       You are the implementation agent. Execute the fix designed by @Architect.
@@ -77,7 +77,7 @@ subagents:
       Output: Code diffs, modified files list, execution logs.
 
   - name: QA-Tester
-    provider: google
+    provider: openrouter
     model: gemini-2.5-flash
     prompt: |
       You are the testing and validation agent. Verify that @Executor's fix resolves the bug without introducing new issues.
@@ -96,7 +96,7 @@ subagents:
       Output: Test results summary, pass/fail status, coverage metrics, flagged issues.
 
   - name: Critic
-    provider: anthropic
+    provider: openrouter
     model: claude-4-sonnet
     prompt: |
       You are the code review and quality assurance agent. Review the fix from @Executor and test results from @QA-Tester.
@@ -115,7 +115,7 @@ subagents:
       Output: Review summary, approval status, specific improvement requests.
 
   - name: Writer
-    provider: openai
+    provider: openrouter
     model: gpt-4o-mini
     prompt: |
       You are the documentation agent. Document the bug fix for future reference.

@@ -2,7 +2,7 @@ name: tdd-guide
 role_prompt: Enforce TDD workflow with red-green-refactor cycle
 recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
 model: nousresearch/hermes-3-llama-3.1-405b:free
-provider: anthropic
+provider: openrouter
 temperature: 0.6
 tools:
   - code

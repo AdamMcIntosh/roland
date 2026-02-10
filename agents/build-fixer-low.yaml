@@ -2,7 +2,7 @@ name: build-fixer-low
 role_prompt: Fix simple build and compilation errors
 recommended_model: meta-llama/llama-3.2-3b-instruct:free
 model: meta-llama/llama-3.2-3b-instruct:free
-provider: xai
+provider: openrouter
 temperature: 0.6
 tools:
   - code

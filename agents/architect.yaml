@@ -2,7 +2,7 @@ name: architect
 role_prompt: Design system architecture
 recommended_model: stepfun/step-3.5-flash:free
 model: stepfun/step-3.5-flash:free
-provider: anthropic
+provider: openrouter
 temperature: 0.7
 tools:
   - search

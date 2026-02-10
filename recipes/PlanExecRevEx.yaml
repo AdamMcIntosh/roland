@@ -3,7 +3,7 @@ description: "Autonomous loop: Claude plans → GPT executes → Gemini reviews 
 lead_model: claude-4-sonnet
 subagents:
   - name: Planner
-    provider: anthropic
+    provider: openrouter
     model: claude-4-sonnet
     prompt: |
       You are the planning agent. For the task: {{user_task}}.
@@ -11,7 +11,7 @@ subagents:
       Output only structured Markdown: Overview, Steps, Files, Best Practices, Risks.
 
   - name: Executor
-    provider: openai
+    provider: openrouter
     model: gpt-4o
     prompt: |
       You are the execution agent. Use the plan from @Planner.
@@ -19,7 +19,7 @@ subagents:
       Handle errors autonomously. Output: Code diffs, execution logs, updated files.
 
   - name: Reviewer
-    provider: google
+    provider: openrouter
     model: gemini-2.5-flash
     prompt: |
       You are the review agent. Analyze diffs/code from @Executor.
@@ -27,7 +27,7 @@ subagents:
       Suggest fixes or approve. If issues, flag for loop back. Output: Summary, Flagged Items, Suggestions.
 
   - name: Explainer
-    provider: xai
+    provider: openrouter
     model: grok-4-1-fast-reasoning
     prompt: |
       You are the explanation agent (Grok style: clear, witty, step-by-step like Hitchhiker's Guide).

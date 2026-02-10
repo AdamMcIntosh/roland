@@ -2,7 +2,7 @@ name: analyst
 role_prompt: Analyze data and trends
 recommended_model: stepfun/step-3.5-flash:free
 model: stepfun/step-3.5-flash:free
-provider: anthropic
+provider: openrouter
 temperature: 0.7
 tools:
   - search

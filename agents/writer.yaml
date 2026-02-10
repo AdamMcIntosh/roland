@@ -2,7 +2,7 @@ name: writer
 role_prompt: Write clear and engaging content
 recommended_model: arcee-ai/trinity-large-preview:free
 model: arcee-ai/trinity-large-preview:free
-provider: openai
+provider: openrouter
 temperature: 0.7
 tools:
   - search
