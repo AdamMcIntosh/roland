@@ -73,29 +73,47 @@ steps:
   - name: generate-docs
     agent: writer
     input: |
-      Generate documentation following this plan. Write in clear Markdown with examples.
+      You are a technical writer. Your task is to write documentation RIGHT NOW.
+      Do NOT say you are ready. Do NOT ask questions. Do NOT describe what you will do.
+      START WRITING THE DOCUMENTATION IMMEDIATELY.
 
-      Documentation Plan:
+      Use read_file to read any source files you need for accuracy.
+
+      Here is the documentation plan to follow:
       {{plan_documentation}}
 
-      Original Codebase Analysis:
+      Here is the codebase analysis for reference:
       {{analyze_codebase}}
 
-      Audience: {{targetAudience}}
+      Target audience: {{targetAudience}}
 
       RULES:
-      - You may use read_file to read additional source files for accuracy.
-      - All code examples must use the correct language from the analysis.
-      - All CLI commands must use the correct package manager from the analysis.
+      - All code examples must use TypeScript (the project's language).
+      - All CLI commands must use npm (the project's package manager).
       - All dependency names must match what is in the actual config files.
       - If you are unsure about something, write "[NEEDS VERIFICATION]" instead of guessing.
-      - Do NOT write file tools or create files — only output documentation text.
+      - Do NOT create files — only output the documentation as text.
 
-      Produce these documents as fenced markdown blocks:
-      1. README.md — project overview, features, quick start, architecture summary
-      2. API_DOCUMENTATION.md — key APIs, interfaces, usage patterns
-      3. SETUP_GUIDE.md — installation, configuration, first run
-      4. CONTRIBUTING.md — development setup, code style, PR process
+      OUTPUT FORMAT: Write each document as a fenced markdown block with the filename.
+      You MUST produce ALL of the following documents NOW:
+
+      ```markdown file=ReadMe.MD
+      (write the full README here — project overview, features, quick start, architecture)
+      ```
+
+      ```markdown file=docs/api.md
+      (write the full API documentation here — key APIs, interfaces, usage patterns)
+      ```
+
+      ```markdown file=INSTALLATION.md
+      (write the full setup guide here — installation, configuration, first run)
+      ```
+
+      ```markdown file=CONTRIBUTING.md
+      (write the full contributing guide here — development setup, code style, PR process)
+      ```
+
+      BEGIN WRITING NOW. Output the first document immediately.
     output_to: generate_docs
 
   - name: review-quality
@@ -128,29 +146,34 @@ steps:
     agent: executor
     allow_file_writes: true
     input: |
-      Finalize documentation by applying review corrections and WRITE the files to disk.
+      You MUST write documentation files to disk using the write_file tool.
+      Do NOT just output text. Do NOT say you are ready. Do NOT ask questions.
+      START WRITING FILES IMMEDIATELY using write_file.
 
-      Review Feedback:
+      Here is the review feedback — apply these corrections:
       {{review_quality}}
 
-      Documentation to Fix:
+      Here is the documentation to fix and save:
       {{generate_docs}}
 
-      Original Analysis (ground truth):
+      Here is the ground truth analysis:
       {{analyze_codebase}}
 
-      INSTRUCTIONS:
-      1. Apply all corrections from the review. Fix any factual errors.
-      2. Add table of contents, cross-links between documents, and consistent formatting.
-      3. Use the write_file tool to WRITE each document to its actual file path:
-         - write_file with filePath="ReadMe.MD" for the main README
-         - write_file with filePath="docs/api.md" for API documentation  
-         - write_file with filePath="INSTALLATION.md" for setup/installation guide
-         - write_file with filePath="CONTRIBUTING.md" for contributing guide
-         - Update any other existing documentation files that need changes using write_file
-      4. Do NOT just output text — you MUST use write_file to save each document.
-      5. If a file already exists, overwrite it with the improved version.
-      6. After writing all files, output a summary of which files were written/updated.
+      EXECUTE THESE STEPS NOW:
+
+      Step 1: Read the generated documentation above.
+      Step 2: Apply all corrections from the review feedback.
+      Step 3: For EACH document, call write_file to save it:
+
+        - Call write_file with filePath="ReadMe.MD" and the corrected README content
+        - Call write_file with filePath="docs/api.md" and the corrected API docs
+        - Call write_file with filePath="INSTALLATION.md" and the corrected setup guide
+        - Call write_file with filePath="CONTRIBUTING.md" and the corrected contributing guide
+
+      Step 4: After writing ALL files, list which files you wrote.
+
+      IMPORTANT: You have permission to overwrite existing files.
+      START NOW. Call write_file for the first document immediately.
     output_to: documentation_package
 
 outputs:
