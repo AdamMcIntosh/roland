@@ -5,7 +5,7 @@
  * Provides unified interface for provider capabilities and constraints
  */
 
-export type LLMProvider = 'openrouter' | 'anthropic' | 'openai' | 'google' | 'xai';
+export type LLMProvider = 'openrouter';
 
 export interface ProviderCapabilities {
   name: string;
@@ -29,82 +29,6 @@ export interface ProviderConstraints {
  * Provider configurations
  */
 const PROVIDER_CONFIGS: Record<LLMProvider, ProviderCapabilities> = {
-  anthropic: {
-    name: 'Anthropic',
-    models: ['claude-4-sonnet', 'claude-3-sonnet', 'claude-3-opus'],
-    maxTokens: 200000,
-    supportStreaming: true,
-    supportTools: true,
-    supportVision: true,
-    rateLimitPerMinute: 60,
-    costPerMillionInputTokens: {
-      'claude-4-sonnet': 3,
-      'claude-3-sonnet': 3,
-      'claude-3-opus': 15,
-    },
-    costPerMillionOutputTokens: {
-      'claude-4-sonnet': 15,
-      'claude-3-sonnet': 15,
-      'claude-3-opus': 75,
-    },
-  },
-  openai: {
-    name: 'OpenAI',
-    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-    maxTokens: 128000,
-    supportStreaming: true,
-    supportTools: true,
-    supportVision: true,
-    rateLimitPerMinute: 3500, // Depends on quota tier
-    costPerMillionInputTokens: {
-      'gpt-4o': 5,
-      'gpt-4o-mini': 0.15,
-      'gpt-4-turbo': 10,
-      'gpt-3.5-turbo': 0.5,
-    },
-    costPerMillionOutputTokens: {
-      'gpt-4o': 15,
-      'gpt-4o-mini': 0.6,
-      'gpt-4-turbo': 30,
-      'gpt-3.5-turbo': 1.5,
-    },
-  },
-  google: {
-    name: 'Google',
-    models: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-pro'],
-    maxTokens: 1000000,
-    supportStreaming: true,
-    supportTools: true,
-    supportVision: true,
-    rateLimitPerMinute: 60,
-    costPerMillionInputTokens: {
-      'gemini-2.5-pro': 2.5,
-      'gemini-2.5-flash': 0.075,
-      'gemini-pro': 0.5,
-    },
-    costPerMillionOutputTokens: {
-      'gemini-2.5-pro': 10,
-      'gemini-2.5-flash': 0.3,
-      'gemini-pro': 1.5,
-    },
-  },
-  xai: {
-    name: 'XAI',
-    models: ['grok-3', 'grok-3-mini'],
-    maxTokens: 131072,
-    supportStreaming: true,
-    supportTools: true,
-    supportVision: false,
-    rateLimitPerMinute: 100,
-    costPerMillionInputTokens: {
-      'grok-3': 2,
-      'grok-3-mini': 0.5,
-    },
-    costPerMillionOutputTokens: {
-      'grok-3': 10,
-      'grok-3-mini': 1.5,
-    },
-  },
   openrouter: {
     name: 'OpenRouter',
     models: [
@@ -203,10 +127,6 @@ export class ProviderAbstraction {
   private static getSupportedParameters(provider: LLMProvider): string[] {
     const commonParams = ['temperature', 'top_p', 'max_tokens', 'timeout'];
     const providerSpecific: Record<LLMProvider, string[]> = {
-      anthropic: [...commonParams, 'top_k', 'system'],
-      openai: [...commonParams, 'frequency_penalty', 'presence_penalty'],
-      google: [...commonParams, 'top_k'],
-      xai: [...commonParams, 'top_k'],
       openrouter: [...commonParams, 'frequency_penalty', 'presence_penalty', 'top_k'],
     };
     return providerSpecific[provider] || commonParams;

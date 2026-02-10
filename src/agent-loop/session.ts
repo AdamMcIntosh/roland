@@ -23,7 +23,7 @@ export class SessionManager {
       toolCallCount: 0,
       sessionId: this.sessionId,
       startTime: this.startTime,
-      model: config.model || 'claude-opus',
+      model: config.model || 'nousresearch/hermes-3-llama-3.1-405b:free',
       maxToolCalls: config.maxToolCalls || 20,
     };
 

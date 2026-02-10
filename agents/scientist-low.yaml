@@ -1,7 +1,7 @@
 name: scientist-low
 role_prompt: Quick data inspection and simple statistics
-recommended_model: grok-4-1-fast-reasoning
-model: grok-4-1-fast-reasoning
+recommended_model: meta-llama/llama-3.2-3b-instruct:free
+model: meta-llama/llama-3.2-3b-instruct:free
 provider: xai
 temperature: 0.6
 tools:

@@ -1,7 +1,7 @@
 name: architect-low
 role_prompt: Design system architecture (lightweight analysis)
-recommended_model: grok-4-1-fast-reasoning
-model: grok-4-1-fast-reasoning
+recommended_model: meta-llama/llama-3.2-3b-instruct:free
+model: meta-llama/llama-3.2-3b-instruct:free
 provider: xai
 temperature: 0.7
 tools:

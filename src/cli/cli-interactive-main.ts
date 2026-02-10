@@ -54,21 +54,20 @@ function loadEnvFile() {
 }
 
 /**
- * Check for at least one API key and prompt user to enter one if missing
+ * Check for OpenRouter API key and prompt user to enter one if missing
  */
 async function checkAndPromptAPIKeys(): Promise<void> {
-  const availableKeys = [
-    { env: 'SAMWISE_API_KEYS_XAI', name: 'xAI (Grok)', url: 'https://console.x.ai' },
-    { env: 'SAMWISE_API_KEYS_ANTHROPIC', name: 'Anthropic (Claude)', url: 'https://console.anthropic.com' },
-    { env: 'SAMWISE_API_KEYS_OPENAI', name: 'OpenAI (GPT)', url: 'https://platform.openai.com/api-keys' },
-    { env: 'SAMWISE_API_KEYS_GOOGLE', name: 'Google (Gemini)', url: 'https://ai.google.dev' },
-  ];
+  const requiredKey = { 
+    env: 'SAMWISE_API_KEYS_OPENROUTER', 
+    name: 'OpenRouter (Free Tier)', 
+    url: 'https://openrouter.ai/settings/keys' 
+  };
 
-  // Check if at least one API key is configured
-  const hasAnyKey = availableKeys.some(key => process.env[key.env]);
+  // Check if OpenRouter API key is configured
+  const hasKey = !!process.env[requiredKey.env];
 
-  if (hasAnyKey) {
-    return; // At least one key is present, we're good
+  if (hasKey) {
+    return; // Key is present, we're good
   }
 
   // Only prompt if running in interactive mode (has TTY)
@@ -77,17 +76,15 @@ async function checkAndPromptAPIKeys(): Promise<void> {
   }
 
   console.log('');
-  console.log('⚠️  No API keys configured');
+  console.log('⚠️  OpenRouter API key not configured');
   console.log('');
-  console.log('Samwise requires at least one API key from one of these providers:');
-  availableKeys.forEach(key => {
-    console.log(`  • ${key.name}: ${key.url}`);
-  });
+  console.log('Samwise requires an OpenRouter API key (free tier available):');
+  console.log(`  • ${requiredKey.name}: ${requiredKey.url}`);
   console.log('');
-  console.log('You can configure them in multiple ways:');
-  console.log('  1. Create a .env file in your home directory with your API keys');
-  console.log('  2. Set environment variables (e.g., export SAMWISE_API_KEYS_XAI=...)');
-  console.log('  3. Enter one now when prompted');
+  console.log('You can configure it in multiple ways:');
+  console.log('  1. Create a .env file in your home directory with SAMWISE_API_KEYS_OPENROUTER=...');
+  console.log('  2. Set environment variable (e.g., export SAMWISE_API_KEYS_OPENROUTER=...)');
+  console.log('  3. Enter it now when prompted');
   console.log('');
 
   const rl = readline.createInterface({
@@ -101,40 +98,22 @@ async function checkAndPromptAPIKeys(): Promise<void> {
     });
   };
 
-  console.log('Do you want to enter an API key now? (y/n): ');
+  console.log('Do you want to enter your OpenRouter API key now? (y/n): ');
   const response = await question('> ');
 
   if (response.toLowerCase() !== 'y' && response.toLowerCase() !== 'yes') {
     rl.close();
     console.log('');
-    console.log('You can add an API key later by creating a .env file in your home directory.');
+    console.log('You can add your OpenRouter API key later by creating a .env file.');
     console.log('');
     return;
   }
 
   console.log('');
-  console.log('Which provider would you like to configure?');
-  availableKeys.forEach((key, index) => {
-    console.log(`  ${index + 1}. ${key.name}`);
-  });
-  console.log('');
-
-  let selectedIndex = -1;
-  while (selectedIndex < 0 || selectedIndex >= availableKeys.length) {
-    const choice = await question(`Enter number (1-${availableKeys.length}): `);
-    const num = parseInt(choice, 10);
-    if (!isNaN(num) && num >= 1 && num <= availableKeys.length) {
-      selectedIndex = num - 1;
-    } else {
-      console.log('Invalid choice, please try again.');
-    }
-  }
-
-  const selectedKey = availableKeys[selectedIndex];
-  const apiKey = await question(`\n${selectedKey.name} API key: `);
+  const apiKey = await question(`${requiredKey.name} API key: `);
 
   if (apiKey.trim()) {
-    process.env[selectedKey.env] = apiKey.trim();
+    process.env[requiredKey.env] = apiKey.trim();
 
     // Save to home directory .env file
     const homeDir = process.env.HOME || process.env.USERPROFILE || '';
@@ -149,8 +128,8 @@ async function checkAndPromptAPIKeys(): Promise<void> {
       }
 
       // Add the key
-      if (!envContent.includes(selectedKey.env + '=')) {
-        envContent += (envContent.endsWith('\n') ? '' : '\n') + `${selectedKey.env}=${apiKey.trim()}\n`;
+      if (!envContent.includes(requiredKey.env + '=')) {
+        envContent += (envContent.endsWith('\n') ? '' : '\n') + `${requiredKey.env}=${apiKey.trim()}\n`;
       }
 
       fs.writeFileSync(envPath, envContent, 'utf-8');

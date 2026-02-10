@@ -1,7 +1,7 @@
 name: critic
 role_prompt: Provide constructive criticism
-recommended_model: claude-haiku-4-5-20251001
-model: claude-haiku-4-5-20251001
+recommended_model: stepfun/step-3.5-flash:free
+model: stepfun/step-3.5-flash:free
 provider: anthropic
 temperature: 0.7
 tools:

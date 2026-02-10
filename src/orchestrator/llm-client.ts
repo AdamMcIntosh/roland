@@ -1,7 +1,7 @@
 /**
  * LLM Client - Unified API for calling LLM models
  * 
- * Phase 8: Real API integration for xAI, Anthropic, OpenAI, Google
+ * Phase 8: Real API integration via OpenRouter
  * Supports automatic fallback, retry logic, error handling, and tool calling
  */
 
@@ -71,25 +71,10 @@ export class LLMClient {
 
     // Define tier-specific models for each provider
     const tierMapping: Record<string, Record<'simple' | 'medium' | 'complex', string[]>> = {
-      xai: {
-        simple: ['grok-3-mini', 'grok-code-fast-1'],
-        medium: ['grok-3', 'grok-4-1-fast-non-reasoning'],
-        complex: ['grok-4-1-fast-reasoning', 'grok-4-0709'],
-      },
-      openai: {
-        simple: ['gpt-4o-mini'],
-        medium: ['gpt-4o'],
-        complex: ['gpt-4-turbo', 'gpt-5'],
-      },
-      google: {
-        simple: ['gemini-2.5-flash'],
-        medium: ['gemini-2.5-pro'],
-        complex: ['gemini-pro-latest'],
-      },
-      anthropic: {
-        simple: ['claude-haiku-4-5-20251001'],
-        medium: ['claude-sonnet-4-5-20250929'],
-        complex: ['claude-opus-4-5-20251101'],
+      openrouter: {
+        simple: ['meta-llama/llama-3.2-3b-instruct:free', 'openrouter/pony-alpha'],
+        medium: ['stepfun/step-3.5-flash:free', 'arcee-ai/trinity-large-preview:free'],
+        complex: ['nousresearch/hermes-3-llama-3.1-405b:free', 'deepseek/deepseek-r1-0528:free'],
       },
     };
 
@@ -329,7 +314,7 @@ export class LLMClient {
    * Call a specific provider
    */
   private static async callProvider(
-    provider: 'xai' | 'anthropic' | 'openai' | 'google' | 'openrouter',
+    provider: 'openrouter',
     model: string,
     apiKey: string,
     prompt: string,
@@ -338,204 +323,11 @@ export class LLMClient {
     maxTokens: number
   ): Promise<LLMResponse> {
     switch (provider) {
-      case 'xai':
-        return this.callXAI(model, apiKey, prompt, systemPrompt, temperature, maxTokens);
-      case 'anthropic':
-        return this.callAnthropic(model, apiKey, prompt, systemPrompt, temperature, maxTokens);
-      case 'openai':
-        return this.callOpenAI(model, apiKey, prompt, systemPrompt, temperature, maxTokens);
-      case 'google':
-        return this.callGoogle(model, apiKey, prompt, systemPrompt, temperature, maxTokens);
       case 'openrouter':
         return this.callOpenRouter(model, apiKey, prompt, systemPrompt, temperature, maxTokens);
       default:
         throw new ApiError(`Unknown provider: ${provider}`);
     }
-  }
-
-  /**
-   * Call xAI (Grok) API
-   */
-  private static async callXAI(
-    model: string,
-    apiKey: string,
-    prompt: string,
-    systemPrompt: string,
-    temperature: number,
-    maxTokens: number
-  ): Promise<LLMResponse> {
-    const response = await fetch('https://api.x.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
-          { role: 'user', content: prompt },
-        ],
-        temperature,
-        max_tokens: maxTokens,
-      }),
-    });
-
-    if (!response.ok) {
-      await this.handleAPIError(response, 'xAI');
-    }
-
-    const data = (await response.json()) as AnyRecord;
-
-    return {
-      content: data.choices[0].message.content as string,
-      model,
-      inputTokens: data.usage.prompt_tokens as number,
-      outputTokens: data.usage.completion_tokens as number,
-      totalTokens: data.usage.total_tokens as number,
-      cached: false,
-    };
-  }
-
-  /**
-   * Call Anthropic (Claude) API
-   */
-  private static async callAnthropic(
-    model: string,
-    apiKey: string,
-    prompt: string,
-    systemPrompt: string,
-    temperature: number,
-    maxTokens: number
-  ): Promise<LLMResponse> {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: maxTokens,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: prompt }],
-        temperature,
-      }),
-    });
-
-    if (!response.ok) {
-      await this.handleAPIError(response, 'Anthropic');
-    }
-
-    const data = (await response.json()) as AnyRecord;
-
-    return {
-      content: data.content[0].text as string,
-      model,
-      inputTokens: data.usage.input_tokens as number,
-      outputTokens: data.usage.output_tokens as number,
-      totalTokens: (data.usage.input_tokens as number) + (data.usage.output_tokens as number),
-      cached: false,
-    };
-  }
-
-  /**
-   * Call OpenAI API
-   */
-  private static async callOpenAI(
-    model: string,
-    apiKey: string,
-    prompt: string,
-    systemPrompt: string,
-    temperature: number,
-    maxTokens: number
-  ): Promise<LLMResponse> {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
-          { role: 'user', content: prompt },
-        ],
-        temperature,
-        max_tokens: maxTokens,
-      }),
-    });
-
-    if (!response.ok) {
-      await this.handleAPIError(response, 'OpenAI');
-    }
-
-    const data = (await response.json()) as AnyRecord;
-
-    return {
-      content: data.choices[0].message.content as string,
-      model,
-      inputTokens: data.usage.prompt_tokens as number,
-      outputTokens: data.usage.completion_tokens as number,
-      totalTokens: data.usage.total_tokens as number,
-      cached: false,
-    };
-  }
-
-  /**
-   * Call Google Gemini API
-   */
-  private static async callGoogle(
-    model: string,
-    apiKey: string,
-    prompt: string,
-    systemPrompt: string,
-    temperature: number,
-    maxTokens: number
-  ): Promise<LLMResponse> {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{ text: prompt }],
-            },
-          ],
-          ...(systemPrompt && {
-            systemInstruction: {
-              parts: [{ text: systemPrompt }],
-            },
-          }),
-          generationConfig: {
-            temperature,
-            maxOutputTokens: maxTokens,
-          },
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      await this.handleAPIError(response, 'Google');
-    }
-
-    const data = (await response.json()) as AnyRecord;
-    const usageData = (data.usageMetadata || {}) as AnyRecord;
-
-    return {
-      content: data.candidates[0].content.parts[0].text as string,
-      model,
-      inputTokens: (usageData.promptTokenCount as number) || 0,
-      outputTokens: (usageData.candidatesTokenCount as number) || 0,
-      totalTokens: (usageData.totalTokenCount as number) || 0,
-      cached: false,
-    };
   }
 
   /**
@@ -613,14 +405,11 @@ export class LLMClient {
   /**
    * Get provider from model name
    */
-  public static getProvider(model: string): 'xai' | 'anthropic' | 'openai' | 'google' | 'openrouter' {
-    if (model.startsWith('grok-')) return 'xai';
-    if (model.startsWith('claude-')) return 'anthropic';
-    if (model.startsWith('gpt-')) return 'openai';
-    if (model.startsWith('gemini-')) return 'google';
+  public static getProvider(model: string): 'openrouter' {
     // OpenRouter models use provider/model format or have ':free' suffix
     if (model.includes('/') || model.includes(':free')) return 'openrouter';
-    throw new ApiError(`Unknown provider for model: ${model}`);
+    // All models go through OpenRouter
+    return 'openrouter';
   }
 
   /**
@@ -631,25 +420,20 @@ export class LLMClient {
     const estimatedInputTokens = Math.ceil(prompt.length / 4);
     const estimatedTotalTokens = estimatedInputTokens + maxTokens;
 
-    // Cost per 1k tokens (very rough estimates)
     const costPer1k: Record<string, number> = {
-      'grok-3-mini': 0.0005,
-      'grok-3': 0.002,
-      'claude-3-5-sonnet-20241022': 0.003,
-      'claude-3-haiku-20240307': 0.00025,
-      'gpt-4o': 0.0025,
-      'gpt-4o-mini': 0.00015,
-      'gemini-1.5-flash': 0.00007,
-      'gemini-1.5-pro': 0.00125,
       // OpenRouter free tier models
       'meta-llama/llama-3.2-3b-instruct:free': 0,
       'openrouter/pony-alpha': 0,
       'nousresearch/hermes-3-llama-3.1-405b:free': 0,
       'stepfun/step-3.5-flash:free': 0,
       'arcee-ai/trinity-large-preview:free': 0,
+      'deepseek/deepseek-r1-0528:free': 0,
+      'tngtech/deepseek-r1t2-chimera:free': 0,
+      'nvidia/nemotron-3-nano-30b-a3b:free': 0,
+      'z-ai/glm-4.5-air:free': 0,
     };
 
-    const cost = (costPer1k[model] || 0.001) * (estimatedTotalTokens / 1000);
+    const cost = (costPer1k[model] || 0) * (estimatedTotalTokens / 1000);
     return cost;
   }
 
@@ -658,23 +442,19 @@ export class LLMClient {
    */
   private static calculateActualCost(model: string, totalTokens: number): number {
     const costPer1k: Record<string, number> = {
-      'grok-3-mini': 0.0005,
-      'grok-3': 0.002,
-      'claude-3-5-sonnet-20241022': 0.003,
-      'claude-3-haiku-20240307': 0.00025,
-      'gpt-4o': 0.0025,
-      'gpt-4o-mini': 0.00015,
-      'gemini-1.5-flash': 0.00007,
-      'gemini-1.5-pro': 0.00125,
       // OpenRouter free tier models
       'meta-llama/llama-3.2-3b-instruct:free': 0,
       'openrouter/pony-alpha': 0,
       'nousresearch/hermes-3-llama-3.1-405b:free': 0,
       'stepfun/step-3.5-flash:free': 0,
       'arcee-ai/trinity-large-preview:free': 0,
+      'deepseek/deepseek-r1-0528:free': 0,
+      'tngtech/deepseek-r1t2-chimera:free': 0,
+      'nvidia/nemotron-3-nano-30b-a3b:free': 0,
+      'z-ai/glm-4.5-air:free': 0,
     };
 
-    return (costPer1k[model] || 0.001) * (totalTokens / 1000);
+    return (costPer1k[model] || 0) * (totalTokens / 1000);
   }
 }
 
@@ -757,14 +537,7 @@ export class LLMClientWithTools {
     provider: string,
     tools: ToolDefinition[]
   ): Record<string, unknown>[] {
-    if (provider === 'anthropic') {
-      return tools.map(tool => ({
-        name: tool.name,
-        description: tool.description,
-        input_schema: tool.parameters,
-      }));
-    }
-    // OpenAI format
+    // OpenAI-compatible format (used by OpenRouter)
     return tools.map(tool => ({
       type: 'function',
       function: {
@@ -773,105 +546,6 @@ export class LLMClientWithTools {
         parameters: tool.parameters,
       },
     }));
-  }
-
-  /**
-   * Call Anthropic with tools
-   */
-  private static async callAnthropicWithTools(
-    model: string,
-    apiKey: string,
-    messages: Message[],
-    tools: ToolDefinition[],
-    temperature: number,
-    maxTokens: number,
-    systemPrompt?: string
-  ): Promise<LLMToolResponse> {
-    const formattedTools = this.formatToolsForProvider('anthropic', tools);
-
-    // Format messages for Anthropic API
-    // Anthropic requires:
-    //   - tool_result messages to have role='user' with content=[{type:'tool_result', tool_use_id, content}]
-    //   - assistant messages with tool calls to include tool_use content blocks
-    const formattedMessages = messages.map(msg => {
-      if (msg.role === 'tool_result') {
-        return {
-          role: 'user' as const,
-          content: [{
-            type: 'tool_result' as const,
-            tool_use_id: msg.toolUseId || 'unknown',
-            content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
-          }],
-        };
-      }
-      if (msg.role === 'assistant' && Array.isArray(msg.content)) {
-        return {
-          role: 'assistant' as const,
-          content: msg.content,
-        };
-      }
-      return {
-        role: msg.role as 'user' | 'assistant',
-        content: typeof msg.content === 'string' ? msg.content : msg.content,
-      };
-    });
-
-    // Merge consecutive user messages (Anthropic doesn't allow them)
-    const mergedMessages: Array<{ role: string; content: any }> = [];
-    for (const msg of formattedMessages) {
-      const prev = mergedMessages[mergedMessages.length - 1];
-      if (prev && prev.role === 'user' && msg.role === 'user') {
-        // Merge content arrays/strings
-        const prevContent = Array.isArray(prev.content) ? prev.content : [{ type: 'text', text: prev.content as string }];
-        const msgContent = Array.isArray(msg.content) ? msg.content : [{ type: 'text', text: msg.content as string }];
-        prev.content = [...prevContent, ...msgContent];
-      } else {
-        mergedMessages.push({ role: msg.role, content: msg.content });
-      }
-    }
-
-    const requestBody: Record<string, unknown> = {
-      model,
-      max_tokens: maxTokens,
-      temperature,
-      tools: formattedTools,
-      messages: mergedMessages,
-    };
-
-    if (systemPrompt) {
-      requestBody.system = systemPrompt;
-    }
-
-    logger.debug(`[LLM] Anthropic request: model=${model}, messages=${mergedMessages.length}, system=${systemPrompt ? 'yes (' + systemPrompt.length + ' chars)' : 'no'}`);
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!response.ok) {
-      const errBody = await response.text().catch(() => '');
-      throw new Error(`Anthropic API error: ${response.status} ${response.statusText} - ${errBody}`);
-    }
-
-    const data = (await response.json()) as any;
-
-    logger.debug(`[LLM] Anthropic response: stop_reason=${data.stop_reason}, content_blocks=${data.content?.length}, usage=${JSON.stringify(data.usage)}`);
-
-    return {
-      stop_reason: data.stop_reason as 'tool_use' | 'end_turn' | 'max_tokens',
-      content: data.content as ContentBlock[],
-      model,
-      usage: {
-        input_tokens: data.usage.input_tokens,
-        output_tokens: data.usage.output_tokens,
-      },
-    };
   }
 
   /**
@@ -958,9 +632,7 @@ export class LLMClientWithTools {
     maxTokens: number,
     systemPrompt?: string
   ): Promise<LLMToolResponse> {
-    if (provider === 'anthropic') {
-      return this.callAnthropicWithTools(model, apiKey, messages, tools, temperature, maxTokens, systemPrompt);
-    } else if (provider === 'openai' || provider === 'openrouter') {
+    if (provider === 'openrouter') {
       // OpenRouter uses OpenAI-compatible API
       return this.callOpenAIWithTools(model, apiKey, messages, tools, temperature, maxTokens, systemPrompt);
     } else {

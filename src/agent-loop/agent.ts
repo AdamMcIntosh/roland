@@ -413,7 +413,7 @@ export class AutonomousAgent {
               toolUseId: msg.toolUseId,
             })),
             tools: this.registry.getTools(),
-            model: this.session.getConfig().model || 'claude-opus',
+            model: this.session.getConfig().model || 'nousresearch/hermes-3-llama-3.1-405b:free',
             systemPrompt,
             maxTokens: 12288,
           }),

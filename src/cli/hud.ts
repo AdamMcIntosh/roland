@@ -175,12 +175,15 @@ export class HudStatusLine {
    */
   private getModelShortName(model: string): string {
     const shortNames: Record<string, string> = {
-      'claude-4-sonnet': 'Claude-S',
-      'claude-opus': 'Claude-O',
-      'gpt-4o': 'GPT-4o',
-      'gpt-4-turbo': 'GPT-4T',
-      'gemini-2.0-flash': 'Gemini-F',
-      'grok-2': 'Grok-2',
+      'nousresearch/hermes-3-llama-3.1-405b:free': 'Hermes-405B',
+      'meta-llama/llama-3.2-3b-instruct:free': 'Llama-3B',
+      'stepfun/step-3.5-flash:free': 'Step-Flash',
+      'arcee-ai/trinity-large-preview:free': 'Trinity',
+      'openrouter/pony-alpha': 'Pony-α',
+      'deepseek/deepseek-r1-0528:free': 'DS-R1',
+      'tngtech/deepseek-r1t2-chimera:free': 'Chimera',
+      'nvidia/nemotron-3-nano-30b-a3b:free': 'Nemotron',
+      'z-ai/glm-4.5-air:free': 'GLM-Air',
     };
     return shortNames[model] || model;
   }

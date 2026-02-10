@@ -20,7 +20,7 @@ export interface CachedConversationTurn {
 export class ConversationCache {
   private cacheManager: CacheManager;
   private cachePrefix = 'agent-conversation';
-  private model = 'gpt-4';
+  private model = 'nousresearch/hermes-3-llama-3.1-405b:free';
 
   constructor(cacheManager?: CacheManager) {
     this.cacheManager = cacheManager || new CacheManager();

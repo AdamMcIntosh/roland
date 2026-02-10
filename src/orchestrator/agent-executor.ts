@@ -571,8 +571,8 @@ Expected behavior confirmed.
    */
   generateReport(): string {
     const costReport = costCalculator.generateReport(
-      'grok-4-1-fast-reasoning',
-      'gpt-4o'
+      'meta-llama/llama-3.2-3b-instruct:free',
+      'nousresearch/hermes-3-llama-3.1-405b:free'
     );
     const cacheReport = cacheManager.generateReport();
 

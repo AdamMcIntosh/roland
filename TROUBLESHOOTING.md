@@ -87,35 +87,25 @@ Common issues and solutions for samwise workflow orchestration.
 
 ### Issue: "Unauthorized" or "API key not found" errors
 
-**Error**: `Anthropic API error: Unauthorized` or `API key not configured`
+**Error**: `OpenRouter API error: Unauthorized` or `API key not configured`
 
 **Solutions**:
-1. Set environment variables with correct prefix:
+1. Set environment variable with correct prefix:
    ```bash
    # PowerShell
-   $env:SAMWISE_API_KEYS_ANTHROPIC="sk-ant-..."
-   $env:SAMWISE_API_KEYS_OPENAI="sk-..."
-   $env:SAMWISE_API_KEYS_XAI="xai-..."
-   $env:SAMWISE_API_KEYS_GOOGLE="..."
+   $env:SAMWISE_API_KEYS_OPENROUTER="sk-or-..."
    
    # Bash
-   export SAMWISE_API_KEYS_ANTHROPIC="sk-ant-..."
+   export SAMWISE_API_KEYS_OPENROUTER="sk-or-..."
    ```
 
 2. Or create a `.env` file in project root:
    ```bash
-   SAMWISE_API_KEYS_ANTHROPIC=sk-ant-...
-   SAMWISE_API_KEYS_OPENAI=sk-...
-   SAMWISE_API_KEYS_XAI=xai-...
-   SAMWISE_API_KEYS_GOOGLE=...
+   SAMWISE_API_KEYS_OPENROUTER=sk-or-...
    ```
 
 3. Verify API key format is correct (no quotes in .env)
-4. Check which provider the model requires:
-   - `claude-*` → Anthropic (ANTHROPIC key)
-   - `gpt-*` → OpenAI (OPENAI key)
-   - `grok-*` → xAI (XAI key)
-   - `gemini-*` → Google (GOOGLE key)
+4. Get your free API key at: https://openrouter.ai/settings/keys
 
 ### Issue: Rate limiting errors
 

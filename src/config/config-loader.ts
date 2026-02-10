@@ -29,10 +29,6 @@ const RoutingConfigSchema = z.object({
 
 const SessionApiKeysSchema = z.object({
   openrouter: z.string().optional(),
-  anthropic: z.string().optional(),
-  openai: z.string().optional(),
-  google: z.string().optional(),
-  xai: z.string().optional(),
 });
 
 const SessionDefaultsSchema = z.object({
@@ -177,14 +173,14 @@ export class ConfigLoader {
 
   /**
    * Merge environment variables into configuration
-  * Format: SAMWISE_API_KEYS_ANTHROPIC=key
+   * Format: SAMWISE_API_KEYS_OPENROUTER=key
    */
   private static mergeEnvironmentVariables(config: Record<string, unknown>): void {
     const samwise = (config.samwise as Record<string, unknown>) || {};
     const apiKeys = (samwise.api_keys as Record<string, unknown>) || {};
 
     // Map environment variables to config
-    const providers = ['openrouter', 'anthropic', 'openai', 'google', 'xai'] as const;
+    const providers = ['openrouter'] as const;
 
     for (const provider of providers) {
       const envKey = `${this.ENV_PREFIX}API_KEYS_${provider.toUpperCase()}`;
@@ -243,7 +239,7 @@ export class ConfigLoader {
   /**
    * Check if an API key is configured for a provider
    */
-  static hasApiKey(config: AppConfig, provider: 'openrouter' | 'anthropic' | 'openai' | 'google' | 'xai'): boolean {
+  static hasApiKey(config: AppConfig, provider: 'openrouter'): boolean {
     const key = config.samwise.api_keys[provider];
     return Boolean(key && key.trim());
   }
@@ -251,7 +247,7 @@ export class ConfigLoader {
   /**
    * Get API key for a provider (safely - for logging/debugging only)
    */
-  static getApiKey(config: AppConfig, provider: 'openrouter' | 'anthropic' | 'openai' | 'google' | 'xai'): string | undefined {
+  static getApiKey(config: AppConfig, provider: 'openrouter'): string | undefined {
     return config.samwise.api_keys[provider];
   }
 
@@ -262,7 +258,7 @@ export class ConfigLoader {
     const missing: string[] = [];
 
     for (const provider of requiredProviders) {
-      if (!this.hasApiKey(config, provider as 'anthropic' | 'openai' | 'google' | 'xai')) {
+      if (!this.hasApiKey(config, provider as 'openrouter')) {
         missing.push(provider);
       }
     }

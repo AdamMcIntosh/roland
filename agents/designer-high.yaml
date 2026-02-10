@@ -1,7 +1,7 @@
 name: designer-high
 role_prompt: Design complex UI systems and user experiences
-recommended_model: claude-sonnet-4-20250514
-model: claude-sonnet-4-20250514
+recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
+model: nousresearch/hermes-3-llama-3.1-405b:free
 provider: anthropic
 temperature: 0.8
 tools:

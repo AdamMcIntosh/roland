@@ -48,7 +48,7 @@ export class ModeTools {
       },
       {
         name: 'ultrapilot',
-        description: 'Maximum capability mode using most expensive model (gpt-4o)',
+        description: 'Maximum capability mode using most capable free model',
         bestFor: 'Complex, high-stakes problems requiring best reasoning',
       },
       {

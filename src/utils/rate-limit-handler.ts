@@ -1,11 +1,8 @@
 /**
  * Rate Limit Handler - Automatic retry with exponential backoff
  * 
- * Handles rate limit errors from various LLM providers:
- * - Anthropic (Claude)
- * - OpenAI (GPT)
- * - Google (Gemini)
- * - xAI (Grok)
+ * Handles rate limit errors from LLM providers:
+ * - OpenRouter (free tier models)
  * 
  * Features:
  * - Auto-detection of rate limit errors
@@ -27,7 +24,7 @@ export interface RateLimitConfig {
 }
 
 export interface RateLimitError {
-  provider: 'openrouter' | 'anthropic' | 'openai' | 'google' | 'xai' | 'unknown';
+  provider: 'openrouter' | 'unknown';
   retryAfter?: number; // seconds
   message: string;
   statusCode?: number;
@@ -35,7 +32,7 @@ export interface RateLimitError {
 
 const DEFAULT_CONFIG: RateLimitConfig = {
   maxRetries: 5,
-  initialDelayMs: 61000, // 61 seconds — Anthropic/OpenAI enforce per-minute limits
+  initialDelayMs: 61000, // 61 seconds — OpenRouter enforces per-minute limits
   maxDelayMs: 120000, // 2 minutes max
   backoffMultiplier: 1.5,
   jitterMs: 2000,
@@ -94,17 +91,8 @@ export class RateLimitHandler {
   private static detectProvider(error: any): RateLimitError['provider'] {
     const message = error?.message || String(error);
     
-    if (message.includes('anthropic') || message.includes('claude')) {
-      return 'anthropic';
-    }
-    if (message.includes('openai') || message.includes('gpt')) {
-      return 'openai';
-    }
-    if (message.includes('google') || message.includes('gemini')) {
-      return 'google';
-    }
-    if (message.includes('xai') || message.includes('grok')) {
-      return 'xai';
+    if (message.includes('openrouter')) {
+      return 'openrouter';
     }
     
     return 'unknown';

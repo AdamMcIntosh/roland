@@ -106,8 +106,8 @@ export class CostCalculator {
   /**
    * Calculate savings compared to standard model
    * 
-   * @param ecomodeModel - Cheap model used (e.g., grok-4-1-fast-reasoning)
-   * @param standardModel - Standard model to compare against (e.g., gpt-4o)
+   * @param ecomodeModel - Cheap model used (e.g., meta-llama/llama-3.2-3b-instruct:free)
+   * @param standardModel - Standard model to compare against (e.g., nousresearch/hermes-3-llama-3.1-405b:free)
    * @returns Savings in USD
    */
   calculateSavings(ecomodeModel: string, standardModel: string): number {

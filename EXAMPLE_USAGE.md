@@ -295,14 +295,14 @@ npm run cli
 
 ✗ Configuration Error
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Missing API key for xAI provider.
+Missing API key for OpenRouter provider.
 
 How to fix:
 1. Create a .env file in the project root
-2. Add: SAMWISE_API_KEYS_XAI=your_key_here
+2. Add: SAMWISE_API_KEYS_OPENROUTER=your_key_here
 3. Restart the CLI
 
-Documentation: See config.yaml for all supported providers
+Get your free API key: https://openrouter.ai/settings/keys
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 

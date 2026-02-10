@@ -327,25 +327,23 @@ export class ComplexityClassifier {
     // Map to model recommendations
     const suggestions: Record<string, string[]> = {
       simple: [
-        'grok-3-mini', // Cheapest
-        'gemini-2.5-flash',
-        'gpt-4o-mini',
+        'meta-llama/llama-3.2-3b-instruct:free', // Lightest
+        'openrouter/pony-alpha',
+        'nvidia/nemotron-3-nano-30b-a3b:free',
       ],
       medium: [
-        'gemini-2.5-flash',
-        'gpt-4o-mini',
-        'grok-3',
-        'gemini-2.5-pro',
+        'stepfun/step-3.5-flash:free',
+        'arcee-ai/trinity-large-preview:free',
+        'z-ai/glm-4.5-air:free',
       ],
       complex: [
-        'gpt-4o',
-        'claude-4-sonnet',
-        'gpt-4o-mini', // Fallback if budget constrained
-        'grok-3',
+        'nousresearch/hermes-3-llama-3.1-405b:free',
+        'deepseek/deepseek-r1-0528:free',
+        'arcee-ai/trinity-large-preview:free', // Fallback
       ],
     };
 
-    return suggestions[complexity]?.[0] || 'gpt-4o-mini';
+    return suggestions[complexity]?.[0] || 'meta-llama/llama-3.2-3b-instruct:free';
   }
 
   /**

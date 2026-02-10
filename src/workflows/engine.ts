@@ -377,7 +377,7 @@ export class WorkflowEngine {
     logger.debug(`[WorkflowEngine] User message: ${userMessage.length} chars, first 300: ${userMessage.slice(0, 300)}`);
 
     const sessionConfig: SessionConfig = {
-      model: agentConfig?.model || 'claude-opus',
+      model: agentConfig?.model || 'nousresearch/hermes-3-llama-3.1-405b:free',
       maxToolCalls: 40,
       maxTerminalCommands: 0,
       autoConfirm: {

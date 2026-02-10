@@ -16,50 +16,16 @@ import { ProviderAbstraction, LLMProvider } from './provider-abstraction.js';
  * Used to estimate cheapest option per complexity level
  */
 export const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  // xAI Grok models
-  'grok-code-fast-1': { input: 0.5, output: 1.5 },
-  'grok-3-mini': { input: 1, output: 3 },
-  'grok-3': { input: 5, output: 15 },
-  'grok-4-1-fast-non-reasoning': { input: 2, output: 6 },
-  'grok-4-1-fast-reasoning': { input: 5, output: 15 },
-  'grok-4-fast-non-reasoning': { input: 2, output: 6 },
-  'grok-4-fast-reasoning': { input: 5, output: 15 },
-  'grok-4-0709': { input: 5, output: 15 },
-  'grok-2-vision-1212': { input: 2, output: 6 },
-  // Google Gemini models
-  'gemini-2.5-flash': { input: 0.075, output: 0.3 },
-  'gemini-2.5-pro': { input: 1.5, output: 6 },
-  'gemini-2.0-flash': { input: 0.075, output: 0.3 },
-  'gemini-2.0-flash-001': { input: 0.075, output: 0.3 },
-  'gemini-2.0-flash-lite': { input: 0.05, output: 0.2 },
-  'gemini-1.5-flash': { input: 0.075, output: 0.3 },
-  'gemini-1.5-pro': { input: 1.25, output: 5 },
-  'gemini-flash-latest': { input: 0.075, output: 0.3 },
-  'gemini-pro-latest': { input: 1.25, output: 5 },
-  // OpenAI models
-  'gpt-5-pro': { input: 4, output: 16 },
-  'gpt-5': { input: 2, output: 8 },
-  'gpt-4o-2024-11-20': { input: 2.5, output: 10 },
-  'gpt-4o': { input: 2.5, output: 10 },
-  'gpt-4o-mini-2024-07-18': { input: 0.15, output: 0.6 },
-  'gpt-4o-mini': { input: 0.15, output: 0.6 },
-  'gpt-4-turbo-2024-04-09': { input: 10, output: 30 },
-  'gpt-4-turbo': { input: 10, output: 30 },
-  'gpt-4': { input: 30, output: 60 },
-  'gpt-3.5-turbo': { input: 0.5, output: 1.5 },
-  // Anthropic Claude models (latest)
-  'claude-opus-4-5-20251101': { input: 15, output: 60 },
-  'claude-sonnet-4-5-20250929': { input: 3, output: 15 },
-  'claude-haiku-4-5-20251001': { input: 0.8, output: 4 },
-  'claude-opus-4-1-20250805': { input: 15, output: 60 },
-  'claude-opus-4-20250514': { input: 15, output: 60 },
-  'claude-sonnet-4-20250514': { input: 3, output: 15 },
-  'claude-3-7-sonnet-20250219': { input: 3, output: 15 },
-  'claude-3-5-haiku-20241022': { input: 0.8, output: 4 },
-  // Legacy Claude models
-  'claude-3-5-sonnet-20240620': { input: 3, output: 15 },
-  'claude-3-opus-20240229': { input: 15, output: 75 },
-  'claude-3-haiku-20240307': { input: 0.25, output: 1.25 },
+  // OpenRouter Free models (all $0)
+  'meta-llama/llama-3.2-3b-instruct:free': { input: 0, output: 0 },
+  'openrouter/pony-alpha': { input: 0, output: 0 },
+  'nousresearch/hermes-3-llama-3.1-405b:free': { input: 0, output: 0 },
+  'stepfun/step-3.5-flash:free': { input: 0, output: 0 },
+  'arcee-ai/trinity-large-preview:free': { input: 0, output: 0 },
+  'tngtech/deepseek-r1t2-chimera:free': { input: 0, output: 0 },
+  'deepseek/deepseek-r1-0528:free': { input: 0, output: 0 },
+  'nvidia/nemotron-3-nano-30b-a3b:free': { input: 0, output: 0 },
+  'z-ai/glm-4.5-air:free': { input: 0, output: 0 },
 };
 
 export class ModelRouter {
@@ -248,10 +214,7 @@ export class ModelRouter {
     
     // Check if each provider has an API key
     const apiKeys = config.samwise.api_keys as Record<string, string>;
-    if (apiKeys.xai) providers.add('xai');
-    if (apiKeys.anthropic) providers.add('anthropic');
-    if (apiKeys.openai) providers.add('openai');
-    if (apiKeys.google) providers.add('google');
+    // Only OpenRouter is supported
 
     return providers;
   }
@@ -467,11 +430,7 @@ export class ModelRouter {
    */
   static getProvider(
     model: string
-  ): 'openrouter' | 'anthropic' | 'openai' | 'google' | 'xai' {
-    if (model.startsWith('claude')) return 'anthropic';
-    if (model.startsWith('gpt-')) return 'openai';
-    if (model.startsWith('gemini-')) return 'google';
-    if (model.startsWith('grok-')) return 'xai';
+  ): 'openrouter' {
     // OpenRouter models use provider/model format or have ':free' suffix
     if (model.includes('/') || model.includes(':free')) return 'openrouter';
     throw new RoutingError(`Unknown provider for model: ${model}`);

@@ -21,27 +21,16 @@ export interface EstimatedTokenUsage extends TokenUsage {
  * Model-specific output token estimation ratios
  */
 const OUTPUT_ESTIMATION_RATIOS: Record<string, number> = {
-  // Haiku models - 30% of input
-  'claude-3-haiku-20240307': 0.30,
-  'claude-haiku': 0.30,
-  
-  // Sonnet models - 40% of input
-  'claude-3-sonnet-20240229': 0.40,
-  'claude-3-5-sonnet-20240620': 0.40,
-  'claude-3-5-sonnet-20241022': 0.40,
-  'claude-4-sonnet': 0.40,
-  'claude-sonnet': 0.40,
-  
-  // Opus models - 50% of input
-  'claude-3-opus-20240229': 0.50,
-  'claude-opus': 0.50,
-  
-  // Other models - 40% default
-  'gpt-4': 0.40,
-  'gpt-4-turbo': 0.40,
-  'gpt-3.5-turbo': 0.30,
-  'grok-beta': 0.40,
-  'gemini-pro': 0.40,
+  // OpenRouter free models
+  'meta-llama/llama-3.2-3b-instruct:free': 0.30,
+  'openrouter/pony-alpha': 0.35,
+  'nousresearch/hermes-3-llama-3.1-405b:free': 0.40,
+  'stepfun/step-3.5-flash:free': 0.35,
+  'arcee-ai/trinity-large-preview:free': 0.40,
+  'deepseek/deepseek-r1-0528:free': 0.50,
+  'tngtech/deepseek-r1t2-chimera:free': 0.45,
+  'nvidia/nemotron-3-nano-30b-a3b:free': 0.35,
+  'z-ai/glm-4.5-air:free': 0.40,
 };
 
 /**

@@ -157,10 +157,10 @@ export class AgentExecutor {
     if (mode === 'ecomode') {
       // Use cheapest available model for ecomode
       // This would be implemented with actual model pricing
-      return agent.model || agent.recommended_model || 'grok-3-mini';
+      return agent.model || agent.recommended_model || 'meta-llama/llama-3.2-3b-instruct:free';
     }
 
-    return agent.model || agent.recommended_model || 'grok-3';
+    return agent.model || agent.recommended_model || 'nousresearch/hermes-3-llama-3.1-405b:free';
   }
 
   /**

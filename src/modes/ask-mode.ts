@@ -77,8 +77,8 @@ export class AskMode extends BaseMode {
         };
       }
 
-      // Use cheapest Grok model for ask mode
-      const cheapestModel = 'grok-code-fast-1';
+      // Use cheapest free model for ask mode
+      const cheapestModel = 'meta-llama/llama-3.2-3b-instruct:free';
       logger.debug(`[Ask] Using model: ${cheapestModel}`);
 
       // Create conversational prompt

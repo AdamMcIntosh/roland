@@ -227,7 +227,7 @@ export function formatHelp(): string {
   help += chalk.bold('DOCUMENTATION OPTIONS:\n');
   help += '  -t, --type <type>                    Doc type (README, API, UserGuide, etc)\n';
   help += '  -a, --audience <audience>            Target audience (default: Developers)\n';
-  help += '  -m, --model <model>                  Model to use (default: claude-opus)\n';
+  help += '  -m, --model <model>                  Model to use (default: nousresearch/hermes-3-llama-3.1-405b:free)\n';
   help += '  --hud                                Enable HUD status line\n';
   help += '  --no-hud                             Disable HUD status line\n\n';
 

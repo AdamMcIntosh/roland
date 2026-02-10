@@ -13,7 +13,7 @@ export interface AgentConfig {
   role_prompt: string;
   recommended_model?: string;
   model: string;
-  provider: 'openrouter' | 'anthropic' | 'openai' | 'google' | 'xai';
+  provider: 'openrouter';
   temperature: number;
   tools?: string[];
   skills?: string[];
@@ -118,7 +118,7 @@ export const AgentConfigSchema = z.object({
   role_prompt: z.string().min(1, 'Role prompt is required'),
   recommended_model: z.string().optional(),
   model: z.string().min(1, 'Model is required'),
-  provider: z.enum(['anthropic', 'openai', 'google', 'xai']),
+  provider: z.enum(['openrouter']),
   temperature: z.number().min(0).max(2),
   tools: z.array(z.string()).optional(),
   skills: z.array(z.string()).optional(),

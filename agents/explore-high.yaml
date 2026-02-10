@@ -1,7 +1,7 @@
 name: explore-high
 role_prompt: Complex architectural search and deep code exploration
-recommended_model: claude-sonnet-4-20250514
-model: claude-sonnet-4-20250514
+recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
+model: nousresearch/hermes-3-llama-3.1-405b:free
 provider: anthropic
 temperature: 0.5
 tools:

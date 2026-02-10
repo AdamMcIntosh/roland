@@ -52,17 +52,11 @@ touch .env  # On Windows: New-Item .env -ItemType File
 Add your OpenRouter API key:
 
 ```bash
-# OpenRouter (recommended - free tier available)
+# OpenRouter (free tier available)
 SAMWISE_API_KEYS_OPENROUTER=your_openrouter_api_key_here
-
-# Optional: Other providers (if you have keys)
-SAMWISE_API_KEYS_ANTHROPIC=your_anthropic_api_key_here
-SAMWISE_API_KEYS_OPENAI=your_openai_api_key_here
-SAMWISE_API_KEYS_GOOGLE=your_google_api_key_here
-SAMWISE_API_KEYS_XAI=your_xai_api_key_here
 ```
 
-**Note**: Only the **OpenRouter API key** is required. Multiple free tier models are available including:
+**Note**: Samwise uses **OpenRouter only**. Multiple free tier models are available including:
 - `meta-llama/llama-3.2-3b-instruct:free` (3B, multilingual, fast)
 - `nousresearch/hermes-3-llama-3.1-405b:free` (405B flagship, most capable)
 - `arcee-ai/trinity-large-preview:free` (400B MoE, creative tasks)
@@ -185,11 +179,8 @@ cache:
 All API keys can be configured via environment variables:
 
 ```bash
-# Provider API keys
-SAMWISE_API_KEYS_XAI=...
-SAMWISE_API_KEYS_ANTHROPIC=...
-SAMWISE_API_KEYS_OPENAI=...
-SAMWISE_API_KEYS_GOOGLE=...
+# OpenRouter API key
+SAMWISE_API_KEYS_OPENROUTER=...
 
 # Optional: Override config file location
 OMG_CONFIG_PATH=/path/to/config.yaml
@@ -247,16 +238,16 @@ You should see 10 loaded agents:
 
 ## Troubleshooting
 
-### Error: "Missing API key for xAI provider"
+### Error: "Missing API key for OpenRouter provider"
 
-**Solution**: Ensure you have set `SAMWISE_API_KEYS_XAI` in your `.env` file.
+**Solution**: Ensure you have set `SAMWISE_API_KEYS_OPENROUTER` in your `.env` file.
 
 ```bash
 # Check if .env exists
 cat .env  # or: Get-Content .env on Windows
 
 # Add the key if missing
-echo "SAMWISE_API_KEYS_XAI=your_key_here" >> .env
+echo "SAMWISE_API_KEYS_OPENROUTER=your_key_here" >> .env
 ```
 
 ### Error: "Cannot find module 'dist/cli/cli-main.js'"

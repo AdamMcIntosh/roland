@@ -183,7 +183,7 @@ export class CliInterface {
     this.program
       .command('agent <query...>')
       .description('Run autonomous agent with natural language query')
-      .option('--model <name>', 'Specify LLM model (default: claude-opus)')
+      .option('--model <name>', 'Specify LLM model (default: nousresearch/hermes-3-llama-3.1-405b:free)')
       .option('--interactive', 'Start interactive multi-turn session')
       .option('--auto-confirm', 'Auto-approve file/terminal/skill operations')
       .option('--max-tools <number>', 'Max tool calls (default: 20)', '20')
@@ -197,7 +197,7 @@ export class CliInterface {
     this.program
       .command('chat [query...]')
       .description('Start interactive chat session (Copilot-style)')
-      .option('--model <name>', 'Specify LLM model (default: claude-opus)')
+      .option('--model <name>', 'Specify LLM model (default: nousresearch/hermes-3-llama-3.1-405b:free)')
       .option('--auto-confirm', 'Auto-approve file/terminal/skill operations')
       .option('--max-tools <number>', 'Max tool calls (default: 20)', '20')
       .option('--max-commands <number>', 'Max terminal commands (default: 10)', '10')
@@ -285,7 +285,7 @@ export class CliInterface {
       .description('Refactor and improve documentation')
       .option('-t, --type <type>', 'Documentation type (README, API, UserGuide, etc)', 'General')
       .option('-a, --audience <audience>', 'Target audience for documentation', 'Developers')
-      .option('-m, --model <model>', 'Model to use', 'claude-opus')
+      .option('-m, --model <model>', 'Model to use', 'nousresearch/hermes-3-llama-3.1-405b:free')
       .option('--hud', 'Show HUD status line', true)
       .option('--no-hud', 'Disable HUD status line')
       .action((filePath, options) => this.handleDocumentationRefactor(filePath, options));
@@ -691,7 +691,7 @@ export class CliInterface {
 
       // Configuration for this session
       const config: SessionConfig = {
-        model: options.model || 'claude-opus',
+        model: options.model || 'nousresearch/hermes-3-llama-3.1-405b:free',
         autoConfirm: {
           files: false,
           terminal: false,
@@ -831,7 +831,7 @@ export class CliInterface {
 
       // Configuration for this session
       const config: SessionConfig = {
-        model: options.model || 'claude-opus',
+        model: options.model || 'nousresearch/hermes-3-llama-3.1-405b:free',
         autoConfirm: {
           files: false,
           terminal: false,
@@ -1152,7 +1152,7 @@ export class CliInterface {
 
       // Configuration for planner session
       const config: SessionConfig = {
-        model: 'claude-4-sonnet',
+        model: 'nousresearch/hermes-3-llama-3.1-405b:free',
         autoConfirm: {
           files: false,
           terminal: false,
@@ -1191,7 +1191,7 @@ Please provide:
 Format your response clearly with sections and bullet points.`;
 
       // Start HUD
-      hud.start('Planning', 'claude-4-sonnet');
+      hud.start('Planning', 'nousresearch/hermes-3-llama-3.1-405b:free');
 
       const response = await agent.processInput(planningPrompt);
 
@@ -1599,7 +1599,7 @@ Format your response clearly with sections and bullet points.`;
 
       // Configuration for this session
       const config: SessionConfig = {
-        model: options.model || 'claude-opus',
+        model: options.model || 'nousresearch/hermes-3-llama-3.1-405b:free',
         autoConfirm: {
           files: false,
           terminal: false,

@@ -304,9 +304,9 @@ export class Ecomode extends BaseMode {
    * Used for displaying savings
    */
   private calculateStandardCost(inputTokens: number, outputTokens: number): number {
-    // Standard model pricing (GPT-4 level)
-    const standardInputPrice = 0.03 / 1000;
-    const standardOutputPrice = 0.06 / 1000;
+    // Standard model pricing (free tier baseline)
+    const standardInputPrice = 0;
+    const standardOutputPrice = 0;
     return inputTokens * standardInputPrice + outputTokens * standardOutputPrice;
   }
 

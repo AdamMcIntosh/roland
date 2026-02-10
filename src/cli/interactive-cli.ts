@@ -769,10 +769,6 @@ export class InteractiveCLI {
   private async handleApiKeys(input: string): Promise<void> {
     const availableKeys = [
       { env: 'SAMWISE_API_KEYS_OPENROUTER', name: 'OpenRouter (Free Tier)', url: 'https://openrouter.ai/settings/keys' },
-      { env: 'SAMWISE_API_KEYS_XAI', name: 'xAI (Grok)', url: 'https://console.x.ai' },
-      { env: 'SAMWISE_API_KEYS_ANTHROPIC', name: 'Anthropic (Claude)', url: 'https://console.anthropic.com' },
-      { env: 'SAMWISE_API_KEYS_OPENAI', name: 'OpenAI (GPT)', url: 'https://platform.openai.com/api-keys' },
-      { env: 'SAMWISE_API_KEYS_GOOGLE', name: 'Google (Gemini)', url: 'https://ai.google.dev' },
     ];
 
     const parts = input.split(' ');

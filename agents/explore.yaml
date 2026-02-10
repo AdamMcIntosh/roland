@@ -1,7 +1,7 @@
 name: explore
 role_prompt: Search and explore codebase, find files and patterns
-recommended_model: grok-4-1-fast-reasoning
-model: grok-4-1-fast-reasoning
+recommended_model: meta-llama/llama-3.2-3b-instruct:free
+model: meta-llama/llama-3.2-3b-instruct:free
 provider: xai
 temperature: 0.5
 tools:
