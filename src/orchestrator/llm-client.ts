@@ -715,7 +715,10 @@ export class LLMClientWithTools {
       const providerName = isOpenRouter ? 'OpenRouter' : 'OpenAI';
       const errorBody = await response.text().catch(() => '');
       logger.error(`[LLM] ${providerName} API error: ${response.status} ${response.statusText}`, errorBody);
-      throw new Error(`${providerName} API error: ${response.status} ${response.statusText}`);
+      const err = new Error(`${providerName} API error: ${response.status} ${response.statusText}`) as any;
+      err.statusCode = response.status;
+      err.status = response.status;
+      throw err;
     }
 
     const data = (await response.json()) as any;

@@ -54,7 +54,8 @@ export class RateLimitHandler {
     const statusCode = error?.status || error?.statusCode;
 
     // HTTP 429 is standard rate limit, 402 is OpenRouter free-tier quota exhaustion
-    if (statusCode === 429 || statusCode === 402) {
+    // HTTP 502/503 are transient server errors (capacity, unavailable) that should also retry
+    if (statusCode === 429 || statusCode === 402 || statusCode === 502 || statusCode === 503) {
       return {
         provider: this.detectProvider(error),
         retryAfter: this.extractRetryAfter(error),
@@ -71,6 +72,10 @@ export class RateLimitHandler {
       /requests per/i,
       /throttle/i,
       /429/,
+      /server at capacity/i,
+      /service unavailable/i,
+      /502/,
+      /503/,
     ];
 
     if (rateLimitPatterns.some(pattern => pattern.test(errorMessage))) {
@@ -123,14 +128,18 @@ export class RateLimitHandler {
   /**
    * Calculate delay for next retry with exponential backoff
    */
-  private calculateDelay(retryAfter?: number): number {
+  private calculateDelay(retryAfter?: number, statusCode?: number): number {
     // If server provided retry-after, use it
     if (retryAfter) {
       return retryAfter * 1000; // Convert to milliseconds
     }
 
-    // Exponential backoff: initialDelay * (multiplier ^ retryCount)
-    const exponentialDelay = this.config.initialDelayMs * 
+    // For transient server errors (502/503), use much shorter initial delay
+    const isTransientServerError = statusCode === 502 || statusCode === 503;
+    const baseDelay = isTransientServerError ? 3000 : this.config.initialDelayMs;
+
+    // Exponential backoff: baseDelay * (multiplier ^ retryCount)
+    const exponentialDelay = baseDelay * 
       Math.pow(this.config.backoffMultiplier, this.retryCount);
 
     // Add jitter to prevent thundering herd
@@ -214,7 +223,7 @@ export class RateLimitHandler {
         }
 
         // Calculate delay and wait
-        const delayMs = this.calculateDelay(rateLimitError.retryAfter);
+        const delayMs = this.calculateDelay(rateLimitError.retryAfter, rateLimitError.statusCode);
         
         console.log(''); // New line
         console.log(chalk.yellow('⚠️  Rate limit hit:'), rateLimitError.message);
