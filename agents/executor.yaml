@@ -1,7 +1,7 @@
 name: executor
 role_prompt: Execute tasks efficiently
-recommended_model: arcee-ai/trinity-large-preview:free
-model: arcee-ai/trinity-large-preview:free
+recommended_model: stepfun/step-3.5-flash:free
+model: stepfun/step-3.5-flash:free
 provider: openrouter
 temperature: 0.7
 tools:
