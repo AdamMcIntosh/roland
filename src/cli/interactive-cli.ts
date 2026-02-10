@@ -125,9 +125,21 @@ export class InteractiveCLI {
         return;
       }
 
-      // Also handle "workflow ..." without slash prefix
-      if (input.startsWith('workflow ') || input === 'workflow') {
-        await this.handleWorkflowCommand(input);
+      // Also handle "workflow ..." without slash prefix (with or without "samwise" prefix)
+      const normalizedInput = input.replace(/^samwise\s+/i, '');
+      if (normalizedInput.startsWith('workflow ') || normalizedInput === 'workflow') {
+        await this.handleWorkflowCommand(normalizedInput);
+        this.showPrompt();
+        return;
+      }
+
+      if (normalizedInput.startsWith('recipe ') || normalizedInput === 'recipe' ||
+          normalizedInput === 'recipes') {
+        if (normalizedInput === 'recipes') {
+          await this.handleRecipesCommand();
+        } else {
+          await this.handleWorkflowCommand(normalizedInput.replace(/^recipe\s+/, 'workflow '));
+        }
         this.showPrompt();
         return;
       }
@@ -475,11 +487,15 @@ export class InteractiveCLI {
       let raw = command.slice(command.indexOf(inputToken) + inputToken.length).trim();
       // Remove trailing flags that aren't part of the JSON
       raw = raw.replace(/\s+--no-cache\b/g, '');
-      const cleaned = raw.replace(/^["']/u, '').replace(/["']$/u, '').trim();
+      // Strip surrounding quotes (single or double)
+      let cleaned = raw.replace(/^["']/u, '').replace(/["']$/u, '').trim();
+      // Unescape backslash-escaped quotes (\" → ")
+      cleaned = cleaned.replace(/\\"/g, '"');
       if (cleaned) {
         try {
           input = JSON.parse(cleaned) as Record<string, unknown>;
         } catch (e) {
+          // Try wrapping in braces if it looks like key=value pairs
           console.log(chalk.red(`\n    Invalid JSON for --input: ${cleaned}`));
         }
       }
@@ -522,15 +538,45 @@ export class InteractiveCLI {
       console.log(chalk.gray(`    Duration: ${result.totalDuration}ms | Cost: $${(result.totalCost || 0).toFixed(4)}`));
 
       if (result.outputs) {
-        console.log(chalk.gray('\n    Outputs:'));
-        console.log('    ' + JSON.stringify(result.outputs, null, 2).split('\n').join('\n    '));
+        // Extract file artifacts from all string outputs
+        const allArtifacts: ReturnType<typeof extractFileArtifactsFromOutput> = [];
+        for (const [key, value] of Object.entries(result.outputs)) {
+          if (typeof value === 'string') {
+            const artifacts = extractFileArtifactsFromOutput(value);
+            allArtifacts.push(...artifacts);
+          }
+        }
 
-        const docPackage = result.outputs.documentation_package;
-        if (typeof docPackage === 'string' && docPackage.trim().length > 0) {
-          const safeName = parsed.name.replace(/[^a-z0-9-_]/gi, '_');
-          const outPath = path.join(process.cwd(), `${safeName}-output.md`);
-          fs.writeFileSync(outPath, docPackage, 'utf8');
-          console.log(chalk.green(`\n    ✓ Saved documentation to ${outPath}`));
+        if (allArtifacts.length > 0) {
+          console.log(chalk.cyan(`\n    ${allArtifacts.length} file(s) generated:`));
+          const writeSummary = await writeFileArtifactsToDirectory(allArtifacts, {
+            baseDir: process.cwd(),
+            overwrite: false,
+          });
+          for (const f of writeSummary.written) {
+            console.log(chalk.green(`    ✓ ${f}`));
+          }
+          for (const s of writeSummary.skipped) {
+            console.log(chalk.yellow(`    ⊘ ${s.filePath} (${s.reason})`));
+          }
+        } else {
+          // No structured artifacts — save raw output as a single file
+          const docPackage = result.outputs.documentation_package;
+          if (typeof docPackage === 'string' && docPackage.trim().length > 0) {
+            const safeName = parsed.name!.replace(/[^a-z0-9-_]/gi, '_');
+            const outPath = path.join(process.cwd(), `${safeName}-output.md`);
+            fs.writeFileSync(outPath, docPackage, 'utf8');
+            console.log(chalk.green(`\n    ✓ Saved documentation to ${outPath}`));
+          } else {
+            console.log(chalk.gray('\n    Outputs:'));
+            for (const [key, value] of Object.entries(result.outputs)) {
+              if (typeof value === 'string' && value.length > 200) {
+                console.log(chalk.gray(`    ${key}: (${value.length} chars)`));
+              } else {
+                console.log(chalk.gray(`    ${key}: ${typeof value === 'string' ? value.substring(0, 200) : JSON.stringify(value)}`));
+              }
+            }
+          }
         }
       }
       console.log();

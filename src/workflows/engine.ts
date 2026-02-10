@@ -61,7 +61,16 @@ export class WorkflowEngine {
    */
   getWorkflow(name: string, version?: string): Workflow | undefined {
     const key = `${name}:${version || '1.0.0'}`;
-    return this.workflows.get(key);
+    const exact = this.workflows.get(key);
+    if (exact) return exact;
+
+    // Fallback: find any version of this workflow
+    for (const [k, w] of this.workflows.entries()) {
+      if (k.startsWith(`${name}:`)) {
+        return w;
+      }
+    }
+    return undefined;
   }
 
   /**
