@@ -53,8 +53,8 @@ export class RateLimitHandler {
     const errorMessage = error?.message || String(error);
     const statusCode = error?.status || error?.statusCode;
 
-    // HTTP 429 is standard rate limit status
-    if (statusCode === 429) {
+    // HTTP 429 is standard rate limit, 402 is OpenRouter free-tier quota exhaustion
+    if (statusCode === 429 || statusCode === 402) {
       return {
         provider: this.detectProvider(error),
         retryAfter: this.extractRetryAfter(error),

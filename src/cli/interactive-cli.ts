@@ -855,6 +855,21 @@ export class InteractiveCLI {
       process.env[key] = value;
     }
 
+    // Update the cached config so LLM client picks up the new keys immediately
+    try {
+      const { getConfig } = await import('../config/config-loader.js');
+      const config = getConfig();
+      if (config) {
+        for (const [envKey, value] of Object.entries(updates)) {
+          // SAMWISE_API_KEYS_OPENROUTER -> openrouter
+          const provider = envKey.replace('SAMWISE_API_KEYS_', '').toLowerCase();
+          (config.samwise.api_keys as Record<string, string>)[provider] = value;
+        }
+      }
+    } catch {
+      // Non-critical: keys are in env vars, will be picked up on next config reload
+    }
+
     // Save to home directory .env file
     const homeDir = process.env.HOME || process.env.USERPROFILE || '';
     const envPath = path.join(homeDir, '.env');

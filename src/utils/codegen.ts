@@ -86,17 +86,70 @@ function isPlaceholderPath(filePath: string): boolean {
   return placeholders.some(regex => regex.test(filePath));
 }
 
+/**
+ * Try to extract a file path from text immediately preceding a code block.
+ * Handles patterns like:
+ *   **Program.cs**
+ *   ### Program.cs
+ *   `Program.cs`
+ *   File: Program.cs
+ *   // Program.cs
+ *   1. Program.cs
+ */
+function extractFilePathFromPrecedingText(text: string): string | undefined {
+  if (!text) return undefined;
+
+  // Take only the last non-empty line before the code block
+  const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+  if (lines.length === 0) return undefined;
+  const lastLine = lines[lines.length - 1].trim();
+
+  // Pattern: **filename.ext** or __filename.ext__
+  const boldMatch = lastLine.match(/\*\*([^*]+\.[a-z0-9]+)\*\*/i) ||
+                    lastLine.match(/__([^_]+\.[a-z0-9]+)__/i);
+  if (boldMatch) return cleanFilePath(boldMatch[1]);
+
+  // Pattern: ### filename.ext or ## filename.ext
+  const headingMatch = lastLine.match(/^#{1,6}\s+(.+\.[a-z0-9]+)\s*$/i);
+  if (headingMatch) return cleanFilePath(headingMatch[1]);
+
+  // Pattern: `filename.ext`
+  const backtickMatch = lastLine.match(/`([^`]+\.[a-z0-9]+)`/i);
+  if (backtickMatch) return cleanFilePath(backtickMatch[1]);
+
+  // Pattern: File: filename.ext or Filename: path/to.ext
+  const fileColonMatch = lastLine.match(/^(?:file|filename|path)\s*:\s*(.+\.[a-z0-9]+)\s*$/i);
+  if (fileColonMatch) return cleanFilePath(fileColonMatch[1]);
+
+  // Pattern: numbered list "1. filename.ext" or "- filename.ext"
+  const listMatch = lastLine.match(/^(?:\d+[.)\s]+|-\s+)(.+\.[a-z0-9]+)\s*$/i);
+  if (listMatch) return cleanFilePath(listMatch[1]);
+
+  // Pattern: just a bare filename with extension on its own line
+  const bareMatch = lastLine.match(/^([a-zA-Z0-9_\-./\\]+\.[a-z0-9]+)\s*:?\s*$/i);
+  if (bareMatch) return cleanFilePath(bareMatch[1]);
+
+  return undefined;
+}
+
 export function extractFileArtifactsFromOutput(output: string): CodeArtifact[] {
   const artifacts: CodeArtifact[] = [];
   const fenceRegex = /```([^\n]*)\n([\s\S]*?)```/g;
   let match: RegExpExecArray | null = null;
+  let lastIndex = 0;
 
   while ((match = fenceRegex.exec(output)) !== null) {
     const info = match[1] || '';
     const body = match[2] || '';
     const { filePath: infoPath, language } = parseInfoString(info);
     const { filePath: contentPath, strippedContent } = extractFilePathFromContent(body);
-    const filePath = infoPath || contentPath;
+
+    // Also check the text immediately before this code block for a filename
+    const precedingText = output.substring(lastIndex, match.index);
+    const contextPath = extractFilePathFromPrecedingText(precedingText);
+    lastIndex = match.index + match[0].length;
+
+    const filePath = infoPath || contentPath || contextPath;
 
     if (!filePath) {
       continue;

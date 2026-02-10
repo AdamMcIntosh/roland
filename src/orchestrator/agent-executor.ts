@@ -185,13 +185,23 @@ export class AgentExecutor {
     logger.debug(`Calling ${model} with agent: ${agentName}`);
 
     // Call the real LLM API (no fallback - let errors propagate)
-    const systemPrompt = `You are ${agentName}, an AI coding assistant. Provide helpful, accurate, and concise responses.`;
-    
+    const systemPrompt = [
+      `You are ${agentName}, an AI coding assistant.`,
+      'When asked to create code or project files, you MUST output one fenced code block per file.',
+      'Each code block MUST include the relative file path in the fence info string like: ```csharp file=Program.cs',
+      'OR include a comment on the very first line of the block like: // filepath: src/Program.cs',
+      'Use correct relative paths. Do NOT omit file paths. Do NOT combine multiple files into one block.',
+    ].join(' ');
+
+    // Use higher token limit for code generation to avoid truncation
+    const isCodeGen = /create|generate|build|scaffold|implement|write|make|set up|setup/i.test(query);
+    const tokenLimit = isCodeGen ? 4096 : 2000;
+
     const response = await LLMClient.call({
       model: model,
       prompt: query,
       temperature: 0.7,
-      maxTokens: 2000,
+      maxTokens: tokenLimit,
       systemPrompt: systemPrompt,
     });
 

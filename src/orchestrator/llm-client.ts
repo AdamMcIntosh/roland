@@ -161,12 +161,17 @@ export class LLMClient {
       throw new ApiError('Configuration not loaded');
     }
 
-    const apiKey = config.samwise.api_keys[provider];
+    // Prefer live env var over cached config (handles interactive apikeys set)
+    const envKey = `SAMWISE_API_KEYS_${provider.toUpperCase()}`;
+    const apiKey = process.env[envKey] || config.samwise.api_keys[provider];
+    
+    // Treat placeholder/dummy values as missing keys
+    const isPlaceholder = apiKey && /^(YOUR_|CHANGE_ME|sk-xxx|placeholder)/i.test(apiKey);
     
     // Debug logging
-    logger.debug(`[LLM] Provider: ${provider}, API key present: ${!!apiKey}, key length: ${apiKey?.length || 0}`);
+    logger.debug(`[LLM] Provider: ${provider}, API key present: ${!!apiKey}, key length: ${apiKey?.length || 0}${isPlaceholder ? ' (placeholder!)' : ''}`);
     
-    if (!apiKey) {
+    if (!apiKey || isPlaceholder) {
       // No API key - try fallback models from other providers (only if not already retrying)
       if (!_isRetry) {
         logger.warn(`[LLM] No API key for ${provider}, trying fallbacks in same tier...`);
@@ -203,18 +208,16 @@ export class LLMClient {
 
       logger.debug(`[LLM] Calling ${provider} model: ${model} (attempt ${attemptNumber})`);
 
-      // Wrap API call with rate limit handler
-      const response = await rateLimitHandler.executeWithRetry(
-        () => this.callProvider(
-          provider,
-          model,
-          apiKey,
-          prompt,
-          systemPrompt,
-          temperature,
-          maxTokens
-        ),
-        `LLM call to ${model}`
+      // Direct API call — no rate-limit-handler wrapper here.
+      // Fallback/retry logic below handles rate limits intelligently.
+      const response = await this.callProvider(
+        provider,
+        model,
+        apiKey,
+        prompt,
+        systemPrompt,
+        temperature,
+        maxTokens
       );
 
       // Record actual spending
@@ -240,7 +243,66 @@ export class LLMClient {
         logger.error(`[LLM] Unexpected error: ${error}`);
       }
 
-      // Try retries with exponential backoff before fallbacks
+      // ----- Rate limit: try fallback models IMMEDIATELY before any waiting -----
+      if (error instanceof ApiRateLimitError && !_isRetry) {
+        // 1) Try explicit fallback models
+        if (fallbackModels.length > 0) {
+          logger.info(`[LLM] Rate limited — trying explicit fallbacks: ${fallbackModels.join(', ')}`);
+          for (const fallbackModel of fallbackModels) {
+            try {
+              return await this.call({
+                model: fallbackModel,
+                prompt,
+                temperature,
+                maxTokens,
+                systemPrompt,
+                retries: 0,
+                _isRetry: true,
+              });
+            } catch (fallbackError) {
+              logger.warn(`[LLM] Fallback ${fallbackModel} also failed, trying next...`);
+            }
+          }
+        }
+
+        // 2) Try auto-generated fallback models (other free models)
+        const apiKeysObj = config.samwise.api_keys as Record<string, string>;
+        const autoFallbacks = this.generateFallbackModels(model, apiKeysObj);
+        if (autoFallbacks.length > 0) {
+          logger.info(`[LLM] Rate limited — trying ${autoFallbacks.length} alternative models before waiting`);
+          for (const fallbackModel of autoFallbacks.slice(0, 5)) {
+            const fallbackProvider = this.getProvider(fallbackModel);
+            if (apiKeysObj[fallbackProvider]) {
+              try {
+                logger.info(`[LLM] Trying alternative: ${fallbackModel}`);
+                return await this.call({
+                  model: fallbackModel,
+                  prompt,
+                  temperature,
+                  maxTokens,
+                  systemPrompt,
+                  retries: 0,
+                  _isRetry: true,
+                });
+              } catch (fallbackError) {
+                logger.warn(`[LLM] Alternative ${fallbackModel} failed: ${(fallbackError as Error).message}`);
+              }
+            }
+          }
+        }
+
+        // 3) All alternatives exhausted — wait and retry original model as last resort
+        logger.info(`[LLM] All alternative models exhausted, waiting before retrying ${model}`);
+        const result = await rateLimitHandler.executeWithRetry(
+          () => this.callProvider(provider, model, apiKey, prompt, systemPrompt, temperature, maxTokens),
+          `LLM call to ${model}`
+        );
+        const actualCost = this.calculateActualCost(model, result.totalTokens);
+        BudgetManager.recordSpending(actualCost);
+        return result;
+      }
+
+      // ----- Non-rate-limit errors: retry with backoff -----
       if (retries > 0 && !(error instanceof ApiAuthenticationError) && !_isRetry) {
         const delay = this.BASE_RETRY_DELAY * Math.pow(2, attemptNumber - 1);
         logger.info(`[LLM] Retrying ${model} in ${delay}ms (${retries} retries left)...`);
@@ -257,7 +319,7 @@ export class LLMClient {
         });
       }
 
-      // Try explicit fallback models first (only if not already retrying)
+      // Try explicit fallback models (non-rate-limit path)
       if (fallbackModels.length > 0 && !_isRetry) {
         logger.info(`[LLM] Attempting explicit fallback models: ${fallbackModels.join(', ')}`);
         for (const fallbackModel of fallbackModels) {
@@ -277,7 +339,7 @@ export class LLMClient {
         }
       }
 
-      // Try auto-generated fallback models (only if not already retrying)
+      // Try auto-generated fallback models (non-rate-limit path)
       if (!_isRetry) {
         const apiKeysObj = config.samwise.api_keys as Record<string, string>;
         const autoFallbacks = this.generateFallbackModels(model, apiKeysObj);
@@ -385,20 +447,28 @@ export class LLMClient {
     // Debug: log full error response
     logger.debug(`[LLM] API Error Details: ${JSON.stringify(errorData)}`);
 
+    // Extract the human-readable message from nested error objects
+    const errorMessage: string =
+      (errorData.error?.message as string) ||
+      (typeof errorData.error === 'string' ? errorData.error : null) ||
+      (errorData.message as string) ||
+      response.statusText;
+
     if (response.status === 401 || response.status === 403) {
       throw new ApiAuthenticationError(
-        `${provider} authentication failed: ${(errorData.message as string) || response.statusText}`
+        `${provider} authentication failed: ${errorMessage}`
       );
     }
 
-    if (response.status === 429) {
+    // 429 = standard rate limit, 402 = OpenRouter free-tier quota exhausted
+    if (response.status === 429 || response.status === 402) {
       throw new ApiRateLimitError(
-        `${provider} rate limit exceeded: ${(errorData.message as string) || response.statusText}`
+        `${provider} rate limit exceeded: ${errorMessage}`
       );
     }
 
     throw new ApiError(
-      `${provider} API error (${response.status}): ${(errorData.message as string) || (errorData.error as string) || response.statusText}`
+      `${provider} API error (${response.status}): ${errorMessage}`
     );
   }
 

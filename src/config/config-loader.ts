@@ -237,11 +237,20 @@ export class ConfigLoader {
   }
 
   /**
+   * Check if a value is a placeholder/dummy API key
+   */
+  private static isPlaceholderKey(key: string): boolean {
+    return /^(YOUR_|CHANGE_ME|sk-xxx|placeholder)/i.test(key);
+  }
+
+  /**
    * Check if an API key is configured for a provider
    */
   static hasApiKey(config: AppConfig, provider: 'openrouter'): boolean {
-    const key = config.samwise.api_keys[provider];
-    return Boolean(key && key.trim());
+    // Prefer live env var over cached config
+    const envKey = `SAMWISE_API_KEYS_${provider.toUpperCase()}`;
+    const key = process.env[envKey] || config.samwise.api_keys[provider];
+    return Boolean(key && key.trim() && !this.isPlaceholderKey(key));
   }
 
   /**

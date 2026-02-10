@@ -80,13 +80,22 @@ export class CliInterface {
   private appendCodeGenerationDirective(query: string): string {
     const directive =
       '\n\n' +
-      'When generating code or project files, output ONLY fenced code blocks for each file, ' +
-      'and include the relative file path in the fence info like:\n' +
-      '```ts file=src/index.ts\n' +
-      '// filepath: src/index.ts\n' +
-      '...file contents...\n' +
+      'IMPORTANT: When generating code or project files, you MUST:\n' +
+      '1. Output EXACTLY ONE fenced code block per file.\n' +
+      '2. Include the relative file path in the fence info like: ```csharp file=Program.cs\n' +
+      '3. OR include a filepath comment as the FIRST line inside the block like: // filepath: Program.cs\n' +
+      '4. Use correct relative file paths (e.g. src/Program.cs, MyApp.csproj).\n' +
+      '5. Do NOT skip any required project files (e.g. .csproj, Program.cs, etc.).\n' +
+      '6. Do NOT combine multiple files into one code block.\n' +
+      '\n' +
+      'Example:\n' +
+      '```xml file=MyApp.csproj\n' +
+      '<Project Sdk="Microsoft.NET.Sdk">...\n' +
       '```\n' +
-      'Use one fenced block per file. Paths must be relative to the current working directory.';
+      '\n' +
+      '```csharp file=Program.cs\n' +
+      'Console.WriteLine("Hello");\n' +
+      '```';
 
     if (query.includes('file=') || query.includes('filepath:')) {
       return query;
