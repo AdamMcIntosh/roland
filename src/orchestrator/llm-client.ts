@@ -636,10 +636,51 @@ export class LLMClientWithTools {
     if (systemPrompt) {
       openaiMessages.push({ role: 'system', content: systemPrompt });
     }
-    openaiMessages.push(...messages.map(msg => ({
-      role: msg.role,
-      content: typeof msg.content === 'string' ? msg.content : msg.content,
-    })));
+
+    // Convert internal message format to OpenAI-compatible format
+    for (const msg of messages) {
+      if (msg.role === 'tool_result') {
+        // OpenAI expects role: 'tool' with tool_call_id
+        openaiMessages.push({
+          role: 'tool',
+          content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+          tool_call_id: msg.toolUseId || '',
+        });
+      } else if (msg.role === 'assistant' && Array.isArray(msg.content)) {
+        // Assistant message with ContentBlock[] — may contain tool_use blocks
+        const textParts: string[] = [];
+        const toolCallsOut: Array<Record<string, unknown>> = [];
+
+        for (const block of msg.content as ContentBlock[]) {
+          if (block.type === 'text' && block.text) {
+            textParts.push(block.text);
+          } else if (block.type === 'tool_use' && block.name && block.id) {
+            toolCallsOut.push({
+              id: block.id,
+              type: 'function',
+              function: {
+                name: block.name,
+                arguments: JSON.stringify(block.input || {}),
+              },
+            });
+          }
+        }
+
+        const assistantMsg: Record<string, unknown> = {
+          role: 'assistant',
+          content: textParts.length > 0 ? textParts.join('\n') : null,
+        };
+        if (toolCallsOut.length > 0) {
+          assistantMsg.tool_calls = toolCallsOut;
+        }
+        openaiMessages.push(assistantMsg);
+      } else {
+        openaiMessages.push({
+          role: msg.role,
+          content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+        });
+      }
+    }
 
     // Determine if this is OpenRouter based on model name
     const isOpenRouter = model.includes('/') || model.includes(':free');
@@ -672,19 +713,66 @@ export class LLMClientWithTools {
 
     if (!response.ok) {
       const providerName = isOpenRouter ? 'OpenRouter' : 'OpenAI';
-      throw new Error(`${providerName} API error: ${response.statusText}`);
+      const errorBody = await response.text().catch(() => '');
+      logger.error(`[LLM] ${providerName} API error: ${response.status} ${response.statusText}`, errorBody);
+      throw new Error(`${providerName} API error: ${response.status} ${response.statusText}`);
     }
 
     const data = (await response.json()) as any;
+
+    if (!data.choices || data.choices.length === 0) {
+      logger.error('[LLM] No choices in API response', data);
+      throw new Error('LLM returned no choices');
+    }
+
     const choice = data.choices[0];
 
+    // Translate OpenAI response format to internal ContentBlock format
+    const contentBlocks: ContentBlock[] = [];
+
+    // Add text content if present
+    if (choice.message.content) {
+      contentBlocks.push({ type: 'text', text: choice.message.content });
+    }
+
+    // Convert OpenAI tool_calls to internal tool_use ContentBlock format
+    if (choice.message.tool_calls && choice.message.tool_calls.length > 0) {
+      for (const tc of choice.message.tool_calls) {
+        let parsedInput: Record<string, unknown>;
+        try {
+          parsedInput = JSON.parse(tc.function.arguments);
+        } catch {
+          logger.warn(`[LLM] Failed to parse tool call arguments for ${tc.function?.name}`, tc.function?.arguments);
+          parsedInput = {};
+        }
+        contentBlocks.push({
+          type: 'tool_use',
+          id: tc.id,
+          name: tc.function.name,
+          input: parsedInput,
+        });
+      }
+    }
+
+    // Fallback: if the model returned nothing usable, push an empty text block
+    if (contentBlocks.length === 0) {
+      logger.warn('[LLM] API response contained no text and no tool calls');
+      contentBlocks.push({ type: 'text', text: '' });
+    }
+
+    const stopReason = choice.finish_reason === 'tool_calls' ? 'tool_use' : 'end_turn';
+
+    logger.debug(`[LLM] Response parsed: stop_reason=${stopReason}, blocks=${contentBlocks.length}, `
+      + `text=${contentBlocks.filter(b => b.type === 'text').length}, `
+      + `tool_use=${contentBlocks.filter(b => b.type === 'tool_use').length}`);
+
     return {
-      stop_reason: choice.finish_reason === 'tool_calls' ? 'tool_use' : 'end_turn',
-      content: choice.message.tool_calls || [{ type: 'text', text: choice.message.content }],
+      stop_reason: stopReason,
+      content: contentBlocks,
       model,
       usage: {
-        input_tokens: data.usage.prompt_tokens,
-        output_tokens: data.usage.completion_tokens,
+        input_tokens: data.usage?.prompt_tokens || 0,
+        output_tokens: data.usage?.completion_tokens || 0,
       },
     };
   }

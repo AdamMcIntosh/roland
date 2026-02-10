@@ -485,6 +485,7 @@ export class AutonomousAgent {
       }
 
       if (!finalResponse) {
+        logger.warn(`[Agent] LLM returned no text response after ${totalToolCalls} tool call round(s). Using fallback. Model: ${this.session.getConfig().model}`);
         finalResponse = 'Completed.';
       }
 

@@ -409,6 +409,9 @@ export class WorkflowEngine {
     const output = await agent.processInput(userMessage, systemPrompt);
 
     logger.info(`[WorkflowEngine] Step "${step.name}" completed — output: ${output.length} chars`);
+    if (output.length <= 20) {
+      logger.warn(`[WorkflowEngine] Step "${step.name}" produced very short output (${output.length} chars: "${output}"). The LLM may not have generated meaningful content. Model: ${sessionConfig.model}`);
+    }
     logger.debug(`[WorkflowEngine] Step "${step.name}" output first 300: ${output.slice(0, 300)}`);
 
     return {
