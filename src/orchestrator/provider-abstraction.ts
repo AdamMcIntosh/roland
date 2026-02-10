@@ -1,7 +1,7 @@
 /**
  * Provider Abstraction Layer
  * 
- * Abstracts differences between LLM providers (Anthropic, OpenAI, Google, XAI, OpenRouter)
+ * Abstracts differences between LLM providers (OpenRouter)
  * Provides unified interface for provider capabilities and constraints
  */
 

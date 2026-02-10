@@ -23,7 +23,7 @@ const AgentConfigSchema = z.object({
   description: z.string().optional(),
   recommended_model: z.string().optional(),
   model: z.string().optional(),
-  provider: z.enum(['anthropic', 'openai', 'google', 'xai']).optional(),
+  provider: z.enum(['openrouter']).optional(),
   temperature: z.number().min(0).max(2).default(0.7),
   max_tokens: z.number().optional(),
   tools: z.array(z.string()).default([]),
