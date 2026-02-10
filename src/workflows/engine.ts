@@ -390,7 +390,7 @@ export class WorkflowEngine {
       maxToolCalls: 40,
       maxTerminalCommands: 0,
       autoConfirm: {
-        files: false,
+        files: step.allow_file_writes === true,
         terminal: false,
         skills: true,
       },
@@ -400,7 +400,7 @@ export class WorkflowEngine {
       config: sessionConfig,
       workspaceDirectory: process.cwd(),
       interactive: false,
-      onConfirmation: async () => false,
+      onConfirmation: step.allow_file_writes === true ? async () => true : async () => false,
       codegen: {
         enforceDirective: false,
       },

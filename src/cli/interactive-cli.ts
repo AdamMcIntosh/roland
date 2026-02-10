@@ -551,7 +551,7 @@ export class InteractiveCLI {
           console.log(chalk.cyan(`\n    ${allArtifacts.length} file(s) generated:`));
           const writeSummary = await writeFileArtifactsToDirectory(allArtifacts, {
             baseDir: process.cwd(),
-            overwrite: false,
+            overwrite: true,
           });
           for (const f of writeSummary.written) {
             console.log(chalk.green(`    ✓ ${f}`));

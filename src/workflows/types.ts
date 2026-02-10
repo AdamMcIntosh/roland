@@ -43,6 +43,9 @@ export interface WorkflowStep {
     max_attempts?: number; // Default: 1 (no retry)
     backoff_seconds?: number; // Delay between retries
   };
+
+  // File write permissions
+  allow_file_writes?: boolean; // Allow agent to write/overwrite files during this step
 }
 
 /**

@@ -126,8 +126,9 @@ steps:
 
   - name: finalize-docs
     agent: executor
+    allow_file_writes: true
     input: |
-      Finalize documentation by applying review corrections.
+      Finalize documentation by applying review corrections and WRITE the files to disk.
 
       Review Feedback:
       {{review_quality}}
@@ -138,9 +139,18 @@ steps:
       Original Analysis (ground truth):
       {{analyze_codebase}}
 
-      Apply all corrections from the review. Fix any factual errors.
-      Add table of contents, cross-links between documents, and consistent formatting.
-      Output the final corrected documents as fenced markdown blocks.
+      INSTRUCTIONS:
+      1. Apply all corrections from the review. Fix any factual errors.
+      2. Add table of contents, cross-links between documents, and consistent formatting.
+      3. Use the write_file tool to WRITE each document to its actual file path:
+         - write_file with filePath="ReadMe.MD" for the main README
+         - write_file with filePath="docs/api.md" for API documentation  
+         - write_file with filePath="INSTALLATION.md" for setup/installation guide
+         - write_file with filePath="CONTRIBUTING.md" for contributing guide
+         - Update any other existing documentation files that need changes using write_file
+      4. Do NOT just output text — you MUST use write_file to save each document.
+      5. If a file already exists, overwrite it with the improved version.
+      6. After writing all files, output a summary of which files were written/updated.
     output_to: documentation_package
 
 outputs:

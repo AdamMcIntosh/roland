@@ -145,6 +145,7 @@ export class RecipeLoader {
         max_cost: step.max_cost,
         timeout_seconds: step.timeout_seconds,
         retry: step.retry,
+        allow_file_writes: step.allow_file_writes === true,
       };
     });
 
