@@ -162,8 +162,8 @@ Quick Start:
 ✓ Ecomode Result
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Skill: RefactoringSkill
-Model: grok-4-1-fast-reasoning (via xAI)
-Cost: $0.0002 | Cached: No | Duration: 1.2s
+Model: stepfun/step-3.5-flash:free (via OpenRouter)
+Cost: $0.0000 | Cached: No | Duration: 1.2s
 
 [Refactored code output]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -172,7 +172,7 @@ Cost: $0.0002 | Cached: No | Duration: 1.2s
    • search-read-analyze Pattern (60% confidence)
 
 > run "plan: create REST API for user management" --hud
-⠋ Planning [2.3s] Claude-S 🔧 3/15 $0.0042
+⠗ Planning [2.3s] Hermes-405B 🔧 3/15 $0.0000
 
 📋 Implementation Plan:
 ────────────────────────────────────────────────────────────
@@ -204,8 +204,8 @@ Found 1 learned skills
 📊 Session Statistics
 Total Queries: 2
 Cache Hits: 0 (0%)
-Total Cost: $0.0044
-Savings (vs standard): 85%
+Total Cost: $0.0000
+Savings (vs standard): 100%
 ```
 
 See [EXAMPLE_USAGE.md](EXAMPLE_USAGE.md) for detailed examples and advanced usage patterns.
@@ -218,19 +218,19 @@ See [EXAMPLE_USAGE.md](EXAMPLE_USAGE.md) for detailed examples and advanced usag
 
 | Task Type | Standard Cost | Ecomode Cost | Savings |
 |-----------|--------------|--------------|---------|
-| Simple (documentation) | $0.0006 | $0.0001 | 83% |
-| Medium (refactoring) | $0.0020 | $0.0003 | 85% |
-| Complex (architecture) | $0.0050 | $0.0010 | 80% |
+| Simple (documentation) | $0.0006 | $0.0000 | 100% |
+| Medium (refactoring) | $0.0020 | $0.0000 | 100% |
+| Complex (architecture) | $0.0050 | $0.0000 | 100% |
 
 **Cache Performance**:
 - Cache hit: **FREE** (instant retrieval)
 - Typical cache hit rate: 20-30% for repeated workflows
-- Additional savings: ~$0.0002 per cached query
+- Additional savings: all models are free tier
 
 **Example Monthly Savings**:
 - 100 queries/month at standard rates: **$2.00**
-- 100 queries/month with Ecomode: **$0.30**
-- **Monthly savings: $1.70 (85%)**
+- 100 queries/month with OpenRouter free tier: **$0.00**
+- **Monthly savings: $2.00 (100%)**
 
 ## ⚙️ Configuration
 
@@ -239,19 +239,16 @@ Current `config.yaml` structure (✅ ready):
 ```yaml
 routing:
   simple:
-    - grok-4-1-fast-reasoning
-    - gemini-2.5-flash
-    - gpt-4o-mini
+    - meta-llama/llama-3.2-3b-instruct:free
+    - openrouter/pony-alpha
   medium:
-    - claude-4-sonnet
-    - gpt-4o
-    - gemini-2.5-pro
+    - stepfun/step-3.5-flash:free
+    - arcee-ai/trinity-large-preview:free
   complex:
-    - claude-4.5-sonnet
-    - gpt-4o
-    - grok-4.1-full
-  explain:
-    - grok-4-1-fast-reasoning
+    - nousresearch/hermes-3-llama-3.1-405b:free
+    - deepseek/deepseek-r1-0528:free
+  creative:
+    - nousresearch/hermes-3-llama-3.1-405b:free
 ```
 
 ## 📁 Architecture
@@ -334,7 +331,7 @@ await loadConfig();
 BudgetManager.setMaxBudget(5.00);
 
 const response = await LLMClient.call({
-  model: 'grok-4-1-fast-reasoning',
+  model: 'meta-llama/llama-3.2-3b-instruct:free',
   messages: [{ role: 'user', content: 'What is TypeScript?' }],
   max_tokens: 500,
   temperature: 0.7,
@@ -405,7 +402,7 @@ npm test
 
 - ✅ **Modular skills system** - Easy to add custom skills
 - ✅ **Agent configuration via YAML** - No code changes needed
-- ✅ **Provider-agnostic** - Works with Anthropic, OpenAI, Google, xAI
+- ✅ **OpenRouter-powered** - All free tier models via OpenRouter
 - ✅ **TypeScript foundation** - Type-safe, maintainable codebase
 
 ### Key Benefits

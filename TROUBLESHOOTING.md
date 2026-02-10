@@ -113,7 +113,7 @@ Common issues and solutions for samwise workflow orchestration.
 
 **Solutions**:
 1. Wait and retry (most providers reset limits hourly/daily)
-2. Use a different model: `samwise run "eco: task" --model grok-2`
+2. Use a different model: `samwise run "eco: task" --model meta-llama/llama-3.2-3b-instruct:free`
 3. Enable caching to reduce API calls: ensure `--no-cache` is NOT used
 4. Check your provider's rate limits and upgrade tier if needed
 5. **Coming soon**: Automatic rate limit handling with exponential backoff
@@ -125,9 +125,9 @@ Common issues and solutions for samwise workflow orchestration.
 **Error**: Planning command returns unauthorized or fails
 
 **Solutions**:
-1. Planning mode uses Claude Sonnet 4 by default - ensure Anthropic API key is set:
+1. Planning mode uses `nousresearch/hermes-3-llama-3.1-405b:free` by default - ensure OpenRouter API key is set:
    ```bash
-   $env:SAMWISE_API_KEYS_ANTHROPIC="sk-ant-..."
+   $env:SAMWISE_API_KEYS_OPENROUTER="sk-or-..."
    ```
 
 2. Check you're using the correct syntax:
@@ -137,9 +137,9 @@ Common issues and solutions for samwise workflow orchestration.
    samwise run "samwise: create auth system"
    ```
 
-3. Try with explicit model override if Claude isn't available:
+3. Try with explicit model override:
    ```bash
-   samwise run "plan: task" --model gpt-4o
+   samwise run "plan: task" --model deepseek/deepseek-r1-0528:free
    ```
 
 ### Issue: Planning output is incomplete

@@ -15,7 +15,7 @@ Complete installation and setup guide for samwise standalone CLI.
 - **Node.js**: v18.0.0 or higher
 - **npm**: v9.0.0 or higher
 - **Operating System**: Windows, macOS, or Linux
-- **API Keys**: At least one AI provider API key (xAI, Anthropic, OpenAI, or Google)
+- **API Keys**: OpenRouter API key (free tier available)
 
 ## Installation Steps
 
@@ -110,41 +110,6 @@ Type `help` to see available commands.
 
 You can also access paid models from multiple providers through a single API key if needed later.
 
-### Optional: Other Providers
-
-If you have existing API keys from other providers, you can add them:
-
-#### Anthropic (Claude)
-
-1. Visit [https://console.anthropic.com](https://console.anthropic.com)
-2. Sign up for an account
-3. Go to API Keys section
-4. Create a new API key
-5. Copy the key to your `.env` file
-
-#### OpenAI (GPT)
-
-1. Visit [https://platform.openai.com](https://platform.openai.com)
-2. Sign up for an account
-3. Navigate to API Keys
-4. Create a new secret key
-5. Copy the key to your `.env` file
-
-#### Google (Gemini)
-
-1. Visit [https://ai.google.dev](https://ai.google.dev)
-2. Sign up for an account
-3. Get an API key
-4. Copy the key to your `.env` file
-
-#### xAI (Grok)
-
-1. Visit [https://x.ai](https://x.ai)
-2. Sign up for an account
-3. Navigate to API section
-4. Generate a new API key
-5. Copy the key to your `.env` file
-
 ## Configuration
 
 ### config.yaml
@@ -154,19 +119,16 @@ The project includes a `config.yaml` file for model routing configuration. Defau
 ```yaml
 routing:
   simple:
-    - grok-code-fast-1      # Cheapest for simple tasks
-    - gemini-2.5-flash
-    - gpt-4o-mini
+    - meta-llama/llama-3.2-3b-instruct:free      # Fast, multilingual
+    - openrouter/pony-alpha                       # Coding tasks
   medium:
-    - grok-4-1-fast-reasoning      # Cheapest for medium tasks
-    - claude-4-sonnet
-    - gpt-4o
+    - stepfun/step-3.5-flash:free                 # Reasoning, 196B MoE
+    - arcee-ai/trinity-large-preview:free         # Creative tasks
   complex:
-    - claude-4.5-sonnet  # Best for complex tasks
-    - gpt-4o
-    - grok-4.1-full
-  explain:
-    - grok-4-1-fast-reasoning      # Good for explanations
+    - nousresearch/hermes-3-llama-3.1-405b:free   # Most capable
+    - deepseek/deepseek-r1-0528:free              # Deep reasoning
+  creative:
+    - nousresearch/hermes-3-llama-3.1-405b:free   # Creative writing
 
 cache:
   enabled: true
@@ -198,8 +160,8 @@ npm run cli
 ```
 
 You should see:
-- Model selection (grok-code-fast-1 for simple tasks)
-- Cost estimate (~$0.0001)
+- Model selection (meta-llama/llama-3.2-3b-instruct:free for simple tasks)
+- Cost: $0.0000 (free tier)
 - Result output
 - Duration and caching status
 
@@ -212,8 +174,8 @@ You should see:
 You should see:
 - Total queries: 1
 - Cache hits: 0
-- Total cost: ~$0.0001
-- Models used: grok-code-fast-1
+- Total cost: $0.0000
+- Models used: meta-llama/llama-3.2-3b-instruct:free
 
 ### 3. List Available Skills
 

@@ -36,18 +36,18 @@ samwise workflow PlanExecRevEx --input '{"task": "build auth system"}'
 **File**: `recipes/PlanExecRevEx.yaml`  
 **Purpose**: Autonomous 4-agent coding workflow with continuous improvement loop  
 **Agents**: 4 (Planner, Executor, Reviewer, Explainer)  
-**Models**: Claude Opus → GPT-4o → Gemini Pro → Grok  
+**Models**: Hermes-405B → Trinity → Step-Flash → Llama-3B  
 **Steps**: 4 sequential with conditional looping  
 **Ideal For**: Complex development tasks, feature implementation, refactoring
 
 ### Description
-"Autonomous loop: Claude plans → GPT-4o executes → Gemini reviews → Grok explains"
+"Autonomous loop: Hermes plans → Trinity executes → Step-Flash reviews → Llama explains"
 
 This recipe implements a complete development cycle where each agent specializes:
-- **Planner** (Claude Opus): Strategic thinking and architecture
-- **Executor** (GPT-4o): Code implementation
-- **Reviewer** (Gemini Pro): Code review and quality checks
-- **Explainer** (Grok): Documentation and explanation
+- **Planner** (Hermes 405B): Strategic thinking and architecture
+- **Executor** (Trinity): Code implementation
+- **Reviewer** (Step-Flash): Code review and quality checks
+- **Explainer** (Llama 3B): Documentation and explanation
 
 ### Flow
 ```
@@ -814,12 +814,12 @@ Total estimated cost: ~$0.08 for entire microservices architecture!
 Recipe Catalog (6 Pre-built)
 1. PlanExecRevEx (PlanExecRevEx.yaml)
 
-```Planner (Claude) → Executor (GPT) → Reviewer (Gemini) → Explainer (Grok)```
+```Planner (Hermes-405B) → Executor (Trinity) → Reviewer (Step-Flash) → Explainer (Llama-3B)```
 
 
 Use: General coding with 4-model diversity
 Loop: Reviewer can send back to Executor if issues found
-Cost: ~$0.02-0.05
+Cost: $0.00 (free tier)
 
 2. BugFix (BugFix.yaml)
 

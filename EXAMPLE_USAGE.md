@@ -15,21 +15,21 @@ npm run cli
 - Keyword parser detects `eco:` prefix → Ecomode mode activated
 - Detects `refactor` → RefactoringSkill is selected
 - Query complexity inferred as `medium`
-- ModelRouter selects `grok-4-1-fast-reasoning` (cheapest model for medium complexity)
+- ModelRouter selects `stepfun/step-3.5-flash:free` (free model for medium complexity)
 - Result is cached for identical future queries
-- Cost: ~$0.0002 (typical)
+- Cost: $0.0000 (free tier)
 
 **Output**:
 ```
 ✓ Ecomode Result
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Skill: RefactoringSkill
-Model: grok-4-1-fast-reasoning (via xAI)
+Model: stepfun/step-3.5-flash:free (via OpenRouter)
 Status: Success
 
 [Refactored code output here]
 
-Cost: $0.0002 | Cached: No | Duration: 1.2s
+Cost: $0.0000 | Cached: No | Duration: 1.2s
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -44,7 +44,7 @@ npm run cli
 - Parser detects `eco:` + `documentation` keywords
 - DocumentationSkill is selected
 - Complexity: `simple`
-- ModelRouter selects `grok-code-fast-1` (cheapest for simple tasks)
+- ModelRouter selects `meta-llama/llama-3.2-3b-instruct:free` (free model for simple tasks)
 - Returns formatted documentation additions
 
 **Example Output**:
@@ -59,7 +59,7 @@ npm run cli
  */
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Cost: $0.0001 | Cached: No | Duration: 0.8s
+Cost: $0.0000 | Cached: No | Duration: 0.8s
 ```
 
 ### 3. Test Generation
@@ -90,7 +90,7 @@ describe('AuthService', () => {
 })
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Cost: $0.0002 | Cached: No | Duration: 1.5s
+Cost: $0.0000 | Cached: No | Duration: 1.5s
 ```
 
 ## Advanced Usage
@@ -129,7 +129,7 @@ npm run cli
 ```bash
 # Check cost savings with cached query
 npm run cli
-> run "eco: refactor function"  # First run: $0.0002
+> run "eco: refactor function"  # First run: $0.0000
 > run "eco: refactor function"  # Cached: FREE
 ```
 
@@ -137,8 +137,8 @@ npm run cli
 ```
 ✓ Cache Hit!
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Retrieved from cache (previous cost: $0.0002)
-Savings this session: $0.0002
+Retrieved from cache (previous cost: $0.0000)
+Savings this session: $0.0000
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -153,7 +153,7 @@ npm run cli
 # Options:
 > run --no-cache "eco: query"      # Bypass cache, always execute
 > run --verbose "eco: query"       # Show detailed execution log
-> run --model grok-4-turbo "eco: query"  # Override model selection
+> run --model nousresearch/hermes-3-llama-3.1-405b:free "eco: query"  # Override model selection
 > run --cost-only "eco: query"     # Show only cost estimate
 ```
 
@@ -170,12 +170,12 @@ npm run cli
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Total Queries: 3
 Cache Hits: 1 (33%)
-Total Cost: $0.0005
-Savings (vs standard): $0.00015
+Total Cost: $0.0000
+Savings (vs standard): 100%
 
 Top Models Used:
-  • grok-4-1-fast-reasoning: 2 queries ($0.0003)
-  • grok-code-fast-1: 1 query ($0.0001)
+  • stepfun/step-3.5-flash:free: 2 queries ($0.0000)
+  • meta-llama/llama-3.2-3b-instruct:free: 1 query ($0.0000)
 
 Top Skills Used:
   • RefactoringSkill: 2 queries
@@ -258,31 +258,31 @@ npm run cli
 
 # 1. Get cost estimate
 > run --cost-only "eco: review this authentication code"
-   Estimated cost: $0.0003
+   Estimated cost: $0.0000
 
 # 2. Generate tests first
 > run "eco: write comprehensive unit tests"
-   Cost: $0.0002 | Duration: 1.3s
+   Cost: $0.0000 | Duration: 1.3s
 
 # 3. Check stats
 > stats
-   Total Cost: $0.0002
+   Total Cost: $0.0000
    Cache Hits: 0
 
 # 4. Refactor code
 > run "eco: refactor for performance and readability"
-   Cost: $0.0003 | Duration: 1.5s
+   Cost: $0.0000 | Duration: 1.5s
 
 # 5. Add documentation
 > run "eco: add JSDoc comments"
-   Cost: $0.0001 (uses grok-code-fast-1 for simple task)
+   Cost: $0.0000 (uses meta-llama/llama-3.2-3b-instruct:free for simple task)
 
 # 6. View final session report
 > stats
-   Total Cost: $0.0006
+   Total Cost: $0.0000
    Time Saved vs Standard: ~45 minutes
-   Estimated Standard Cost: $0.0040
-   Savings: 85%
+   Estimated Standard Cost: $0.0000
+   Savings: 100%
 ```
 
 ## Error Handling Examples
@@ -340,7 +340,7 @@ Available skills:
   • TestingSkill - Use: "test", "testing", "unit test"
 
 Proceeding with general query execution...
-Cost: $0.0002 | Duration: 1.1s
+Cost: $0.0000 | Duration: 1.1s
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -374,13 +374,13 @@ Cost: $0.0002 | Duration: 1.1s
 
 ```bash
 # In one session:
-> run "eco: write tests"      # Cost: $0.0002
-> run "eco: refactor"         # Cost: $0.0003
-> run "eco: add docs"         # Cost: $0.0001
-# Total: $0.0006 (85% cheaper than standard)
+> run "eco: write tests"      # Cost: $0.0000
+> run "eco: refactor"         # Cost: $0.0000
+> run "eco: add docs"         # Cost: $0.0000
+# Total: $0.0000 (100% free with OpenRouter)
 
 # vs. Running separately, forgetting cache hits:
-# Total could be: $0.0040 (without optimization)
+# Total could be: $0.0000 (all free tier models)
 ```
 
 ## Troubleshooting
@@ -402,10 +402,10 @@ npm run cli
 ```bash
 # Check if using complex model
 > run --verbose "eco: simple task"
-# If using grok-4-turbo, try --model grok-code-fast-1
+# If using a complex model, try --model meta-llama/llama-3.2-3b-instruct:free
 
 # Or specify complexity explicitly:
-> run "eco: explain: quick summary"  # Will use cheaper model
+> run "eco: explain: quick summary"  # Will use faster model
 ```
 
 ### Model Not Available
