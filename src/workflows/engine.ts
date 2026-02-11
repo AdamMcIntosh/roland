@@ -242,11 +242,12 @@ export class WorkflowEngine {
                 result && typeof result === 'object' && 'output' in result
                   ? (result as { output: unknown }).output
                   : result;
-              const MAX_STEP_OUTPUT_CHARS = 12000;
-              if (typeof outputValue === 'string' && outputValue.length > MAX_STEP_OUTPUT_CHARS) {
-                const truncated = outputValue.slice(0, MAX_STEP_OUTPUT_CHARS) + '\n\n[OUTPUT TRUNCATED — use read_file tools for additional details]';
+              const DEFAULT_MAX_OUTPUT_CHARS = 32000;
+              const maxChars = step.max_output_chars ?? workflow.max_output_chars ?? DEFAULT_MAX_OUTPUT_CHARS;
+              if (typeof outputValue === 'string' && outputValue.length > maxChars) {
+                const truncated = outputValue.slice(0, maxChars) + '\n\n[OUTPUT TRUNCATED — use read_file tools for additional details]';
                 context.variables.set(step.output_to, truncated);
-                logger.info(`[WorkflowEngine] Truncated step "${step.name}" output from ${outputValue.length} to ${MAX_STEP_OUTPUT_CHARS} chars for variable {{${step.output_to}}}`);
+                logger.info(`[WorkflowEngine] Truncated step "${step.name}" output from ${outputValue.length} to ${maxChars} chars for variable {{${step.output_to}}}`);
               } else {
                 context.variables.set(step.output_to, outputValue);
               }

@@ -35,6 +35,9 @@ export interface WorkflowStep {
   // Cost constraints
   max_cost?: number; // Maximum cost allowed for this step
   
+  // Output size limits
+  max_output_chars?: number; // Max chars to keep from this step's output (default: 32000)
+
   // Timeout
   timeout_seconds?: number; // Execution timeout
   
@@ -74,6 +77,9 @@ export interface Workflow {
   // Steps
   steps: WorkflowStep[];
   
+  // Output size limits
+  max_output_chars?: number; // Default max chars per step output (default: 32000)
+
   // Global constraints
   max_total_cost?: number; // Total budget for entire workflow
   max_duration_seconds?: number; // Overall timeout

@@ -1,15 +1,15 @@
 name: DocumentationRefactor
-version: "2.0.0"
-description: "Multi-agent workflow to analyze entire codebase, extract existing documentation, and generate/clean up comprehensive docs"
+version: "3.0.0"
+description: "Multi-agent workflow that reads source code and existing documentation, identifies gaps and inaccuracies, and makes targeted improvements directly to files on disk"
 
 metadata:
   category: "Documentation"
   complexity: "high"
-  estimatedCost: 0.05
+  estimatedCost: 0.08
   estimatedDuration: "10-20 minutes"
-  tags: ["documentation", "codebase-analysis", "generation", "refactoring", "quality"]
+  tags: ["documentation", "codebase-analysis", "refactoring", "quality"]
 
-agents: [analyst, architect, writer, critic, executor]
+agents: [analyst, architect, writer, critic]
 
 variables:
   codebasePath: "."
@@ -22,170 +22,182 @@ input_variables:
   - targetAudience
 
 steps:
-  - name: analyze-codebase
+  # ── Step 1: Audit ──────────────────────────────────────────────────
+  # The analyst reads source code AND existing docs, then produces a
+  # concise gap/accuracy report. Output is small — just a structured list.
+  - name: audit-docs
     agent: analyst
     input: |
-      You are analyzing a codebase for documentation purposes.
+      You are auditing a project's documentation against its actual source code.
       Codebase path: {{codebasePath}}
       Focus areas: {{focusAreas}}
       Target audience: {{targetAudience}}
 
-      STEP 1 — Use tools to read these files (do this BEFORE writing anything):
-        - Use read_file to read "package.json" (or requirements.txt, Cargo.toml, etc.)
-        - Use read_file to read "tsconfig.json" (or equivalent config)
-        - Use list_files to list the root directory
-        - Use list_files on the "src" directory (if it exists)
-        - Use read_file on the main README
+      PHASE 1 — Read the project structure (do this BEFORE writing anything):
+        1. Use list_files to list the root directory
+        2. Use list_files on "src" (and its subdirectories)
+        3. Use list_files on "docs" (if it exists)
+        4. Use read_file to read: package.json, tsconfig.json (or equivalent configs)
+        5. Use read_file to read the main README
 
-      STEP 2 — Based ONLY on what the tools returned, write a structured analysis:
-        1. Project identity: name, language, runtime, package manager (from config files)
-        2. Dependencies: list actual deps from package.json/requirements.txt
-        3. Directory structure: from list_files results
-        4. Key modules and entry points: from src/ listing
-        5. Existing documentation: which .md files exist at root and docs/
-        6. Features: only those described in existing docs or inferable from code structure
-        7. Gaps: documentation that is missing or incomplete
+      PHASE 2 — Read existing documentation files:
+        Read EVERY .md file you found in the root directory and docs/ folder.
+        For each one, note: file path, what it covers, how long it is.
 
-      CRITICAL: Every claim must cite a file path. If you did not read a file, do not describe it.
-    output_to: analyze_codebase
+      PHASE 3 — Read key source files:
+        Read entry points (src/index.ts or similar) and key module files to understand
+        what the code actually does. Read at least 8-10 source files across different modules.
 
-  - name: plan-documentation
+      PHASE 4 — Produce a structured audit report with these sections:
+
+        PROJECT IDENTITY:
+        - Name, language, runtime, package manager (cite the config file)
+
+        DOCUMENTATION INVENTORY:
+        - List every existing .md file with: path, purpose, approximate line count
+
+        GAP ANALYSIS (most important):
+        For each documentation file, list:
+        - ACCURATE: things the doc gets right (with source file evidence)
+        - INACCURATE: things the doc gets wrong vs. actual source code
+        - OUTDATED: things that have changed in code but not in docs
+        - MISSING: features/modules in source code not mentioned in docs
+
+        MISSING DOCUMENTATION:
+        - Source modules/features that have NO documentation at all
+
+        PRIORITY FIXES (ranked):
+        - Numbered list of specific changes needed, most important first
+        - Each item: which file, what change, why
+
+      RULES:
+      - Every claim must cite a source file path as evidence
+      - Do NOT describe files you did not actually read
+      - Keep the report concise — bullet points, not paragraphs
+      - Focus on ACTIONABLE findings, not general observations
+    output_to: audit_report
+
+  # ── Step 2: Plan targeted changes ──────────────────────────────────
+  # The architect reads the audit and creates a specific, file-by-file
+  # action plan. Output is small — just a structured change list.
+  - name: plan-changes
     agent: architect
     input: |
-      Create a documentation plan based on this codebase analysis.
+      Create a specific action plan for documentation improvements.
 
-      Codebase Analysis (from actual file reads):
-      {{analyze_codebase}}
+      Here is the documentation audit report:
+      {{audit_report}}
 
       Focus areas: {{focusAreas}}
       Audience: {{targetAudience}}
 
+      INSTRUCTIONS:
+      You must create a CONCRETE action plan. For each documentation file that needs changes:
+
+      FILE-BY-FILE PLAN:
+      For each file (existing or new), specify:
+        - File path (e.g., ReadMe.MD, docs/api.md, INSTALLATION.md)
+        - Action: UPDATE (modify existing) or CREATE (new file)
+        - Specific changes: exactly what sections to add, remove, or rewrite
+        - Source files to reference: which source files the writer should read for accuracy
+
       RULES:
-      - Only plan docs for features/modules that appear in the analysis above.
-      - If a doc already exists, plan updates — not replacement.
-      - Use the exact technology names from the analysis (language, framework, package manager).
-      - Do not introduce technologies or features not mentioned in the analysis.
+      - Prefer UPDATE over CREATE — preserve existing good content
+      - Only plan changes supported by evidence in the audit report
+      - Do NOT plan changes for issues not found in the audit
+      - Be specific: "Add a section about the workflow engine citing src/workflows/engine.ts"
+        not "improve documentation"
+      - Limit to the most impactful changes — quality over quantity
+      - Maximum 6 files to change (focus on highest priority)
+    output_to: change_plan
 
-      Plan sections for: README, API docs, architecture overview, setup guide, contributing guide.
-      For each section specify: purpose, key content points, source files to reference.
-    output_to: plan_documentation
-
-  - name: generate-docs
+  # ── Step 3: Execute changes ────────────────────────────────────────
+  # The writer reads the plan, reads current file contents from disk,
+  # and writes updated files directly. No content passes through variables.
+  - name: execute-changes
     agent: writer
+    allow_file_writes: true
     input: |
-      You are a technical writer. Your task is to write documentation RIGHT NOW.
-      Do NOT say you are ready. Do NOT ask questions. Do NOT describe what you will do.
-      START WRITING THE DOCUMENTATION IMMEDIATELY.
+      You are a technical writer. You must UPDATE documentation files on disk NOW.
+      Do NOT just output text. Use read_file and write_file tools directly.
+      START IMMEDIATELY. Do not ask questions or describe what you will do.
 
-      Use read_file to read any source files you need for accuracy.
+      Here is the change plan to execute:
+      {{change_plan}}
 
-      Here is the documentation plan to follow:
-      {{plan_documentation}}
-
-      Here is the codebase analysis for reference:
-      {{analyze_codebase}}
+      Here is the audit report for context:
+      {{audit_report}}
 
       Target audience: {{targetAudience}}
 
-      RULES:
-      - All code examples must use TypeScript (the project's language).
-      - All CLI commands must use npm (the project's package manager).
-      - All dependency names must match what is in the actual config files.
-      - If you are unsure about something, write "[NEEDS VERIFICATION]" instead of guessing.
-      - Do NOT create files — only output the documentation as text.
+      FOR EACH FILE IN THE PLAN:
+        1. Use read_file to read the CURRENT contents of the file (if it exists)
+        2. Make the specific changes described in the plan
+        3. Use write_file to save the updated file to disk
+        4. Move to the next file
 
-      OUTPUT FORMAT: Write each document as a fenced markdown block with the filename.
-      You MUST produce ALL of the following documents NOW:
+      WRITING RULES:
+      - When UPDATING: preserve all existing content that is accurate. Only change/add
+        what the plan specifies. Do not rewrite sections that are already correct.
+      - When CREATING: write a complete, well-structured document.
+      - Use read_file on source files referenced in the plan to ensure accuracy.
+      - All code examples must use the project's actual language and package manager.
+      - If unsure about a detail, use read_file on the relevant source file to check.
+      - If still unsure, write "[NEEDS VERIFICATION]" rather than guessing.
+      - Write clear, concise documentation appropriate for the target audience.
 
-      ```markdown file=ReadMe.MD
-      (write the full README here — project overview, features, quick start, architecture)
-      ```
+      After writing ALL files, output a summary listing:
+      - Each file path you wrote
+      - What changes you made to it (1-2 sentences each)
+    output_to: changes_summary
 
-      ```markdown file=docs/api.md
-      (write the full API documentation here — key APIs, interfaces, usage patterns)
-      ```
-
-      ```markdown file=INSTALLATION.md
-      (write the full setup guide here — installation, configuration, first run)
-      ```
-
-      ```markdown file=CONTRIBUTING.md
-      (write the full contributing guide here — development setup, code style, PR process)
-      ```
-
-      BEGIN WRITING NOW. Output the first document immediately.
-    output_to: generate_docs
-
-  - name: review-quality
+  # ── Step 4: Verify changes ────────────────────────────────────────
+  # The critic reads the ACTUAL files from disk (not from variables)
+  # and verifies them against source code.
+  - name: verify-changes
     agent: critic
     input: |
-      Review these generated docs for factual accuracy against the codebase analysis.
+      You must verify the documentation changes that were just written to disk.
+      Do NOT rely on the summary below — read the ACTUAL files yourself.
 
-      Generated Documentation:
-      {{generate_docs}}
+      Changes that were made:
+      {{changes_summary}}
 
-      Original Codebase Analysis (source of truth):
-      {{analyze_codebase}}
+      Original audit report (what was supposed to be fixed):
+      {{audit_report}}
 
-      Audience: {{targetAudience}}
+      VERIFICATION PROCESS:
+        1. Use read_file to read EACH documentation file that was changed
+        2. Use read_file to read relevant source files to cross-check accuracy
+        3. For each changed document, verify:
+           - Technical accuracy: do code examples, commands, and paths match source?
+           - Completeness: were the planned changes actually made?
+           - Consistency: does the document read well with the changes?
+           - No regressions: was existing good content preserved?
 
-      CHECK EACH ITEM:
-      1. Does every technology name match what's in the analysis? (language, framework, deps)
-      2. Are CLI commands correct for the actual package manager?
-      3. Do file paths reference real files from the analysis?
-      4. Are described features actually present in the codebase?
-      5. Are code examples in the correct programming language?
+      OUTPUT FORMAT:
+      For each verified file:
+        - File: (path)
+        - Status: PASS / NEEDS-FIXES
+        - Issues found: (list any remaining problems, or "None")
 
-      Output:
-      - PASS/FAIL for each document
-      - List of specific factual errors with corrections
-      - Overall quality score (1-10)
-    output_to: review_quality
-
-  - name: finalize-docs
-    agent: executor
-    allow_file_writes: true
-    input: |
-      You MUST write documentation files to disk using the write_file tool.
-      Do NOT just output text. Do NOT say you are ready. Do NOT ask questions.
-      START WRITING FILES IMMEDIATELY using write_file.
-
-      Here is the review feedback — apply these corrections:
-      {{review_quality}}
-
-      Here is the documentation to fix and save:
-      {{generate_docs}}
-
-      Here is the ground truth analysis:
-      {{analyze_codebase}}
-
-      EXECUTE THESE STEPS NOW:
-
-      Step 1: Read the generated documentation above.
-      Step 2: Apply all corrections from the review feedback.
-      Step 3: For EACH document, call write_file to save it:
-
-        - Call write_file with filePath="ReadMe.MD" and the corrected README content
-        - Call write_file with filePath="docs/api.md" and the corrected API docs
-        - Call write_file with filePath="INSTALLATION.md" and the corrected setup guide
-        - Call write_file with filePath="CONTRIBUTING.md" and the corrected contributing guide
-
-      Step 4: After writing ALL files, list which files you wrote.
-
-      IMPORTANT: You have permission to overwrite existing files.
-      START NOW. Call write_file for the first document immediately.
-    output_to: documentation_package
+      FINAL SUMMARY:
+        - Files verified: (count)
+        - All passing: YES/NO
+        - Overall quality: (1-10 score)
+        - Remaining issues: (list, if any)
+    output_to: verification_report
 
 outputs:
-  documentation_package: documentation_package
-  codebase_analysis: analyze_codebase
-  documentation_plan: plan_documentation
-  quality_report: review_quality
+  audit_report: audit_report
+  change_plan: change_plan
+  changes_summary: changes_summary
+  verification_report: verification_report
 
 success_criteria:
-  - "All technologies match actual project config files"
-  - "README provides accurate project overview and quick start"
-  - "No hallucinated features or incorrect language references"
-  - "Setup guide uses correct package manager and commands"
-  - "Documentation reflects current codebase state"
-  - "Code examples are in the correct programming language"
+  - "Documentation accurately reflects actual source code"
+  - "Existing good content is preserved, not rewritten"
+  - "No hallucinated features or incorrect references"
+  - "Code examples use the correct language and package manager"
+  - "Gaps identified in audit are addressed in the changes"
+  - "Verification confirms changes are accurate"

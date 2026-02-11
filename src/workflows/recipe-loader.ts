@@ -146,6 +146,7 @@ export class RecipeLoader {
         timeout_seconds: step.timeout_seconds,
         retry: step.retry,
         allow_file_writes: step.allow_file_writes === true,
+        max_output_chars: step.max_output_chars,
       };
     });
 
@@ -179,6 +180,7 @@ export class RecipeLoader {
       outputs: data.outputs,
       max_total_cost: data.max_total_cost,
       max_duration_seconds: data.max_duration_seconds,
+      max_output_chars: data.max_output_chars,
       parallel_steps: data.parallel_steps,
       checkpoint_at: data.checkpoint_at,
       tags: data.tags,
@@ -222,6 +224,7 @@ export class RecipeLoader {
       outputs: template.outputs,
       max_total_cost: template.max_total_cost,
       max_duration_seconds: template.max_duration_seconds,
+      max_output_chars: template.max_output_chars,
       tags: template.tags,
       template_variables: template.template_variables,
     };
