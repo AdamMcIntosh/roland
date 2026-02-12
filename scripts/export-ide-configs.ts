@@ -672,7 +672,24 @@ function generateRecipeHandoffs(recipe: Recipe): HandoffAgent[] {
 // Generator: MCP config templates
 // ---------------------------------------------------------------------------
 
-function generateVscodeMcpJson(): string {
+function generateVscodeMcpJson(samwiseRoot: string, isExternal: boolean): string {
+  if (isExternal) {
+    // Absolute path to samwise dist — works from any project
+    const distIndex = path.join(samwiseRoot, 'dist', 'index.js').replace(/\\/g, '/');
+    return JSON.stringify({
+      servers: {
+        samwise: {
+          type: 'stdio',
+          command: 'node',
+          args: [distIndex],
+          env: {
+            SAMWISE_API_KEYS_OPENROUTER: '${env:SAMWISE_API_KEYS_OPENROUTER}',
+          },
+        },
+      },
+    }, null, 2);
+  }
+  // Self-referencing — use workspace-relative path
   return JSON.stringify({
     servers: {
       samwise: {
@@ -687,7 +704,23 @@ function generateVscodeMcpJson(): string {
   }, null, 2);
 }
 
-function generateCursorMcpJson(): string {
+function generateCursorMcpJson(samwiseRoot: string, isExternal: boolean): string {
+  if (isExternal) {
+    // Absolute path to samwise dist — works from any project
+    const distIndex = path.join(samwiseRoot, 'dist', 'index.js').replace(/\\/g, '/');
+    return JSON.stringify({
+      mcpServers: {
+        samwise: {
+          command: 'node',
+          args: [distIndex],
+          env: {
+            SAMWISE_API_KEYS_OPENROUTER: '${env:SAMWISE_API_KEYS_OPENROUTER}',
+          },
+        },
+      },
+    }, null, 2);
+  }
+  // Self-referencing
   return JSON.stringify({
     mcpServers: {
       samwise: {
@@ -781,8 +814,13 @@ async function main() {
     targetDir = path.resolve(args[targetIdx + 1]);
   }
 
-  const agentsDir = path.resolve(__dirname, '..', 'agents');
-  const recipesDir = path.resolve(__dirname, '..', 'recipes');
+  // Samwise project root (where this script lives)
+  const samwiseRoot = path.resolve(__dirname, '..');
+  const agentsDir = path.resolve(samwiseRoot, 'agents');
+  const recipesDir = path.resolve(samwiseRoot, 'recipes');
+
+  // Detect if we're exporting to an external project
+  const isExternal = path.resolve(targetDir) !== path.resolve(samwiseRoot);
 
   // Output directories
   const ghAgentsDir = path.join(targetDir, '.github', 'agents');
@@ -833,9 +871,9 @@ async function main() {
   console.log(`✅ Exported ${recipeCount} recipe handoff agents`);
 
   // ---- MCP config templates ----
-  fs.writeFileSync(path.join(vscodeDir, 'mcp.json'), generateVscodeMcpJson(), 'utf-8');
-  fs.writeFileSync(path.join(cursorDir, 'mcp.json'), generateCursorMcpJson(), 'utf-8');
-  console.log(`✅ Generated MCP config templates`);
+  fs.writeFileSync(path.join(vscodeDir, 'mcp.json'), generateVscodeMcpJson(samwiseRoot, isExternal), 'utf-8');
+  fs.writeFileSync(path.join(cursorDir, 'mcp.json'), generateCursorMcpJson(samwiseRoot, isExternal), 'utf-8');
+  console.log(`✅ Generated MCP config templates${isExternal ? ' (absolute paths → portable)' : ''}`);
 
   // ---- copilot-instructions.md ----
   fs.writeFileSync(
@@ -850,6 +888,10 @@ async function main() {
   console.log(`  .cursor/rules/      — ${agentCount} rule files`);
   console.log(`  .vscode/mcp.json    — VS Code MCP config`);
   console.log(`  .cursor/mcp.json    — Cursor MCP config`);
+  if (isExternal) {
+    console.log(`\n🔗 MCP configs point to: ${samwiseRoot}/dist/index.js`);
+    console.log(`   Make sure Samwise is built: cd ${samwiseRoot} && npm run build`);
+  }
 }
 
 main().catch(err => {

@@ -41,6 +41,25 @@ if (fs.existsSync(agentsSrc)) {
   console.warn(`⚠ Agents directory not found at ${agentsSrc}`);
 }
 
+// Copy recipes directory
+const recipesSrc = path.join(__dirname, '..', 'recipes');
+const recipesDest = path.join(distDir, 'recipes');
+if (fs.existsSync(recipesSrc)) {
+  if (!fs.existsSync(recipesDest)) {
+    fs.mkdirSync(recipesDest, { recursive: true });
+  }
+  
+  const recipePattern = recipesSrc.replace(/\\/g, '/') + '/**/*.yaml';
+  const recipeFiles = globSync(recipePattern);
+  recipeFiles.forEach(file => {
+    const filename = path.basename(file);
+    fs.copyFileSync(file, path.join(recipesDest, filename));
+  });
+  console.log(`✓ Copied ${recipeFiles.length} recipe files to ${recipesDest}`);
+} else {
+  console.warn(`⚠ Recipes directory not found at ${recipesSrc}`);
+}
+
 console.log('✓ Assets copied successfully');
 
 

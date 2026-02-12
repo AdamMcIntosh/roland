@@ -6,9 +6,10 @@ Setup guide for Samwise as an MCP server integrated with VS Code or Cursor.
 
 1. [Prerequisites](#prerequisites)
 2. [Installation Steps](#installation-steps)
-3. [IDE Setup](#ide-setup)
-4. [Verify Installation](#verify-installation)
-5. [Troubleshooting](#troubleshooting)
+3. [Use on Any Project](#use-on-any-project)
+4. [IDE Setup](#ide-setup)
+5. [Verify Installation](#verify-installation)
+6. [Troubleshooting](#troubleshooting)
 
 ## Prerequisites
 
@@ -45,6 +46,50 @@ This creates:
 - `.cursor/rules/*.mdc` — Cursor rule files
 - `.vscode/mcp.json` — VS Code MCP server config
 - `.cursor/mcp.json` — Cursor MCP server config
+
+## Use on Any Project
+
+Samwise is fully portable — you can add it to **any project** with one command.
+
+### Quick Setup
+
+From the samwise directory, run:
+
+```bash
+npm run init -- /path/to/your/project
+```
+
+Or target the current directory:
+
+```bash
+npm run init
+```
+
+This generates all agent configs, MCP server configs, and copilot instructions **with absolute paths** pointing back to your Samwise installation — so it works from any project, no matter where it lives on disk.
+
+### What Gets Created
+
+In your target project:
+- `.github/agents/*.agent.md` — VS Code Copilot agent personas
+- `.cursor/rules/*.mdc` — Cursor rule files
+- `.vscode/mcp.json` — VS Code MCP config (absolute path to Samwise)
+- `.cursor/mcp.json` — Cursor MCP config (absolute path to Samwise)
+- `.github/copilot-instructions.md` — Agent catalog & usage guide
+
+### Global Install (Optional)
+
+For the simplest experience, link Samwise globally:
+
+```bash
+cd /path/to/samwise
+npm link
+```
+
+Now `samwise-mcp` is available system-wide. You can verify with:
+
+```bash
+samwise-mcp --help
+```
 
 ## IDE Setup
 

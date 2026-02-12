@@ -33,6 +33,7 @@ import { BudgetManager } from '../utils/budget-manager.js';
 import { RecipeSessionManager, ParsedRecipe, SubagentDef, RecipeStepDef } from './recipe-session.js';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import YAML from 'yaml';
 
 // ============================================================================
@@ -53,8 +54,9 @@ export class McpServer {
     this.tools = new Map();
     this.toolDefinitions = new Map();
 
-    // Recipes directory
-    this.recipesDir = path.join(process.cwd(), 'recipes');
+    // Recipes directory — resolve relative to the server's own install location
+    // so it works when Samwise is run from any project directory
+    this.recipesDir = McpServer.resolveRecipesDir();
 
     // Initialize cost tracker
     this.costTracker = getGlobalTracker();
@@ -935,5 +937,51 @@ export class McpServer {
 
   getServer(): Server {
     return this.server;
+  }
+
+  // --------------------------------------------------------------------------
+  // Portable path resolution
+  // --------------------------------------------------------------------------
+
+  /**
+   * Resolve the recipes directory relative to this file's location.
+   * Search order:
+   *   1. <installDir>/dist/recipes  (bundled in dist after build)
+   *   2. <installDir>/recipes       (development / source layout)
+   *   3. process.cwd()/recipes      (legacy fallback)
+   */
+  private static resolveRecipesDir(): string {
+    try {
+      const thisFile = fileURLToPath(import.meta.url);
+      const serverDir = path.dirname(thisFile);           // dist/server/
+      const installDir = path.resolve(serverDir, '..');   // dist/
+      const rootDir = path.resolve(installDir, '..');     // project root
+
+      // 1. dist/recipes (copied by build)
+      const distRecipes = path.join(installDir, 'recipes');
+      if (fs.existsSync(distRecipes)) return distRecipes;
+
+      // 2. project-root/recipes (source layout)
+      const srcRecipes = path.join(rootDir, 'recipes');
+      if (fs.existsSync(srcRecipes)) return srcRecipes;
+    } catch {
+      // URL parsing failed — fall through
+    }
+
+    // 3. Legacy fallback
+    return path.join(process.cwd(), 'recipes');
+  }
+
+  /**
+   * Return the resolved Samwise installation root directory.
+   * Useful for other tools that need to locate bundled assets.
+   */
+  static getSamwiseRoot(): string {
+    try {
+      const thisFile = fileURLToPath(import.meta.url);
+      return path.resolve(path.dirname(thisFile), '..', '..');
+    } catch {
+      return process.cwd();
+    }
   }
 }
