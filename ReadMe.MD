@@ -1,376 +1,177 @@
-# Samwise 🧑‍🌾
+# Samwise
 
-> Persistent autonomous agent orchestration for developers. Named after Sam from LOTR—never gives up.
+> AI agent orchestration as an MCP server — cost-routed models, multi-agent recipes, and IDE-native personas.
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/status-Stable-green.svg)]()
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)]()
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)]()
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)]()
+[![MCP](https://img.shields.io/badge/MCP-1.0.4-purple.svg)]()
 
-A production-ready orchestration framework for intelligent AI workflow management through MCP (Model Context Protocol) integration. Samwise provides specialized agents, reusable skills, cost-optimized execution modes, and workflow automation — all built with TypeScript for type safety and maintainability.
+Samwise is an MCP (Model Context Protocol) server that gives your IDE agent superpowers: complexity-based model routing, session cost tracking, budget management, and multi-agent recipe execution — all via free-tier OpenRouter models. It also exports 32 specialized agent personas directly into VS Code (Copilot) and Cursor as native config files.
 
-**Version**: 1.0.0 (package.json)
-
----
-
-## ✨ Key Features
-
-### 🎯 Seven Execution Modes
-Samwise offers multiple execution modes optimized for different use cases and budgets:
-
-| Mode | Agents | Speed | Cost | Best For |
-|------|--------|-------|------|----------|
-| **Ecomode** | 1 | ⚡ Fast | 💰 Cheap | Simple questions, quick lookups |
-| **Autopilot** | 2-3 | ⚡⚡ Fast | 💰 Cheap | Standard requests, balanced quality |
-| **Ultrapilot** | 5 | ⚡⚡⚡ Medium | 💰💰 Moderate | Complex analysis, multiple perspectives |
-| **Swarm** | 8+ | ⚡⚡⚡⚡ Slow | 💰💰💰 Expensive | Deep research, validation needed |
-| **Pipeline** | 4 stages | ⚡⚡⚡⚡⚡ Slowest | 💰💰💰💰 Most Expensive | Multi-stage workflows |
-| **Planning** | 1-3 | ⚡⚡ Medium | 💰💰 Moderate | Structured implementation plans |
-| **Ask Mode** | 1 | ⚡ Fast | 💰 Cheap | Simple Q&A without tools |
-
-**Mode Keywords** (use in CLI): `eco:`, `autopilot:`, `ultrapilot:`, `swarm:`, `pipeline:`, `plan:`, `ask:`
-
-### 🎓 Skill Learning System
-- **Automatic pattern extraction** from successful sessions
-- Learns tool sequences, multi-step workflows, and prompt templates
-- Confidence scoring that increases with repeated success
-- Persistent storage in `./learned-skills/` directory
-- CLI commands: `learned`, `learned --stats`, `learned --find <query>`, `learned --export <id>`
-
-### 🤖 Specialized Agents
-10 pre-configured agents loaded from YAML definitions in `./agents/`:
-- **architect** - System design and architecture
-- **researcher** - Information gathering and research
-- **designer** - UX/UI design
-- **writer** - Documentation and content
-- **vision** - Future-thinking and strategy
-- **critic** - Review and validation
-- **analyst** - Data analysis
-- **executor** - Implementation and coding
-- **planner** - Task breakdown and planning
-- **qa-tester** - Quality assurance
-
-### ⚡ Core Skills System
-10 production skills across 3 categories:
-- **Core** (3): `refactoring`, `documentation`, `testing`
-- **Advanced** (2): `security_scan`, `performance`
-- **Extended** (5): `code_review`, `api_design`, `database_schema`, `debugging`, `migration`
-
-Skills are automatically detected from query keywords and can be extended with custom implementations.
-
-### 🧩 Workflow Orchestration
-- Multi-step workflows with variable interpolation between steps
-- **6 pre-built recipes** in `./recipes/`:
-  - `PlanExecRevEx` - 4-agent coding workflow
-  - `BugFix` - Automated bug fixing
-  - `RESTfulAPI` - API development
-  - `MicroservicesArchitecture` - Architecture design
-  - `SecurityAudit` - Security review
-  - `WebAppFullStack` - Full-stack development
-- Execution tracking, duration, and cost reporting
-- Workflow caching for repeatable runs
-
-### 🖥️ CLI Interface
-Rich interactive CLI with commands:
-- `run <query>` - Execute tasks with mode keywords
-- `agent <query>` - Autonomous agent with tool calling
-- `workflow <name>` - Execute workflows by name
-- `recipe <name>` - Execute pre-built recipes
-- `recipes` - List available recipes
-- `learned` - View/manage learned skills
-- `cache` - Manage workflow cache (stats, clear, invalidate)
-- `skills` - List available skills
-- `agents` - List loaded agents
-- `modes` - List execution modes
-- `stats` - View session cost and cache statistics
-- `help` - Show comprehensive documentation
-
-**Options**: `--no-cache`, `--verbose`, `--model <model>`, `--cost-only`, `--hud`, `--no-hud`
-
-### 📊 HUD Status Line
-Real-time metrics displayed in terminal during execution:
-- Live progress spinner
-- Duration counter
-- Tool call tracking
-- Cost tracking
-- Auto-enabled in TTY terminals (toggle with `--hud`/`--no-hud`)
-
-### 💸 Cost Optimization
-- **Complexity-based model routing** - Automatically selects cheapest model for task complexity
-- **Cache system** - Persistent query result caching with TTL (default24 hours)
-- **Budget management** - Set spending limits with warnings
-- **Free tier available** - All default models use OpenRouter free tier
-
-**Real Performance** (from actual measurements):
-| Task Type | Standard Cost | Ecomode Cost | Savings |
-|-----------|--------------|--------------|---------|
-| Simple (documentation) | $0.0006 | $0.0000 | 100% |
-| Medium (refactoring) | $0.0020 | $0.0000 | 100% |
-| Complex (architecture) | $0.0150 | $0.0003 | 98% |
-
-### 🔌 MCP Integration
-- Full Model Context Protocol server implementation
-- Exposes tools for external MCP clients
-- Skill registration as MCP tools
-- Stdio transport for local integration
+**Version**: 2.0.0
 
 ---
 
-## 🚀 Quick Start
+## Key Features
+
+### MCP Tools
+Nine tools exposed to any MCP-compatible client (VS Code Copilot, Cursor, Claude Desktop, etc.):
+
+| Tool | Purpose |
+|------|---------|
+| `health_check` | Server status & uptime |
+| `route_model` | Analyze task complexity → recommend cheapest adequate model |
+| `track_cost` | Log token usage, return session totals |
+| `manage_budget` | Get/set/reset spending limits |
+| `get_analytics` | Cost & token breakdowns by model, agent, provider |
+| `suggest_mode` | Recommend quick/standard/deep effort level |
+| `list_recipes` | Browse available multi-agent workflow recipes |
+| `execute_recipe` | Run a multi-agent recipe end-to-end |
+| `get_cache_stats` | Workflow cache hit rate & memory usage |
+
+### 32 Specialized Agent Personas
+YAML-defined agents in `./agents/`, exported as IDE-native config files:
+
+| Agent | Role |
+|-------|------|
+| architect | System design & architecture |
+| researcher | Information gathering & analysis |
+| executor | Implementation & coding |
+| designer | UI/UX design |
+| planner | Task breakdown & planning |
+| critic | Code review & validation |
+| qa-tester | Quality assurance & testing |
+| writer | Documentation & technical writing |
+| analyst | Data & trend analysis |
+| vision | Technical strategy & long-term planning |
+| scientist | Data analysis & hypothesis testing |
+| security-reviewer | Security auditing & hardening |
+| build-fixer | Build error resolution |
+| code-reviewer | Comprehensive code review |
+| tdd-guide | Test-driven development guidance |
+| explore | Codebase navigation & mapping |
+
+Most agents have tiered variants (`-low`, `-medium`, `-high`) for different depth levels.
+
+### 7 Pre-Built Recipes
+Multi-agent workflow templates in `./recipes/`:
+
+| Recipe | Agent Chain | Use Case |
+|--------|-------------|----------|
+| **PlanExecRevEx** | Planner → Executor → Reviewer → Explainer | Autonomous coding loop |
+| **BugFix** | Analyst → Researcher → Architect → Executor → QA → Critic → Writer | Systematic bug resolution |
+| **RESTfulAPI** | Architect → Executor → Critic → Writer | API design through docs |
+| **SecurityAudit** | Architect → Critic → Executor → Writer | Threat modeling to remediation |
+| **WebAppFullStack** | Architect → Designer → Executor → Critic → Writer | Full-stack development |
+| **MicroservicesArchitecture** | Architect → Executor → Critic → Writer | Service decomposition |
+| **DocumentationRefactor** | Analyst → Architect → Writer → Critic | Codebase-aware doc improvement |
+
+### Cost Optimization
+- **Complexity-based model routing** — automatically selects the cheapest adequate model
+- **Session cost tracking** — per-model, per-agent, per-provider breakdowns
+- **Budget management** — set spending limits with real-time enforcement
+- **Free tier by default** — all default models use OpenRouter free tier ($0)
+
+### IDE-Native Integration
+Run `npm run export-configs` to generate:
+- `.github/agents/*.agent.md` — VS Code Copilot agent personas (64 files)
+- `.cursor/rules/*.mdc` — Cursor rule files (32 files)
+- `.vscode/mcp.json` / `.cursor/mcp.json` — MCP server configuration
+- `.github/copilot-instructions.md` — Project-wide agent instructions
+
+---
+
+## Quick Start
 
 ### Prerequisites
-- **Node.js** >= 18.0.0 (required)
-- **OpenRouter API key** (free tier available)
+- **Node.js** >= 18.0.0
+- **OpenRouter API key** (free tier available at [openrouter.ai](https://openrouter.ai))
 
-### Installation
+### Install & Build
 
 ```bash
-# Clone the repository
 git clone https://github.com/yourusername/samwise.git
 cd samwise
-
-# Install dependencies
 npm install
-
-# Build the project
 npm run build
-
-# Start the CLI
-npm run samwise
 ```
 
-### First Run
+### Set Your API Key
 
 ```bash
-# Start interactive CLI
-npm run samwise
-
-# Or execute a single task
-npm run samwise run "eco: refactor this function"
-```
-
-### Configuration
-
-1. **Set your OpenRouter API key** (get free key at https://openrouter.ai):
-
-```bash
-# Option A: Environment variable
+# Bash / Zsh
 export SAMWISE_API_KEYS_OPENROUTER="your-key-here"
 
-# Option B: .env file (recommended)
-echo "SAMWISE_API_KEYS_OPENROUTER=your-key-here" > .env
+# PowerShell
+$env:SAMWISE_API_KEYS_OPENROUTER = "your-key-here"
 ```
 
-2. **Optional: Customize configuration** by editing `config.yaml`:
+### Use in Your IDE
 
-```yaml
-routing:
-  simple:
-    - meta-llama/llama-3.2-3b-instruct:free
-  medium:
-    - stepfun/step-3.5-flash:free
-  complex:
-    - nousresearch/hermes-3-llama-3.1-405b:free
+The project ships with MCP configs for both VS Code and Cursor. After building:
 
-samwise:
-  api_keys:
-    openrouter: "YOUR_OPENROUTER_KEY"
-  mcp_defaults:
-    temperature: 0.7
-    max_tokens: 2000
-```
+1. Open the project in your IDE
+2. The MCP server starts automatically when the IDE connects
+3. Agent personas are available in chat (e.g., `@architect`, `@executor`)
+4. MCP tools are available to the IDE agent
+
+**Verify**: Ask your IDE agent to "Use the health_check tool" — you should get `status: healthy`.
+
+See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions.
 
 ---
 
-## 📖 Usage Examples
-
-### Basic Task Execution
-
-```bash
-# Simple refactoring in Ecomode
-samwise run "eco: refactor this authentication function"
-
-# Complex analysis with Ultrapilot
-samwise run "ultrapilot: analyze this codebase architecture"
-
-# Planning mode for structured implementation
-samwise run "plan: build a REST API for user management"
-
-# Ask mode for simple Q&A
-samwise run "ask: what is TypeScript?"
-
-# Custom model selection
-samwise run "eco: explain this algorithm" --model "anthropic/claude-3.5-sonnet"
-```
-
-### Workflow Execution
-
-```bash
-# Execute a pre-built recipe
-samwise recipe BugFix
-
-# With input variables
-samwise recipe RESTfulAPI --input user_task="Create endpoints for user CRUD"
-
-# List all recipes
-samwise recipes
-```
-
-### Agent Interaction
-
-```bash
-# Direct agent query (autonomous tool use)
-samwise agent "Analyze the performance bottleneck in this code"
-
-# With verbose output
-samwise agent "Review this PR" --verbose
-```
-
-### Cache Management
-
-```bash
-# View cache statistics
-samwise cache --stats
-
-# Clear all cached results
-samwise cache --clear
-
-# Invalidate specific query
-samwise cache --invalidate "refactor function"
-```
-
-### View Learned Skills
-
-```bash
-# List all learned patterns
-samwise learned
-
-# Show learning statistics
-samwise learned --stats
-
-# Find skills matching query
-samwise learned --find "performance"
-
-# Export a skill to framework
-samwise learned --export "pattern-id"
-```
-
----
-
-## 🏗️ Architecture Overview
-
-Samwise is built with a modular architecture:
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                         CLI Layer                           │
-│  (interactive-cli.ts, cli-main.ts, commands, HUD)         │
+│                      IDE / MCP Client                       │
+│  (VS Code Copilot, Cursor, Claude Desktop)                 │
 ├─────────────────────────────────────────────────────────────┤
-│                    Orchestrator Layer                       │
-│  (llm-client.ts, model-router.ts, cost-calculator.ts)     │
+│                   MCP Server (stdio)                        │
+│  (mcp-server.ts — 9 registered tools)                      │
 ├─────────────────────────────────────────────────────────────┤
-│                    Agent System │
-│  (agent-loader.ts, agent-manager.ts, agent-loop/) │
+│                  Orchestration Layer                        │
+│  (model-router, cost-calculator, workflow-engine)          │
 ├─────────────────────────────────────────────────────────────┤
-│                    Skill Framework                          │
-│  (skill-framework.ts, skill-executor.ts, implementations) │
+│                   Agent & Recipe System                     │
+│  (agent-loader, recipe-loader, YAML definitions)           │
 ├─────────────────────────────────────────────────────────────┤
-│                    Workflow Engine                          │
-│  (engine.ts, recipe-loader.ts, workflow execution)        │
-├─────────────────────────────────────────────────────────────┤
-│                    Support Systems │
-│  (cache/, config/, utils/, monitoring/, server/)          │
+│                   Support Systems                           │
+│  (cache, config, utils, monitoring)                        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Technology Stack**:
-- **Runtime**: Node.js 18+
-- **Language**: TypeScript 5.7 (strict mode)
-- **LLM Integration**: OpenRouter (multiple providers)
-- **Protocol**: Model Context Protocol (MCP) SDK 1.0.4
-- **Configuration**: YAML parsing with validation (Zod)
-- **CLI**: Commander.js with interactive readline
-- **Styling**: Chalk for terminal colors
-- **Testing**: Vitest
+**Stack**: TypeScript 5.7 · Node.js 18+ · MCP SDK 1.0.4 · OpenRouter · YAML/Zod
 
 ---
 
-## 🔧 Modes Deep Dive
+## Documentation
 
-### Ecomode
-Single-agent, ultra-efficient execution. Uses cheapest available model for the task complexity. Ideal for simple questions, quick lookups, and cost-critical applications.
-
-**Configuration**: 1 agent (executor), parallel=False, timeout=10s
-
-**Example**: `eco: what is TypeScript?`
-
-### Autopilot
-Two to three agents working sequentially or in parallel. Balances speed and quality. Good for standard requests and moderate analysis.
-
-**Configuration**: 2-3 agents (executor + researcher), parallel=True, timeout=15s
-
-**Example**: `autopilot: compare REST vs GraphQL`
-
-### Ultrapilot
-Five parallel agents providing comprehensive analysis from multiple perspectives. For complex problems where quality is priority over cost.
-
-**Configuration**: 5 agents (architect, researcher, designer, writer, executor), parallel=True, timeout=30s
-
-**Example**: `ultrapilot: design a real-time notification system`
-
-### Swarm
-Eight or more dynamic agents with coordination. Deep research mode with validation, analysis, and QA. Most expensive and slowest but highest quality.
-
-**Configuration**: 8+ agents (all available), parallel=True, timeout=60s
-
-**Example**: `swarm: create comprehensive AI system architecture`
-
-### Pipeline
-Sequential multi-stage workflow where each stage builds on previous results. For guided processes and complex project development.
-
-**Configuration**: 4 stages with different agents per stage, sequential execution
-
-**Example**: `pipeline: develop full-stack web application`
-
-### Planning Mode
-Structured implementation planning with step-by-step breakdowns. Produces actionable plans without full implementation.
-
-**Configuration**: 1-3 agents (planner + optionally architect), moderate tokens
-
-**Example**: `plan: build REST API for user management`
-
-### Ask Mode
-Simple Q&A without tool access. Fastest mode for factual questions and explanations.
-
-**Configuration**: 1 agent, minimal tokens, no tools
-
-**Example**: `ask: explain async/await in JavaScript`
+- [INSTALLATION.md](INSTALLATION.md) — Setup & IDE configuration
+- [EXAMPLE_WORKFLOWS.md](EXAMPLE_WORKFLOWS.md) — Workflow structure & examples
+- [RECIPES_CATALOG.md](RECIPES_CATALOG.md) — Complete recipe reference
+- [CHANGELOG.md](CHANGELOG.md) — Version history
+- [docs/guides/budget-guide.md](docs/guides/budget-guide.md) — Cost management
+- [docs/guides/cache-guide.md](docs/guides/cache-guide.md) — Caching strategies
 
 ---
 
-## 📚 Documentation
+## Development
 
-- **INSTALLATION.md** - Detailed setup instructions
-- **EXAMPLE_USAGE.md** - CLI examples and patterns
-- **EXAMPLE_WORKFLOWS.md** - Real-world workflow examples
-- **RECIPES_CATALOG.md** - Complete recipe reference
-- **TROUBLESHOOTING.md** - Common issues and solutions
-- **docs/guides/** - In-depth guides:
-  - `mode-guide.md` - Mode comparison and configuration
-  - `budget-guide.md` - Cost management
-  - `cache-guide.md` - Caching strategies
-  - `integration-guide.md` - External system integration
-  - `interactive-cli-guide.md` - CLI usage tips
-- **docs/api.md** - API reference for developers
+```bash
+npm run build           # Compile TypeScript → dist/
+npm run dev             # Watch mode (auto-rebuild)
+npm run export-configs  # Regenerate IDE agent/rule files
+npm test                # Run tests
+npm run lint            # Lint check
+npm run clean           # Remove dist/
+npm start               # Start MCP server directly
+```
 
 ---
 
-## 🤝 Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on development, testing, and pull requests.
-
----
-
-## 📄 License
+## License
 
 MIT © Samwise Contributors

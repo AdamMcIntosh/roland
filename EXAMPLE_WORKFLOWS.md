@@ -8,7 +8,7 @@ This guide shows how to create and use workflows with samwise. Workflows are com
 - [Creating Your First Workflow](#creating-your-first-workflow)
 - [Multi-Step Workflows](#multi-step-workflows)
 - [Using Workflow Variables](#using-workflow-variables)
-- [Workflow Execution](#workflow-execution)
+- [Executing Workflows](#executing-workflows)
 - [Real-World Examples](#real-world-examples)
 
 ## Basic Workflow Structure
@@ -69,38 +69,16 @@ metadata:
 
 ### Execute the Workflow
 
-```typescript
-import { WorkflowEngine } from './src/workflows/engine.js';
-import { CacheManager } from './src/cache/cache-manager.js';
+Workflows (recipes) are executed via the Samwise MCP server's `execute_recipe` tool, or by invoking the first agent in the recipe's IDE handoff chain.
 
-// Initialize cache and engine
-const cache = new CacheManager({ enabled: true, persistent: true });
-const engine = new WorkflowEngine(cache);
+**Via MCP tool:**
+```
+execute_recipe { recipe_name: "CodeAnalysis", inputs: { code: "function calculateSum(arr) { ... }" } }
+```
 
-// Register workflow
-const workflow = {
-  name: 'CodeAnalysis',
-  version: '1.0.0',
-  description: 'Analyzes code and suggests improvements',
-  steps: [
-    {
-      id: 'analyze',
-      type: 'agent',
-      agent: 'analyst',
-      prompt: 'Analyze the following code for issues and improvements',
-      inputs: {
-        code: 'function calculateSum(arr) { ... }'
-      }
-    }
-  ],
-  metadata: { tags: ['analysis'] }
-};
-
-engine.registerWorkflow(workflow);
-
-// Execute workflow
-const result = await engine.executeWorkflow('CodeAnalysis', '1.0.0', {});
-console.log('Workflow result:', result);
+**Via IDE agent handoff:**
+```
+@code-analysis-analyst Analyze the following code for issues and improvements: ...
 ```
 
 ## Multi-Step Workflows
@@ -159,16 +137,13 @@ metadata:
 
 ### Workflow Input Variables
 
-Pass inputs when executing the workflow:
+Pass inputs when executing the workflow via MCP:
 
-```typescript
-const result = await engine.executeWorkflow('FullCodeReview', '1.0.0', {
-  sourceCode: `
-    function add(a, b) {
-      return a + b;
-    }
-  `
-});
+```
+execute_recipe {
+  recipe_name: "FullCodeReview",
+  inputs: { sourceCode: "function add(a, b) { return a + b; }" }
+}
 ```
 
 Reference them in workflow steps using the double-brace syntax:
@@ -202,43 +177,31 @@ Reference outputs from previous steps:
     analysis: "{{ step1.output }}"
 ```
 
-## Workflow Execution
+## Executing Workflows
 
-### Execute via CLI
+### Via MCP Tool
 
-```bash
-# Execute a specific workflow
-samwise workflow CodeAnalysis
+Use the `execute_recipe` tool provided by the Samwise MCP server:
 
-# Execute a specific version
-samwise workflow CodeAnalysis:1.0.0
-
-# Execute with inputs (via JSON)
-samwise workflow CodeAnalysis --input '{"sourceCode":"const x = 1;"}'
+```
+execute_recipe {
+  recipe_name: "CodeAnalysis",
+  inputs: { sourceCode: "const x = 1;" }
+}
 ```
 
-### Execute via TypeScript
+You can discover available recipes with the `list_recipes` tool.
 
-```typescript
-import { WorkflowEngine } from './src/workflows/engine.js';
+### Via IDE Agent Handoff
 
-const engine = new WorkflowEngine();
+Invoke the first agent in a recipe's chain. The agent's system prompt includes handoff instructions to pass work to the next agent automatically.
 
-// Execute
-const result = await engine.executeWorkflow('CodeAnalysis', '1.0.0', {
-  // Input parameters
-});
-
-// Check result
-console.log('Status:', result.status); // 'success', 'partial', or 'error'
-console.log('Steps completed:', result.steps.length);
-console.log('Duration:', result.duration, 'ms');
-console.log('Cost:', result.cost);
-```
+**VS Code:** `@recipe-agent-name Your task description here`
+**Cursor:** Reference the agent rule in your prompt
 
 ### Workflow Results
 
-Execution returns a result object:
+The `execute_recipe` MCP tool returns a result object:
 
 ```typescript
 {
@@ -427,5 +390,5 @@ metadata:
 
 ## Next Steps
 
-- [Read the Troubleshooting Guide](./TROUBLESHOOTING.md) for common issues
-- [Explore the MCP Tools](./MCP_TOOLS.md) for available agent capabilities
+- [Browse the Recipes Catalog](./RECIPES_CATALOG.md) for all pre-built recipes
+- [Installation & Setup](./INSTALLATION.md) for MCP server configuration
