@@ -21,9 +21,6 @@ agents:
   - executor
   - writer
 
-modes:
-  - swarm
-
 input_variables:
   - system_description
   - code_to_audit
@@ -33,7 +30,6 @@ steps:
   - name: ThreatModeling
     description: Identify threats and attack vectors
     agent: architect
-    mode: ecomode
     input: |
       System: {{system_description}}
       
@@ -49,7 +45,6 @@ steps:
   - name: CodeSecurityReview
     description: Review code for security issues
     agent: critic
-    mode: swarm
     input: |
       Code: {{code_to_audit}}
       Threat Model: {{threat_model}}
@@ -68,7 +63,6 @@ steps:
   - name: VulnerabilityAssessment
     description: Assess vulnerabilities and risk
     agent: executor
-    mode: swarm
     input: |
       Security Findings: {{security_findings}}
       Threat Model: {{threat_model}}
@@ -85,7 +79,6 @@ steps:
   - name: RemediationPlan
     description: Create remediation and hardening plan
     agent: writer
-    mode: ecomode
     input: |
       Vulnerability Assessment: {{vulnerability_assessment}}
       Compliance Requirements: {{compliance_requirements}}

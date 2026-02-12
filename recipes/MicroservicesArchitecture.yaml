@@ -21,9 +21,6 @@ agents:
   - critic
   - writer
 
-modes:
-  - pipeline
-
 input_variables:
   - system_name
   - business_domain
@@ -33,7 +30,6 @@ steps:
   - name: ServiceDecomposition
     description: Decompose system into services
     agent: architect
-    mode: ecomode
     input: |
       System: {{system_name}}
       Domain: {{business_domain}}
@@ -53,7 +49,6 @@ steps:
   - name: ServiceImplementation
     description: Implement individual services
     agent: executor
-    mode: swarm
     input: |
       Service Design: {{service_design}}
       
@@ -70,7 +65,6 @@ steps:
   - name: IntegrationTesting
     description: Test service integration
     agent: critic
-    mode: swarm
     input: |
       Services Code: {{services_code}}
       Service Design: {{service_design}}
@@ -87,7 +81,6 @@ steps:
   - name: DeploymentStrategy
     description: Create deployment guide
     agent: writer
-    mode: ecomode
     input: |
       Services Code: {{services_code}}
       Integration Tests: {{integration_tests}}

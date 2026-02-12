@@ -180,19 +180,6 @@ export interface CacheStats {
 }
 
 // ============================================================================
-// Mode Types
-// ============================================================================
-
-export type ExecutionMode = 'ecomode' | 'autopilot' | 'ultrapilot' | 'swarm' | 'pipeline';
-
-export interface ModeContext {
-  mode: ExecutionMode;
-  query: string;
-  agent?: string;
-  options?: Record<string, unknown>;
-}
-
-// ============================================================================
 // Workflow Types
 // ============================================================================
 

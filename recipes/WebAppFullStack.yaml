@@ -24,10 +24,6 @@ agents:
   - critic
   - writer
 
-modes:
-  - pipeline
-  - swarm
-
 input_variables:
   - app_name
   - app_description
@@ -42,7 +38,6 @@ steps:
   - name: ArchitectureDesign
     description: Design application architecture
     agent: architect
-    mode: ecomode
     input: |
       App: {{app_name}}
       Description: {{app_description}}
@@ -61,7 +56,6 @@ steps:
   - name: UIDesign
     description: Create UI/UX design
     agent: designer
-    mode: ecomode
     input: |
       Architecture: {{architecture}}
       App: {{app_name}}
@@ -78,7 +72,6 @@ steps:
   - name: Implementation
     description: Implement full-stack application
     agent: executor
-    mode: swarm
     input: |
       Architecture: {{architecture}}
       UI Design: {{ui_design}}
@@ -94,7 +87,6 @@ steps:
   - name: QualityAssurance
     description: Comprehensive QA review
     agent: critic
-    mode: swarm
     input: |
       Implementation: {{implementation}}
       Architecture: {{architecture}}
@@ -111,7 +103,6 @@ steps:
   - name: Deployment
     description: Create deployment guide
     agent: writer
-    mode: ecomode
     input: |
       Implementation: {{implementation}}
       QA Report: {{qa_report}}
