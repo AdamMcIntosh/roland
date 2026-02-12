@@ -4,10 +4,7 @@
       "command": "node",
       "args": [
         "dist/index.js"
-      ],
-      "env": {
-        "SAMWISE_API_KEYS_OPENROUTER": "${env:SAMWISE_API_KEYS_OPENROUTER}"
-      }
+      ]
     }
   }
 }

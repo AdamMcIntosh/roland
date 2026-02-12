@@ -97,16 +97,6 @@ npm install
 npm run build
 ```
 
-### Set Your API Key
-
-```bash
-# Bash / Zsh
-export SAMWISE_API_KEYS_OPENROUTER="your-key-here"
-
-# PowerShell
-$env:SAMWISE_API_KEYS_OPENROUTER = "your-key-here"
-```
-
 ### Use in Your IDE
 
 The project ships with MCP configs for both VS Code and Cursor. After building:

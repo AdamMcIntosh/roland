@@ -242,7 +242,7 @@ export class McpServer {
         }
 
         // Record in cost tracker
-        this.costTracker.recordCost(model, 'openrouter', agent, inputTokens, outputTokens, cost, {
+        this.costTracker.recordCost(model, 'ide', agent, inputTokens, outputTokens, cost, {
           query: task,
           cached: false,
         });

@@ -682,9 +682,6 @@ function generateVscodeMcpJson(samwiseRoot: string, isExternal: boolean): string
           type: 'stdio',
           command: 'node',
           args: [distIndex],
-          env: {
-            SAMWISE_API_KEYS_OPENROUTER: '${env:SAMWISE_API_KEYS_OPENROUTER}',
-          },
         },
       },
     }, null, 2);
@@ -696,9 +693,6 @@ function generateVscodeMcpJson(samwiseRoot: string, isExternal: boolean): string
         type: 'stdio',
         command: 'node',
         args: ['${workspaceFolder}/dist/index.js'],
-        env: {
-          SAMWISE_API_KEYS_OPENROUTER: '${env:SAMWISE_API_KEYS_OPENROUTER}',
-        },
       },
     },
   }, null, 2);
@@ -713,9 +707,6 @@ function generateCursorMcpJson(samwiseRoot: string, isExternal: boolean): string
         samwise: {
           command: 'node',
           args: [distIndex],
-          env: {
-            SAMWISE_API_KEYS_OPENROUTER: '${env:SAMWISE_API_KEYS_OPENROUTER}',
-          },
         },
       },
     }, null, 2);
@@ -726,9 +717,6 @@ function generateCursorMcpJson(samwiseRoot: string, isExternal: boolean): string
       samwise: {
         command: 'node',
         args: ['dist/index.js'],
-        env: {
-          SAMWISE_API_KEYS_OPENROUTER: '${env:SAMWISE_API_KEYS_OPENROUTER}',
-        },
       },
     },
   }, null, 2);

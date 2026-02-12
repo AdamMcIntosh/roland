@@ -47,10 +47,7 @@ Create or edit `~/.cursor/mcp.json` (i.e. `C:\Users\<you>\.cursor\mcp.json`):
   "mcpServers": {
     "samwise": {
       "command": "node",
-      "args": ["C:/path/to/samwise/dist/index.js"],
-      "env": {
-        "SAMWISE_API_KEYS_OPENROUTER": "${env:SAMWISE_API_KEYS_OPENROUTER}"
-      }
+      "args": ["C:/path/to/samwise/dist/index.js"]
     }
   }
 }
@@ -112,10 +109,7 @@ The included `.vscode/mcp.json` uses the workspace-relative path:
     "samwise": {
       "type": "stdio",
       "command": "node",
-      "args": ["${workspaceFolder}/dist/index.js"],
-      "env": {
-        "SAMWISE_API_KEYS_OPENROUTER": "${env:SAMWISE_API_KEYS_OPENROUTER}"
-      }
+      "args": ["${workspaceFolder}/dist/index.js"]
     }
   }
 }

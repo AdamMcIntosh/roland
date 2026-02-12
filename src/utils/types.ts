@@ -13,17 +13,12 @@ export interface RoutingConfig {
   explain: string[];
 }
 
-export interface SessionApiKeys {
-  openrouter?: string;
-}
-
 export interface SessionDefaults {
   temperature: number;
   max_tokens: number;
 }
 
 export interface SessionConfig {
-  api_keys: SessionApiKeys;
   mcp_defaults: SessionDefaults;
 }
 
@@ -120,7 +115,7 @@ export interface McpResponse {
 
 export interface ModelSelection {
   model: string;
-  provider: 'openrouter';
+  tier: 'simple' | 'medium' | 'complex' | 'explain';
   costPer1kTokens: number;
 }
 

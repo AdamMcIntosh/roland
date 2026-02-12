@@ -318,32 +318,32 @@ export class ComplexityClassifier {
   }
 
   /**
-   * Suggest best model for query complexity
+   * Suggest best IDE model for query complexity
    */
   private static suggestModel(
     complexity: 'simple' | 'medium' | 'complex',
     score: number
   ): string {
-    // Map to model recommendations
+    // Map to IDE model recommendations (Cursor / VS Code compatible)
     const suggestions: Record<string, string[]> = {
       simple: [
-        'meta-llama/llama-3.2-3b-instruct:free', // Lightest
-        'openrouter/pony-alpha',
-        'nvidia/nemotron-3-nano-30b-a3b:free',
+        'cursor-small',         // Fast, cheap — typo fixes, renames
+        'gpt-4o-mini',          // Good fallback
+        'gemini-2.0-flash',     // Fast alternative
       ],
       medium: [
-        'stepfun/step-3.5-flash:free',
-        'arcee-ai/trinity-large-preview:free',
-        'z-ai/glm-4.5-air:free',
+        'gpt-4o',               // Balanced speed/quality
+        'claude-3.5-sonnet',    // Strong coding model
+        'gemini-1.5-pro',       // Good alternative
       ],
       complex: [
-        'nousresearch/hermes-3-llama-3.1-405b:free',
-        'deepseek/deepseek-r1-0528:free',
-        'arcee-ai/trinity-large-preview:free', // Fallback
+        'claude-3.5-sonnet',    // Best for architecture/reasoning
+        'gpt-4o',               // Strong alternative
+        'gemini-1.5-pro',       // Capable fallback
       ],
     };
 
-    return suggestions[complexity]?.[0] || 'meta-llama/llama-3.2-3b-instruct:free';
+    return suggestions[complexity]?.[0] || 'cursor-small';
   }
 
   /**

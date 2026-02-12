@@ -27,17 +27,12 @@ const RoutingConfigSchema = z.object({
   explain: z.array(z.string()).min(1),
 });
 
-const SessionApiKeysSchema = z.object({
-  openrouter: z.string().optional(),
-});
-
 const SessionDefaultsSchema = z.object({
   temperature: z.number().min(0).max(2).default(0.7),
   max_tokens: z.number().min(1).default(2000),
 });
 
 const SessionConfigSchema = z.object({
-  api_keys: SessionApiKeysSchema,
   mcp_defaults: SessionDefaultsSchema,
 });
 
@@ -173,27 +168,11 @@ export class ConfigLoader {
 
   /**
    * Merge environment variables into configuration
-   * Format: SAMWISE_API_KEYS_OPENROUTER=key
+   * Currently a no-op — Samwise relies on IDE-provided models, no API keys needed.
+   * Reserved for future provider integrations.
    */
-  private static mergeEnvironmentVariables(config: Record<string, unknown>): void {
-    const samwise = (config.samwise as Record<string, unknown>) || {};
-    const apiKeys = (samwise.api_keys as Record<string, unknown>) || {};
-
-    // Map environment variables to config
-    const providers = ['openrouter'] as const;
-
-    for (const provider of providers) {
-      const envKey = `${this.ENV_PREFIX}API_KEYS_${provider.toUpperCase()}`;
-      const value = process.env[envKey];
-
-      if (value) {
-        apiKeys[provider] = value;
-        logger.debug(`✅ Loaded API key from environment: ${envKey}`);
-      }
-    }
-
-    samwise.api_keys = apiKeys;
-    config.samwise = samwise;
+  private static mergeEnvironmentVariables(_config: Record<string, unknown>): void {
+    // No API keys needed — routing is advisory and the IDE handles model access.
   }
 
   /**
@@ -237,42 +216,11 @@ export class ConfigLoader {
   }
 
   /**
-   * Check if a value is a placeholder/dummy API key
+   * Check if an environment variable is set for a given key name
    */
-  private static isPlaceholderKey(key: string): boolean {
-    return /^(YOUR_|CHANGE_ME|sk-xxx|placeholder)/i.test(key);
-  }
-
-  /**
-   * Check if an API key is configured for a provider
-   */
-  static hasApiKey(config: AppConfig, provider: 'openrouter'): boolean {
-    // Prefer live env var over cached config
-    const envKey = `SAMWISE_API_KEYS_${provider.toUpperCase()}`;
-    const key = process.env[envKey] || config.samwise.api_keys[provider];
-    return Boolean(key && key.trim() && !this.isPlaceholderKey(key));
-  }
-
-  /**
-   * Get API key for a provider (safely - for logging/debugging only)
-   */
-  static getApiKey(config: AppConfig, provider: 'openrouter'): string | undefined {
-    return config.samwise.api_keys[provider];
-  }
-
-  /**
-   * Validate that required API keys are configured
-   */
-  static validateApiKeys(config: AppConfig, requiredProviders: string[]): string[] {
-    const missing: string[] = [];
-
-    for (const provider of requiredProviders) {
-      if (!this.hasApiKey(config, provider as 'openrouter')) {
-        missing.push(provider);
-      }
-    }
-
-    return missing;
+  static hasEnvKey(name: string): boolean {
+    const value = process.env[`${this.ENV_PREFIX}${name.toUpperCase()}`];
+    return Boolean(value && value.trim());
   }
 }
 

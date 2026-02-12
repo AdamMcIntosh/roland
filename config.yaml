@@ -1,23 +1,32 @@
+# Samwise Model Routing Configuration
+#
+# Maps complexity tiers to recommended IDE models.
+# These are advisory — Samwise returns the suggestion, and the IDE (Cursor/VS Code)
+# uses it to pick the right model for the task.
+#
+# Cursor models:  cursor-small, gpt-4o-mini, gpt-4o, claude-3.5-sonnet, claude-3-opus,
+#                 gemini-1.5-flash, gemini-1.5-pro, grok-fast, etc.
+# VS Code models: whatever GitHub Copilot provides (gpt-4o, claude-sonnet, etc.)
+
 routing:
   simple:
-    - meta-llama/llama-3.2-3b-instruct:free    # OpenRouter Free (3B, multilingual)
-    - openrouter/pony-alpha                     # OpenRouter Free (coding, roleplay)
-    - nousresearch/hermes-3-llama-3.1-405b:free # OpenRouter Free (405B flagship)
+    - cursor-small            # Fast, cheap — typo fixes, renames, small edits
+    - gpt-4o-mini             # Good fallback for simple tasks
+    - gemini-2.0-flash        # Fast alternative
   medium:
-    - stepfun/step-3.5-flash:free               # OpenRouter Free (reasoning, 196B MoE)
-    - arcee-ai/trinity-large-preview:free       # OpenRouter Free (400B MoE, creative)
-    - meta-llama/llama-3.2-3b-instruct:free    # OpenRouter Free fallback
+    - gpt-4o                  # Balanced speed/quality for moderate tasks
+    - claude-3.5-sonnet       # Strong coding model
+    - gemini-1.5-pro          # Good alternative
   complex:
-    - nousresearch/hermes-3-llama-3.1-405b:free # OpenRouter Free (most capable)
-    - arcee-ai/trinity-large-preview:free       # OpenRouter Free (creative tasks)
-    - stepfun/step-3.5-flash:free               # OpenRouter Free (reasoning)
+    - claude-3.5-sonnet       # Best for complex architecture/reasoning
+    - gpt-4o                  # Strong alternative
+    - gemini-1.5-pro          # Capable fallback
   explain:
-    - nousresearch/hermes-3-llama-3.1-405b:free # OpenRouter Free (best for explanations)
-    - arcee-ai/trinity-large-preview:free       # OpenRouter Free (comprehensive)
-    - stepfun/step-3.5-flash:free               # OpenRouter Free fallback
+    - claude-3.5-sonnet       # Best for detailed explanations
+    - gpt-4o                  # Good explainer
+    - gemini-1.5-pro          # Thorough alternative
+
 samwise:
-  api_keys:
-    openrouter: "YOUR_OPENROUTER_KEY"
   mcp_defaults:
     temperature: 0.7
     max_tokens: 2000
