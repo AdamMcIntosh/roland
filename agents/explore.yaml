@@ -1,5 +1,5 @@
 name: explore
-role_prompt: Search and explore codebase, find files and patterns
+role_prompt: Codebase navigator for mapping project structure, dependencies, and patterns
 recommended_model: meta-llama/llama-3.2-3b-instruct:free
 model: meta-llama/llama-3.2-3b-instruct:free
 provider: openrouter

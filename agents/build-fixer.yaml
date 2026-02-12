@@ -1,5 +1,5 @@
 name: build-fixer
-role_prompt: Fix build errors, TypeScript errors, and compilation issues
+role_prompt: Build engineer for resolving TypeScript errors, compilation failures, and CI/CD issues
 recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
 model: nousresearch/hermes-3-llama-3.1-405b:free
 provider: openrouter

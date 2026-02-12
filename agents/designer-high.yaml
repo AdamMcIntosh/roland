@@ -1,5 +1,5 @@
 name: designer-high
-role_prompt: Design complex UI systems and user experiences
+role_prompt: Senior UX/UI designer for complex design systems, interaction patterns, and accessibility
 recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
 model: nousresearch/hermes-3-llama-3.1-405b:free
 provider: openrouter

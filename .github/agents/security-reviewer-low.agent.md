@@ -1,5 +1,5 @@
 ---
-description: "Quick security scan for common vulnerabilities"
+description: "Quick security scanner for common vulnerabilities and dependency CVE checks"
 tools:
   - codebase
   - editFiles

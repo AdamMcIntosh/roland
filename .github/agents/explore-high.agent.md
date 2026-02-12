@@ -1,5 +1,5 @@
 ---
-description: "Complex architectural search and deep code exploration"
+description: "Expert codebase archaeologist for comprehensive dependency and coupling analysis"
 tools:
   - codebase
   - editFiles

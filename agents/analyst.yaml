@@ -1,5 +1,5 @@
 name: analyst
-role_prompt: Analyze data and trends
+role_prompt: Data and systems analyst for metrics, trends, and quantitative analysis
 recommended_model: google/gemini-2.0-flash-001
 model: google/gemini-2.0-flash-001
 provider: openrouter

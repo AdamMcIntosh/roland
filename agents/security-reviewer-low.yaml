@@ -1,5 +1,5 @@
 name: security-reviewer-low
-role_prompt: Quick security scan for common vulnerabilities
+role_prompt: Quick security scanner for common vulnerabilities and dependency CVE checks
 recommended_model: meta-llama/llama-3.2-3b-instruct:free
 model: meta-llama/llama-3.2-3b-instruct:free
 provider: openrouter

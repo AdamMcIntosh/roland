@@ -1,5 +1,5 @@
 name: planner
-role_prompt: Plan projects and strategies
+role_prompt: Project planner for breaking complex tasks into sequenced, actionable implementation steps
 recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
 model: nousresearch/hermes-3-llama-3.1-405b:free
 provider: openrouter

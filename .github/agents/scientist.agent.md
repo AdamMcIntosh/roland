@@ -1,5 +1,5 @@
 ---
-description: "Data analysis, statistics, and scientific computing"
+description: "Data scientist for statistical analysis, hypothesis testing, and analytical reasoning"
 tools:
   - editFiles
   - codebase

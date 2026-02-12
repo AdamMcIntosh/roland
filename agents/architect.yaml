@@ -1,5 +1,5 @@
 name: architect
-role_prompt: Design system architecture
+role_prompt: Expert system architect for design decisions, component diagrams, and trade-off analysis
 recommended_model: google/gemini-2.0-flash-001
 model: google/gemini-2.0-flash-001
 provider: openrouter
@@ -7,3 +7,4 @@ temperature: 0.7
 tools:
   - search
   - code
+  - terminal

@@ -1,5 +1,5 @@
 ---
-description: "Search and explore codebase with deeper analysis"
+description: "Deeper codebase explorer for architectural analysis and flow tracing"
 tools:
   - codebase
   - editFiles

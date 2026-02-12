@@ -1,5 +1,5 @@
 name: architect-medium
-role_prompt: Design system architecture (balanced analysis)
+role_prompt: Balanced architectural analysis evaluating 2-3 options with trade-offs
 recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
 model: nousresearch/hermes-3-llama-3.1-405b:free
 provider: openrouter

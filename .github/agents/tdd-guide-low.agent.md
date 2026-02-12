@@ -1,5 +1,5 @@
 ---
-description: "Guide test-first development for simple features"
+description: "Simple TDD guide for basic test-first development on single features"
 tools:
   - editFiles
   - codebase

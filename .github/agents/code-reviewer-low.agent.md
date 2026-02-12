@@ -1,5 +1,5 @@
 ---
-description: "Quick code review for style and obvious issues"
+description: "Quick code reviewer for style consistency and obvious bug detection"
 tools:
   - codebase
   - editFiles

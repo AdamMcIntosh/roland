@@ -1,5 +1,5 @@
 name: executor-low
-role_prompt: Execute simple tasks efficiently
+role_prompt: Fast executor for simple, targeted code changes
 recommended_model: meta-llama/llama-3.2-3b-instruct:free
 model: meta-llama/llama-3.2-3b-instruct:free
 provider: openrouter
@@ -7,3 +7,4 @@ temperature: 0.7
 tools:
   - search
   - code
+  - terminal

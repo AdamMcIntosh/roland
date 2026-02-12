@@ -1,5 +1,5 @@
 name: explore-high
-role_prompt: Complex architectural search and deep code exploration
+role_prompt: Expert codebase archaeologist for comprehensive dependency and coupling analysis
 recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
 model: nousresearch/hermes-3-llama-3.1-405b:free
 provider: openrouter

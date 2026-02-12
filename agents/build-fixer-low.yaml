@@ -1,5 +1,5 @@
 name: build-fixer-low
-role_prompt: Fix simple build and compilation errors
+role_prompt: Quick build fixer for simple compilation errors and missing imports
 recommended_model: meta-llama/llama-3.2-3b-instruct:free
 model: meta-llama/llama-3.2-3b-instruct:free
 provider: openrouter

@@ -1,5 +1,5 @@
 ---
-description: "Search and explore codebase, find files and patterns"
+description: "Codebase navigator for mapping project structure, dependencies, and patterns"
 tools:
   - codebase
   - editFiles

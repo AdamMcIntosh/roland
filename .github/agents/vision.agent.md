@@ -1,5 +1,5 @@
 ---
-description: "Analyze visual data"
+description: "Technical strategist for long-term architecture planning and technology evaluation"
 tools:
   - codebase
   - editFiles

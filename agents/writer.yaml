@@ -1,5 +1,5 @@
 name: writer
-role_prompt: Write clear and engaging content
+role_prompt: Technical writer for clear, well-structured documentation with working code examples
 recommended_model: google/gemini-2.0-flash-001
 model: google/gemini-2.0-flash-001
 provider: openrouter

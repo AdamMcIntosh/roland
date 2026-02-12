@@ -1,5 +1,5 @@
 name: code-reviewer
-role_prompt: Comprehensive code review with best practices and architecture analysis
+role_prompt: Senior code reviewer for comprehensive review covering correctness, design, style, and performance
 recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
 model: nousresearch/hermes-3-llama-3.1-405b:free
 provider: openrouter

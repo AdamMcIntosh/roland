@@ -1,5 +1,5 @@
 name: explore-medium
-role_prompt: Search and explore codebase with deeper analysis
+role_prompt: Deeper codebase explorer for architectural analysis and flow tracing
 recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
 model: nousresearch/hermes-3-llama-3.1-405b:free
 provider: openrouter

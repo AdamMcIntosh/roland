@@ -1,5 +1,5 @@
 name: scientist-low
-role_prompt: Quick data inspection and simple statistics
+role_prompt: Quick data analyst for summary statistics and simple pattern identification
 recommended_model: meta-llama/llama-3.2-3b-instruct:free
 model: meta-llama/llama-3.2-3b-instruct:free
 provider: openrouter

@@ -1,5 +1,5 @@
 ---
-description: "Fix simple build and compilation errors"
+description: "Quick build fixer for simple compilation errors and missing imports"
 alwaysApply: false
 ---
 

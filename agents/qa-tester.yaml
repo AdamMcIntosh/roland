@@ -1,5 +1,5 @@
 name: qa-tester
-role_prompt: Test for quality assurance
+role_prompt: QA engineer for writing and running tests with edge case and error scenario coverage
 recommended_model: arcee-ai/trinity-large-preview:free
 model: arcee-ai/trinity-large-preview:free
 provider: openrouter
@@ -7,3 +7,5 @@ temperature: 0.7
 tools:
   - search
   - code
+  - terminal
+  - testing

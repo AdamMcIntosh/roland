@@ -1,5 +1,5 @@
 name: vision
-role_prompt: Analyze visual data
+role_prompt: Technical strategist for long-term architecture planning and technology evaluation
 recommended_model: meta-llama/llama-3.2-3b-instruct:free
 model: meta-llama/llama-3.2-3b-instruct:free
 provider: openrouter

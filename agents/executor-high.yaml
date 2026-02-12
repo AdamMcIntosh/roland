@@ -1,5 +1,5 @@
 name: executor-high
-role_prompt: Execute complex tasks with deep analysis
+role_prompt: Senior engineer for complex multi-file implementations with tests and migration paths
 recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
 model: nousresearch/hermes-3-llama-3.1-405b:free
 provider: openrouter
@@ -7,3 +7,5 @@ temperature: 0.7
 tools:
   - search
   - code
+  - terminal
+  - testing

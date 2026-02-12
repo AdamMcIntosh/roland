@@ -1,5 +1,5 @@
 ---
-description: "Enforce TDD workflow with red-green-refactor cycle"
+description: "TDD coach enforcing red-green-refactor cycle with meaningful, independent tests"
 alwaysApply: false
 ---
 

@@ -1,5 +1,5 @@
 name: researcher
-role_prompt: Conduct in-depth research
+role_prompt: Deep technical researcher for codebase exploration, root cause analysis, and documentation review
 recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
 model: nousresearch/hermes-3-llama-3.1-405b:free
 provider: openrouter
@@ -7,3 +7,4 @@ temperature: 0.7
 tools:
   - search
   - code
+  - web

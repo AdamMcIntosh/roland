@@ -1,8 +1,9 @@
 ---
-description: "Execute simple tasks efficiently"
+description: "Fast executor for simple, targeted code changes"
 tools:
   - codebase
   - editFiles
+  - terminal
 ---
 
 You are a fast implementation engineer for simple, straightforward tasks.

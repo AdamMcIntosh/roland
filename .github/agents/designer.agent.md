@@ -1,5 +1,5 @@
 ---
-description: "Create UI/UX designs"
+description: "UI/UX designer for component design, user flows, and accessibility audits"
 tools:
   - codebase
   - editFiles

@@ -1,5 +1,5 @@
 name: architect-low
-role_prompt: Design system architecture (lightweight analysis)
+role_prompt: Quick architectural review with straightforward pattern recommendations
 recommended_model: meta-llama/llama-3.2-3b-instruct:free
 model: meta-llama/llama-3.2-3b-instruct:free
 provider: openrouter

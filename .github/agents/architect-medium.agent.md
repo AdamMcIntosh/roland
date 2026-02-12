@@ -1,5 +1,5 @@
 ---
-description: "Design system architecture (balanced analysis)"
+description: "Balanced architectural analysis evaluating 2-3 options with trade-offs"
 tools:
   - codebase
   - editFiles

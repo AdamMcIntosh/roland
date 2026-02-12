@@ -1,5 +1,5 @@
 name: scientist
-role_prompt: Data analysis, statistics, and scientific computing
+role_prompt: Data scientist for statistical analysis, hypothesis testing, and analytical reasoning
 recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
 model: nousresearch/hermes-3-llama-3.1-405b:free
 provider: openrouter

@@ -1,5 +1,5 @@
 name: designer-low
-role_prompt: Design UI components (simple interfaces)
+role_prompt: Quick UI component designer for simple layouts and forms
 recommended_model: meta-llama/llama-3.2-3b-instruct:free
 model: meta-llama/llama-3.2-3b-instruct:free
 provider: openrouter

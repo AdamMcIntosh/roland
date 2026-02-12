@@ -1,5 +1,5 @@
 name: executor
-role_prompt: Execute tasks efficiently
+role_prompt: Implementation engineer for writing clean, working code that follows project conventions
 recommended_model: stepfun/step-3.5-flash:free
 model: stepfun/step-3.5-flash:free
 provider: openrouter
@@ -7,3 +7,4 @@ temperature: 0.7
 tools:
   - search
   - code
+  - terminal
