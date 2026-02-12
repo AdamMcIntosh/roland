@@ -7,7 +7,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)]()
 [![MCP](https://img.shields.io/badge/MCP-1.0.4-purple.svg)]()
 
-Roland is an MCP (Model Context Protocol) server that gives your IDE agent superpowers: complexity-based model routing, session cost tracking, budget management, and multi-agent recipe execution. It also exports 32 specialized agent personas directly into VS Code (Copilot) and Cursor as native config files.
+Roland is an MCP (Model Context Protocol) server that gives your IDE agent superpowers: auto-pilot triage, complexity-based model routing, session cost tracking, budget management, and multi-agent recipe execution. It also exports 32 specialized agent personas directly into VS Code (Copilot) and Cursor as native config files.
 
 **Version**: 2.0.0
 
@@ -16,19 +16,20 @@ Roland is an MCP (Model Context Protocol) server that gives your IDE agent super
 ## Key Features
 
 ### MCP Tools
-Nine tools exposed to any MCP-compatible client (VS Code Copilot, Cursor, Claude Desktop, etc.):
+Ten tools exposed to any MCP-compatible client (VS Code Copilot, Cursor, Claude Desktop, etc.):
 
 | Tool | Purpose |
-|------|---------|
+|------|---------||
 | `health_check` | Server status & uptime |
+| `triage` | Auto-pilot — analyze any prompt → recommend agent + recipe |
 | `route_model` | Analyze task complexity → recommend cheapest adequate model |
 | `track_cost` | Log token usage, return session totals |
 | `manage_budget` | Get/set/reset spending limits |
 | `get_analytics` | Cost & token breakdowns by model, agent, provider |
 | `suggest_mode` | Recommend quick/standard/deep effort level |
 | `list_recipes` | Browse available multi-agent workflow recipes |
-| `execute_recipe` | Run a multi-agent recipe end-to-end |
-| `get_cache_stats` | Workflow cache hit rate & memory usage |
+| `start_recipe` | Begin a multi-agent recipe session, get first step prompt |
+| `advance_recipe` | Submit step output, get next step or final summary |
 
 ### 32 Specialized Agent Personas
 YAML-defined agents in `./agents/`, exported as IDE-native config files:
@@ -67,16 +68,21 @@ Multi-agent workflow templates in `./recipes/`:
 | **MicroservicesArchitecture** | Architect → Executor → Critic → Writer | Service decomposition |
 | **DocumentationRefactor** | Analyst → Architect → Writer → Critic | Codebase-aware doc improvement |
 
+### Auto-Pilot Mode
+Roland includes a `triage` tool and a Cursor auto-pilot rule (`roland-autopilot.mdc`) that fires on every message. When enabled, the IDE automatically calls `triage` before processing your prompt, which analyzes your intent and recommends the best agent or recipe — no `@agent` mention required.
+
+Skip conditions: explicit `@agent` mentions, direct tool/recipe requests, mid-recipe steps, follow-up questions.
+
 ### Cost Optimization
 - **Complexity-based model routing** — automatically selects the cheapest adequate model
 - **Session cost tracking** — per-model, per-agent, per-provider breakdowns
 - **Budget management** — set spending limits with real-time enforcement
-- **Free tier by default** — all default models use OpenRouter free tier ($0)
+- **IDE-native models** — routes to models already available in your IDE (no external API keys needed)
 
 ### IDE-Native Integration
-Run `npm run export-configs` to generate:
+Run `npm run init -- /path/to/your/project` to set up any project with Roland, or `npm run export-configs` for the Roland repo itself:
 - `.github/agents/*.agent.md` — VS Code Copilot agent personas (64 files)
-- `.cursor/rules/*.mdc` — Cursor rule files (32 files)
+- `.cursor/rules/*.mdc` — Cursor rule files (32 files + auto-pilot rule)
 - `.vscode/mcp.json` / `.cursor/mcp.json` — MCP server configuration
 - `.github/copilot-instructions.md` — Project-wide agent instructions
 
@@ -96,18 +102,24 @@ npm install
 npm run build
 ```
 
-### Use in Your IDE
+### Use in Any Project
 
-The project ships with MCP configs for both VS Code and Cursor. After building:
+After building, run the init command to set up Roland in your target project:
 
-1. Open the project in your IDE
+```bash
+npm run init -- /path/to/your/project
+```
+
+This copies all agent personas, recipe configs, MCP server config, and the auto-pilot rule into your project. Then:
+
+1. Open your project in Cursor or VS Code
 2. The MCP server starts automatically when the IDE connects
 3. Agent personas are available in chat (e.g., `@architect`, `@executor`)
-4. MCP tools are available to the IDE agent
+4. Auto-pilot mode triages every prompt to the best agent/recipe
 
 **Verify**: Ask your IDE agent to "Use the health_check tool" — you should get `status: healthy`.
 
-See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions.
+See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions (includes global Cursor config option).
 
 ---
 
@@ -119,7 +131,7 @@ See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions.
 │  (VS Code Copilot, Cursor, Claude Desktop)                 │
 ├─────────────────────────────────────────────────────────────┤
 │                   MCP Server (stdio)                        │
-│  (mcp-server.ts — 9 registered tools)                      │
+│  (mcp-server.ts — 10 registered tools)                     │
 ├─────────────────────────────────────────────────────────────┤
 │                  Orchestration Layer                        │
 │  (model-router, cost-calculator, workflow-engine)          │
@@ -132,16 +144,16 @@ See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions.
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Stack**: TypeScript 5.7 · Node.js 18+ · MCP SDK 1.0.4 · OpenRouter · YAML/Zod
+**Stack**: TypeScript 5.7 · Node.js 18+ · MCP SDK 1.0.4 · YAML/Zod
 
 ---
 
 ## Documentation
 
 - [INSTALLATION.md](INSTALLATION.md) — Setup & IDE configuration
-- [EXAMPLE_WORKFLOWS.md](EXAMPLE_WORKFLOWS.md) — Workflow structure & examples
 - [RECIPES_CATALOG.md](RECIPES_CATALOG.md) — Complete recipe reference
 - [CHANGELOG.md](CHANGELOG.md) — Version history
+- [TESTING.md](TESTING.md) — Test strategy & running tests
 - [docs/guides/budget-guide.md](docs/guides/budget-guide.md) — Cost management
 - [docs/guides/cache-guide.md](docs/guides/cache-guide.md) — Caching strategies
 
@@ -152,7 +164,8 @@ See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions.
 ```bash
 npm run build           # Compile TypeScript → dist/
 npm run dev             # Watch mode (auto-rebuild)
-npm run export-configs  # Regenerate IDE agent/rule files
+npm run init -- <path>  # Set up Roland in an external project
+npm run export-configs  # Regenerate IDE configs for this repo
 npm test                # Run tests
 npm run lint            # Lint check
 npm run clean           # Remove dist/
