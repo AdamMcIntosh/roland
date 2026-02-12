@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "samwise": {
+      "command": "node",
+      "args": [
+        "node_modules/samwise/dist/server/mcp-server.js"
+      ],
+      "env": {
+        "SAMWISE_API_KEYS_OPENROUTER": "${env:SAMWISE_API_KEYS_OPENROUTER}"
+      }
+    }
+  }
+}
