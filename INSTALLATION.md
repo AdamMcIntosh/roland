@@ -7,16 +7,14 @@ Setup guide for Samwise as an MCP server integrated with VS Code or Cursor.
 1. [Prerequisites](#prerequisites)
 2. [Installation Steps](#installation-steps)
 3. [IDE Setup](#ide-setup)
-4. [Getting API Keys](#getting-your-api-keys)
-5. [Verify Installation](#verify-installation)
-6. [Troubleshooting](#troubleshooting)
+4. [Verify Installation](#verify-installation)
+5. [Troubleshooting](#troubleshooting)
 
 ## Prerequisites
 
 - **Node.js**: v18.0.0 or higher
 - **npm**: v9.0.0 or higher
-- **IDE**: VS Code (with GitHub Copilot) or Cursor
-- **API Keys**: OpenRouter API key (free tier available)
+- **IDE**: Cursor (primary) or VS Code (with GitHub Copilot)
 
 ## Installation Steps
 
@@ -34,21 +32,7 @@ npm install
 npm run build
 ```
 
-### 3. Set Your API Key
-
-Set the environment variable for your shell:
-
-```bash
-# Bash / Zsh
-export SAMWISE_API_KEYS_OPENROUTER=your_openrouter_api_key_here
-
-# PowerShell
-$env:SAMWISE_API_KEYS_OPENROUTER = "your_openrouter_api_key_here"
-
-# Or add to config.yaml (samwise.api_keys.openrouter)
-```
-
-### 4. Export IDE Configs (Optional)
+### 3. Export IDE Configs (Optional)
 
 Regenerate agent files and MCP configs for your IDE:
 
@@ -69,8 +53,7 @@ This creates:
 The project includes `.vscode/mcp.json` which VS Code reads automatically. Ensure:
 
 1. You have the **GitHub Copilot** extension installed
-2. The `SAMWISE_API_KEYS_OPENROUTER` environment variable is set
-3. The project is built (`npm run build`)
+2. The project is built (`npm run build`)
 
 VS Code will discover the MCP server and expose its tools to Copilot agents. You can verify by opening the Command Palette and running **MCP: List Servers**.
 
@@ -94,8 +77,7 @@ The `.vscode/mcp.json` config:
 
 The project includes `.cursor/mcp.json` which Cursor reads automatically. Ensure:
 
-1. The `SAMWISE_API_KEYS_OPENROUTER` environment variable is set
-2. The project is built (`npm run build`)
+1. The project is built (`npm run build`)
 
 Cursor will discover the MCP server and expose its tools in chat. You can verify in **Settings → MCP Servers**.
 
@@ -144,49 +126,22 @@ Once connected, the Samwise MCP server provides:
 | `get_analytics` | Cost breakdowns by model/agent/provider |
 | `suggest_mode` | Recommend quick/standard/deep depth |
 | `list_recipes` | Browse available workflow recipes |
-| `execute_recipe` | Run a multi-agent recipe |
-| `get_cache_stats` | Workflow cache statistics |
+| `start_recipe` | Start a multi-agent recipe, get first step prompt |
+| `advance_recipe` | Advance recipe to next step or get summary |
 
-## Getting Your API Keys
-
-### OpenRouter (Free Tier Available)
-
-1. Visit [https://openrouter.ai](https://openrouter.ai)
-2. Sign up (Google, GitHub, or MetaMask)
-3. Navigate to **Settings → API Keys**
-4. Create a new API key
-5. Set it as `SAMWISE_API_KEYS_OPENROUTER`
-
-All default models are **completely free**:
-- `meta-llama/llama-3.2-3b-instruct:free` — Fast, multilingual
-- `nousresearch/hermes-3-llama-3.1-405b:free` — Most capable
-- `arcee-ai/trinity-large-preview:free` — Creative tasks
-- `stepfun/step-3.5-flash:free` — Reasoning
+No API key is required. All tools run locally. The IDE's own model handles execution.
 
 ## Verify Installation
 
 ### Quick Test
 
-```bash
-# Start the MCP server directly
-npm start
+1. Build: `npm run build`
+2. Open the project in Cursor
+3. Go to **Settings → MCP** and verify `samwise` shows as connected
+4. Open Cursor chat and ask: *"Use the health_check tool"*
+5. You should get a response with `status: healthy` and a list of 9 tools
 
-# Expected output:
-# 🚀 Starting Samwise MCP Server v2...
-# ✅ Configuration loaded
-# ✅ MCP Server connected and ready
-# 📦 Tools: health_check, route_model, track_cost, manage_budget, get_analytics, suggest_mode, list_recipes, execute_recipe, get_cache_stats
-# 🔗 Waiting for client connection...
-```
-
-Press `Ctrl+C` to stop.
-
-### In VS Code / Cursor
-
-1. Open the project in your IDE
-2. Open Copilot chat (or Cursor chat)
-3. Ask: "Use the health_check tool"
-4. You should get a response with `status: healthy` and the tool list
+See [TESTING.md](TESTING.md) for a full testing walkthrough.
 
 ## Troubleshooting
 
@@ -194,9 +149,6 @@ Press `Ctrl+C` to stop.
 
 **Solution**: Update the MCP SDK — the server requires `capabilities: { tools: {} }` in the Server constructor. Run `npm install` and `npm run build`.
 
-### Error: "Missing API key for OpenRouter provider"
-
-**Solution**: Set `SAMWISE_API_KEYS_OPENROUTER` as an environment variable or in `config.yaml`.
 
 ### Error: "Cannot find module 'dist/index.js'"
 
@@ -236,3 +188,4 @@ npm run clean        # Remove dist/
 2. **Try a recipe**: Invoke `@plan-exec-rev-ex-planner` with a coding task
 3. **Monitor costs**: Ask the agent to use `get_analytics`
 4. **Set a budget**: Ask the agent to use `manage_budget` with `set_limit`
+5. **Test recipes**: See [TESTING.md](TESTING.md)
