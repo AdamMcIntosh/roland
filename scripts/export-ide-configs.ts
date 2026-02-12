@@ -644,7 +644,7 @@ function generateVscodeMcpJson(): string {
       samwise: {
         type: 'stdio',
         command: 'node',
-        args: ['node_modules/samwise/dist/server/mcp-server.js'],
+        args: ['${workspaceFolder}/dist/index.js'],
         env: {
           SAMWISE_API_KEYS_OPENROUTER: '${env:SAMWISE_API_KEYS_OPENROUTER}',
         },
@@ -658,7 +658,7 @@ function generateCursorMcpJson(): string {
     mcpServers: {
       samwise: {
         command: 'node',
-        args: ['node_modules/samwise/dist/server/mcp-server.js'],
+        args: ['dist/index.js'],
         env: {
           SAMWISE_API_KEYS_OPENROUTER: '${env:SAMWISE_API_KEYS_OPENROUTER}',
         },
@@ -720,11 +720,18 @@ To start a recipe, invoke the first agent in the chain (e.g., \`@plan-exec-rev-e
 ## Samwise MCP Server
 
 If configured, the Samwise MCP server provides these tools:
-- \`health_check\` — Server status
-- \`list_recipes\` — Available workflow recipes  
-- \`execute_recipe\` — Run a multi-agent recipe
-- \`get_budget_status\` — Budget tracking
-- \`get_cache_stats\` — Cache statistics
+
+| Tool | Purpose | When to Use |
+|------|---------|-------------|
+| \`health_check\` | Server status & uptime | Verify server is running |
+| \`route_model\` | Complexity analysis → cheapest adequate model | Before making an LLM request |
+| \`track_cost\` | Log token usage, return session totals | After each LLM interaction |
+| \`manage_budget\` | Get/set/reset spending limits | Enforce cost controls |
+| \`get_analytics\` | Cost & token breakdowns by model/agent/provider | Review session spending |
+| \`suggest_mode\` | Recommend quick/standard/deep depth | Decide effort level for a task |
+| \`list_recipes\` | Available workflow recipes | Browse available multi-agent workflows |
+| \`execute_recipe\` | Run a multi-agent recipe | Execute BugFix, RESTfulAPI, SecurityAudit, etc. |
+| \`get_cache_stats\` | Workflow cache hit rate & memory | Monitor caching efficiency |
 `;
 }
 

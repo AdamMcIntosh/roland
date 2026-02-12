@@ -7,32 +7,19 @@
 import { McpServer } from './server/mcp-server.js';
 import { loadConfig } from './config/config-loader.js';
 import { logger } from './utils/logger.js';
-import { initializeAgents } from './agents/index.js';
-import { initializeSkills, registerSkillsAsTools } from './skills/index.js';
 
 async function main() {
   try {
-    logger.info(' Starting samwise MCP Server...');
+    logger.info('🚀 Starting Samwise MCP Server v2...');
 
     // Load configuration
     const config = await loadConfig();
-    logger.info(`✅ Configuration loaded`);
-
-    // Initialize Phase 3 components
-    logger.info('Initializing Phase 3 components...');
-    await initializeSkills();
-    await initializeAgents();
-    logger.info('✅ Phase 3 components initialized');
+    logger.info('✅ Configuration loaded');
 
     // Initialize MCP server
     const server = new McpServer(config);
-
-    // Register skills as MCP tools
-    registerSkillsAsTools(server.registerTool.bind(server));
-
     await server.start();
 
-    logger.info('✅ MCP Server started successfully');
     logger.info('🔗 Waiting for client connection...');
 
     // Handle graceful shutdown
@@ -49,6 +36,7 @@ async function main() {
     });
   } catch (error) {
     logger.error('❌ Fatal error:', error);
+    console.error(error);
     process.exit(1);
   }
 }

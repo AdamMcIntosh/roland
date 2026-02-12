@@ -1,355 +1,238 @@
-# Installation Guide - samwise
+# Installation Guide — Samwise MCP Server
 
-Complete installation and setup guide for samwise standalone CLI.
+Setup guide for Samwise as an MCP server integrated with VS Code or Cursor.
 
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
 2. [Installation Steps](#installation-steps)
-3. [Getting API Keys](#getting-your-api-keys)
-4. [Testing Installation](#testing-your-installation)
-5. [Troubleshooting](#troubleshooting)
+3. [IDE Setup](#ide-setup)
+4. [Getting API Keys](#getting-your-api-keys)
+5. [Verify Installation](#verify-installation)
+6. [Troubleshooting](#troubleshooting)
 
 ## Prerequisites
 
 - **Node.js**: v18.0.0 or higher
 - **npm**: v9.0.0 or higher
-- **Operating System**: Windows, macOS, or Linux
+- **IDE**: VS Code (with GitHub Copilot) or Cursor
 - **API Keys**: OpenRouter API key (free tier available)
 
 ## Installation Steps
 
-### 1. Clone the Repository
+### 1. Clone & Install
 
 ```bash
 git clone https://github.com/yourusername/samwise.git
 cd samwise
-```
-
-### 2. Install Dependencies
-
-```bash
 npm install
 ```
 
-This will install all required dependencies including:
-- TypeScript compiler and type definitions
-- Commander.js for CLI
-- Chalk for colored output
-- Ora for loading spinners
-- Zod for validation
-- @modelcontextprotocol/sdk for MCP integration
-
-### 3. Configure API Keys
-
-Create a `.env` file in the project root:
-
-```bash
-# Create .env file
-touch .env  # On Windows: New-Item .env -ItemType File
-```
-
-Add your OpenRouter API key:
-
-```bash
-# OpenRouter (free tier available)
-SAMWISE_API_KEYS_OPENROUTER=your_openrouter_api_key_here
-```
-
-**Note**: Samwise uses **OpenRouter only**. Multiple free tier models are available including:
-- `meta-llama/llama-3.2-3b-instruct:free` (3B, multilingual, fast)
-- `nousresearch/hermes-3-llama-3.1-405b:free` (405B flagship, most capable)
-- `arcee-ai/trinity-large-preview:free` (400B MoE, creative tasks)
-- `stepfun/step-3.5-flash:free` (reasoning, 196B MoE)
-- `openrouter/pony-alpha` (coding, roleplay)
-
-### 4. Build the Project
+### 2. Build
 
 ```bash
 npm run build
 ```
 
-This compiles TypeScript source files from `src/` to JavaScript in `dist/`.
+### 3. Set Your API Key
 
-Expected output:
-```
-> samwise@1.0.0 build
-> tsc
-
-(no errors)
-```
-
-### 5. Verify Installation
+Set the environment variable for your shell:
 
 ```bash
-# Check that CLI runs
-npm run cli
+# Bash / Zsh
+export SAMWISE_API_KEYS_OPENROUTER=your_openrouter_api_key_here
 
-# You should see the CLI prompt
-samwise>
+# PowerShell
+$env:SAMWISE_API_KEYS_OPENROUTER = "your_openrouter_api_key_here"
+
+# Or add to config.yaml (samwise.api_keys.openrouter)
 ```
 
-Type `help` to see available commands.
+### 4. Export IDE Configs (Optional)
+
+Regenerate agent files and MCP configs for your IDE:
+
+```bash
+npm run export-configs
+```
+
+This creates:
+- `.github/agents/*.agent.md` — VS Code Copilot agent personas
+- `.cursor/rules/*.mdc` — Cursor rule files
+- `.vscode/mcp.json` — VS Code MCP server config
+- `.cursor/mcp.json` — Cursor MCP server config
+
+## IDE Setup
+
+### VS Code (GitHub Copilot)
+
+The project includes `.vscode/mcp.json` which VS Code reads automatically. Ensure:
+
+1. You have the **GitHub Copilot** extension installed
+2. The `SAMWISE_API_KEYS_OPENROUTER` environment variable is set
+3. The project is built (`npm run build`)
+
+VS Code will discover the MCP server and expose its tools to Copilot agents. You can verify by opening the Command Palette and running **MCP: List Servers**.
+
+The `.vscode/mcp.json` config:
+```jsonc
+{
+  "servers": {
+    "samwise": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${workspaceFolder}/dist/index.js"],
+      "env": {
+        "SAMWISE_API_KEYS_OPENROUTER": "${env:SAMWISE_API_KEYS_OPENROUTER}"
+      }
+    }
+  }
+}
+```
+
+### Cursor
+
+The project includes `.cursor/mcp.json` which Cursor reads automatically. Ensure:
+
+1. The `SAMWISE_API_KEYS_OPENROUTER` environment variable is set
+2. The project is built (`npm run build`)
+
+Cursor will discover the MCP server and expose its tools in chat. You can verify in **Settings → MCP Servers**.
+
+The `.cursor/mcp.json` config:
+```jsonc
+{
+  "mcpServers": {
+    "samwise": {
+      "command": "node",
+      "args": ["dist/index.js"],
+      "env": {
+        "SAMWISE_API_KEYS_OPENROUTER": "${env:SAMWISE_API_KEYS_OPENROUTER}"
+      }
+    }
+  }
+}
+```
+
+### Using Agents
+
+After setup, mention agents by name in chat:
+
+- `@architect` — System design & architecture
+- `@executor` — Implementation & coding
+- `@planner` — Task breakdown
+- `@critic` — Code review & validation
+
+Start a recipe workflow by invoking the first agent in the chain:
+
+- `@plan-exec-rev-ex-planner` — 4-agent autonomous coding loop
+- `@bugfix-analyst` — Full bug resolution workflow
+- `@securityaudit-architect` — Security audit workflow
+
+See `.github/copilot-instructions.md` for the full list.
+
+## Available MCP Tools
+
+Once connected, the Samwise MCP server provides:
+
+| Tool | Purpose |
+|------|---------|
+| `health_check` | Server status & uptime |
+| `route_model` | Analyze complexity → recommend cheapest model |
+| `track_cost` | Log token usage, return session totals |
+| `manage_budget` | Get/set/reset spending limits |
+| `get_analytics` | Cost breakdowns by model/agent/provider |
+| `suggest_mode` | Recommend quick/standard/deep depth |
+| `list_recipes` | Browse available workflow recipes |
+| `execute_recipe` | Run a multi-agent recipe |
+| `get_cache_stats` | Workflow cache statistics |
 
 ## Getting Your API Keys
 
-### OpenRouter (Recommended - Free Tier Available)
+### OpenRouter (Free Tier Available)
 
 1. Visit [https://openrouter.ai](https://openrouter.ai)
-2. Sign up for an account (can use Google, GitHub, or MetaMask)
-3. Navigate to Settings > API Keys
+2. Sign up (Google, GitHub, or MetaMask)
+3. Navigate to **Settings → API Keys**
 4. Create a new API key
-5. Copy the key to your `.env` file
+5. Set it as `SAMWISE_API_KEYS_OPENROUTER`
 
-**Cost**: OpenRouter provides multiple **completely free** models:
-- `meta-llama/llama-3.2-3b-instruct:free` - $0/query (3B multilingual)
-- `nousresearch/hermes-3-llama-3.1-405b:free` - $0/query (405B flagship)
-- `arcee-ai/trinity-large-preview:free` - $0/query (400B MoE, creative)
-- `stepfun/step-3.5-flash:free` - $0/query (reasoning, 196B MoE)
-- `openrouter/pony-alpha` - $0/query (coding, roleplay)
+All default models are **completely free**:
+- `meta-llama/llama-3.2-3b-instruct:free` — Fast, multilingual
+- `nousresearch/hermes-3-llama-3.1-405b:free` — Most capable
+- `arcee-ai/trinity-large-preview:free` — Creative tasks
+- `stepfun/step-3.5-flash:free` — Reasoning
 
-You can also access paid models from multiple providers through a single API key if needed later.
+## Verify Installation
 
-## Configuration
-
-### config.yaml
-
-The project includes a `config.yaml` file for model routing configuration. Default settings work out-of-the-box, but you can customize:
-
-```yaml
-routing:
-  simple:
-    - meta-llama/llama-3.2-3b-instruct:free      # Fast, multilingual
-    - openrouter/pony-alpha                       # Coding tasks
-  medium:
-    - stepfun/step-3.5-flash:free                 # Reasoning, 196B MoE
-    - arcee-ai/trinity-large-preview:free         # Creative tasks
-  complex:
-    - nousresearch/hermes-3-llama-3.1-405b:free   # Most capable
-    - deepseek/deepseek-r1-0528:free              # Deep reasoning
-  creative:
-    - nousresearch/hermes-3-llama-3.1-405b:free   # Creative writing
-
-cache:
-  enabled: true
-  ttl: 3600              # Cache TTL in seconds (1 hour)
-  directory: ".cache"    # Cache storage directory
-```
-
-### Environment Variables
-
-All API keys can be configured via environment variables:
+### Quick Test
 
 ```bash
-# OpenRouter API key
-SAMWISE_API_KEYS_OPENROUTER=...
+# Start the MCP server directly
+npm start
 
-# Optional: Override config file location
-OMG_CONFIG_PATH=/path/to/config.yaml
+# Expected output:
+# 🚀 Starting Samwise MCP Server v2...
+# ✅ Configuration loaded
+# ✅ MCP Server connected and ready
+# 📦 Tools: health_check, route_model, track_cost, manage_budget, get_analytics, suggest_mode, list_recipes, execute_recipe, get_cache_stats
+# 🔗 Waiting for client connection...
 ```
 
-## Testing Your Installation
+Press `Ctrl+C` to stop.
 
-### 1. Run a Simple Query
+### In VS Code / Cursor
 
-```bash
-npm run cli
-
-# At the prompt
-> run "eco: add a comment to this line: const x = 5"
-```
-
-You should see:
-- Model selection (meta-llama/llama-3.2-3b-instruct:free for simple tasks)
-- Cost: $0.0000 (free tier)
-- Result output
-- Duration and caching status
-
-### 2. Check Session Statistics
-
-```bash
-> stats
-```
-
-You should see:
-- Total queries: 1
-- Cache hits: 0
-- Total cost: $0.0000
-- Models used: meta-llama/llama-3.2-3b-instruct:free
-
-### 3. List Available Skills
-
-```bash
-> skills
-```
-
-You should see 3 core skills:
-- RefactoringSkill
-- DocumentationSkill
-- TestingSkill
-
-### 4. List Available Agents
-
-```bash
-> agents
-```
-
-You should see 10 loaded agents:
-- architect, researcher, designer, writer, vision
-- critic, analyst, executor, planner, qa-tester
+1. Open the project in your IDE
+2. Open Copilot chat (or Cursor chat)
+3. Ask: "Use the health_check tool"
+4. You should get a response with `status: healthy` and the tool list
 
 ## Troubleshooting
 
+### Error: "Server does not support tools"
+
+**Solution**: Update the MCP SDK — the server requires `capabilities: { tools: {} }` in the Server constructor. Run `npm install` and `npm run build`.
+
 ### Error: "Missing API key for OpenRouter provider"
 
-**Solution**: Ensure you have set `SAMWISE_API_KEYS_OPENROUTER` in your `.env` file.
+**Solution**: Set `SAMWISE_API_KEYS_OPENROUTER` as an environment variable or in `config.yaml`.
 
-```bash
-# Check if .env exists
-cat .env  # or: Get-Content .env on Windows
+### Error: "Cannot find module 'dist/index.js'"
 
-# Add the key if missing
-echo "SAMWISE_API_KEYS_OPENROUTER=your_key_here" >> .env
-```
+**Solution**: Build the project first: `npm run build`
 
-### Error: "Cannot find module 'dist/cli/cli-main.js'"
+### MCP Server Not Showing in IDE
 
-**Solution**: Build the project first.
-
-```bash
-npm run build
-```
-
-### Error: "Config file not found"
-
-**Solution**: Ensure `config.yaml` exists in the project root.
-
-```bash
-# Check if config.yaml exists
-ls config.yaml  # or: Test-Path config.yaml on Windows
-
-# If missing, the project should include a default one
-# Restore from git:
-git checkout config.yaml
-```
+**Solution**:
+1. Ensure `.vscode/mcp.json` (or `.cursor/mcp.json`) exists
+2. Rebuild: `npm run build`
+3. Restart the IDE
+4. Check **MCP: List Servers** (VS Code) or **Settings → MCP** (Cursor)
 
 ### TypeScript Compilation Errors
 
-**Solution**: Ensure you're using Node.js v18+ and TypeScript is installed.
-
 ```bash
-# Check Node.js version
-node --version  # Should be v18.0.0 or higher
-
-# Reinstall dependencies
+node --version  # Should be v18.0.0+
 rm -rf node_modules package-lock.json
 npm install
 npm run build
 ```
 
-### Cache Not Working
-
-**Solution**: Check that the `.cache` directory is writable.
+## Development
 
 ```bash
-# Create cache directory if missing
-mkdir .cache  # or: New-Item -ItemType Directory .cache on Windows
-
-# Check permissions
-ls -la .cache  # Ensure it's writable
-```
-
-### Slow Response Times
-
-**Solution**: This is usually due to API latency, not the tool.
-
-- Check your internet connection
-- Verify API provider status
-- Use `--verbose` flag to see detailed execution logs
-
-```bash
-> run --verbose "eco: your query"
-```
-
-## Running Tests
-
-```bash
-# Install dev dependencies (if not already installed)
-npm install
-
-# Run the full test suite
-npm test
-```
-
-Expected output:
-```
-Test Files  1 passed (1)
-     Tests  40+ passed (40+)
-```
-
-## Development Setup
-
-If you want to contribute or modify the code:
-
-```bash
-# Run in watch mode (auto-rebuild on changes)
-npm run dev
-
-# Run linting
-npm run lint
-
-# Format code
-npm run format
-
-# Clean build artifacts
-npm run clean
+npm run dev          # Watch mode (auto-rebuild)
+npm run build        # Full build
+npm run export-configs  # Regenerate IDE configs
+npm test             # Run tests
+npm run lint         # Lint check
+npm run clean        # Remove dist/
 ```
 
 ## Next Steps
 
-After successful installation:
-
-1. **Read the usage guide**: [EXAMPLE_USAGE.md](EXAMPLE_USAGE.md)
-2. **Try example scripts**: Check the `examples/` directory
-3. **Explore skills**: See what each skill can do with `skills` command
-4. **Monitor costs**: Use `stats` command to track your spending
-
-## Uninstallation
-
-To remove samwise:
-
-```bash
-# Navigate to project directory
-cd samwise
-
-# Remove dependencies
-rm -rf node_modules
-
-# Remove cache (optional)
-rm -rf .cache
-
-# Remove the entire project (optional)
-cd ..
-rm -rf samwise
-```
-
-## Support
-
-If you encounter issues during installation:
-
-1. Check this troubleshooting guide
-2. Review [EXAMPLE_USAGE.md](EXAMPLE_USAGE.md) for usage patterns
-3. Open an issue on GitHub with:
-   - Your Node.js version (`node --version`)
-   - Your npm version (`npm --version`)
-   - Error messages and logs
-   - Steps to reproduce
-
----
-
-**Installation Complete!** 🎉
-
-Start using samwise with:
-```bash
-npm run cli
-```
+1. **Read the agent catalog**: See `.github/copilot-instructions.md`
+2. **Try a recipe**: Invoke `@plan-exec-rev-ex-planner` with a coding task
+3. **Monitor costs**: Ask the agent to use `get_analytics`
+4. **Set a budget**: Ask the agent to use `manage_budget` with `set_limit`

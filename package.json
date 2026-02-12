@@ -1,18 +1,17 @@
 {
   "name": "samwise",
   "version": "1.0.0",
-  "description": "Persistent autonomous agent orchestration with recipes and workflows",
+  "description": "AI agent cost routing, analytics, and workflow orchestration via MCP",
   "main": "dist/index.js",
   "type": "module",
   "bin": {
-    "samwise": "./dist/cli/cli-interactive-main.js"
+    "samwise-mcp": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc && node scripts/copy-assets.js",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
-    "samwise": "node dist/cli/cli-interactive-main.js",
-    "mcp": "node dist/server/mcp-server.js",
+    "mcp": "node dist/index.js",
     "export-configs": "npx tsx scripts/export-ide-configs.ts",
     "lint": "eslint src/**/*.ts",
     "format": "prettier --write src/**/*.ts",

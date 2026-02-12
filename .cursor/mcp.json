@@ -3,7 +3,7 @@
     "samwise": {
       "command": "node",
       "args": [
-        "node_modules/samwise/dist/server/mcp-server.js"
+        "dist/index.js"
       ],
       "env": {
         "SAMWISE_API_KEYS_OPENROUTER": "${env:SAMWISE_API_KEYS_OPENROUTER}"
