@@ -1,12 +1,12 @@
 {
-  "name": "samwise",
+  "name": "roland",
   "version": "2.0.0",
   "description": "AI agent cost routing, analytics, and workflow orchestration via MCP",
   "main": "dist/index.js",
   "type": "module",
   "bin": {
-    "samwise": "./dist/index.js",
-    "samwise-mcp": "./dist/index.js"
+    "roland": "./dist/index.js",
+    "roland-mcp": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc && node scripts/copy-assets.js",

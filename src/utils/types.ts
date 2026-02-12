@@ -1,5 +1,5 @@
 /**
- * Core type definitions for samwise
+ * Core type definitions for roland
  */
 
 // ============================================================================
@@ -24,7 +24,7 @@ export interface SessionConfig {
 
 export interface AppConfig {
   routing: RoutingConfig;
-  samwise: SessionConfig;
+  roland: SessionConfig;
   configPath?: string;
 }
 

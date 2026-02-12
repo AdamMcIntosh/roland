@@ -1,6 +1,6 @@
-# Installation Guide — Samwise MCP Server
+# Installation Guide — Roland MCP Server
 
-Setup guide for Samwise as an MCP server integrated with VS Code or Cursor.
+Setup guide for Roland as an MCP server integrated with VS Code or Cursor.
 
 ## Table of Contents
 
@@ -25,8 +25,8 @@ Setup guide for Samwise as an MCP server integrated with VS Code or Cursor.
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/yourusername/samwise.git
-cd samwise
+git clone https://github.com/yourusername/roland.git
+cd roland
 npm install
 ```
 
@@ -45,19 +45,19 @@ Create or edit `~/.cursor/mcp.json` (i.e. `C:\Users\<you>\.cursor\mcp.json`):
 ```jsonc
 {
   "mcpServers": {
-    "samwise": {
+    "roland": {
       "command": "node",
-      "args": ["C:/path/to/samwise/dist/index.js"]
+      "args": ["C:/path/to/roland/dist/index.js"]
     }
   }
 }
 ```
 
-Replace `C:/path/to/samwise` with the actual path to your samwise clone. Restart Cursor, and `samwise` will appear in **Settings → MCP** for every project you open.
+Replace `C:/path/to/roland` with the actual path to your roland clone. Restart Cursor, and `roland` will appear in **Settings → MCP** for every project you open.
 
 ### Option B: Per-Project Config (via init command)
 
-From the samwise directory:
+From the roland directory:
 
 ```bash
 npm run init -- C:\path\to\your\project
@@ -65,14 +65,14 @@ npm run init -- C:\path\to\your\project
 
 This generates `.cursor/mcp.json` (with absolute path), agent personas in `.cursor/rules/`, and agent files in `.github/agents/` in the target project.
 
-### Option C: Samwise Project Only
+### Option C: Roland Project Only
 
-If you just want to test within the samwise repo itself, the existing `.cursor/mcp.json` uses a relative path and works out of the box:
+If you just want to test within the roland repo itself, the existing `.cursor/mcp.json` uses a relative path and works out of the box:
 
 ```jsonc
 {
   "mcpServers": {
-    "samwise": {
+    "roland": {
       "command": "node",
       "args": ["dist/index.js"]
     }
@@ -82,31 +82,31 @@ If you just want to test within the samwise repo itself, the existing `.cursor/m
 
 ### Verify in Cursor
 
-1. Open **Settings → MCP** — `samwise` should show a green status
+1. Open **Settings → MCP** — `roland` should show a green status
 2. Open chat and type: *"Use the health_check tool"*
 3. You should get `status: healthy` and a list of 9 tools
 
-If the server shows red, rebuild (`npm run build` in the samwise directory) and click **Restart** next to samwise in Settings → MCP.
+If the server shows red, rebuild (`npm run build` in the roland directory) and click **Restart** next to roland in Settings → MCP.
 
 ## VS Code Setup
 
 ### Option A: Per-Project Config (via init command)
 
 ```bash
-cd /path/to/samwise
+cd /path/to/roland
 npm run init -- C:\path\to\your\project
 ```
 
-This generates `.vscode/mcp.json` with an absolute path to samwise.
+This generates `.vscode/mcp.json` with an absolute path to roland.
 
-### Option B: Samwise Project Only
+### Option B: Roland Project Only
 
 The included `.vscode/mcp.json` uses the workspace-relative path:
 
 ```jsonc
 {
   "servers": {
-    "samwise": {
+    "roland": {
       "type": "stdio",
       "command": "node",
       "args": ["${workspaceFolder}/dist/index.js"]
@@ -119,10 +119,10 @@ Verify by opening the Command Palette → **MCP: List Servers**.
 
 ## Use on Any Project
 
-Samwise is fully portable. The `init` command exports everything a project needs:
+Roland is fully portable. The `init` command exports everything a project needs:
 
 ```bash
-cd /path/to/samwise
+cd /path/to/roland
 npm run init -- /path/to/your/project
 ```
 
@@ -130,9 +130,9 @@ npm run init -- /path/to/your/project
 
 | Path | Contents |
 |------|----------|
-| `.cursor/mcp.json` | Cursor MCP config (absolute path to Samwise) |
+| `.cursor/mcp.json` | Cursor MCP config (absolute path to Roland) |
 | `.cursor/rules/*.mdc` | Cursor agent persona rules |
-| `.vscode/mcp.json` | VS Code MCP config (absolute path to Samwise) |
+| `.vscode/mcp.json` | VS Code MCP config (absolute path to Roland) |
 | `.github/agents/*.agent.md` | VS Code Copilot agent personas |
 | `.github/copilot-instructions.md` | Agent catalog & usage guide |
 
@@ -157,7 +157,7 @@ See `.github/copilot-instructions.md` for the full list.
 
 ## Available MCP Tools
 
-Once connected, the Samwise MCP server provides:
+Once connected, the Roland MCP server provides:
 
 | Tool | Purpose |
 |------|---------|
@@ -179,7 +179,7 @@ No API key is required for the MCP tools themselves. All tools run locally. The 
 
 1. Build: `npm run build`
 2. Open any project in Cursor (with global config) or a project where you ran `init`
-3. Go to **Settings → MCP** and verify `samwise` shows a green status
+3. Go to **Settings → MCP** and verify `roland` shows a green status
 4. Open Cursor chat and ask: *"Use the health_check tool"*
 5. You should get a response with `status: healthy` and a list of 9 tools
 
@@ -190,20 +190,20 @@ See [TESTING.md](TESTING.md) for a full testing walkthrough.
 | Problem | Fix |
 |---------|-----|
 | Server not showing in Settings → MCP | Check your `mcp.json` path is correct, rebuild (`npm run build`), restart Cursor |
-| `Cannot find module 'dist/index.js'` | Run `npm run build` in the samwise directory |
+| `Cannot find module 'dist/index.js'` | Run `npm run build` in the roland directory |
 | Server shows red status | Click **Restart** in Settings → MCP |
 | Tools not appearing in chat | Verify server is green in Settings → MCP, try restarting Cursor |
 | TypeScript compilation errors | `node --version` (need v18+), then `rm -rf node_modules && npm install && npm run build` |
-| Works in samwise project but not others | You're using a relative path — switch to global config or run `npm run init` |
+| Works in roland project but not others | You're using a relative path — switch to global config or run `npm run init` |
 
 ## Development
 
 ```bash
 npm run dev            # Watch mode (auto-rebuild)
 npm run build          # Full build
-npm run init           # Set up Samwise in current directory
-npm run init -- <dir>  # Set up Samwise in target directory
-npm run export-configs # Regenerate IDE configs (samwise project only)
+npm run init           # Set up Roland in current directory
+npm run init -- <dir>  # Set up Roland in target directory
+npm run export-configs # Regenerate IDE configs (roland project only)
 npm test               # Run tests
 npm run lint           # Lint check
 npm run clean          # Remove dist/

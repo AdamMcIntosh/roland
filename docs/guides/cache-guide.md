@@ -1,6 +1,6 @@
 # Cache Management Guide
 
-**Complete Guide to Caching Strategy with samwise**
+**Complete Guide to Caching Strategy with roland**
 
 ---
 

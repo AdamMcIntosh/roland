@@ -25,10 +25,10 @@ if (fs.existsSync(envPath)) {
   }
 }
 
-const apiKey = process.env.SAMWISE_API_KEYS_ANTHROPIC;
+const apiKey = process.env.ROLAND_API_KEYS_ANTHROPIC;
 
 if (!apiKey) {
-  console.error('❌ Error: SAMWISE_API_KEYS_ANTHROPIC not found in environment');
+  console.error('❌ Error: ROLAND_API_KEYS_ANTHROPIC not found in environment');
   console.error('   Please set the Anthropic API key in your .env file');
   process.exit(1);
 }

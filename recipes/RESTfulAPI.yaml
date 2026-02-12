@@ -4,7 +4,7 @@
 name: RESTfulAPI
 recipe: restful-api
 version: 1.0.0
-author: samwise
+author: roland
 description: |
   Complete workflow for designing, implementing, and documenting a production-grade REST API.
   Includes architecture, implementation, testing, and comprehensive documentation.

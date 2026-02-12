@@ -1,5 +1,5 @@
 /**
- * Configuration loader for samwise
+ * Configuration loader for roland
  * Handles loading, parsing, and validating configuration from YAML and environment variables
  */
 
@@ -38,7 +38,7 @@ const SessionConfigSchema = z.object({
 
 const AppConfigSchema = z.object({
   routing: RoutingConfigSchema,
-  samwise: SessionConfigSchema,
+  roland: SessionConfigSchema,
 });
 
 // ============================================================================
@@ -47,14 +47,14 @@ const AppConfigSchema = z.object({
 
 export class ConfigLoader {
   private static readonly DEFAULT_CONFIG_PATH = 'config.yaml';
-  private static readonly ENV_PREFIX = 'SAMWISE_';
+  private static readonly ENV_PREFIX = 'ROLAND_';
 
   /**
    * Load and validate configuration from YAML file and environment variables
    * Searches in multiple locations:
    * 1. Provided path or current directory (config.yaml)
-   * 2. Samwise installation directory
-   * 3. User home directory (~/.samwise/config.yaml)
+   * 2. Roland installation directory
+   * 3. User home directory (~/.roland/config.yaml)
    */
   static async loadConfig(configPath?: string): Promise<AppConfig> {
     try {
@@ -108,8 +108,8 @@ export class ConfigLoader {
   private static getAlternativeConfigPaths(): string[] {
     const paths: string[] = [];
 
-    // Try samwise package installation directory
-    // When installed globally, config will be in node_modules/samwise/dist/
+    // Try roland package installation directory
+    // When installed globally, config will be in node_modules/roland/dist/
     try {
       const currentFile = new URL(import.meta.url).pathname;
       // Handle Windows paths that start with /C:/...
@@ -131,8 +131,8 @@ export class ConfigLoader {
     // Try user home directory
     const homeDir = process.env.HOME || process.env.USERPROFILE || '';
     if (homeDir) {
-      paths.push(path.join(homeDir, '.samwise', 'config.yaml'));
-      paths.push(path.join(homeDir, '.config', 'samwise', 'config.yaml'));
+      paths.push(path.join(homeDir, '.roland', 'config.yaml'));
+      paths.push(path.join(homeDir, '.config', 'roland', 'config.yaml'));
     }
 
     return paths;
@@ -168,7 +168,7 @@ export class ConfigLoader {
 
   /**
    * Merge environment variables into configuration
-   * Currently a no-op — Samwise relies on IDE-provided models, no API keys needed.
+   * Currently a no-op — Roland relies on IDE-provided models, no API keys needed.
    * Reserved for future provider integrations.
    */
   private static mergeEnvironmentVariables(_config: Record<string, unknown>): void {

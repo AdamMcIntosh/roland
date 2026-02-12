@@ -1,6 +1,6 @@
 # Testing Guide
 
-Step-by-step guide for verifying the Samwise MCP server in Cursor.
+Step-by-step guide for verifying the Roland MCP server in Cursor.
 
 ## Prerequisites
 
@@ -9,7 +9,7 @@ npm install
 npm run build
 ```
 
-Open the project in Cursor and confirm the server is connected at **Settings → MCP** — `samwise` should show a green status.
+Open the project in Cursor and confirm the server is connected at **Settings → MCP** — `roland` should show a green status.
 
 ## 1. Health Check
 
@@ -138,4 +138,4 @@ When you modify source files:
 npm run build
 ```
 
-Then restart the MCP server in Cursor: **Settings → MCP → samwise → Restart**.
+Then restart the MCP server in Cursor: **Settings → MCP → roland → Restart**.

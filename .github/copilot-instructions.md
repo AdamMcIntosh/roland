@@ -1,6 +1,6 @@
-# Samwise Project Instructions
+# Roland Project Instructions
 
-This project uses **Samwise** — an AI agent orchestration framework — to provide specialized agent personas and multi-agent workflow recipes.
+This project uses **Roland** — an AI agent orchestration framework — to provide specialized agent personas and multi-agent workflow recipes.
 
 ## Available Agents
 
@@ -43,9 +43,9 @@ Recipe chains are multi-agent workflows available as handoff agent chains:
 
 To start a recipe, invoke the first agent in the chain (e.g., `@plan-exec-rev-ex-planner`).
 
-## Samwise MCP Server
+## Roland MCP Server
 
-If configured, the Samwise MCP server provides these tools:
+If configured, the Roland MCP server provides these tools:
 
 | Tool | Purpose | When to Use |
 |------|---------|-------------|

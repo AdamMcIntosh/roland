@@ -1,4 +1,4 @@
-# Samwise
+# Roland
 
 > AI agent orchestration as an MCP server — cost-routed models, multi-agent recipes, and IDE-native personas.
 
@@ -7,7 +7,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)]()
 [![MCP](https://img.shields.io/badge/MCP-1.0.4-purple.svg)]()
 
-Samwise is an MCP (Model Context Protocol) server that gives your IDE agent superpowers: complexity-based model routing, session cost tracking, budget management, and multi-agent recipe execution — all via free-tier OpenRouter models. It also exports 32 specialized agent personas directly into VS Code (Copilot) and Cursor as native config files.
+Roland is an MCP (Model Context Protocol) server that gives your IDE agent superpowers: complexity-based model routing, session cost tracking, budget management, and multi-agent recipe execution. It also exports 32 specialized agent personas directly into VS Code (Copilot) and Cursor as native config files.
 
 **Version**: 2.0.0
 
@@ -86,13 +86,12 @@ Run `npm run export-configs` to generate:
 
 ### Prerequisites
 - **Node.js** >= 18.0.0
-- **OpenRouter API key** (free tier available at [openrouter.ai](https://openrouter.ai))
 
 ### Install & Build
 
 ```bash
-git clone https://github.com/yourusername/samwise.git
-cd samwise
+git clone https://github.com/yourusername/roland.git
+cd roland
 npm install
 npm run build
 ```
@@ -164,4 +163,4 @@ npm start               # Start MCP server directly
 
 ## License
 
-MIT © Samwise Contributors
+MIT © Roland Contributors

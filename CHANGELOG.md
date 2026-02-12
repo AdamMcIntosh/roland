@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to samwise are documented in this file.
+All notable changes to roland are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🎉 Production Release - Complete Orchestration Framework
 
-Production-ready release of samwise with all 10 phases complete.
+Production-ready release of roland with all 10 phases complete.
 
 ### Added
 
@@ -231,7 +231,7 @@ npm run cli
 Docker containerization support coming in next release.
 
 #### Package Manager
-Package available on npm as @samwise/core
+Package available on npm as @roland/core
 
 ### Support & Feedback
 
@@ -250,7 +250,7 @@ For issues, questions, or feedback:
 
 ### Contributors
 
-Thank you to all who contributed to samwise!
+Thank you to all who contributed to roland!
 
 ### License
 
@@ -457,5 +457,5 @@ This is the initial release. No migration needed.
 
 ---
 
-[1.0.0]: https://github.com/yourusername/samwise/releases/tag/v1.0.0
-[Unreleased]: https://github.com/yourusername/samwise/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/yourusername/roland/releases/tag/v1.0.0
+[Unreleased]: https://github.com/yourusername/roland/compare/v1.0.0...HEAD

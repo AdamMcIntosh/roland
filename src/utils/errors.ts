@@ -1,8 +1,8 @@
 /**
- * Custom error classes for samwise
+ * Custom error classes for roland
  */
 
-export class SamwiseError extends Error {
+export class RolandError extends Error {
   constructor(
     message: string,
     public code: string = 'UNKNOWN_ERROR',
@@ -28,7 +28,7 @@ export class SamwiseError extends Error {
 // Configuration Errors
 // ============================================================================
 
-export class ConfigError extends SamwiseError {
+export class ConfigError extends RolandError {
   constructor(message: string, details?: Record<string, unknown>) {
     super(message, 'CONFIG_ERROR', details);
   }
@@ -56,7 +56,7 @@ export class ConfigValidationError extends ConfigError {
 // Agent Errors
 // ============================================================================
 
-export class AgentError extends SamwiseError {
+export class AgentError extends RolandError {
   constructor(message: string, details?: Record<string, unknown>) {
     super(message, 'AGENT_ERROR', details);
   }
@@ -78,7 +78,7 @@ export class AgentLoadError extends AgentError {
 // Skill Errors
 // ============================================================================
 
-export class SkillError extends SamwiseError {
+export class SkillError extends RolandError {
   constructor(message: string, details?: Record<string, unknown>) {
     super(message, 'SKILL_ERROR', details);
   }
@@ -106,7 +106,7 @@ export class SkillValidationError extends SkillError {
 // MCP Server Errors
 // ============================================================================
 
-export class McpError extends SamwiseError {
+export class McpError extends RolandError {
   constructor(message: string, details?: Record<string, unknown>) {
     super(message, 'MCP_ERROR', details);
   }
@@ -134,7 +134,7 @@ export class McpServerError extends McpError {
 // Model Routing Errors
 // ============================================================================
 
-export class RoutingError extends SamwiseError {
+export class RoutingError extends RolandError {
   constructor(message: string, details?: Record<string, unknown>) {
     super(message, 'ROUTING_ERROR', details);
   }
@@ -156,7 +156,7 @@ export class ModelNotConfiguredError extends RoutingError {
 // Cache Errors
 // ============================================================================
 
-export class CacheError extends SamwiseError {
+export class CacheError extends RolandError {
   constructor(message: string, details?: Record<string, unknown>) {
     super(message, 'CACHE_ERROR', details);
   }
@@ -178,7 +178,7 @@ export class CacheWriteError extends CacheError {
 // Workflow Errors
 // ============================================================================
 
-export class WorkflowError extends SamwiseError {
+export class WorkflowError extends RolandError {
   constructor(message: string, details?: Record<string, unknown>) {
     super(message, 'WORKFLOW_ERROR', details);
   }
@@ -200,7 +200,7 @@ export class WorkflowExecutionError extends WorkflowError {
 // API Errors
 // ============================================================================
 
-export class ApiError extends SamwiseError {
+export class ApiError extends RolandError {
   constructor(message: string, public statusCode?: number, details?: Record<string, unknown>) {
     super(message, 'API_ERROR', details);
   }

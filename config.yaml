@@ -1,7 +1,7 @@
-# Samwise Model Routing Configuration
+# Roland Model Routing Configuration
 #
 # Maps complexity tiers to recommended IDE models.
-# These are advisory — Samwise returns the suggestion, and the IDE (Cursor/VS Code)
+# These are advisory — Roland returns the suggestion, and the IDE (Cursor/VS Code)
 # uses it to pick the right model for the task.
 #
 # Cursor models:  cursor-small, gpt-4o-mini, gpt-4o, claude-3.5-sonnet, claude-3-opus,
@@ -26,7 +26,7 @@ routing:
     - gpt-4o                  # Good explainer
     - gemini-1.5-pro          # Thorough alternative
 
-samwise:
+roland:
   mcp_defaults:
     temperature: 0.7
     max_tokens: 2000

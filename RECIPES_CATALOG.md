@@ -1,6 +1,6 @@
 # Recipes Catalog
 
-Samwise includes 7 multi-agent workflow recipes. Each recipe defines a sequence of agent steps that Cursor drives one at a time via `start_recipe` and `advance_recipe`.
+Roland includes 7 multi-agent workflow recipes. Each recipe defines a sequence of agent steps that Cursor drives one at a time via `start_recipe` and `advance_recipe`.
 
 ## How Recipes Work
 
@@ -9,7 +9,7 @@ Samwise includes 7 multi-agent workflow recipes. Each recipe defines a sequence 
 3. **`advance_recipe`** — Pass the output back. Returns the next agent's prompt (or a summary when done).
 4. Repeat until all steps complete.
 
-The IDE controls the model and context for every step — Samwise just orchestrates the sequence.
+The IDE controls the model and context for every step — Roland just orchestrates the sequence.
 
 ## Available Recipes
 

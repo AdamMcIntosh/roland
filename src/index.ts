@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * samwise MCP Server Entry Point
+ * Roland MCP Server Entry Point
  * Starts the Model Context Protocol server for agent orchestration
  */
 
@@ -10,7 +10,7 @@ import { logger } from './utils/logger.js';
 
 async function main() {
   try {
-    logger.info('🚀 Starting Samwise MCP Server v2...');
+    logger.info('🚀 Starting Roland MCP Server v2...');
 
     // Load configuration
     const config = await loadConfig();

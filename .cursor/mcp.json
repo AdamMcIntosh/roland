@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "samwise": {
+    "roland": {
       "command": "node",
       "args": [
         "dist/index.js"

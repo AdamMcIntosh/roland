@@ -1,7 +1,7 @@
 /**
  * MCP Server Implementation (v2)
  *
- * Samwise MCP Server — exposes cost routing, analytics, budget management,
+ * Roland MCP Server — exposes cost routing, analytics, budget management,
  * and recipe execution as MCP tools for IDE agents (VS Code, Cursor, etc.).
  *
  * Tools provided:
@@ -56,7 +56,7 @@ export class McpServer {
     this.toolDefinitions = new Map();
 
     // Recipes directory — resolve relative to the server's own install location
-    // so it works when Samwise is run from any project directory
+    // so it works when Roland is run from any project directory
     this.recipesDir = McpServer.resolveRecipesDir();
 
     // Initialize cost tracker
@@ -73,7 +73,7 @@ export class McpServer {
     // Initialize MCP server with stdio transport
     this.server = new Server(
       {
-        name: 'samwise',
+        name: 'roland',
         version: '2.0.0',
       },
       {
@@ -109,7 +109,7 @@ export class McpServer {
   private registerHealthCheck(): void {
     this.registerTool(
       'health_check',
-      'Check the health status of the Samwise MCP server',
+      'Check the health status of the Roland MCP server',
       async () => ({
         status: 'healthy',
         version: '2.0.0',
@@ -297,7 +297,7 @@ export class McpServer {
   private registerTriage(): void {
     this.registerTool(
       'triage',
-      'Auto-pilot: analyze any user message and recommend the best Samwise agent persona and/or recipe workflow. Call this FIRST on every coding request to get intelligent routing. Returns which agent to adopt, whether a multi-agent recipe applies, and the reasoning.',
+      'Auto-pilot: analyze any user message and recommend the best Roland agent persona and/or recipe workflow. Call this FIRST on every coding request to get intelligent routing. Returns which agent to adopt, whether a multi-agent recipe applies, and the reasoning.',
       async (args: Record<string, unknown>) => {
         const message = args.message as string;
         if (!message) {
@@ -1203,7 +1203,7 @@ export class McpServer {
 
   async start(): Promise<void> {
     try {
-      logger.info('🚀 Starting Samwise MCP Server v2...');
+      logger.info('🚀 Starting Roland MCP Server v2...');
       const transport = new StdioServerTransport();
       await this.server.connect(transport);
       logger.success('✅ MCP Server connected and ready');
@@ -1298,10 +1298,10 @@ export class McpServer {
   }
 
   /**
-   * Return the resolved Samwise installation root directory.
+   * Return the resolved Roland installation root directory.
    * Useful for other tools that need to locate bundled assets.
    */
-  static getSamwiseRoot(): string {
+  static getRolandRoot(): string {
     try {
       const thisFile = fileURLToPath(import.meta.url);
       return path.resolve(path.dirname(thisFile), '..', '..');

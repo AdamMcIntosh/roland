@@ -1,6 +1,6 @@
 # Budget Management Guide
 
-**Complete Guide to Managing API Spending with samwise**
+**Complete Guide to Managing API Spending with roland**
 
 ---
 

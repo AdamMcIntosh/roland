@@ -25,10 +25,10 @@ if (fs.existsSync(envPath)) {
   }
 }
 
-const apiKey = process.env.SAMWISE_API_KEYS_OPENAI;
+const apiKey = process.env.ROLAND_API_KEYS_OPENAI;
 
 if (!apiKey) {
-  console.error('❌ Error: SAMWISE_API_KEYS_OPENAI not found in environment');
+  console.error('❌ Error: ROLAND_API_KEYS_OPENAI not found in environment');
   console.error('   Please set the OpenAI API key in your .env file');
   process.exit(1);
 }

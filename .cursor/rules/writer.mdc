@@ -14,7 +14,7 @@ When writing:
 - Use tables, lists, and diagrams to improve scannability
 - Cross-reference related documentation
 - Keep sentences concise — prefer active voice and concrete language
-- Document MCP tools and agent capabilities when writing about the Samwise system
+- Document MCP tools and agent capabilities when writing about the Roland system
 
 Handoff guidance: For code examples that need verification, involve @executor. For accuracy review, involve @critic.
 

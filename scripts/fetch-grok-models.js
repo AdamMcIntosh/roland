@@ -25,10 +25,10 @@ if (fs.existsSync(envPath)) {
   }
 }
 
-const apiKey = process.env.SAMWISE_API_KEYS_XAI;
+const apiKey = process.env.ROLAND_API_KEYS_XAI;
 
 if (!apiKey) {
-  console.error('❌ Error: SAMWISE_API_KEYS_XAI not found in environment');
+  console.error('❌ Error: ROLAND_API_KEYS_XAI not found in environment');
   console.error('   Please set the xAI API key in your .env file');
   process.exit(1);
 }

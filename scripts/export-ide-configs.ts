@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Export Samwise agent configs as IDE-native files.
+ * Export Roland agent configs as IDE-native files.
  *
  * Generates:
  *   .github/agents/*.agent.md     – VS Code / GitHub Copilot agent definitions
@@ -479,7 +479,7 @@ When writing:
 - Use tables, lists, and diagrams to improve scannability
 - Cross-reference related documentation
 - Keep sentences concise — prefer active voice and concrete language
-- Document MCP tools and agent capabilities when writing about the Samwise system
+- Document MCP tools and agent capabilities when writing about the Roland system
 
 Handoff guidance: For code examples that need verification, involve @executor. For accuracy review, involve @critic.
 
@@ -487,7 +487,7 @@ Output format: Well-structured Markdown with headings, code blocks, tables, and 
 };
 
 // ---------------------------------------------------------------------------
-// IDE tool mapping – translate samwise tool names to IDE-native tools
+// IDE tool mapping – translate roland tool names to IDE-native tools
 // ---------------------------------------------------------------------------
 
 function mapToolsToIDE(tools: string[]): string[] {
@@ -672,13 +672,13 @@ function generateRecipeHandoffs(recipe: Recipe): HandoffAgent[] {
 // Generator: MCP config templates
 // ---------------------------------------------------------------------------
 
-function generateVscodeMcpJson(samwiseRoot: string, isExternal: boolean): string {
+function generateVscodeMcpJson(rolandRoot: string, isExternal: boolean): string {
   if (isExternal) {
-    // Absolute path to samwise dist — works from any project
-    const distIndex = path.join(samwiseRoot, 'dist', 'index.js').replace(/\\/g, '/');
+    // Absolute path to roland dist — works from any project
+    const distIndex = path.join(rolandRoot, 'dist', 'index.js').replace(/\\/g, '/');
     return JSON.stringify({
       servers: {
-        samwise: {
+        roland: {
           type: 'stdio',
           command: 'node',
           args: [distIndex],
@@ -689,7 +689,7 @@ function generateVscodeMcpJson(samwiseRoot: string, isExternal: boolean): string
   // Self-referencing — use workspace-relative path
   return JSON.stringify({
     servers: {
-      samwise: {
+      roland: {
         type: 'stdio',
         command: 'node',
         args: ['${workspaceFolder}/dist/index.js'],
@@ -698,13 +698,13 @@ function generateVscodeMcpJson(samwiseRoot: string, isExternal: boolean): string
   }, null, 2);
 }
 
-function generateCursorMcpJson(samwiseRoot: string, isExternal: boolean): string {
+function generateCursorMcpJson(rolandRoot: string, isExternal: boolean): string {
   if (isExternal) {
-    // Absolute path to samwise dist — works from any project
-    const distIndex = path.join(samwiseRoot, 'dist', 'index.js').replace(/\\/g, '/');
+    // Absolute path to roland dist — works from any project
+    const distIndex = path.join(rolandRoot, 'dist', 'index.js').replace(/\\/g, '/');
     return JSON.stringify({
       mcpServers: {
-        samwise: {
+        roland: {
           command: 'node',
           args: [distIndex],
         },
@@ -714,7 +714,7 @@ function generateCursorMcpJson(samwiseRoot: string, isExternal: boolean): string
   // Self-referencing
   return JSON.stringify({
     mcpServers: {
-      samwise: {
+      roland: {
         command: 'node',
         args: ['dist/index.js'],
       },
@@ -727,9 +727,9 @@ function generateCursorMcpJson(samwiseRoot: string, isExternal: boolean): string
 // ---------------------------------------------------------------------------
 
 function generateCopilotInstructions(): string {
-  return `# Samwise Project Instructions
+  return `# Roland Project Instructions
 
-This project uses **Samwise** — an AI agent orchestration framework — to provide specialized agent personas and multi-agent workflow recipes.
+This project uses **Roland** — an AI agent orchestration framework — to provide specialized agent personas and multi-agent workflow recipes.
 
 ## Available Agents
 
@@ -772,9 +772,9 @@ Recipe chains are multi-agent workflows available as handoff agent chains:
 
 To start a recipe, invoke the first agent in the chain (e.g., \`@plan-exec-rev-ex-planner\`).
 
-## Samwise MCP Server
+## Roland MCP Server
 
-If configured, the Samwise MCP server provides these tools:
+If configured, the Roland MCP server provides these tools:
 
 | Tool | Purpose | When to Use |
 |------|---------|-------------|
@@ -802,13 +802,13 @@ async function main() {
     targetDir = path.resolve(args[targetIdx + 1]);
   }
 
-  // Samwise project root (where this script lives)
-  const samwiseRoot = path.resolve(__dirname, '..');
-  const agentsDir = path.resolve(samwiseRoot, 'agents');
-  const recipesDir = path.resolve(samwiseRoot, 'recipes');
+  // Roland project root (where this script lives)
+  const rolandRoot = path.resolve(__dirname, '..');
+  const agentsDir = path.resolve(rolandRoot, 'agents');
+  const recipesDir = path.resolve(rolandRoot, 'recipes');
 
   // Detect if we're exporting to an external project
-  const isExternal = path.resolve(targetDir) !== path.resolve(samwiseRoot);
+  const isExternal = path.resolve(targetDir) !== path.resolve(rolandRoot);
 
   // Output directories
   const ghAgentsDir = path.join(targetDir, '.github', 'agents');
@@ -844,10 +844,10 @@ async function main() {
   console.log(`✅ Exported ${agentCount} agent configs`);
 
   // ---- Export auto-pilot rule ----
-  const autopilotRule = path.join(samwiseRoot, '.cursor', 'rules', 'samwise-autopilot.mdc');
+  const autopilotRule = path.join(rolandRoot, '.cursor', 'rules', 'roland-autopilot.mdc');
   if (fs.existsSync(autopilotRule)) {
-    fs.copyFileSync(autopilotRule, path.join(cursorRulesDir, 'samwise-autopilot.mdc'));
-    console.log(`✅ Exported samwise-autopilot rule (alwaysApply: true)`);
+    fs.copyFileSync(autopilotRule, path.join(cursorRulesDir, 'roland-autopilot.mdc'));
+    console.log(`✅ Exported roland-autopilot rule (alwaysApply: true)`);
   }
 
   // ---- Export recipe handoff chains ----
@@ -866,8 +866,8 @@ async function main() {
   console.log(`✅ Exported ${recipeCount} recipe handoff agents`);
 
   // ---- MCP config templates ----
-  fs.writeFileSync(path.join(vscodeDir, 'mcp.json'), generateVscodeMcpJson(samwiseRoot, isExternal), 'utf-8');
-  fs.writeFileSync(path.join(cursorDir, 'mcp.json'), generateCursorMcpJson(samwiseRoot, isExternal), 'utf-8');
+  fs.writeFileSync(path.join(vscodeDir, 'mcp.json'), generateVscodeMcpJson(rolandRoot, isExternal), 'utf-8');
+  fs.writeFileSync(path.join(cursorDir, 'mcp.json'), generateCursorMcpJson(rolandRoot, isExternal), 'utf-8');
   console.log(`✅ Generated MCP config templates${isExternal ? ' (absolute paths → portable)' : ''}`);
 
   // ---- copilot-instructions.md ----
@@ -884,8 +884,8 @@ async function main() {
   console.log(`  .vscode/mcp.json    — VS Code MCP config`);
   console.log(`  .cursor/mcp.json    — Cursor MCP config`);
   if (isExternal) {
-    console.log(`\n🔗 MCP configs point to: ${samwiseRoot}/dist/index.js`);
-    console.log(`   Make sure Samwise is built: cd ${samwiseRoot} && npm run build`);
+    console.log(`\n🔗 MCP configs point to: ${rolandRoot}/dist/index.js`);
+    console.log(`   Make sure Roland is built: cd ${rolandRoot} && npm run build`);
   }
 }
 

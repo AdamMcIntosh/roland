@@ -8,7 +8,7 @@
  *   3. Accepts the IDE's output for that step
  *   4. Interpolates variables and returns the next step
  *
- * This lets the IDE use its own model while Samwise orchestrates the flow,
+ * This lets the IDE use its own model while Roland orchestrates the flow,
  * tracks costs, and manages the multi-agent recipe structure.
  */
 

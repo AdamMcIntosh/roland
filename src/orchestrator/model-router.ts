@@ -2,7 +2,7 @@
  * Model Router — IDE Model Selection with Complexity Classification
  *
  * Analyzes query complexity and recommends the best IDE model (Cursor, VS Code).
- * This is purely advisory — Samwise returns the recommendation and the IDE picks
+ * This is purely advisory — Roland returns the recommendation and the IDE picks
  * the model. No server-side LLM calls are made.
  */
 
