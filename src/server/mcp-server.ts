@@ -12,7 +12,8 @@
  *   get_analytics   — session cost & token breakdowns
  *   suggest_mode    — advisory: quick vs. standard vs. deep
  *   list_recipes    — available workflow recipes
- *   execute_recipe  — run a multi-agent recipe
+ *   start_recipe    — begin a recipe session, return first step prompt
+ *   advance_recipe  — submit step output, get next step or summary
  *   get_cache_stats — workflow cache statistics
  */
 
@@ -32,6 +33,10 @@ import { ComplexityClassifier } from '../orchestrator/complexity-classifier.js';
 import { ModelRouter } from '../orchestrator/model-router.js';
 import { AdvancedCostTracker, getGlobalTracker } from '../orchestrator/advanced-cost-tracker.js';
 import { BudgetManager } from '../utils/budget-manager.js';
+import { RecipeSessionManager, ParsedRecipe, SubagentDef, RecipeStepDef } from './recipe-session.js';
+import fs from 'fs';
+import path from 'path';
+import YAML from 'yaml';
 
 // ============================================================================
 // MCP Server Implementation (v2)
@@ -45,6 +50,7 @@ export class McpServer {
   private workflowEngine: WorkflowEngine;
   private recipeLoader: RecipeLoader;
   private costTracker: AdvancedCostTracker;
+  private recipeSessionManager: RecipeSessionManager;
 
   constructor(config: AppConfig) {
     this.config = config;
@@ -57,6 +63,9 @@ export class McpServer {
 
     // Initialize cost tracker
     this.costTracker = getGlobalTracker();
+
+    // Initialize recipe session manager (for IDE-driven recipe execution)
+    this.recipeSessionManager = new RecipeSessionManager();
 
     // Initialize budget manager
     BudgetManager.initialize();
@@ -91,7 +100,8 @@ export class McpServer {
     this.registerGetAnalytics();
     this.registerSuggestMode();
     this.registerListRecipes();
-    this.registerExecuteRecipe();
+    this.registerStartRecipe();
+    this.registerAdvanceRecipe();
     this.registerGetCacheStats();
   }
 
@@ -606,43 +616,49 @@ export class McpServer {
   }
 
   // --------------------------------------------------------------------------
-  // execute_recipe
+  // start_recipe — begin a recipe session, return first step's prompt
   // --------------------------------------------------------------------------
-  private registerExecuteRecipe(): void {
+  private registerStartRecipe(): void {
     this.registerTool(
-      'execute_recipe',
-      'Execute a pre-built multi-agent workflow recipe. Available recipes: BugFix, RESTfulAPI, SecurityAudit, WebAppFullStack, MicroservicesArchitecture, PlanExecRevEx, DocumentationRefactor',
+      'start_recipe',
+      'Start a multi-agent recipe session. Returns the first step\'s system prompt and user prompt for you to execute. Then call advance_recipe with your output to get the next step. Available recipes: BugFix, RESTfulAPI, SecurityAudit, WebAppFullStack, MicroservicesArchitecture, PlanExecRevEx, DocumentationRefactor.',
       async (args: Record<string, unknown>) => {
         const recipeName = args.recipe_name as string;
-        const inputs = (args.inputs as Record<string, unknown>) || {};
+        const userTask = args.task as string;
 
         if (!recipeName) {
-          throw new McpToolError('execute_recipe', 'recipe_name is required');
+          throw new McpToolError('start_recipe', 'recipe_name is required');
+        }
+        if (!userTask) {
+          throw new McpToolError('start_recipe', 'task is required — describe what you want to accomplish');
         }
 
         try {
-          const recipeData = await this.recipeLoader.loadRecipe(`${recipeName}.yaml`);
-          if (!recipeData) {
-            throw new McpToolError('execute_recipe', `Recipe not found: ${recipeName}`);
+          // Load raw YAML to preserve subagent prompts (the RecipeLoader normalizes them away)
+          const recipePath = path.join(process.cwd(), 'recipes', `${recipeName}.yaml`);
+          if (!fs.existsSync(recipePath)) {
+            throw new McpToolError('start_recipe', `Recipe not found: ${recipeName}`);
           }
 
-          const workflowResult = await this.workflowEngine.executeWorkflow(recipeData.name, inputs);
-
-          // Record recipe cost
-          if (workflowResult.totalCost > 0) {
-            BudgetManager.recordSpending(workflowResult.totalCost);
+          const rawYaml = YAML.parse(fs.readFileSync(recipePath, 'utf-8'));
+          if (!rawYaml) {
+            throw new McpToolError('start_recipe', `Failed to parse recipe: ${recipeName}`);
           }
+
+          // Parse the raw YAML recipe into the format the session manager expects
+          const parsed = this.parseRecipeForSession(rawYaml);
+
+          // Start the session
+          const stepPrompt = this.recipeSessionManager.startSession(parsed, userTask);
 
           return {
-            recipe: recipeName,
-            status: workflowResult.status,
-            outputs: workflowResult.outputs,
-            cost: workflowResult.totalCost,
-            duration: workflowResult.totalDuration,
+            instructions: 'Execute this step using the system_prompt as your persona and user_prompt as the task. ' +
+                          'When done, call advance_recipe with session_id and your complete output.',
+            ...stepPrompt,
           };
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          throw new McpToolError('execute_recipe', `Recipe execution failed: ${message}`);
+          throw new McpToolError('start_recipe', `Failed to start recipe: ${message}`);
         }
       },
       {
@@ -650,16 +666,130 @@ export class McpServer {
         properties: {
           recipe_name: {
             type: 'string',
-            description: 'Name of the recipe (e.g., "BugFix", "RESTfulAPI", "SecurityAudit", "PlanExecRevEx")',
+            description: 'Name of the recipe (e.g., "BugFix", "PlanExecRevEx", "SecurityAudit")',
           },
-          inputs: {
-            type: 'object',
-            description: 'Input variables for the recipe (e.g., { "user_task": "Fix login bug" })',
+          task: {
+            type: 'string',
+            description: 'The task to accomplish (e.g., "Create a hello world Express app with tests")',
           },
         },
-        required: ['recipe_name'],
+        required: ['recipe_name', 'task'],
       }
     );
+  }
+
+  // --------------------------------------------------------------------------
+  // advance_recipe — submit step output, get next step or summary
+  // --------------------------------------------------------------------------
+  private registerAdvanceRecipe(): void {
+    this.registerTool(
+      'advance_recipe',
+      'Submit the output from the current recipe step and get the next step\'s prompt. When all steps are complete, returns a summary. Pass cost data if available for budget tracking.',
+      async (args: Record<string, unknown>) => {
+        const sessionId = args.session_id as string;
+        const stepOutput = args.step_output as string;
+
+        if (!sessionId) {
+          throw new McpToolError('advance_recipe', 'session_id is required');
+        }
+        if (!stepOutput) {
+          throw new McpToolError('advance_recipe', 'step_output is required — provide your complete output for this step');
+        }
+
+        // Optional cost tracking data
+        const costData = args.cost ? args.cost as {
+          input_tokens?: number;
+          output_tokens?: number;
+          cost?: number;
+          model?: string;
+        } : undefined;
+
+        try {
+          const result = this.recipeSessionManager.advanceSession(sessionId, stepOutput, costData);
+
+          // Check if it's a summary (session complete) or next step prompt
+          if ('status' in result && (result.status === 'completed' || result.status === 'failed')) {
+            return {
+              type: 'summary',
+              ...result,
+            };
+          }
+
+          return {
+            type: 'next_step',
+            instructions: 'Execute this step using the system_prompt as your persona and user_prompt as the task. ' +
+                          'When done, call advance_recipe again with session_id and your complete output.',
+            ...result,
+          };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          throw new McpToolError('advance_recipe', message);
+        }
+      },
+      {
+        type: 'object',
+        properties: {
+          session_id: {
+            type: 'string',
+            description: 'The session ID returned by start_recipe',
+          },
+          step_output: {
+            type: 'string',
+            description: 'Your complete output for the current step',
+          },
+          cost: {
+            type: 'object',
+            description: 'Optional cost data for budget tracking',
+            properties: {
+              input_tokens: { type: 'number', description: 'Input tokens used' },
+              output_tokens: { type: 'number', description: 'Output tokens used' },
+              cost: { type: 'number', description: 'Cost in USD' },
+              model: { type: 'string', description: 'Model used' },
+            },
+          },
+        },
+        required: ['session_id', 'step_output'],
+      }
+    );
+  }
+
+  // --------------------------------------------------------------------------
+  // Parse a loaded Recipe into the session manager's ParsedRecipe format
+  // --------------------------------------------------------------------------
+  private parseRecipeForSession(recipeData: any): ParsedRecipe {
+    // The recipe YAML has subagents[] with prompts and workflow.steps[]
+    // We need to extract both into the ParsedRecipe format
+
+    const rawSubagents = recipeData.subagents || recipeData.agents_config || [];
+    const rawSteps = recipeData.steps ||
+                     recipeData.workflow?.steps ||
+                     [];
+
+    const subagents: SubagentDef[] = rawSubagents.map((sa: any) => ({
+      name: sa.name || 'unknown',
+      prompt: sa.prompt || sa.system_prompt || `You are the ${sa.name} agent.`,
+      model: sa.model,
+      provider: sa.provider,
+    }));
+
+    const steps: RecipeStepDef[] = rawSteps.map((step: any) => ({
+      agent: step.agent || step.name || 'unknown',
+      input: step.input,
+      output_to: step.output_to,
+      loop_if: typeof step.loop_if === 'string' ? step.loop_if : step.loop_if?.condition,
+      loop_to: step.loop_to,
+      final_output: step.final_output === true,
+      condition: step.condition,
+    }));
+
+    return {
+      name: recipeData.name || 'unknown',
+      description: recipeData.description || '',
+      subagents,
+      steps,
+      options: recipeData.options,
+      settings: recipeData.settings,
+    };
   }
 
   // --------------------------------------------------------------------------
