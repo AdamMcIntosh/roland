@@ -6,10 +6,13 @@ Setup guide for Samwise as an MCP server integrated with VS Code or Cursor.
 
 1. [Prerequisites](#prerequisites)
 2. [Installation Steps](#installation-steps)
-3. [Use on Any Project](#use-on-any-project)
-4. [IDE Setup](#ide-setup)
-5. [Verify Installation](#verify-installation)
-6. [Troubleshooting](#troubleshooting)
+3. [Cursor Setup](#cursor-setup)
+4. [VS Code Setup](#vs-code-setup)
+5. [Use on Any Project](#use-on-any-project)
+6. [Available MCP Tools](#available-mcp-tools)
+7. [Verify Installation](#verify-installation)
+8. [Troubleshooting](#troubleshooting)
+9. [Development](#development)
 
 ## Prerequisites
 
@@ -33,76 +36,76 @@ npm install
 npm run build
 ```
 
-### 3. Export IDE Configs (Optional)
+## Cursor Setup
 
-Regenerate agent files and MCP configs for your IDE:
+### Option A: Global Config (Recommended — configure once, works in every project)
 
-```bash
-npm run export-configs
+Create or edit `~/.cursor/mcp.json` (i.e. `C:\Users\<you>\.cursor\mcp.json`):
+
+```jsonc
+{
+  "mcpServers": {
+    "samwise": {
+      "command": "node",
+      "args": ["C:/path/to/samwise/dist/index.js"],
+      "env": {
+        "SAMWISE_API_KEYS_OPENROUTER": "${env:SAMWISE_API_KEYS_OPENROUTER}"
+      }
+    }
+  }
+}
 ```
 
-This creates:
-- `.github/agents/*.agent.md` — VS Code Copilot agent personas
-- `.cursor/rules/*.mdc` — Cursor rule files
-- `.vscode/mcp.json` — VS Code MCP server config
-- `.cursor/mcp.json` — Cursor MCP server config
+Replace `C:/path/to/samwise` with the actual path to your samwise clone. Restart Cursor, and `samwise` will appear in **Settings → MCP** for every project you open.
 
-## Use on Any Project
+### Option B: Per-Project Config (via init command)
 
-Samwise is fully portable — you can add it to **any project** with one command.
-
-### Quick Setup
-
-From the samwise directory, run:
+From the samwise directory:
 
 ```bash
-npm run init -- /path/to/your/project
+npm run init -- C:\path\to\your\project
 ```
 
-Or target the current directory:
+This generates `.cursor/mcp.json` (with absolute path), agent personas in `.cursor/rules/`, and agent files in `.github/agents/` in the target project.
 
-```bash
-npm run init
+### Option C: Samwise Project Only
+
+If you just want to test within the samwise repo itself, the existing `.cursor/mcp.json` uses a relative path and works out of the box:
+
+```jsonc
+{
+  "mcpServers": {
+    "samwise": {
+      "command": "node",
+      "args": ["dist/index.js"]
+    }
+  }
+}
 ```
 
-This generates all agent configs, MCP server configs, and copilot instructions **with absolute paths** pointing back to your Samwise installation — so it works from any project, no matter where it lives on disk.
+### Verify in Cursor
 
-### What Gets Created
+1. Open **Settings → MCP** — `samwise` should show a green status
+2. Open chat and type: *"Use the health_check tool"*
+3. You should get `status: healthy` and a list of 9 tools
 
-In your target project:
-- `.github/agents/*.agent.md` — VS Code Copilot agent personas
-- `.cursor/rules/*.mdc` — Cursor rule files
-- `.vscode/mcp.json` — VS Code MCP config (absolute path to Samwise)
-- `.cursor/mcp.json` — Cursor MCP config (absolute path to Samwise)
-- `.github/copilot-instructions.md` — Agent catalog & usage guide
+If the server shows red, rebuild (`npm run build` in the samwise directory) and click **Restart** next to samwise in Settings → MCP.
 
-### Global Install (Optional)
+## VS Code Setup
 
-For the simplest experience, link Samwise globally:
+### Option A: Per-Project Config (via init command)
 
 ```bash
 cd /path/to/samwise
-npm link
+npm run init -- C:\path\to\your\project
 ```
 
-Now `samwise-mcp` is available system-wide. You can verify with:
+This generates `.vscode/mcp.json` with an absolute path to samwise.
 
-```bash
-samwise-mcp --help
-```
+### Option B: Samwise Project Only
 
-## IDE Setup
+The included `.vscode/mcp.json` uses the workspace-relative path:
 
-### VS Code (GitHub Copilot)
-
-The project includes `.vscode/mcp.json` which VS Code reads automatically. Ensure:
-
-1. You have the **GitHub Copilot** extension installed
-2. The project is built (`npm run build`)
-
-VS Code will discover the MCP server and expose its tools to Copilot agents. You can verify by opening the Command Palette and running **MCP: List Servers**.
-
-The `.vscode/mcp.json` config:
 ```jsonc
 {
   "servers": {
@@ -118,28 +121,28 @@ The `.vscode/mcp.json` config:
 }
 ```
 
-### Cursor
+Verify by opening the Command Palette → **MCP: List Servers**.
 
-The project includes `.cursor/mcp.json` which Cursor reads automatically. Ensure:
+## Use on Any Project
 
-1. The project is built (`npm run build`)
+Samwise is fully portable. The `init` command exports everything a project needs:
 
-Cursor will discover the MCP server and expose its tools in chat. You can verify in **Settings → MCP Servers**.
-
-The `.cursor/mcp.json` config:
-```jsonc
-{
-  "mcpServers": {
-    "samwise": {
-      "command": "node",
-      "args": ["dist/index.js"],
-      "env": {
-        "SAMWISE_API_KEYS_OPENROUTER": "${env:SAMWISE_API_KEYS_OPENROUTER}"
-      }
-    }
-  }
-}
+```bash
+cd /path/to/samwise
+npm run init -- /path/to/your/project
 ```
+
+### What Gets Created
+
+| Path | Contents |
+|------|----------|
+| `.cursor/mcp.json` | Cursor MCP config (absolute path to Samwise) |
+| `.cursor/rules/*.mdc` | Cursor agent persona rules |
+| `.vscode/mcp.json` | VS Code MCP config (absolute path to Samwise) |
+| `.github/agents/*.agent.md` | VS Code Copilot agent personas |
+| `.github/copilot-instructions.md` | Agent catalog & usage guide |
+
+If you use the **global Cursor config** (Option A above), you only need `init` when you want the agent persona files — the MCP server is already available everywhere.
 
 ### Using Agents
 
@@ -174,15 +177,15 @@ Once connected, the Samwise MCP server provides:
 | `start_recipe` | Start a multi-agent recipe, get first step prompt |
 | `advance_recipe` | Advance recipe to next step or get summary |
 
-No API key is required. All tools run locally. The IDE's own model handles execution.
+No API key is required for the MCP tools themselves. All tools run locally. The IDE's own model handles execution.
 
 ## Verify Installation
 
 ### Quick Test
 
 1. Build: `npm run build`
-2. Open the project in Cursor
-3. Go to **Settings → MCP** and verify `samwise` shows as connected
+2. Open any project in Cursor (with global config) or a project where you ran `init`
+3. Go to **Settings → MCP** and verify `samwise` shows a green status
 4. Open Cursor chat and ask: *"Use the health_check tool"*
 5. You should get a response with `status: healthy` and a list of 9 tools
 
@@ -190,41 +193,26 @@ See [TESTING.md](TESTING.md) for a full testing walkthrough.
 
 ## Troubleshooting
 
-### Error: "Server does not support tools"
-
-**Solution**: Update the MCP SDK — the server requires `capabilities: { tools: {} }` in the Server constructor. Run `npm install` and `npm run build`.
-
-
-### Error: "Cannot find module 'dist/index.js'"
-
-**Solution**: Build the project first: `npm run build`
-
-### MCP Server Not Showing in IDE
-
-**Solution**:
-1. Ensure `.vscode/mcp.json` (or `.cursor/mcp.json`) exists
-2. Rebuild: `npm run build`
-3. Restart the IDE
-4. Check **MCP: List Servers** (VS Code) or **Settings → MCP** (Cursor)
-
-### TypeScript Compilation Errors
-
-```bash
-node --version  # Should be v18.0.0+
-rm -rf node_modules package-lock.json
-npm install
-npm run build
-```
+| Problem | Fix |
+|---------|-----|
+| Server not showing in Settings → MCP | Check your `mcp.json` path is correct, rebuild (`npm run build`), restart Cursor |
+| `Cannot find module 'dist/index.js'` | Run `npm run build` in the samwise directory |
+| Server shows red status | Click **Restart** in Settings → MCP |
+| Tools not appearing in chat | Verify server is green in Settings → MCP, try restarting Cursor |
+| TypeScript compilation errors | `node --version` (need v18+), then `rm -rf node_modules && npm install && npm run build` |
+| Works in samwise project but not others | You're using a relative path — switch to global config or run `npm run init` |
 
 ## Development
 
 ```bash
-npm run dev          # Watch mode (auto-rebuild)
-npm run build        # Full build
-npm run export-configs  # Regenerate IDE configs
-npm test             # Run tests
-npm run lint         # Lint check
-npm run clean        # Remove dist/
+npm run dev            # Watch mode (auto-rebuild)
+npm run build          # Full build
+npm run init           # Set up Samwise in current directory
+npm run init -- <dir>  # Set up Samwise in target directory
+npm run export-configs # Regenerate IDE configs (samwise project only)
+npm test               # Run tests
+npm run lint           # Lint check
+npm run clean          # Remove dist/
 ```
 
 ## Next Steps
