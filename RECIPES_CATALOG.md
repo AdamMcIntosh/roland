@@ -1,19 +1,17 @@
 # Pre-Built Recipes Catalog
 
-> Complete documentation of all 6 pre-built workflow recipes included with samwise
+> Complete documentation of all pre-built workflow recipes included with Samwise
 
-Recipes are YAML-based workflow templates that orchestrate multiple agents to accomplish complex tasks. They're loaded automatically and can be executed via CLI or MCP tools.
+Recipes are YAML-based workflow templates that orchestrate multiple agents to accomplish complex tasks. They can be executed via the MCP `execute_recipe` tool or by invoking the first agent in a recipe's handoff chain (e.g., `@plan-exec-rev-ex-planner`).
 
-**Quick Start:**
-```bash
-# List all recipes
-samwise recipes
+**Usage via MCP tool:**
+```
+Use the execute_recipe tool with recipe_name "PlanExecRevEx" and inputs { "user_task": "build auth system" }
+```
 
-# Execute a recipe
-samwise recipe PlanExecRevEx
-
-# With custom inputs
-samwise workflow PlanExecRevEx --input '{"task": "build auth system"}'
+**Usage via agent handoff:**
+```
+@plan-exec-rev-ex-planner Build an authentication system with JWT tokens
 ```
 
 ---

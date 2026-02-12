@@ -13,7 +13,7 @@
  */
 
 import { logger } from './logger.js';
-import chalk from 'chalk';
+// chalk removed — using logger + plain text for MCP server context
 
 export interface RateLimitConfig {
   maxRetries: number;
@@ -167,15 +167,12 @@ export class RateLimitHandler {
         ? `${minutes}m ${seconds}s` 
         : `${seconds}s`;
       
-      process.stdout.write(
-        `\r${chalk.yellow('⏳')} Rate limit - retrying in ${chalk.bold(timeStr)}... `
-      );
+      logger.debug(`⏳ Rate limit - retrying in ${timeStr}...`);
       
       await this.sleep(1000);
     }
     
-    process.stdout.write('\r' + ' '.repeat(80) + '\r'); // Clear line
-    console.log(chalk.green('✓') + ' Resuming...');
+    logger.info('✓ Resuming...');
   }
 
   /**
@@ -226,8 +223,8 @@ export class RateLimitHandler {
         const delayMs = this.calculateDelay(rateLimitError.retryAfter, rateLimitError.statusCode);
         
         console.log(''); // New line
-        console.log(chalk.yellow('⚠️  Rate limit hit:'), rateLimitError.message);
-        console.log(chalk.dim(`   Provider: ${rateLimitError.provider}`));
+        logger.warn(`⚠️  Rate limit hit: ${rateLimitError.message}`);
+        logger.warn(`   Provider: ${rateLimitError.provider}`);
         
         await this.waitWithCountdown(delayMs);
         
