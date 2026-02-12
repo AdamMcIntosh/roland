@@ -14,7 +14,6 @@
  *   list_recipes    — available workflow recipes
  *   start_recipe    — begin a recipe session, return first step prompt
  *   advance_recipe  — submit step output, get next step or summary
- *   get_cache_stats — workflow cache statistics
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -27,8 +26,6 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { AppConfig } from '../utils/types.js';
 import { McpServerError, McpToolError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
-import { WorkflowEngine } from '../workflows/engine.js';
-import { RecipeLoader } from '../workflows/recipe-loader.js';
 import { ComplexityClassifier } from '../orchestrator/complexity-classifier.js';
 import { ModelRouter } from '../orchestrator/model-router.js';
 import { AdvancedCostTracker, getGlobalTracker } from '../orchestrator/advanced-cost-tracker.js';
@@ -47,19 +44,17 @@ export class McpServer {
   private config: AppConfig;
   private tools: Map<string, (args: Record<string, unknown>) => Promise<unknown>>;
   private toolDefinitions: Map<string, Tool>;
-  private workflowEngine: WorkflowEngine;
-  private recipeLoader: RecipeLoader;
   private costTracker: AdvancedCostTracker;
   private recipeSessionManager: RecipeSessionManager;
+  private recipesDir: string;
 
   constructor(config: AppConfig) {
     this.config = config;
     this.tools = new Map();
     this.toolDefinitions = new Map();
 
-    // Initialize workflow engine with caching
-    this.workflowEngine = new WorkflowEngine(true);
-    this.recipeLoader = new RecipeLoader(this.workflowEngine, './recipes');
+    // Recipes directory
+    this.recipesDir = path.join(process.cwd(), 'recipes');
 
     // Initialize cost tracker
     this.costTracker = getGlobalTracker();
@@ -102,7 +97,6 @@ export class McpServer {
     this.registerListRecipes();
     this.registerStartRecipe();
     this.registerAdvanceRecipe();
-    this.registerGetCacheStats();
   }
 
   // --------------------------------------------------------------------------
@@ -601,18 +595,41 @@ export class McpServer {
       'list_recipes',
       'List all available multi-agent workflow recipes with their descriptions and agent chains',
       async () => {
-        const recipes = await this.recipeLoader.loadAllRecipes();
+        const recipes = this.scanRecipeFiles();
         return {
           count: recipes.length,
-          recipes: recipes.map(r => ({
-            name: r.name,
-            description: r.description,
-            version: r.version,
-          })),
+          recipes,
         };
       },
       { type: 'object', properties: {}, required: [] }
     );
+  }
+
+  /**
+   * Scan the recipes/ directory and parse each YAML for name/description/agents.
+   */
+  private scanRecipeFiles(): Array<{ name: string; description: string; agents: string[] }> {
+    if (!fs.existsSync(this.recipesDir)) {
+      return [];
+    }
+    const files = fs.readdirSync(this.recipesDir).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
+    const results: Array<{ name: string; description: string; agents: string[] }> = [];
+
+    for (const file of files) {
+      try {
+        const raw = YAML.parse(fs.readFileSync(path.join(this.recipesDir, file), 'utf-8'));
+        if (!raw) continue;
+        const agents = (raw.subagents || []).map((s: any) => s.name || 'unknown');
+        results.push({
+          name: raw.name || path.basename(file, path.extname(file)),
+          description: raw.description || '',
+          agents,
+        });
+      } catch {
+        logger.warn(`[McpServer] Skipping malformed recipe: ${file}`);
+      }
+    }
+    return results;
   }
 
   // --------------------------------------------------------------------------
@@ -635,7 +652,7 @@ export class McpServer {
 
         try {
           // Load raw YAML to preserve subagent prompts (the RecipeLoader normalizes them away)
-          const recipePath = path.join(process.cwd(), 'recipes', `${recipeName}.yaml`);
+          const recipePath = path.join(this.recipesDir, `${recipeName}.yaml`);
           if (!fs.existsSync(recipePath)) {
             throw new McpToolError('start_recipe', `Recipe not found: ${recipeName}`);
           }
@@ -790,21 +807,6 @@ export class McpServer {
       options: recipeData.options,
       settings: recipeData.settings,
     };
-  }
-
-  // --------------------------------------------------------------------------
-  // get_cache_stats
-  // --------------------------------------------------------------------------
-  private registerGetCacheStats(): void {
-    this.registerTool(
-      'get_cache_stats',
-      'Get workflow cache statistics — hit rate, entries, and memory usage',
-      async () => {
-        const stats = this.workflowEngine.getCacheStats();
-        return stats;
-      },
-      { type: 'object', properties: {}, required: [] }
-    );
   }
 
   // ==========================================================================
