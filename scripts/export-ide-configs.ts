@@ -843,6 +843,13 @@ async function main() {
 
   console.log(`✅ Exported ${agentCount} agent configs`);
 
+  // ---- Export auto-pilot rule ----
+  const autopilotRule = path.join(samwiseRoot, '.cursor', 'rules', 'samwise-autopilot.mdc');
+  if (fs.existsSync(autopilotRule)) {
+    fs.copyFileSync(autopilotRule, path.join(cursorRulesDir, 'samwise-autopilot.mdc'));
+    console.log(`✅ Exported samwise-autopilot rule (alwaysApply: true)`);
+  }
+
   // ---- Export recipe handoff chains ----
   const recipeFiles = fs.readdirSync(recipesDir).filter(f => f.endsWith('.yaml'));
   for (const file of recipeFiles) {
@@ -873,7 +880,7 @@ async function main() {
 
   console.log(`\nDone! Generated files in ${targetDir}`);
   console.log(`  .github/agents/     — ${agentCount + recipeCount} agent files`);
-  console.log(`  .cursor/rules/      — ${agentCount} rule files`);
+  console.log(`  .cursor/rules/      — ${agentCount} agent rules + auto-pilot`);
   console.log(`  .vscode/mcp.json    — VS Code MCP config`);
   console.log(`  .cursor/mcp.json    — Cursor MCP config`);
   if (isExternal) {

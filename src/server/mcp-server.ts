@@ -6,6 +6,7 @@
  *
  * Tools provided:
  *   health_check    — server status
+ *   triage          — auto-pilot: analyze message → agent + recipe recommendation
  *   route_model     — complexity-based model recommendation
  *   track_cost      — log token usage and return session totals
  *   manage_budget   — get/set/reset spending limits
@@ -26,7 +27,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { AppConfig } from '../utils/types.js';
 import { McpServerError, McpToolError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
-import { ComplexityClassifier } from '../orchestrator/complexity-classifier.js';
+import { ComplexityClassifier, ComplexityAnalysis } from '../orchestrator/complexity-classifier.js';
 import { ModelRouter } from '../orchestrator/model-router.js';
 import { AdvancedCostTracker, getGlobalTracker } from '../orchestrator/advanced-cost-tracker.js';
 import { BudgetManager } from '../utils/budget-manager.js';
@@ -91,6 +92,7 @@ export class McpServer {
 
   private registerTools(): void {
     this.registerHealthCheck();
+    this.registerTriage();
     this.registerRouteModel();
     this.registerTrackCost();
     this.registerManageBudget();
@@ -117,6 +119,329 @@ export class McpServer {
       }),
       { type: 'object', properties: {}, required: [] }
     );
+  }
+
+  // --------------------------------------------------------------------------
+  // triage — auto-pilot: analyze any message → agent + recipe recommendation
+  // --------------------------------------------------------------------------
+
+  /**
+   * Agent metadata for triage matching.
+   * Each entry maps an agent name to its role description and keyword triggers.
+   */
+  private static readonly AGENT_CATALOG: Array<{
+    name: string;
+    role: string;
+    triggers: string[];
+    tier: 'simple' | 'medium' | 'complex';
+  }> = [
+    {
+      name: 'architect',
+      role: 'System design, architecture decisions, component diagrams, trade-off analysis',
+      triggers: ['architect', 'design', 'system design', 'component', 'diagram', 'trade-off', 'tradeoff', 'schema', 'database design', 'erd', 'data model', 'api design', 'microservice', 'infrastructure'],
+      tier: 'complex',
+    },
+    {
+      name: 'executor',
+      role: 'Write clean, working code; implement features; make changes',
+      triggers: ['implement', 'build', 'create', 'add', 'write', 'code', 'feature', 'make', 'develop', 'scaffold', 'generate'],
+      tier: 'medium',
+    },
+    {
+      name: 'researcher',
+      role: 'Codebase exploration, documentation review, root cause investigation',
+      triggers: ['research', 'investigate', 'explore', 'find', 'search', 'look into', 'root cause', 'why does', 'how does', 'understand', 'explain codebase'],
+      tier: 'medium',
+    },
+    {
+      name: 'planner',
+      role: 'Break complex tasks into sequenced, actionable steps',
+      triggers: ['plan', 'break down', 'steps', 'roadmap', 'strategy', 'approach', 'how should', 'what order', 'sequence', 'prioritize'],
+      tier: 'medium',
+    },
+    {
+      name: 'critic',
+      role: 'Code review, find bugs, security issues, improvement opportunities',
+      triggers: ['review', 'critique', 'improve', 'issues', 'problems', 'smell', 'anti-pattern', 'best practice', 'code quality'],
+      tier: 'medium',
+    },
+    {
+      name: 'designer',
+      role: 'UI/UX design, component layout, user flows, accessibility',
+      triggers: ['ui', 'ux', 'design', 'layout', 'component', 'user flow', 'wireframe', 'accessibility', 'a11y', 'responsive', 'css', 'style', 'theme', 'color', 'font'],
+      tier: 'medium',
+    },
+    {
+      name: 'qa-tester',
+      role: 'Write and run tests, edge cases, coverage analysis',
+      triggers: ['test', 'testing', 'unit test', 'integration test', 'e2e', 'coverage', 'edge case', 'spec', 'jest', 'vitest', 'pytest', 'assert'],
+      tier: 'medium',
+    },
+    {
+      name: 'security-reviewer',
+      role: 'Vulnerability scanning, OWASP checks, hardening recommendations',
+      triggers: ['security', 'vulnerability', 'owasp', 'cve', 'xss', 'sql injection', 'csrf', 'auth', 'authentication', 'authorization', 'encrypt', 'hardening', 'penetration'],
+      tier: 'complex',
+    },
+    {
+      name: 'writer',
+      role: 'Technical documentation, README updates, API docs',
+      triggers: ['document', 'docs', 'readme', 'api docs', 'jsdoc', 'docstring', 'changelog', 'guide', 'tutorial', 'explain'],
+      tier: 'simple',
+    },
+    {
+      name: 'build-fixer',
+      role: 'Resolve TypeScript errors, compilation failures, CI/CD issues',
+      triggers: ['build', 'compile', 'typescript error', 'ts error', 'ci', 'cd', 'pipeline', 'build fail', 'lint', 'eslint', 'type error', 'cannot find module'],
+      tier: 'medium',
+    },
+    {
+      name: 'code-reviewer',
+      role: 'Comprehensive code review covering correctness, design, style, performance',
+      triggers: ['code review', 'pull request', 'pr review', 'review this', 'check this code', 'look at this'],
+      tier: 'medium',
+    },
+    {
+      name: 'tdd-guide',
+      role: 'Test-driven development coaching, red-green-refactor cycle',
+      triggers: ['tdd', 'test driven', 'red green refactor', 'test first', 'failing test'],
+      tier: 'medium',
+    },
+    {
+      name: 'scientist',
+      role: 'Data analysis, statistics, ML, hypothesis testing',
+      triggers: ['data', 'analysis', 'statistics', 'ml', 'machine learning', 'model', 'predict', 'regression', 'classification', 'dataset', 'hypothesis'],
+      tier: 'complex',
+    },
+    {
+      name: 'explore',
+      role: 'Map project structure, find patterns, navigate codebase',
+      triggers: ['explore', 'navigate', 'structure', 'map', 'dependency', 'where is', 'find file', 'project layout'],
+      tier: 'simple',
+    },
+    {
+      name: 'analyst',
+      role: 'Metrics, trends, quantitative analysis',
+      triggers: ['metrics', 'trend', 'analyze', 'performance', 'benchmark', 'measure', 'profil'],
+      tier: 'medium',
+    },
+    {
+      name: 'vision',
+      role: 'Long-term technical strategy, technology evaluation',
+      triggers: ['strategy', 'long-term', 'tech stack', 'evaluate', 'compare', 'future', 'migration', 'upgrade'],
+      tier: 'complex',
+    },
+  ];
+
+  /**
+   * Recipe metadata for triage matching.
+   */
+  private static readonly RECIPE_CATALOG: Array<{
+    name: string;
+    fileKey: string;
+    description: string;
+    triggers: string[];
+    agents: string[];
+  }> = [
+    {
+      name: 'PlanExecRevEx',
+      fileKey: 'PlanExecRevEx',
+      description: '4-agent autonomous coding loop: plan → execute → review → explain',
+      triggers: ['build', 'implement', 'create', 'develop', 'feature', 'full', 'complete', 'end to end', 'end-to-end'],
+      agents: ['planner', 'executor', 'reviewer', 'explainer'],
+    },
+    {
+      name: 'BugFix',
+      fileKey: 'BugFix',
+      description: 'Systematic bug resolution: triage → research → architect → fix → test → review → document',
+      triggers: ['bug', 'fix', 'broken', 'not working', 'error', 'crash', 'fails', 'issue', 'defect', 'regression'],
+      agents: ['analyst', 'researcher', 'architect', 'executor', 'qa-tester', 'critic', 'writer'],
+    },
+    {
+      name: 'SecurityAudit',
+      fileKey: 'SecurityAudit',
+      description: 'Security audit: threat modeling → code review → remediation → documentation',
+      triggers: ['security audit', 'vulnerability', 'penetration', 'owasp', 'secure', 'hardening', 'threat model'],
+      agents: ['architect', 'critic', 'executor', 'writer'],
+    },
+    {
+      name: 'RESTfulAPI',
+      fileKey: 'RESTfulAPI',
+      description: 'API design through documentation: architect → implement → review → document',
+      triggers: ['api', 'rest', 'endpoint', 'restful', 'crud', 'route', 'controller'],
+      agents: ['architect', 'executor', 'critic', 'writer'],
+    },
+    {
+      name: 'WebAppFullStack',
+      fileKey: 'WebAppFullStack',
+      description: 'Full-stack web app: architect → design → implement → review → document',
+      triggers: ['web app', 'full stack', 'fullstack', 'frontend', 'backend', 'full-stack', 'application', 'webapp'],
+      agents: ['architect', 'designer', 'executor', 'critic', 'writer'],
+    },
+    {
+      name: 'MicroservicesArchitecture',
+      fileKey: 'MicroservicesArchitecture',
+      description: 'Microservices: service decomposition → implement → review → document',
+      triggers: ['microservice', 'service decomposition', 'distributed', 'event driven', 'message queue', 'kafka'],
+      agents: ['architect', 'executor', 'critic', 'writer'],
+    },
+    {
+      name: 'DocumentationRefactor',
+      fileKey: 'DocumentationRefactor',
+      description: 'Documentation improvement: audit → plan → write → review',
+      triggers: ['documentation', 'docs refactor', 'readme', 'api docs', 'document everything', 'doc update'],
+      agents: ['analyst', 'architect', 'writer', 'critic'],
+    },
+  ];
+
+  private registerTriage(): void {
+    this.registerTool(
+      'triage',
+      'Auto-pilot: analyze any user message and recommend the best Samwise agent persona and/or recipe workflow. Call this FIRST on every coding request to get intelligent routing. Returns which agent to adopt, whether a multi-agent recipe applies, and the reasoning.',
+      async (args: Record<string, unknown>) => {
+        const message = args.message as string;
+        if (!message) {
+          throw new McpToolError('triage', 'message is required');
+        }
+
+        const lowerMessage = message.toLowerCase();
+
+        // --- Score agents ---
+        const agentScores = McpServer.AGENT_CATALOG.map(agent => {
+          let score = 0;
+          const matchedTriggers: string[] = [];
+          for (const trigger of agent.triggers) {
+            if (lowerMessage.includes(trigger)) {
+              // Longer triggers = more specific = higher weight
+              const weight = trigger.includes(' ') ? 3 : 1;
+              score += weight;
+              matchedTriggers.push(trigger);
+            }
+          }
+          return { ...agent, score, matchedTriggers };
+        });
+
+        // Sort by score descending
+        agentScores.sort((a, b) => b.score - a.score);
+
+        // Top agent and runners-up
+        const topAgent = agentScores[0];
+        const runnersUp = agentScores
+          .filter(a => a.score > 0 && a.name !== topAgent.name)
+          .slice(0, 2);
+
+        // --- Score recipes ---
+        const recipeScores = McpServer.RECIPE_CATALOG.map(recipe => {
+          let score = 0;
+          const matchedTriggers: string[] = [];
+          for (const trigger of recipe.triggers) {
+            if (lowerMessage.includes(trigger)) {
+              const weight = trigger.includes(' ') ? 4 : 1;
+              score += weight;
+              matchedTriggers.push(trigger);
+            }
+          }
+          return { ...recipe, score, matchedTriggers };
+        });
+
+        recipeScores.sort((a, b) => b.score - a.score);
+        const topRecipe = recipeScores[0];
+
+        // --- Complexity analysis ---
+        const complexity = ComplexityClassifier.getDetailedAnalysis(message);
+
+        // --- Decide if a recipe is warranted ---
+        // Recipes are for substantial, multi-step work
+        const recipeThreshold = complexity.complexity === 'complex' ? 1 : 2;
+        const suggestRecipe = topRecipe.score >= recipeThreshold;
+
+        // --- Build recommendation ---
+        const recommendation: Record<string, unknown> = {
+          agent: {
+            name: topAgent.score > 0 ? topAgent.name : 'executor',
+            role: topAgent.score > 0 ? topAgent.role : 'General implementation — no strong pattern match; defaulting to executor.',
+            confidence: topAgent.score > 0
+              ? (topAgent.score >= 3 ? 'high' : 'medium')
+              : 'low',
+            matched_triggers: topAgent.matchedTriggers,
+          },
+          complexity: {
+            level: complexity.complexity,
+            score: complexity.score,
+          },
+          reasoning: this.buildTriageReasoning(topAgent, topRecipe, complexity, suggestRecipe),
+        };
+
+        if (runnersUp.length > 0) {
+          recommendation.alternative_agents = runnersUp.map(a => ({
+            name: a.name,
+            role: a.role,
+            matched_triggers: a.matchedTriggers,
+          }));
+        }
+
+        if (suggestRecipe) {
+          recommendation.recipe = {
+            name: topRecipe.fileKey,
+            description: topRecipe.description,
+            agents: topRecipe.agents,
+            confidence: topRecipe.score >= 3 ? 'high' : 'medium',
+            matched_triggers: topRecipe.matchedTriggers,
+            start_command: `Use the start_recipe tool with recipe_name="${topRecipe.fileKey}" and the user's task.`,
+          };
+        }
+
+        // Mode suggestion (quick / standard / deep)
+        const modeMap: Record<string, string> = {
+          simple: 'quick',
+          medium: 'standard',
+          complex: 'deep',
+        };
+        recommendation.suggested_mode = modeMap[complexity.complexity] || 'standard';
+
+        recommendation.instructions = suggestRecipe
+          ? `Adopt the "${recommendation.agent && (recommendation.agent as any).name}" persona. A multi-agent recipe "${topRecipe.name}" is recommended — offer to run it, or proceed as the recommended agent if the user prefers a single pass.`
+          : `Adopt the "${recommendation.agent && (recommendation.agent as any).name}" persona for this task. Apply that agent's expertise and thinking style to your response.`;
+
+        return recommendation;
+      },
+      {
+        type: 'object',
+        properties: {
+          message: {
+            type: 'string',
+            description: 'The user\'s raw message or task description to analyze',
+          },
+        },
+        required: ['message'],
+      }
+    );
+  }
+
+  /**
+   * Build human-readable reasoning for the triage decision.
+   */
+  private buildTriageReasoning(
+    topAgent: { name: string; score: number; matchedTriggers: string[] },
+    topRecipe: { name: string; score: number; matchedTriggers: string[] },
+    complexity: ComplexityAnalysis,
+    suggestRecipe: boolean,
+  ): string {
+    const parts: string[] = [];
+
+    if (topAgent.score > 0) {
+      parts.push(`Matched agent "${topAgent.name}" (triggers: ${topAgent.matchedTriggers.join(', ')}).`);
+    } else {
+      parts.push('No strong agent match — defaulting to executor for general implementation.');
+    }
+
+    parts.push(`Complexity: ${complexity.complexity} (score ${complexity.score}/100).`);
+
+    if (suggestRecipe) {
+      parts.push(`Recipe "${topRecipe.name}" is a good fit (triggers: ${topRecipe.matchedTriggers.join(', ')}). Consider running the full multi-agent workflow for better results.`);
+    }
+
+    return parts.join(' ');
   }
 
   // --------------------------------------------------------------------------
@@ -150,10 +475,10 @@ export class McpServer {
         let recommendedModel = analysis.suggestedModel;
         if (budgetHint === 'minimal' && analysis.complexity !== 'simple') {
           // Force cheapest model even for complex queries
-          recommendedModel = 'meta-llama/llama-3.2-3b-instruct:free';
+          recommendedModel = 'cursor-small';
         } else if (budgetHint === 'unlimited' && analysis.complexity === 'simple') {
           // Allow upgrading simple queries for higher quality
-          recommendedModel = 'nousresearch/hermes-3-llama-3.1-405b:free';
+          recommendedModel = 'claude-3.5-sonnet';
         }
 
         // Build alternatives list
