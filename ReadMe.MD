@@ -180,4 +180,4 @@ npm start               # Start MCP server directly
 
 ## License
 
-MIT © Roland Contributors
+MIT
