@@ -104,7 +104,7 @@ class Logger {
       args[0],
       args[1] as LogContext | undefined
     );
-    console.log(this.prefix, message, ...args.slice(2));
+    console.error(this.prefix, message, ...args.slice(2));
     this.storeInHistory('info', String(args[0]), args[1] as LogContext | undefined);
   }
 
@@ -137,7 +137,7 @@ class Logger {
       args[0],
       args[1] as LogContext | undefined
     );
-    console.log(this.prefix, '🐛', message, ...args.slice(2));
+    console.error(this.prefix, '🐛', message, ...args.slice(2));
     this.storeInHistory('debug', String(args[0]), args[1] as LogContext | undefined);
   }
 
@@ -148,7 +148,7 @@ class Logger {
       args[0],
       args[1] as LogContext | undefined
     );
-    console.log(this.prefix, '✅', message, ...args.slice(2));
+    console.error(this.prefix, '✅', message, ...args.slice(2));
     this.storeInHistory('info', String(args[0]), args[1] as LogContext | undefined);
   }
 

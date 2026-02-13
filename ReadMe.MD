@@ -19,7 +19,7 @@ Roland is an MCP (Model Context Protocol) server that gives your IDE agent super
 Ten tools exposed to any MCP-compatible client (VS Code Copilot, Cursor, Claude Desktop, etc.):
 
 | Tool | Purpose |
-|------|---------||
+|------|---------|
 | `health_check` | Server status & uptime |
 | `triage` | Auto-pilot — analyze any prompt → recommend agent + recipe |
 | `route_model` | Analyze task complexity → recommend cheapest adequate model |
@@ -82,7 +82,7 @@ Skip conditions: explicit `@agent` mentions, direct tool/recipe requests, mid-re
 
 ### IDE-Native Integration
 Run `npm run init -- /path/to/your/project` to set up any project with Roland, or `npm run export-configs` for the Roland repo itself:
-- `.github/agents/*.agent.md` — VS Code Copilot agent personas (64 files)
+- `.github/agents/*.agent.md` — VS Code Copilot agent personas (70 files: 32 agents + 38 recipe handoffs)
 - `.cursor/rules/*.mdc` — Cursor rule files (32 files + auto-pilot rule)
 - `.vscode/mcp.json` / `.cursor/mcp.json` — MCP server configuration
 - `.github/copilot-instructions.md` — Project-wide agent instructions
@@ -135,13 +135,13 @@ See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions (includes
 │  (mcp-server.ts — 10 registered tools)                     │
 ├─────────────────────────────────────────────────────────────┤
 │                  Orchestration Layer                        │
-│  (model-router, cost-calculator, workflow-engine)          │
+│  (model-router, complexity-classifier, cost-tracker)       │
 ├─────────────────────────────────────────────────────────────┤
-│                   Agent & Recipe System                     │
-│  (agent-loader, recipe-loader, YAML definitions)           │
+│              Recipe Sessions & Agent Definitions            │
+│  (recipe-session, YAML agents & recipes)                   │
 ├─────────────────────────────────────────────────────────────┤
 │                   Support Systems                           │
-│  (cache, config, utils, monitoring)                        │
+│  (config-loader, budget-manager, logger)                   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
