@@ -1,13 +1,15 @@
 # Roland
 
-> AI agent orchestration as an MCP server — cost-routed models, multi-agent recipes, and IDE-native personas.
+> AI agent orchestration as an MCP server — multi-agent recipes, cost visibility, and IDE-native personas.
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)]()
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)]()
 [![MCP](https://img.shields.io/badge/MCP-1.0.4-purple.svg)]()
 
-Roland is an MCP (Model Context Protocol) server that gives your IDE agent superpowers: auto-pilot triage, complexity-based model routing, session cost tracking, budget management, and multi-agent recipe execution. It also exports 32 specialized agent personas directly into VS Code (Copilot) and Cursor as native config files.
+Roland is an MCP (Model Context Protocol) server that gives your IDE agent superpowers: multi-agent recipe workflows, auto-pilot triage, session cost tracking, budget management, and 32 specialized agent personas exported directly into VS Code (Copilot) and Cursor as native config files.
+
+IDEs control which model runs your requests — Roland focuses on what they can't do: orchestrating multi-step workflows across specialized agents, tracking what you're spending, and triaging every prompt to the right persona.
 
 **Version**: 2.0.0
 
@@ -74,11 +76,12 @@ Roland includes a `triage` tool and a Cursor auto-pilot rule (`roland-autopilot.
 
 Skip conditions: explicit `@agent` mentions, direct tool/recipe requests, mid-recipe steps, follow-up questions.
 
-### Cost Optimization
-- **Complexity-based model routing** — automatically selects the cheapest adequate model
+### Cost Visibility & Budget Management
+IDEs provide zero insight into what you're spending. Roland fills that gap:
 - **Session cost tracking** — per-model, per-agent, per-provider breakdowns
 - **Budget management** — set spending limits with real-time enforcement
-- **IDE-native models** — routes to models already available in your IDE (no external API keys needed)
+- **Cost analytics** — understand where your tokens go across sessions
+- **Model routing (advisory)** — complexity analysis recommends the cheapest adequate model, but the IDE ultimately controls model selection
 
 ### IDE-Native Integration
 Run `npm run init -- /path/to/your/project` to set up any project with Roland, or `npm run export-configs` for the Roland repo itself:
