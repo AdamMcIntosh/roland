@@ -55,7 +55,7 @@ YAML-defined agents in `./agents/`, exported as IDE-native config files:
 
 Most agents have tiered variants (`-low`, `-medium`, `-high`) for different depth levels.
 
-### 7 Pre-Built Recipes
+### 8 Pre-Built Recipes
 Multi-agent workflow templates in `./recipes/`:
 
 | Recipe | Agent Chain | Use Case |
@@ -67,6 +67,7 @@ Multi-agent workflow templates in `./recipes/`:
 | **WebAppFullStack** | Architect → Designer → Executor → Critic → Writer | Full-stack development |
 | **MicroservicesArchitecture** | Architect → Executor → Critic → Writer | Service decomposition |
 | **DocumentationRefactor** | Analyst → Architect → Writer → Critic | Codebase-aware doc improvement |
+| **DesktopApp** | Architect → Designer → Executor → QA → Critic → Writer | Desktop/native app development |
 
 ### Auto-Pilot Mode
 Roland includes a `triage` tool and a Cursor auto-pilot rule (`roland-autopilot.mdc`) that fires on every message. When enabled, the IDE automatically calls `triage` before processing your prompt, which analyzes your intent and recommends the best agent or recipe — no `@agent` mention required.

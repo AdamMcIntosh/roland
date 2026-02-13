@@ -22,7 +22,7 @@ Before responding to any coding, development, or technical request, **always cal
 Skip triage for:
 - Simple greetings or conversational messages ("hi", "thanks", "what's your name?")
 - **Explicit agent mentions** — if the user invokes a specific agent with `@agent-name` (e.g., `@architect`, `@executor`, `@critic`), respect their choice and adopt that persona directly without calling triage
-- **Explicit tool or recipe requests** — if the user names a specific tool (`health_check`, `route_model`, `start_recipe`, `advance_recipe`, `execute_recipe`, `list_recipes`, `track_cost`, `manage_budget`, `get_analytics`, `suggest_mode`) or a specific recipe (`BugFix`, `PlanExecRevEx`, `WebAppFullStack`, etc.), just execute what they asked for directly
+- **Explicit tool or recipe requests** — if the user names a specific tool (`health_check`, `route_model`, `start_recipe`, `advance_recipe`, `execute_recipe`, `list_recipes`, `track_cost`, `manage_budget`, `get_analytics`, `suggest_mode`) or a specific recipe (`BugFix`, `PlanExecRevEx`, `WebAppFullStack`, `DesktopApp`, etc.), just execute what they asked for directly
 - **Mid-recipe steps** — if you're already inside a recipe session (i.e., you've called `start_recipe` and are iterating with `advance_recipe`), do NOT re-triage each step
 - Follow-up messages in an ongoing conversation where the agent is already established
 - Questions about Roland itself
@@ -55,6 +55,7 @@ When triage suggests a recipe, offer to start it:
 - **SecurityAudit** — Threat modeling through remediation
 - **RESTfulAPI** — API design through documentation
 - **WebAppFullStack** — Full-stack development pipeline
+- **DesktopApp** — Desktop/native app development pipeline
 - **MicroservicesArchitecture** — Service decomposition workflow
 - **DocumentationRefactor** — Audit and improve docs
 

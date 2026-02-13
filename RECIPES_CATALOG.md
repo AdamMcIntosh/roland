@@ -89,6 +89,20 @@ Full pipeline from triage through fix, test, and documentation.
 | 3 | execute-changes | Make changes |
 | 4 | verify-changes | Verify accuracy |
 
+### DesktopApp
+**Desktop/Native App Development**
+
+Full pipeline for cross-platform desktop apps: framework selection, UI design, implementation, testing, packaging, and distribution.
+
+| Step | Agent | Role |
+|------|-------|------|
+| 1 | ArchitectureDesign | Framework selection & system architecture |
+| 2 | UIDesign | Desktop UI/UX design |
+| 3 | Implementation | Build the app |
+| 4 | Testing | Test strategy & execution |
+| 5 | QualityReview | Code review & security |
+| 6 | PackagingAndDistribution | Build, sign, distribute |
+
 ## Quick Start
 
 In Cursor chat:

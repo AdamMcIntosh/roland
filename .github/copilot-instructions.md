@@ -38,6 +38,7 @@ Recipe chains are multi-agent workflows available as handoff agent chains:
 | RESTfulAPI | Architect → Executor → Critic → Writer | API design through documentation |
 | SecurityAudit | Architect → Critic → Executor → Writer | Threat modeling to remediation |
 | WebAppFullStack | Architect → Designer → Executor → Critic → Writer | Full-stack development |
+| DesktopApp | Architect → Designer → Executor → QA → Critic → Writer | Desktop/native app development |
 | MicroservicesArchitecture | Architect → Executor → Critic → Writer | Service decomposition |
 | DocumentationRefactor | Analyst → Architect → Writer → Critic | Codebase-aware doc improvement |
 

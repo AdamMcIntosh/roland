@@ -1,0 +1,162 @@
+# Desktop App Recipe
+# Complete workflow for building a cross-platform desktop application
+# Covers architecture, UI design, implementation, packaging, and distribution
+
+name: DesktopApp
+recipe: desktop-app
+version: 1.0.0
+author: roland
+description: |
+  End-to-end workflow for designing and implementing a cross-platform desktop application.
+  Covers framework selection (Electron, Tauri, .NET MAUI, etc.), UI design, native integration,
+  data persistence, packaging, and distribution.
+
+tags:
+  - desktop
+  - electron
+  - tauri
+  - native
+  - cross-platform
+  - gui
+
+agents:
+  - architect
+  - designer
+  - executor
+  - qa-tester
+  - critic
+  - writer
+
+input_variables:
+  - app_name
+  - app_description
+  - target_platforms
+  - key_features
+
+variables:
+  use_auto_update: true
+  use_local_storage: true
+
+steps:
+  - name: ArchitectureDesign
+    description: Design desktop application architecture and select framework
+    agent: architect
+    input: |
+      App: {{app_name}}
+      Description: {{app_description}}
+      Target Platforms: {{target_platforms}}
+      Features: {{key_features}}
+
+      Design a comprehensive desktop application architecture including:
+      1. Framework recommendation (Electron, Tauri, .NET MAUI, Flutter, etc.) with trade-off analysis
+      2. Process architecture (main/renderer, IPC patterns)
+      3. Data persistence strategy (SQLite, local files, IndexedDB, etc.)
+      4. Native OS integration points (system tray, notifications, file system, menus)
+      5. State management approach
+      6. Auto-update and distribution strategy
+      7. Security model (sandboxing, permissions, code signing)
+    output_to: architecture
+    timeout_seconds: 300
+
+  - name: UIDesign
+    description: Create desktop UI/UX design 
+    agent: designer
+    input: |
+      Architecture: {{architecture}}
+      App: {{app_name}}
+      Target Platforms: {{target_platforms}}
+
+      Create UI/UX design tailored for desktop including:
+      1. Window layout and navigation patterns
+      2. Menu bar and keyboard shortcut design
+      3. System tray / dock integration
+      4. Multi-window or tabbed interface design
+      5. Component library and theming (light/dark mode, OS-native look)
+      6. Responsive behavior for window resizing
+      7. Drag-and-drop and native OS interactions
+      8. Accessibility (screen readers, high contrast, keyboard navigation)
+    output_to: ui_design
+    timeout_seconds: 300
+
+  - name: Implementation
+    description: Implement the desktop application
+    agent: executor
+    input: |
+      Architecture: {{architecture}}
+      UI Design: {{ui_design}}
+
+      Implement the desktop application including:
+      1. Project scaffolding with chosen framework
+      2. Main process / backend setup
+      3. UI implementation with components
+      4. IPC communication layer
+      5. Data persistence layer
+      6. Native OS integration (menus, tray, notifications)
+      7. State management wiring
+    output_to: implementation
+    timeout_seconds: 900
+
+  - name: Testing
+    description: Test the desktop application
+    agent: qa-tester
+    input: |
+      Implementation: {{implementation}}
+      Architecture: {{architecture}}
+
+      Create a comprehensive test strategy for the desktop app:
+      1. Unit tests for business logic
+      2. Component/UI tests
+      3. Integration tests for IPC and data layer
+      4. Platform-specific smoke tests
+      5. Performance profiling (memory, startup time, bundle size)
+      6. Accessibility audit
+    output_to: test_report
+    timeout_seconds: 600
+
+  - name: QualityReview
+    description: Code review and quality assessment
+    agent: critic
+    input: |
+      Implementation: {{implementation}}
+      Test Report: {{test_report}}
+      Architecture: {{architecture}}
+
+      Perform quality review covering:
+      1. Code quality and maintainability
+      2. Security review (IPC surface, dependency audit, CSP)
+      3. Performance analysis (memory leaks, startup time)
+      4. Platform compatibility issues
+      5. Bundle size optimization
+      6. Error handling and crash recovery
+    output_to: qa_report
+    timeout_seconds: 600
+
+  - name: PackagingAndDistribution
+    description: Create build, packaging, and distribution guide
+    agent: writer
+    input: |
+      Implementation: {{implementation}}
+      QA Report: {{qa_report}}
+      Architecture: {{architecture}}
+
+      Create packaging and distribution documentation:
+      1. Build configuration for each target platform
+      2. Code signing setup (Windows, macOS, Linux)
+      3. Installer creation (MSI/NSIS, DMG, AppImage/deb/rpm)
+      4. Auto-update configuration
+      5. CI/CD pipeline for automated builds
+      6. App store submission guidelines (if applicable)
+      7. User installation and upgrade instructions
+    output_to: distribution_guide
+    timeout_seconds: 300
+
+outputs:
+  system_architecture: architecture
+  ui_design: ui_design
+  implementation_code: implementation
+  test_report: test_report
+  qa_report: qa_report
+  distribution_guide: distribution_guide
+
+max_total_cost: 6.0
+max_duration_seconds: 3600

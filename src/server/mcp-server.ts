@@ -292,6 +292,13 @@ export class McpServer {
       triggers: ['documentation', 'docs refactor', 'readme', 'api docs', 'document everything', 'doc update'],
       agents: ['analyst', 'architect', 'writer', 'critic'],
     },
+    {
+      name: 'DesktopApp',
+      fileKey: 'DesktopApp',
+      description: 'Desktop app: architect → design → implement → test → review → package',
+      triggers: ['desktop', 'electron', 'tauri', 'native app', 'gui', 'desktop app', 'cross-platform', 'maui', 'installable', 'offline app'],
+      agents: ['architect', 'designer', 'executor', 'qa-tester', 'critic', 'writer'],
+    },
   ];
 
   private registerTriage(): void {
@@ -965,7 +972,7 @@ export class McpServer {
   private registerStartRecipe(): void {
     this.registerTool(
       'start_recipe',
-      'Start a multi-agent recipe session. Returns the first step\'s system prompt and user prompt for you to execute. Then call advance_recipe with your output to get the next step. Available recipes: BugFix, RESTfulAPI, SecurityAudit, WebAppFullStack, MicroservicesArchitecture, PlanExecRevEx, DocumentationRefactor.',
+      'Start a multi-agent recipe session. Returns the first step\'s system prompt and user prompt for you to execute. Then call advance_recipe with your output to get the next step. Available recipes: BugFix, RESTfulAPI, SecurityAudit, WebAppFullStack, MicroservicesArchitecture, PlanExecRevEx, DocumentationRefactor, DesktopApp.',
       async (args: Record<string, unknown>) => {
         const recipeName = args.recipe_name as string;
         const userTask = args.task as string;
