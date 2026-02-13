@@ -8,16 +8,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **BugFix.yaml Workflow Recipe** - Comprehensive 7-agent workflow for systematic bug resolution
-  - Analyst agent for bug triage and severity classification
-  - Researcher agent for root cause investigation
-  - Architect agent for solution design
-  - Executor agent for implementation
-  - QA-Tester agent for testing and validation
-  - Critic agent for code review and quality assurance
-  - Writer agent for documentation updates
-  - Includes loop conditions for test failures and review issues
-  - Adaptive workflow with settings for required tests and documentation
+- **DesktopApp Recipe** — 6-agent workflow for cross-platform desktop applications
+  - Architect → Designer → Executor → QA-Tester → Critic → Writer
+  - Covers framework selection (Electron, Tauri, .NET MAUI), native OS integration, packaging, and distribution
+  - Triage triggers: desktop, electron, tauri, native app, gui, cross-platform
+
+## [2.0.0] - 2026-02-12
+
+### 🏗️ Architecture Overhaul — IDE-Native MCP Server
+
+Complete architectural pivot from a standalone CLI agent system to a pure MCP server that orchestrates through the IDE. Roland no longer makes its own LLM calls — it provides intelligent routing, cost tracking, and multi-agent workflow orchestration while the IDE (VS Code Copilot or Cursor) handles all model interactions.
+
+### Added
+
+#### Auto-Pilot Triage System
+- **`triage` MCP tool** — analyzes any user message and recommends the best agent persona and/or recipe workflow
+- **Cursor `roland-autopilot.mdc` rule** (`alwaysApply: true`) — automatically calls triage before every coding request
+- Keyword-based matching against all agents (16 personas) and recipes (8 workflows)
+- Complexity classification with quick/standard/deep depth recommendations
+- Smart skip conditions: explicit `@agent` mentions, mid-recipe steps, conversational messages
+
+#### Recipe Session Management
+- **`start_recipe` MCP tool** — begins a multi-agent recipe session, returns the first step's prompt
+- **`advance_recipe` MCP tool** — accepts step output, returns next step prompt or final summary
+- IDE drives each step using its own model while Roland orchestrates the sequence
+- Variable interpolation (e.g., `{{architecture}}`, `{{implementation}}`) across steps
+
+#### New Agents & Recipes
+- **SecurityAudit recipe** — threat modeling → code review → vulnerability assessment → remediation
+- **Security-reviewer agent** — OWASP-focused vulnerability scanning and hardening
+- **TDD-guide agent** — red-green-refactor cycle guidance
+- **BugFix recipe** — 7-agent systematic bug resolution (analyst → researcher → architect → executor → qa-tester → critic → writer)
+- **Code-reviewer agent** — comprehensive review with best practices
+- **Explore agent** — codebase navigation and pattern mapping
+- **Scientist agent** — data analysis, statistics, hypothesis testing
+- **Analyst agent** — metrics, trends, quantitative reasoning
+- Agent tiered variants (`-low`, `-medium`, `-high`) for different depth levels
+- 32 total agent personas exported as IDE-native config files
+
+#### IDE Integration & Export System
+- **`export-ide-configs.ts` script** — generates IDE-native config files from YAML definitions
+  - `.github/agents/*.agent.md` — VS Code Copilot agent files with handoff chains
+  - `.cursor/rules/*.mdc` — Cursor rule files for each agent persona
+  - `.vscode/mcp.json` and `.cursor/mcp.json` — MCP server configuration
+  - `.github/copilot-instructions.md` — auto-generated project instructions
+- Recipe handoff chains with `autoSend: true` for autonomous multi-agent workflows
+- **`init.ts` script** — project portability setup for external projects
+
+#### Project Identity
+- **Renamed project from Samwise to Roland** across all files, configs, and documentation
+- Repository renamed to `AdamMcIntosh/roland`
+- npm package name: `roland`
+- Binary commands: `roland`, `roland-mcp`
+
+### Changed
+
+#### Architecture (Breaking)
+- **Removed standalone workflow engine** — no more internal LLM calls; IDE handles all model interactions
+- **Removed execution modes** (eco, autopilot, ultrapilot, swarm, pipeline) — replaced by IDE-native model selection
+- **Removed API key requirements** — Roland no longer needs provider API keys; the IDE manages authentication
+- **Removed recipe loader** — recipes are read directly from YAML at runtime
+- **Removed CLI interactive mode** — Roland is now a pure MCP server, not a CLI application
+- **Removed AutonomousAgent, LLMClient, and related modules** — no longer needed
+
+#### MCP Server
+- Streamlined to 10 focused tools: `health_check`, `triage`, `route_model`, `track_cost`, `manage_budget`, `get_analytics`, `suggest_mode`, `list_recipes`, `start_recipe`, `advance_recipe`
+- Removed outdated documentation files (EXAMPLE_USAGE.md, EXAMPLE_WORKFLOWS.md, TROUBLESHOOTING.md, RELEASE_NOTES.md)
+- Updated INSTALLATION.md with simplified setup (no API keys needed)
+- Added TESTING.md with manual testing guide for all MCP tools
+
+### Removed
+- Workflow engine and recipe loader modules
+- AutonomousAgent, LLMClientWithTools, RateLimitHandler
+- All execution mode abstractions
+- OpenRouter provider integration (IDE handles providers)
+- Interactive CLI (commander-based)
+- HUD, progress tracking, budget prompts
+- DocReview and other internal skills
+- Agent-level model/provider configuration (IDE controls models)
+- File materialization and code generation directives
 
 ## [1.0.0] - 2026-02-01
 
@@ -457,5 +526,6 @@ This is the initial release. No migration needed.
 
 ---
 
-[1.0.0]: https://github.com/yourusername/roland/releases/tag/v1.0.0
-[Unreleased]: https://github.com/yourusername/roland/compare/v1.0.0...HEAD
+[2.0.0]: https://github.com/AdamMcIntosh/roland/releases/tag/v2.0.0
+[1.0.0]: https://github.com/AdamMcIntosh/roland/releases/tag/v1.0.0
+[Unreleased]: https://github.com/AdamMcIntosh/roland/compare/v2.0.0...HEAD
