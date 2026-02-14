@@ -1,6 +1,6 @@
 # Recipes Catalog
 
-Roland includes 7 multi-agent workflow recipes. Each recipe defines a sequence of agent steps that Cursor drives one at a time via `start_recipe` and `advance_recipe`.
+Roland includes 8 multi-agent workflow recipes. Each recipe defines a sequence of agent steps that Cursor drives one at a time via `start_recipe` and `advance_recipe`.
 
 ## How Recipes Work
 
@@ -102,6 +102,18 @@ Full pipeline for cross-platform desktop apps: framework selection, UI design, i
 | 4 | Testing | Test strategy & execution |
 | 5 | QualityReview | Code review & security |
 | 6 | PackagingAndDistribution | Build, sign, distribute |
+
+### CodeReviewCompliance
+**Code Review & Requirements Compliance**
+
+Comprehensive code review workflow that validates code against best practices and a requirements document, with adversarial critique and a polished compliance report.
+
+| Step | Agent | Role |
+|------|-------|------|
+| 1 | requirements-analysis | Analyze requirements doc & map codebase |
+| 2 | code-review | Review code for best practices & requirements |
+| 3 | critique-review | Adversarial validation of findings |
+| 4 | compliance-report | Generate compliance report |
 
 ## Quick Start
 

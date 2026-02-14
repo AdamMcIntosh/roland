@@ -41,6 +41,7 @@ Recipe chains are multi-agent workflows available as handoff agent chains:
 | DesktopApp | Architect → Designer → Executor → QA → Critic → Writer | Desktop/native app development |
 | MicroservicesArchitecture | Architect → Executor → Critic → Writer | Service decomposition |
 | DocumentationRefactor | Analyst → Architect → Writer → Critic | Codebase-aware doc improvement |
+| CodeReviewCompliance | Researcher → Code-Reviewer → Critic → Writer | Code review & requirements compliance |
 
 To start a recipe, invoke the first agent in the chain (e.g., `@plan-exec-rev-ex-planner`).
 

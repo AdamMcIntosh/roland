@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **CodeReviewCompliance Recipe** — 4-agent workflow for code review against best practices and requirements compliance
+  - Researcher → Code-Reviewer → Critic → Writer
+  - Step 1: Requirements analysis with traceability matrix mapping each requirement to code
+  - Step 2: Comprehensive code review covering quality, security, performance, testing, and maintainability
+  - Step 3: Adversarial critique that validates findings, catches missed issues, and adjusts severity ratings
+  - Step 4: Polished compliance report with executive summary, compliance matrix, and prioritized action plan
+  - Input variables: `codebasePath`, `requirementsDoc`, `focusAreas`, `standards`
 - **DesktopApp Recipe** — 6-agent workflow for cross-platform desktop applications
   - Architect → Designer → Executor → QA-Tester → Critic → Writer
   - Covers framework selection (Electron, Tauri, .NET MAUI), native OS integration, packaging, and distribution
