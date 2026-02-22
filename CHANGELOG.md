@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Responsive-design agent** — specialist for cross-device compatibility, mobile-first layouts, breakpoint strategy, fluid typography, flexible grids, touch-target sizing, and viewport-aware component architecture
+  - Standard tier (`responsive-design`) and low tier (`responsive-design-low`) variants
 - **CodeReviewCompliance Recipe** — 4-agent workflow for code review against best practices and requirements compliance
   - Researcher → Code-Reviewer → Critic → Writer
   - Step 1: Requirements analysis with traceability matrix mapping each requirement to code
@@ -19,6 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Architect → Designer → Executor → QA-Tester → Critic → Writer
   - Covers framework selection (Electron, Tauri, .NET MAUI), native OS integration, packaging, and distribution
   - Triage triggers: desktop, electron, tauri, native app, gui, cross-platform
+
+### Fixed
+- Logger output switched from `console.log` to `console.error` for MCP-compliant stderr output
+- Removed contributor mention from license section in ReadMe
+
+### Changed
+- ReadMe updated to enhance clarity on cost visibility and multi-agent workflow descriptions
+- Cursor autopilot rule updated to recognize DesktopApp recipe in skip conditions and recipe list
 
 ## [2.0.0] - 2026-02-12
 

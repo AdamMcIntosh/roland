@@ -1,0 +1,9 @@
+name: responsive-design-low
+role_prompt: Quick responsive design checker for basic breakpoint and mobile layout issues
+recommended_model: meta-llama/llama-3.2-3b-instruct:free
+model: meta-llama/llama-3.2-3b-instruct:free
+provider: openrouter
+temperature: 0.6
+tools:
+  - code
+  - design
