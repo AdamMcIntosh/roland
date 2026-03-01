@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 /**
- * RCO Agent Worker — child process that "executes" an agent (mock or Puppeteer-based Claude simulation).
- * Receives WorkerInput via IPC, validates with Zod, runs tools, sends WorkerOutput.
- * Set RCO_USE_PUPPETEER=1 to use headless browser Claude simulation (local mock page).
+ * RCO Agent Worker — child process that "executes" an agent via Claude tool-calling prompts.
+ * Generates prompts like "As [agent-name], execute step: [input]. Tools: [yaml-tools]. Respond in JSON: {output: '...'}".
+ * Parses responses with JSON.parse / parseClaudeResponseText. Puppeteer for dev automation (mock page).
+ * Production: manual Claude interface.
  */
 
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath, pathToFileURL } from 'url';
-import { WorkerInputSchema, type RcoState, type WorkerOutput } from './types.js';
+import { WorkerInputSchema, WorkerOutputSchema, type RcoState, type WorkerOutput } from './types.js';
 import { runTool } from './tools.js';
+import { buildClaudeToolCallingPrompt } from './prompts.js';
+import { parseClaudeResponseText } from '../schemas.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -59,39 +62,46 @@ async function getResponseViaPuppeteer(prompt: string, agentName: string, model:
 }
 
 async function runAsync(input: unknown): Promise<void> {
-  const parsed = WorkerInputSchema.safeParse(input);
-  if (!parsed.success) {
+  const inputParsed = WorkerInputSchema.safeParse(input);
+  if (!inputParsed.success) {
     sendResult({
       type: 'result',
       success: false,
       output: '',
-      error: `Validation failed: ${parsed.error.message}`,
+      error: `Validation failed: ${inputParsed.error.message}`,
     });
     process.exit(1);
   }
 
-  const { agentYaml, state, taskContext, stepInput, tools, workflowSteps } = parsed.data;
+  const { agentYaml, state, taskContext, stepInput, tools, workflowSteps } = inputParsed.data;
   const agentName = agentYaml.name ?? 'unknown';
   const model = agentYaml.claude_model ?? 'claude-3-5-sonnet-20241022';
 
   log('start', `Agent=${agentName} model=${model}`);
-  const prompt = `Task: ${taskContext}\n${stepInput ? `Input from previous step:\n${stepInput}` : ''}`;
-  log('prompt', prompt.slice(0, 200) + (prompt.length > 200 ? '...' : ''));
+  const prompt = buildClaudeToolCallingPrompt({
+    agentYaml,
+    taskContext,
+    stepInput,
+    stateSummary: state ? { currentStep: (state as unknown as RcoState).currentStep, loopCount: (state as unknown as RcoState).loopCount } : undefined,
+  });
+  log('prompt', prompt.slice(0, 300) + (prompt.length > 300 ? '...' : ''));
 
-  let mockResponse: string;
+  let rawResponse: string;
   if (process.env.RCO_USE_PUPPETEER === '1' || process.env.RCO_USE_PUPPETEER === 'true') {
     try {
-      mockResponse = await getResponseViaPuppeteer(prompt, agentName, model);
+      rawResponse = await getResponseViaPuppeteer(prompt, agentName, model);
       log('puppeteer', 'Got response from Claude mock page');
     } catch (err) {
-      const fallback = `[Mock ${model} response for ${agentName}]\nProcessed task context. Output: structured result for next step.`;
+      const fallback = JSON.stringify({ output: `[Mock ${model} response for ${agentName}] Processed task context.`, success: true });
       log('puppeteer', `Fallback to inline mock: ${(err as Error).message}`);
-      mockResponse = fallback;
+      rawResponse = fallback;
     }
   } else {
-    mockResponse = `[Mock ${model} response for ${agentName}]\nProcessed task context. Output: structured result for next step.`;
+    rawResponse = JSON.stringify({ output: `[Mock ${model} response for ${agentName}] Processed task context. Output: structured result for next step.`, success: true });
   }
-  log('response', mockResponse.slice(0, 150) + '...');
+  log('response', rawResponse.slice(0, 200) + (rawResponse.length > 200 ? '...' : ''));
+
+  const responseParsed = parseClaudeResponseText(rawResponse);
 
   const toolResults: string[] = [];
   const toolList = tools ?? agentYaml.tools ?? [];
@@ -104,18 +114,24 @@ async function runAsync(input: unknown): Promise<void> {
     log('tools', toolResults.join('; '));
   }
 
-  let dotGraph: string | undefined;
-  if (toolList.includes('dependency-mapper')) {
+  let dotGraph: string | undefined = responseParsed.dotGraph;
+  if (toolList.includes('dependency-mapper') && !dotGraph) {
     dotGraph = runTool('dependency-mapper', '', stateCast, workflowSteps);
   }
 
-  const output = [mockResponse, ...toolResults].filter(Boolean).join('\n');
-  sendResult({
+  const output = [responseParsed.output, ...toolResults].filter(Boolean).join('\n');
+  const result: WorkerOutput = {
     type: 'result',
-    success: true,
+    success: responseParsed.success ?? true,
     output,
     dotGraph: dotGraph ?? undefined,
-  });
+    error: responseParsed.error,
+  };
+  const validated = WorkerOutputSchema.safeParse(result);
+  if (!validated.success) {
+    log('validation', `WorkerOutput schema failed: ${validated.error.message}`);
+  }
+  sendResult(validated.success ? validated.data : result);
   setImmediate(() => process.exit(0));
 }
 

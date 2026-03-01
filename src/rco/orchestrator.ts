@@ -11,6 +11,7 @@ import { fileURLToPath } from 'url';
 import { fork } from 'child_process';
 import { loadRcoConfig, loadAllAgents, loadRecipe } from './loadConfig.js';
 import { acquireLock, writeStateUnlocked } from './stateLock.js';
+import { WorkerOutputSchema } from './types.js';
 import type { RcoState, RcoRecipe, AgentYaml, WorkerInput, WorkerOutput } from './types.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -43,6 +44,8 @@ export interface OrchestratorOptions {
   maxLoops?: number;
   /** Optional: broadcast agent status/logs for dashboard */
   onLog?: (payload: { agent: string; phase: string; message: string }) => void;
+  /** Optional: broadcast dependency graph for dashboard (nodes/edges) */
+  onGraph?: (payload: { nodes: Array<{ id: string; label: string }>; edges: Array<{ from: string; to: string }>; sessionId: string }) => void;
   /** Optional: run in parallel-swarm (concurrent forks + file lock) */
   executionMode?: 'autonomous-loop' | 'parallel-swarm' | 'linear';
   /** Optional: worker step timeout in ms (default 60000) */
@@ -87,13 +90,18 @@ function defaultRunWorker(
       const m = msg as { type: string; success?: boolean; output?: string; error?: string; dotGraph?: string };
       if (m.type === 'result') {
         clearTimeout(timeout);
-        resolve({
+        const candidate: WorkerOutput = {
           type: 'result',
           success: m.success ?? false,
           output: m.output ?? '',
           error: m.error,
           dotGraph: m.dotGraph,
-        });
+        };
+        const validated = WorkerOutputSchema.safeParse(candidate);
+        if (!validated.success) {
+          logVerbose(`Worker output validation failed: ${validated.error.message}`);
+        }
+        resolve(validated.success ? validated.data : candidate);
         return;
       }
     });
@@ -147,6 +155,7 @@ export async function runOrchestrator(options: OrchestratorOptions): Promise<Orc
     ecoMode,
     maxLoops: optMaxLoops,
     onLog,
+    onGraph,
     executionMode: optMode,
     workerTimeoutMs = 60000,
     workerRetries = 2,
@@ -183,6 +192,24 @@ export async function runOrchestrator(options: OrchestratorOptions): Promise<Orc
 
   const workflowSteps = recipe.workflow.steps;
   const steps = workflowSteps;
+
+  if (onGraph) {
+    const nodes = steps.map((s) => ({ id: s.agent.replace(/\s+/g, '_'), label: s.agent }));
+    const seen = new Set(nodes.map((n) => n.id));
+    const edges: Array<{ from: string; to: string }> = [];
+    for (const step of steps) {
+      const from = step.agent.replace(/\s+/g, '_');
+      if (step.output_to) {
+        const to = step.output_to.replace(/\s+/g, '_');
+        if (!seen.has(to)) {
+          nodes.push({ id: to, label: step.output_to });
+          seen.add(to);
+        }
+        edges.push({ from, to });
+      }
+    }
+    onGraph({ nodes, edges, sessionId });
+  }
 
   function persist(): void {
     state.updatedAt = Date.now();

@@ -56,12 +56,17 @@ async function main(): Promise<void> {
   const onLog = useDashboard
     ? (p: { agent: string; phase: string; message: string }) => broadcast({ type: 'log', ...p })
     : undefined;
+  const onGraph = useDashboard
+    ? (p: { nodes: Array<{ id: string; label: string }>; edges: Array<{ from: string; to: string }>; sessionId: string }) =>
+        broadcast({ type: 'graph', ...p, timestamp: Date.now() })
+    : undefined;
 
   if (verbose) console.error('[RCO] Starting orchestrator...');
   const result = await runOrchestrator({
     recipeName: recipe,
     task,
     onLog,
+    onGraph,
   });
 
   if (verbose) {

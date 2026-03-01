@@ -6,6 +6,7 @@ pnpm-lock.yaml
 
 # Build output
 dist/
+dist-plugin/
 build/
 *.tsbuildinfo
 

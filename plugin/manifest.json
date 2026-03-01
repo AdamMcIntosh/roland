@@ -1,0 +1,24 @@
+{
+  "name": "Roland Code Orchestrator (RCO)",
+  "version": "2.0.0",
+  "description": "Multi-agent recipe orchestration for Claude: run PlanExecRevEx and other workflows via slash commands.",
+  "commands": [
+    {
+      "name": "rco-run:recipe",
+      "description": "Run an RCO recipe with a task (e.g. PlanExecRevEx --task \"Build a CLI\")",
+      "permissions": ["read_workspace", "write_workspace"]
+    },
+    {
+      "name": "rco-status",
+      "description": "Show current RCO session status",
+      "permissions": ["read_workspace"]
+    },
+    {
+      "name": "rco-export",
+      "description": "Export last session to Cursor rules and MCP snippet",
+      "permissions": ["read_workspace", "write_workspace"]
+    }
+  ],
+  "permissions": ["read_workspace", "write_workspace"],
+  "entry": "dist-plugin/plugin.js"
+}

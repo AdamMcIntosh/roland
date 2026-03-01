@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RCO Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: #1a1a2e; color: #eee; }
+    h1 { font-size: 1.25rem; }
+    #status { color: #8f8; font-size: 0.9rem; margin-bottom: 1rem; }
+    #log { max-height: 120px; overflow-y: auto; font-size: 0.8rem; color: #aaa; }
+    .chart-container { position: relative; height: 280px; margin-top: 1rem; }
+    canvas { max-height: 280px; }
+  </style>
+</head>
+<body>
+  <h1>RCO Dashboard</h1>
+  <div id="status">Connecting to WebSocket…</div>
+  <div class="chart-container">
+    <canvas id="dependencyChart"></canvas>
+  </div>
+  <div id="log"></div>
+  <script>
+    const WS_URL = 'ws://127.0.0.1:8080';
+    const logEl = document.getElementById('log');
+    const statusEl = document.getElementById('status');
+
+    let chart = null;
+    const nodeCounts = {};
+    const edgeCounts = {};
+
+    function ensureChart() {
+      if (chart) return;
+      const ctx = document.getElementById('dependencyChart').getContext('2d');
+      chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: [],
+          datasets: [{ label: 'Agent steps', data: [], backgroundColor: 'rgba(99, 102, 241, 0.6)' }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+    }
+
+    function updateChartFromGraph(nodes, edges) {
+      ensureChart();
+      const labels = nodes.map(n => n.label);
+      const data = labels.map(() => 0);
+      edges.forEach(e => {
+        const fromLabel = nodes.find(n => n.id === e.from)?.label ?? e.from;
+        const idx = labels.indexOf(fromLabel);
+        if (idx >= 0) data[idx]++;
+      });
+      chart.data.labels = labels;
+      chart.data.datasets[0].data = data;
+      chart.update();
+    }
+
+    function appendLog(msg) {
+      const line = document.createElement('div');
+      line.textContent = new Date().toLocaleTimeString() + ' ' + msg;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    let ws = null;
+    function connect() {
+      ws = new WebSocket(WS_URL);
+      ws.onopen = () => { statusEl.textContent = 'Connected to RCO WebSocket (port 8080)'; statusEl.style.color = '#8f8'; };
+      ws.onclose = () => { statusEl.textContent = 'Disconnected. Reconnecting…'; statusEl.style.color = '#f88'; setTimeout(connect, 2000); };
+      ws.onerror = () => {};
+      ws.onmessage = (ev) => {
+        try {
+          const payload = JSON.parse(ev.data);
+          if (payload.type === 'log') appendLog(`[${payload.agent}] ${payload.message}`);
+          if (payload.type === 'graph' && payload.nodes && payload.edges) updateChartFromGraph(payload.nodes, payload.edges);
+        } catch (e) {}
+      };
+    }
+    connect();
+  </script>
+</body>
+</html>

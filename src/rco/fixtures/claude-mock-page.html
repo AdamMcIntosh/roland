@@ -14,7 +14,7 @@
       var agent = params.get('agent') || 'agent';
       var model = params.get('model') || 'claude-3-5-sonnet';
       document.getElementById('prompt').textContent = prompt;
-      var response = '[Puppeteer mock ' + model + ' response for ' + agent + ']\\nProcessed task context. Output: structured result for next step.';
+      var response = JSON.stringify({ output: '[Puppeteer mock ' + model + ' response for ' + agent + '] Processed task context. Output: structured result for next step.', success: true });
       document.getElementById('response').textContent = response;
       window.__rco_mock_response = response;
     })();
