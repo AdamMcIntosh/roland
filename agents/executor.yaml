@@ -3,6 +3,8 @@ role_prompt: Implementation engineer for writing clean, working code that follow
 recommended_model: stepfun/step-3.5-flash:free
 model: stepfun/step-3.5-flash:free
 provider: openrouter
+# RCO: Claude model (medium = Sonnet; eco_mode can use Haiku)
+claude_model: claude-3-5-sonnet-20241022
 temperature: 0.7
 tools:
   - search

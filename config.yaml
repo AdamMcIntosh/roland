@@ -30,3 +30,27 @@ roland:
   mcp_defaults:
     temperature: 0.7
     max_tokens: 2000
+
+# Roland Code Orchestrator (RCO) — Claude-centric multi-agent orchestration
+rco:
+  # Complexity → Claude model mapping (no APIs; mock/simulate for now)
+  claude_models:
+    complex: claude-3-5-sonnet-20241022
+    medium:  claude-3-5-sonnet-20241022
+    simple:  claude-3-haiku-20240307
+    explain: claude-3-5-sonnet-20241022
+  # Eco mode: use Haiku for simple steps to reduce token usage
+  eco_mode: true
+  # Dynamic agent selection: task string patterns → preferred agent names
+  task_routing:
+    - pattern: "plan|architecture|design|break down"
+      agents: [planner, architect]
+    - pattern: "implement|build|code|fix"
+      agents: [executor, executor-high]
+    - pattern: "review|audit|security|test"
+      agents: [critic, code-reviewer, qa-tester]
+    - pattern: "explain|document|readme"
+      agents: [writer, explainer]
+  # Dashboard and state
+  dashboard_port: 8080
+  state_file: .rco-state.json

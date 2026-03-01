@@ -1,0 +1,12 @@
+{
+  "rco_session": "rco-1772379884950-ap4dyuc",
+  "recipe": "PlanExecRevEx",
+  "task": "Build a todo app",
+  "suggested_agents": [
+    "Planner",
+    "Executor",
+    "Reviewer",
+    "Explainer"
+  ],
+  "exported_at": "2026-03-01T15:44:45.279Z"
+}

@@ -3,6 +3,8 @@ role_prompt: Project planner for breaking complex tasks into sequenced, actionab
 recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
 model: nousresearch/hermes-3-llama-3.1-405b:free
 provider: openrouter
+# RCO: Claude model for this agent (complex = Sonnet)
+claude_model: claude-3-5-sonnet-20241022
 temperature: 0.7
 tools:
   - search
