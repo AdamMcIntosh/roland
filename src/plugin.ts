@@ -12,8 +12,11 @@ import { loadRcoConfig } from './rco/loadConfig.js';
 import { startDashboard } from './rco/dashboard.js';
 import { PluginRunRecipeArgsSchema } from './schemas.js';
 import { z } from 'zod';
+import { hasConsent, setConsent, initTelemetry, captureException } from './telemetry.js';
 
 const RCO_VERBOSE = process.env.RCO_VERBOSE !== '0' && process.env.RCO_VERBOSE !== 'false';
+
+if (hasConsent()) initTelemetry();
 
 function log(msg: string): void {
   if (RCO_VERBOSE) console.error(`[RCO plugin] ${msg}`);
@@ -49,6 +52,11 @@ export const RCO_PLUGIN_COMMANDS: RcoPluginCommand[] = [
   {
     name: 'rco-export',
     description: 'Export last session to Cursor rules and MCP snippet',
+  },
+  {
+    name: 'rco-consent',
+    description: 'Opt-in to telemetry: use /rco-consent:yes to enable (errors and sessions sent to Sentry)',
+    args: ['yes'],
   },
 ];
 
@@ -250,6 +258,18 @@ export async function handlePluginCommand(
   commandName: string,
   commandArgs: string[]
 ): Promise<string> {
+  try {
+    return await handlePluginCommandImpl(commandName, commandArgs);
+  } catch (err) {
+    captureException(err instanceof Error ? err : new Error(String(err)), { command: commandName });
+    throw err;
+  }
+}
+
+async function handlePluginCommandImpl(
+  commandName: string,
+  commandArgs: string[]
+): Promise<string> {
   if (commandName === 'rco-run:recipe') {
     const result = await runRecipeFromPlugin(commandArgs);
     const lines = [
@@ -289,5 +309,15 @@ export async function handlePluginCommand(
   if (commandName === 'rco-export') {
     return 'RCO export: run a recipe first with rco-run:recipe, then export is automatic unless --no-export.';
   }
+  if (commandName === 'rco-consent') {
+    const arg = (commandArgs[0] ?? '').toLowerCase();
+    if (arg === 'yes') {
+      setConsent('user');
+      initTelemetry();
+      return 'RCO telemetry: consent saved. Opt-in active; errors and sessions may be sent to Sentry. Set SENTRY_DSN (or RCO_SENTRY_DSN) for your project to receive them.';
+    }
+    return `RCO consent: use /rco-consent:yes to opt in. Current consent: ${hasConsent() ? 'yes' : 'no'}.`;
+  }
   return `Unknown RCO command: ${commandName}. Available: ${RCO_PLUGIN_COMMANDS.map((c) => c.name).join(', ')}`;
 }
+
