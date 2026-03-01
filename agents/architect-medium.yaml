@@ -2,6 +2,7 @@ name: architect-medium
 role_prompt: Balanced architectural analysis evaluating 2-3 options with trade-offs
 recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
 model: nousresearch/hermes-3-llama-3.1-405b:free
+claude_model: claude-3-5-sonnet-20241022
 provider: openrouter
 temperature: 0.7
 tools:

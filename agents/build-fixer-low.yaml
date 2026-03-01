@@ -2,6 +2,7 @@ name: build-fixer-low
 role_prompt: Quick build fixer for simple compilation errors and missing imports
 recommended_model: meta-llama/llama-3.2-3b-instruct:free
 model: meta-llama/llama-3.2-3b-instruct:free
+claude_model: claude-3-5-sonnet-20241022
 provider: openrouter
 temperature: 0.6
 tools:

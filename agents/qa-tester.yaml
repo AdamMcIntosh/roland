@@ -2,6 +2,7 @@ name: qa-tester
 role_prompt: QA engineer for writing and running tests with edge case and error scenario coverage
 recommended_model: arcee-ai/trinity-large-preview:free
 model: arcee-ai/trinity-large-preview:free
+claude_model: claude-3-5-sonnet-20241022
 provider: openrouter
 temperature: 0.7
 tools:

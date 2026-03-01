@@ -5,6 +5,7 @@ subagents:
   - name: Analyst
     provider: openrouter
     model: claude-4-sonnet
+    claude_model: claude-3-5-sonnet-20241022
     prompt: |
       You are the bug triage and analysis agent. For the reported bug: {{user_task}}.
       
@@ -22,6 +23,7 @@ subagents:
   - name: Researcher
     provider: openrouter
     model: gemini-2.5-flash
+    claude_model: claude-3-5-sonnet-20241022
     prompt: |
       You are the root cause investigation agent. Using the analysis from @Analyst, investigate the bug deeply.
       
@@ -40,6 +42,7 @@ subagents:
   - name: Architect
     provider: openrouter
     model: claude-4-sonnet
+    claude_model: claude-3-5-sonnet-20241022
     prompt: |
       You are the solution design agent. Based on @Researcher's root cause analysis, design the fix strategy.
       
@@ -60,6 +63,7 @@ subagents:
   - name: Executor
     provider: openrouter
     model: gpt-4o
+    claude_model: claude-3-5-sonnet-20241022
     prompt: |
       You are the implementation agent. Execute the fix designed by @Architect.
       
@@ -79,6 +83,7 @@ subagents:
   - name: QA-Tester
     provider: openrouter
     model: gemini-2.5-flash
+    claude_model: claude-3-5-sonnet-20241022
     prompt: |
       You are the testing and validation agent. Verify that @Executor's fix resolves the bug without introducing new issues.
       
@@ -98,6 +103,7 @@ subagents:
   - name: Critic
     provider: openrouter
     model: claude-4-sonnet
+    claude_model: claude-3-5-sonnet-20241022
     prompt: |
       You are the code review and quality assurance agent. Review the fix from @Executor and test results from @QA-Tester.
       
@@ -117,6 +123,7 @@ subagents:
   - name: Writer
     provider: openrouter
     model: gpt-4o-mini
+    claude_model: claude-3-5-sonnet-20241022
     prompt: |
       You are the documentation agent. Document the bug fix for future reference.
       

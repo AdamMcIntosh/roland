@@ -17,6 +17,21 @@
       "name": "rco-export",
       "description": "Export last session to Cursor rules and MCP snippet",
       "permissions": ["read_workspace", "write_workspace"]
+    },
+    {
+      "name": "rco-run:mode",
+      "description": "Run an RCO execution mode (e.g. adaptive-swarm, collab-mode) with a task",
+      "permissions": ["read_workspace", "write_workspace"]
+    },
+    {
+      "name": "rco-new-agent",
+      "description": "Generate a custom agent YAML from a prompt description",
+      "permissions": ["read_workspace", "write_workspace"]
+    },
+    {
+      "name": "rco-consent",
+      "description": "Set telemetry consent (yes or no)",
+      "permissions": ["read_workspace"]
     }
   ],
   "permissions": ["read_workspace", "write_workspace"],

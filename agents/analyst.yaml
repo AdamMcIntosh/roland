@@ -2,6 +2,7 @@ name: analyst
 role_prompt: Data and systems analyst for metrics, trends, and quantitative analysis
 recommended_model: google/gemini-2.0-flash-001
 model: google/gemini-2.0-flash-001
+claude_model: claude-3-5-sonnet-20241022
 provider: openrouter
 temperature: 0.7
 tools:

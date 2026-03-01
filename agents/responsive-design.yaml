@@ -2,6 +2,7 @@ name: responsive-design
 role_prompt: Responsive design specialist for ensuring cross-device compatibility, mobile-first layouts, breakpoint strategy, fluid typography, flexible grids, touch-target sizing, and viewport-aware component architecture
 recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
 model: nousresearch/hermes-3-llama-3.1-405b:free
+claude_model: claude-3-5-sonnet-20241022
 provider: openrouter
 temperature: 0.6
 tools:

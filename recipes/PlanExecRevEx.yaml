@@ -5,6 +5,7 @@ subagents:
   - name: Planner
     provider: openrouter
     model: claude-4-sonnet
+    claude_model: claude-3-5-sonnet-20241022
     prompt: |
       You are the planning agent. For the task: {{user_task}}.
       Break it down into detailed steps, required files, dependencies, best practices (e.g., security, efficiency), potential risks, and a high-level architecture.
@@ -13,6 +14,7 @@ subagents:
   - name: Executor
     provider: openrouter
     model: gpt-4o
+    claude_model: claude-3-5-sonnet-20241022
     prompt: |
       You are the execution agent. Use the plan from @Planner.
       Implement changes: Edit/create files, install deps if needed, run tests/commands.
@@ -21,6 +23,7 @@ subagents:
   - name: Reviewer
     provider: openrouter
     model: gemini-2.5-flash
+    claude_model: claude-3-5-sonnet-20241022
     prompt: |
       You are the review agent. Analyze diffs/code from @Executor.
       Check for: Bugs, performance issues, security vulnerabilities, code smells, adherence to best practices.
@@ -29,6 +32,7 @@ subagents:
   - name: Explainer
     provider: openrouter
     model: grok-4-1-fast-reasoning
+    claude_model: claude-3-5-sonnet-20241022
     prompt: |
       You are the explanation agent (Grok style: clear, witty, step-by-step like Hitchhiker's Guide).
       Take final changes from @Reviewer/@Executor.
