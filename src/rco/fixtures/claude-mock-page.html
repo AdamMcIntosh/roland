@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>RCO Claude mock</title>
+</head>
+<body>
+  <pre id="prompt"></pre>
+  <pre id="response"></pre>
+  <script>
+    (function() {
+      var params = new URLSearchParams(window.location.search);
+      var prompt = params.get('prompt') || decodeURIComponent((window.location.hash || '#').slice(1));
+      var agent = params.get('agent') || 'agent';
+      var model = params.get('model') || 'claude-3-5-sonnet';
+      document.getElementById('prompt').textContent = prompt;
+      var response = '[Puppeteer mock ' + model + ' response for ' + agent + ']\\nProcessed task context. Output: structured result for next step.';
+      document.getElementById('response').textContent = response;
+      window.__rco_mock_response = response;
+    })();
+  </script>
+</body>
+</html>

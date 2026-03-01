@@ -50,6 +50,11 @@ coverage/
 # Runtime
 *.log
 *.pid
+.rco-state.json
+.rco-state-*.json
+.rco-qa-*.json
+.rco-state-unit-test*.json
+.rco-state-lock-test*
 
 # Python (legacy - keeping for reference)
 __pycache__/

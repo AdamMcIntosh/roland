@@ -18,7 +18,14 @@
     "lint": "eslint src/**/*.ts",
     "format": "prettier --write src/**/*.ts",
     "test": "vitest",
-    "clean": "rimraf dist"
+    "test:run": "vitest run",
+    "test:rco": "vitest run tests/rco",
+    "test:coverage": "vitest run --coverage",
+    "qa": "npx tsx scripts/qa-scenarios.ts",
+    "qa:all": "npx tsx scripts/qa-scenarios.ts --all",
+    "clean": "rimraf dist",
+    "rco": "node dist/rco/cli.js",
+    "rco:dev": "npx tsx src/rco/cli.ts"
   },
   "keywords": [
     "agent-orchestration",
@@ -32,16 +39,23 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
+    "js-yaml": "^4.1.0",
+    "ws": "^8.18.0",
     "yaml": "^2.6.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.5",
+    "@types/sinon": "^17.0.0",
+    "@types/ws": "^8.5.10",
     "@typescript-eslint/eslint-plugin": "^8.20.0",
     "@typescript-eslint/parser": "^8.20.0",
     "eslint": "^9.18.0",
     "prettier": "^3.4.2",
+    "puppeteer": "^23.0.0",
     "rimraf": "^6.0.1",
+    "sinon": "^17.0.0",
     "typescript": "^5.7.3",
     "vitest": "^2.1.8"
   },

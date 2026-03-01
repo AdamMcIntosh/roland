@@ -126,6 +126,69 @@ This copies all agent personas, recipe configs, MCP server config, and the auto-
 
 See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions (includes global Cursor config option).
 
+### Roland Code Orchestrator (RCO)
+
+RCO is a lightweight, Claude-centric multi-agent orchestrator that runs **outside** the MCP server: it uses Node.js `child_process.fork` for on-demand agent workers, YAML configs, and optional WebSocket monitoring.
+
+#### RCO usage
+
+**Basic run (PlanExecRevEx recipe):**
+
+```bash
+npm run build
+npm run rco -- --recipe PlanExecRevEx --task "Build a todo app"
+```
+
+- **Without building**: `npm run rco:dev -- --recipe PlanExecRevEx --task "Build a todo app"` (runs with tsx)
+- **With dashboard**: add `--dashboard` to start a WebSocket server on port 8080 (config: `config.yaml` → `rco.dashboard_port`)
+- **No Cursor export**: add `--no-export` to skip writing `.cursor/rules` and MCP JSON from the session
+- **Quiet**: add `--quiet` to reduce stderr logging
+
+**Manual QA and benchmarks:**
+
+```bash
+npm run qa -- --scenario todo-app        # Single scenario (mock workers)
+npm run qa:all                            # All 10 scenarios; timings vs OMC benchmark mocks
+```
+
+**Tests:**
+
+```bash
+npm run test:rco                          # RCO unit + integration tests only
+npm run test:run                          # Full test suite
+```
+
+**Optional Puppeteer-based Claude simulation** (headless browser mock): set `RCO_USE_PUPPETEER=1` before running RCO so the agent worker loads a local HTML mock page instead of an inline mock. Requires `puppeteer` installed.
+
+**Verbose profiling:** Orchestrator uses `console.time`/`timeEnd` when `RCO_VERBOSE` is not `0` or `false`. Worker timeout and retries are configurable via orchestrator options (default 60s timeout, 2 retries).
+
+#### RCO YAML guide
+
+- **Agents** (`agents/*.yaml`): Each file defines `name`, optional `role_prompt`, `claude_model` (e.g. `claude-3-5-sonnet-20241022`), `tools` (e.g. `search`, `code`, `dependency-mapper`). RCO uses the same 32 agent YAMLs as the rest of Roland; set `claude_model` for RCO to target that Claude model.
+- **Recipes** (`recipes/rco/*.yaml` or `recipes/<Name>.yaml`): Define `name`, `execution_mode` (`autonomous-loop` | `parallel-swarm` | `linear`), `max_loops`, and `workflow.steps`. Each step has `agent`, optional `input` (e.g. `{{user_task}}`), `output_to`, `loop_if` (substring in output to trigger loop), and `final_output: true`. Optional `subagents` override `agentRef` and `claude_model` per step.
+- **Config** (`config.yaml` → `rco`): `claude_models` (complex/medium/simple/explain), `eco_mode`, `task_routing` (pattern → agents), `dashboard_port`, `state_file`.
+
+#### RCO vs. OMC (Why RCO?)
+
+RCO is a modular, IDE-hybrid alternative to other multi-agent code runners:
+
+| Focus | RCO | Typical alternatives |
+|-------|-----|----------------------|
+| **Extensibility** | YAML-driven agents and recipes; add files to extend. | Often fixed workflows. |
+| **IDE + Claude** | Cursor export (`.cursor/rules` + MCP snippet), optional dashboard; single-model Claude focus. | Varies. |
+| **Eco mode** | Built-in: prefer Haiku for simple steps to reduce token usage. | Not standard. |
+| **Original skills** | e.g. **dependency-mapper** (DOT graph of agent handoffs). | N/A. |
+| **Stability** | Zod validation, timeouts, retries, state file locking for parallel-swarm. | Varies. |
+
+Benchmark-style comparisons are available via `npm run qa:all` (mock workers; timings vs hardcoded OMC-style baseline). Real runs use real workers and depend on environment.
+
+#### RCO features (summary)
+
+- **Claude pivot**: All agent models are Claude variants (e.g. `claude-3-5-sonnet-20241022`, `claude-3-haiku-20240307`). Mock by default; optional Puppeteer-based simulation or plug in a real Claude interface.
+- **Execution modes**: `autonomous-loop` (conditional looping, max 5 iterations), `parallel-swarm` (concurrent forks + file locking), `linear`.
+- **Tools/skills**: Stub tools (`search`, `code`, `terminal`) plus **dependency-mapper** (DOT graph for handoffs).
+- **Eco mode**, **task_routing**, **state** (`.rco-state.json`), **Cursor export** (session → `.cursor/rules` + MCP JSON).
+
 ---
 
 ## Architecture
@@ -171,11 +234,19 @@ npm run build           # Compile TypeScript → dist/
 npm run dev             # Watch mode (auto-rebuild)
 npm run init -- <path>  # Set up Roland in an external project
 npm run export-configs  # Regenerate IDE configs for this repo
-npm test                # Run tests
-npm run lint            # Lint check
-npm run clean           # Remove dist/
-npm start               # Start MCP server directly
+npm run rco -- --recipe PlanExecRevEx --task "..."  # RCO orchestrator (after build)
+npm run rco:dev -- --recipe PlanExecRevEx --task "..."  # RCO without building (tsx)
+npm run qa              # RCO QA: one scenario (todo-app), mock workers
+npm run qa:all           # RCO QA: all scenarios; timings vs OMC benchmark mocks
+npm test                 # Run tests (watch)
+npm run test:run         # Run tests once
+npm run test:rco         # RCO tests only (orchestrator, loadConfig, stateLock, tools)
+npm run lint             # Lint check
+npm run clean            # Remove dist/
+npm start                # Start MCP server directly
 ```
+
+**RCO benchmark report:** Run `npm run qa:all` and use the printed timings (and diff vs OMC-style baseline) as a benchmark report. For real recipe runs, use `npm run rco` and check stderr for `console.time` output when `RCO_VERBOSE` is set.
 
 ---
 
