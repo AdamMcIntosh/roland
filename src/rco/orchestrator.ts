@@ -13,6 +13,9 @@ import { loadRcoConfig, loadAllAgents, loadRecipe } from './loadConfig.js';
 import { acquireLock, writeStateUnlocked } from './stateLock.js';
 import { WorkerOutputSchema } from './types.js';
 import type { RcoState, RcoRecipe, AgentYaml, WorkerInput, WorkerOutput } from './types.js';
+import { ComplexityClassifier } from '../orchestrator/complexity-classifier.js';
+import { broadcast, startDashboard, waitForCollabFeedback } from './dashboard.js';
+import { ecoOptimizerSuggestModel } from '../skills.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -46,8 +49,8 @@ export interface OrchestratorOptions {
   onLog?: (payload: { agent: string; phase: string; message: string }) => void;
   /** Optional: broadcast dependency graph for dashboard (nodes/edges) */
   onGraph?: (payload: { nodes: Array<{ id: string; label: string }>; edges: Array<{ from: string; to: string }>; sessionId: string }) => void;
-  /** Optional: run in parallel-swarm (concurrent forks + file lock) */
-  executionMode?: 'autonomous-loop' | 'parallel-swarm' | 'linear';
+  /** Optional: run mode (adaptive-swarm scales agents by complexity; collab-mode pauses for WS user feedback) */
+  executionMode?: 'autonomous-loop' | 'parallel-swarm' | 'linear' | 'adaptive-swarm' | 'collab-mode';
   /** Optional: worker step timeout in ms (default 60000) */
   workerTimeoutMs?: number;
   /** Optional: max retries per worker step on failure (default 2) */
@@ -141,6 +144,18 @@ async function runWorkerWithRetry(
   throw lastErr ?? new Error('Worker failed after retries');
 }
 
+/** Compute number of steps to run for adaptive-swarm based on task complexity (keyword count + length). */
+function getAdaptiveStepCount(task: string, maxSteps: number): number {
+  const analysis = ComplexityClassifier.analyzeQuery(task);
+  const score = analysis.score;
+  const keywordCount = analysis.factors.filter((f) => f.detected).length;
+  const lengthFactor = Math.min(1, task.length / 500);
+  const combined = (score * 0.5 + keywordCount * 10 + lengthFactor * 20) / 100;
+  const steps = Math.max(1, Math.min(maxSteps, Math.ceil(combined * maxSteps)));
+  logVerbose(`adaptive-swarm: score=${score} keywordFactors=${keywordCount} -> ${steps}/${maxSteps} steps`);
+  return steps;
+}
+
 export async function runOrchestrator(options: OrchestratorOptions): Promise<OrchestratorResult> {
   const profileKey = `rco-${options.recipeName}-${Date.now()}`;
   if (RCO_VERBOSE) console.time(profileKey);
@@ -190,7 +205,12 @@ export async function runOrchestrator(options: OrchestratorOptions): Promise<Orc
     updatedAt: Date.now(),
   };
 
-  const workflowSteps = recipe.workflow.steps;
+  let workflowSteps = recipe.workflow.steps;
+  if (executionMode === 'adaptive-swarm') {
+    const stepCount = getAdaptiveStepCount(task, workflowSteps.length);
+    workflowSteps = workflowSteps.slice(0, stepCount);
+    logVerbose(`adaptive-swarm: using ${workflowSteps.length} steps`);
+  }
   const steps = workflowSteps;
 
   if (onGraph) {
@@ -226,6 +246,28 @@ export async function runOrchestrator(options: OrchestratorOptions): Promise<Orc
     onLog?.({ agent, phase, message });
   }
 
+  function broadcastMetrics(): void {
+    const outputLength = Object.values(state.outputs).reduce<number>(
+      (sum, v) => sum + (typeof v === 'string' ? v.length : 0),
+      0
+    );
+    const tokensEstimated = Math.ceil((task.length + outputLength) / 4);
+    broadcast({
+      type: 'metrics',
+      sessionId,
+      tokensEstimated,
+      stepsCount: steps.length,
+      currentStep: state.currentStep,
+      timestamp: Date.now(),
+    });
+  }
+
+  if (executionMode === 'collab-mode') {
+    const dashboardPort = rcoConfig.dashboard_port ?? 8080;
+    startDashboard(dashboardPort);
+    logVerbose(`collab-mode: dashboard started on port ${dashboardPort}`);
+  }
+
   if (executionMode === 'parallel-swarm') {
     const release = acquireLock(stateFile);
     try {
@@ -234,7 +276,13 @@ export async function runOrchestrator(options: OrchestratorOptions): Promise<Orc
       release();
     }
     const promises = steps.map(async (step, i) => {
-      const agentYaml = pickAgentForStep(recipe, step.agent, agents);
+      let agentYaml = pickAgentForStep(recipe, step.agent, agents);
+      if (eco) {
+        agentYaml = {
+          ...agentYaml,
+          claude_model: ecoOptimizerSuggestModel(task, agentYaml.claude_model),
+        };
+      }
       log(step.agent, 'start', `parallel step ${i + 1}`);
       const input: WorkerInput = {
         type: 'run',
@@ -253,6 +301,7 @@ export async function runOrchestrator(options: OrchestratorOptions): Promise<Orc
     });
     await Promise.all(promises);
     persist();
+    broadcastMetrics();
     const synthesizedOutput = steps.map((s) => `## ${s.agent}\n${(state.outputs[s.agent] as string) ?? ''}`).join('\n\n');
     if (RCO_VERBOSE) console.timeEnd(profileKey);
     return {
@@ -271,8 +320,18 @@ export async function runOrchestrator(options: OrchestratorOptions): Promise<Orc
   while (stepIndex < steps.length) {
     const step = steps[stepIndex];
     state.currentStep = stepIndex;
-    const agentYaml = pickAgentForStep(recipe, step.agent, agents);
-    const stepInput = step.input === '{{user_task}}' ? task : (state.outputs[steps[stepIndex - 1]?.agent] as string | undefined);
+    let agentYaml = pickAgentForStep(recipe, step.agent, agents);
+    let stepInput = step.input === '{{user_task}}' ? task : (state.outputs[steps[stepIndex - 1]?.agent] as string | undefined);
+    const collabFeedback = (state.outputs as Record<string, unknown>)[`__collab_feedback_${stepIndex - 1}`] as string | undefined;
+    if (executionMode === 'collab-mode' && collabFeedback) {
+      stepInput = [stepInput, `[User feedback]: ${collabFeedback}`].filter(Boolean).join('\n\n');
+    }
+    if (eco) {
+      agentYaml = {
+        ...agentYaml,
+        claude_model: ecoOptimizerSuggestModel(stepInput ?? task, agentYaml.claude_model),
+      };
+    }
 
     log(step.agent, 'start', `step ${stepIndex + 1}/${steps.length}`);
     const input: WorkerInput = {
@@ -289,6 +348,27 @@ export async function runOrchestrator(options: OrchestratorOptions): Promise<Orc
     if (result.dotGraph) lastDotGraph = result.dotGraph;
     log(step.agent, 'done', result.success ? 'ok' : (result.error ?? 'fail'));
 
+    if (executionMode === 'collab-mode') {
+      broadcast({
+        type: 'collab_pause',
+        sessionId,
+        stepIndex,
+        step: stepIndex + 1,
+        collabPrompt: `Step ${stepIndex + 1}/${steps.length} (${step.agent}) completed. Add feedback or press Submit to continue.`,
+        message: result.output?.slice(0, 200) ?? '',
+        timestamp: Date.now(),
+      });
+      try {
+        const feedback = await waitForCollabFeedback(sessionId, 300000);
+        (state.outputs as Record<string, unknown>)[`__collab_feedback_${stepIndex}`] = feedback;
+        log('orchestrator', 'collab', `feedback received (${feedback.length} chars)`);
+        broadcast({ type: 'collab_resume', sessionId, stepIndex, timestamp: Date.now() });
+      } catch (err) {
+        log('orchestrator', 'collab', `timeout or error: ${(err as Error).message}`);
+      }
+      persist();
+    }
+
     const loopCondition = step.loop_if && result.output.toLowerCase().includes('issue');
     if (loopCondition && loopCount < maxLoops) {
       loopCount++;
@@ -302,6 +382,7 @@ export async function runOrchestrator(options: OrchestratorOptions): Promise<Orc
     if (step.final_output) break;
     stepIndex++;
     persist();
+    broadcastMetrics();
   }
 
   const synthesizedOutput = steps.map((s) => `## ${s.agent}\n${(state.outputs[s.agent] as string) ?? ''}`).join('\n\n');

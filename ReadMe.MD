@@ -160,6 +160,15 @@ npm run test:run                          # Full test suite
 
 **Optional Puppeteer-based Claude simulation** (headless browser mock): set `RCO_USE_PUPPETEER=1` before running RCO so the agent worker loads a local HTML mock page instead of an inline mock. Requires `puppeteer` installed.
 
+#### RCO Claude plugin (Phase 2)
+
+RCO can run as a **Claude plugin** with slash commands (e.g. `/rco-run:recipe PlanExecRevEx --task "..."`).
+
+- **Build plugin bundle:** `npm run build-plugin` → outputs `dist-plugin/plugin.js`.
+- **Manifest:** `plugin/manifest.json` defines commands (`rco-run:recipe`, `rco-run:mode`, `rco-new-agent`, `rco-status`, `rco-export`) and permissions.
+- **Custom agent creation:** Use `/rco-new-agent` with a prompt (e.g. "Create agent for testing") to generate a YAML template and save it to `agents/custom-<name>.yaml`. The next RCO run will load agents from disk and include the new file (auto-reload).
+- **Install via Claude marketplace simulation:** Package the `plugin/` folder and `dist-plugin/plugin.js` into a zip. In Claude Desktop or claude.ai, use the plugin installation flow and point to the manifest (or sideload the bundle). For local development, run the orchestrator via Node: `node dist-plugin/plugin.js` is not a standalone CLI — use the plugin entry from your Claude environment’s plugin loader, or run recipes with `npm run rco` as before.
+
 **Verbose profiling:** Orchestrator uses `console.time`/`timeEnd` when `RCO_VERBOSE` is not `0` or `false`. Worker timeout and retries are configurable via orchestrator options (default 60s timeout, 2 retries).
 
 #### RCO YAML guide
@@ -182,12 +191,23 @@ RCO is a modular, IDE-hybrid alternative to other multi-agent code runners:
 
 Benchmark-style comparisons are available via `npm run qa:all` (mock workers; timings vs hardcoded OMC-style baseline). Real runs use real workers and depend on environment.
 
+#### Benchmarks
+
+Run sample tasks and compare RCO timing to a simulated baseline:
+
+```bash
+npm run benchmark
+```
+
+The benchmark runs three sample tasks (e.g. "Build todo app", "CLI tool", "Bug fix") with the RCO orchestrator and reports elapsed time and step count. A simulated baseline (fixed ms per step, no real execution) is printed for comparison. Results can be used to validate performance and document wins (e.g. RCO's modularity and eco mode reducing steps for simple tasks). For full QA scenarios and timings, use `npm run qa:all`.
+
 #### RCO features (summary)
 
 - **Claude pivot**: All agent models are Claude variants (e.g. `claude-3-5-sonnet-20241022`, `claude-3-haiku-20240307`). Mock by default; optional Puppeteer-based simulation or plug in a real Claude interface.
-- **Execution modes**: `autonomous-loop` (conditional looping, max 5 iterations), `parallel-swarm` (concurrent forks + file locking), `linear`.
+- **Execution modes**: `autonomous-loop` (conditional looping, max 5 iterations), `parallel-swarm` (concurrent forks + file locking), `linear`, **adaptive-swarm** (scale steps by task complexity), **collab-mode** (pause for real-time user feedback via dashboard WebSocket).
 - **Tools/skills**: Stub tools (`search`, `code`, `terminal`) plus **dependency-mapper** (DOT graph for handoffs).
 - **Eco mode**, **task_routing**, **state** (`.rco-state.json`), **Cursor export** (session → `.cursor/rules` + MCP JSON).
+- **Phase 2:** Claude tool-calling prompts (JSON response parsing), session persistence (notepad prompts + local JSON fallback), dynamic Cursor rules from agent outputs, Tauri dashboard with Chart.js dependency view, Zod validation for prompts/state/outputs, VS Code extension stub for importing RCO sessions.
 
 ---
 
@@ -240,7 +260,11 @@ npm run qa              # RCO QA: one scenario (todo-app), mock workers
 npm run qa:all           # RCO QA: all scenarios; timings vs OMC benchmark mocks
 npm test                 # Run tests (watch)
 npm run test:run         # Run tests once
-npm run test:rco         # RCO tests only (orchestrator, loadConfig, stateLock, tools)
+npm run test:rco         # RCO tests only (orchestrator, loadConfig, stateLock, tools, Phase 2)
+npm run build-plugin    # Bundle RCO plugin for Claude (esbuild → dist-plugin/plugin.js)
+npm run tauri:dev       # RCO dashboard (Tauri + Chart.js); start Node dashboard first: npm run rco -- --dashboard --task "..." in another terminal, or run WS on 8080
+npm run serve-dashboard # Serve dashboard-ui on port 8081 (used by tauri:dev)
+npm run benchmark       # RCO benchmark: sample tasks vs simulated baseline
 npm run lint             # Lint check
 npm run clean            # Remove dist/
 npm start                # Start MCP server directly

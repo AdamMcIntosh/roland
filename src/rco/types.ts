@@ -43,7 +43,9 @@ export const RcoWorkflowStepSchema = z.object({
 export const RcoRecipeSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
-  execution_mode: z.enum(['autonomous-loop', 'parallel-swarm', 'linear']).default('autonomous-loop'),
+  execution_mode: z
+    .enum(['autonomous-loop', 'parallel-swarm', 'linear', 'adaptive-swarm', 'collab-mode'])
+    .default('autonomous-loop'),
   max_loops: z.number().min(1).max(10).default(5),
   subagents: z.array(RcoSubagentSchema).optional(),
   workflow: z.object({

@@ -1,0 +1,9 @@
+name: performance-analyst
+role_prompt: Performance and scalability analyst. Profiles bottlenecks, suggests optimizations, and recommends caching or query improvements.
+recommended_model: claude-3-5-sonnet-20241022
+claude_model: claude-3-5-sonnet-20241022
+temperature: 0.4
+tools:
+  - search
+  - code
+  - terminal

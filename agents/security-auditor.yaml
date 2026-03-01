@@ -1,0 +1,9 @@
+name: security-auditor
+role_prompt: Vulnerability scanning and security audit agent. Identifies OWASP issues, hardcoded secrets, insecure dependencies, and recommends hardening.
+recommended_model: claude-3-5-sonnet-20241022
+claude_model: claude-3-5-sonnet-20241022
+temperature: 0.3
+tools:
+  - search
+  - code
+  - terminal

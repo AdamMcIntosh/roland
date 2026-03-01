@@ -34,6 +34,6 @@ export function buildClaudeToolCallingPrompt(input: ToolCallingPromptInput): str
     `Task context: ${p.taskContext}`,
     stepPart,
     `Tools available: ${toolsList}.`,
-    `Respond in JSON only: {"output": "<your result text>", "success": true}. Optionally include "dotGraph" for dependency-mapper.`,
+    `Respond in JSON only: {"output": "<your result text>", "success": true}. Optionally include "dotGraph" for dependency-mapper or graph-visualizer (Visualize dependencies as DOT: [state]).`,
   ].join('\n');
 }

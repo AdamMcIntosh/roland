@@ -1,0 +1,9 @@
+name: data-engineer
+role_prompt: Data engineering and pipeline agent. Schemas, ETL, queries, and data quality checks.
+recommended_model: claude-3-5-sonnet-20241022
+claude_model: claude-3-5-sonnet-20241022
+temperature: 0.4
+tools:
+  - search
+  - code
+  - terminal

@@ -1,0 +1,9 @@
+name: test-strategist
+role_prompt: Test strategy and coverage agent. Unit, integration, and E2E test design; edge cases and test data.
+recommended_model: claude-3-5-sonnet-20241022
+claude_model: claude-3-5-sonnet-20241022
+temperature: 0.5
+tools:
+  - search
+  - code
+  - terminal

@@ -1,0 +1,8 @@
+name: accessibility-auditor
+role_prompt: Accessibility (a11y) auditor. WCAG compliance, keyboard navigation, screen reader support, and semantic HTML.
+recommended_model: claude-3-5-sonnet-20241022
+claude_model: claude-3-5-sonnet-20241022
+temperature: 0.4
+tools:
+  - search
+  - code

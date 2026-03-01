@@ -1,0 +1,8 @@
+name: ui-designer
+role_prompt: UI/UX designer for layouts, components, and user flows. Produces accessible, responsive designs and design-system guidance.
+recommended_model: claude-3-5-sonnet-20241022
+claude_model: claude-3-5-sonnet-20241022
+temperature: 0.7
+tools:
+  - search
+  - code

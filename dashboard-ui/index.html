@@ -5,39 +5,82 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>RCO Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hotkeys-js@3.13.0/dist/hotkeys.min.js"></script>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: #1a1a2e; color: #eee; }
+    :root {
+      --bg: #1a1a2e;
+      --fg: #eee;
+      --muted: #aaa;
+      --accent: #8f8;
+      --chart-bg: rgba(99, 102, 241, 0.6);
+    }
+    [data-theme="light"] {
+      --bg: #f5f5f5;
+      --fg: #222;
+      --muted: #555;
+      --accent: #282;
+      --chart-bg: rgba(99, 102, 241, 0.5);
+    }
+    @media (prefers-color-scheme: light) {
+      body:not([data-theme="dark"]) { --bg: #f5f5f5; --fg: #222; --muted: #555; --accent: #282; }
+    }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: var(--bg); color: var(--fg); transition: background 0.2s, color 0.2s; }
     h1 { font-size: 1.25rem; }
-    #status { color: #8f8; font-size: 0.9rem; margin-bottom: 1rem; }
-    #log { max-height: 120px; overflow-y: auto; font-size: 0.8rem; color: #aaa; }
+    #status { color: var(--accent); font-size: 0.9rem; margin-bottom: 0.5rem; }
+    #metrics { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.5rem; }
+    #log { max-height: 120px; overflow-y: auto; font-size: 0.8rem; color: var(--muted); outline: none; }
+    #log:focus { outline: 2px solid var(--accent); }
     .chart-container { position: relative; height: 280px; margin-top: 1rem; }
     canvas { max-height: 280px; }
+    .toolbar { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; }
+    .toolbar button { padding: 0.35rem 0.75rem; cursor: pointer; border: 1px solid var(--muted); background: var(--bg); color: var(--fg); border-radius: 4px; }
+    .toolbar button:hover { background: var(--muted); color: var(--bg); }
+    #collab-prompt { margin-top: 0.5rem; padding: 0.5rem; background: rgba(99, 102, 241, 0.2); border-radius: 4px; display: none; }
+    #collab-prompt.visible { display: block; }
+    #collab-feedback { width: 100%; min-height: 60px; margin-top: 0.25rem; padding: 0.25rem; }
   </style>
 </head>
 <body>
   <h1>RCO Dashboard</h1>
+  <div class="toolbar">
+    <button type="button" id="btn-dark" aria-label="Toggle dark mode">Dark mode</button>
+    <button type="button" id="btn-csv" aria-label="Export logs to CSV">Export CSV</button>
+  </div>
   <div id="status">Connecting to WebSocket…</div>
+  <div id="metrics"></div>
+  <div id="collab-prompt">
+    <div id="collab-message"></div>
+    <textarea id="collab-feedback" placeholder="Add feedback and press Submit to continue"></textarea>
+    <button type="button" id="btn-collab-submit">Submit</button>
+  </div>
   <div class="chart-container">
     <canvas id="dependencyChart"></canvas>
   </div>
-  <div id="log"></div>
+  <div id="log" tabindex="0"></div>
   <script>
     const WS_URL = 'ws://127.0.0.1:8080';
     const logEl = document.getElementById('log');
     const statusEl = document.getElementById('status');
+    const metricsEl = document.getElementById('metrics');
+    const collabPromptEl = document.getElementById('collab-prompt');
+    const collabMessageEl = document.getElementById('collab-message');
+    const collabFeedbackEl = document.getElementById('collab-feedback');
+    const btnCollabSubmit = document.getElementById('btn-collab-submit');
 
     let chart = null;
-    const nodeCounts = {};
-    const edgeCounts = {};
+    const stateLog = [];
+    let currentSessionId = null;
 
     function ensureChart() {
       if (chart) return;
       const ctx = document.getElementById('dependencyChart').getContext('2d');
+      const isDark = document.body.getAttribute('data-theme') !== 'light';
       chart = new Chart(ctx, {
         type: 'bar',
         data: {
           labels: [],
-          datasets: [{ label: 'Agent steps', data: [], backgroundColor: 'rgba(99, 102, 241, 0.6)' }]
+          datasets: [{ label: 'Agent steps', data: [], backgroundColor: isDark ? 'rgba(99, 102, 241, 0.6)' : 'rgba(99, 102, 241, 0.5)' }]
         },
         options: {
           responsive: true,
@@ -61,27 +104,97 @@
       chart.update();
     }
 
-    function appendLog(msg) {
+    function appendLog(msg, payload) {
       const line = document.createElement('div');
       line.textContent = new Date().toLocaleTimeString() + ' ' + msg;
       logEl.appendChild(line);
       logEl.scrollTop = logEl.scrollHeight;
+      if (payload) stateLog.push({ ts: payload.timestamp || Date.now(), type: payload.type || 'log', agent: payload.agent || '', message: msg });
+    }
+
+    function updateMetrics(payload) {
+      const parts = [];
+      if (payload.tokensEstimated != null) parts.push('Tokens (est.): ' + payload.tokensEstimated);
+      if (payload.stepsCount != null) parts.push('Steps: ' + (payload.currentStep != null ? payload.currentStep + 1 : 0) + ' / ' + payload.stepsCount);
+      if (payload.sessionId) currentSessionId = payload.sessionId;
+      metricsEl.textContent = parts.length ? parts.join(' | ') : '';
+    }
+
+    function showCollabPrompt(payload) {
+      currentSessionId = payload.sessionId;
+      collabMessageEl.textContent = payload.collabPrompt || 'Paused for feedback.';
+      collabFeedbackEl.value = '';
+      collabPromptEl.classList.add('visible');
+    }
+
+    function hideCollabPrompt() {
+      collabPromptEl.classList.remove('visible');
+    }
+
+    function sendCollabFeedback() {
+      if (!currentSessionId || !ws || ws.readyState !== 1) return;
+      const feedback = collabFeedbackEl.value.trim();
+      ws.send(JSON.stringify({ type: 'collab_feedback', sessionId: currentSessionId, feedback }));
+      hideCollabPrompt();
+    }
+
+    function exportCSV() {
+      const rows = stateLog.length ? stateLog : [{ ts: Date.now(), type: 'none', agent: '', message: 'No log entries' }];
+      const csv = Papa.unparse(rows);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'rco-dashboard-logs-' + new Date().toISOString().slice(0, 10) + '.csv';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function setTheme(theme) {
+      document.body.setAttribute('data-theme', theme);
+      document.getElementById('btn-dark').textContent = theme === 'dark' ? 'Light mode' : 'Dark mode';
+      if (chart) {
+        chart.data.datasets[0].backgroundColor = theme === 'dark' ? 'rgba(99, 102, 241, 0.6)' : 'rgba(99, 102, 241, 0.5)';
+        chart.update();
+      }
+    }
+
+    function toggleTheme() {
+      const t = document.body.getAttribute('data-theme');
+      const next = t === 'dark' ? 'light' : 'dark';
+      setTheme(next);
     }
 
     let ws = null;
     function connect() {
       ws = new WebSocket(WS_URL);
-      ws.onopen = () => { statusEl.textContent = 'Connected to RCO WebSocket (port 8080)'; statusEl.style.color = '#8f8'; };
+      ws.onopen = () => { statusEl.textContent = 'Connected to RCO WebSocket (port 8080)'; statusEl.style.color = 'var(--accent)'; };
       ws.onclose = () => { statusEl.textContent = 'Disconnected. Reconnecting…'; statusEl.style.color = '#f88'; setTimeout(connect, 2000); };
       ws.onerror = () => {};
       ws.onmessage = (ev) => {
         try {
           const payload = JSON.parse(ev.data);
-          if (payload.type === 'log') appendLog(`[${payload.agent}] ${payload.message}`);
+          if (payload.type === 'log') appendLog('[' + (payload.agent || '') + '] ' + (payload.message || ''), payload);
           if (payload.type === 'graph' && payload.nodes && payload.edges) updateChartFromGraph(payload.nodes, payload.edges);
+          if (payload.type === 'metrics') updateMetrics(payload);
+          if (payload.type === 'collab_pause') showCollabPrompt(payload);
+          if (payload.type === 'collab_resume') hideCollabPrompt();
         } catch (e) {}
       };
     }
+
+    hotkeys('ctrl+r', function(e) { e.preventDefault(); connect(); });
+    hotkeys('up', function(e) { if (document.activeElement === logEl) { e.preventDefault(); logEl.scrollTop -= 20; } });
+    hotkeys('down', function(e) { if (document.activeElement === logEl) { e.preventDefault(); logEl.scrollTop += 20; } });
+
+    document.getElementById('btn-dark').addEventListener('click', toggleTheme);
+    document.getElementById('btn-csv').addEventListener('click', exportCSV);
+    btnCollabSubmit.addEventListener('click', sendCollabFeedback);
+
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+      document.body.setAttribute('data-theme', 'light');
+      document.getElementById('btn-dark').textContent = 'Dark mode';
+    }
+
     connect();
   </script>
 </body>

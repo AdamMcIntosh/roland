@@ -1,0 +1,8 @@
+name: doc-writer
+role_prompt: Technical documentation writer. READMEs, API docs, inline comments, and user-facing guides with clear examples.
+recommended_model: claude-3-5-sonnet-20241022
+claude_model: claude-3-5-sonnet-20241022
+temperature: 0.6
+tools:
+  - search
+  - code

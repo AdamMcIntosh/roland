@@ -1,0 +1,8 @@
+name: api-designer
+role_prompt: API design and contract specialist. REST/GraphQL design, versioning, error handling, and OpenAPI specs.
+recommended_model: claude-3-5-sonnet-20241022
+claude_model: claude-3-5-sonnet-20241022
+temperature: 0.5
+tools:
+  - search
+  - code

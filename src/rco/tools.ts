@@ -1,8 +1,9 @@
 /**
- * RCO tool stubs and dependency-mapper skill
+ * RCO tool stubs and dependency-mapper / graph-visualizer skills
  */
 
 import type { RcoState } from './types.js';
+import { graphVisualizerDOT } from '../skills.js';
 
 /** Stub: logs search query and returns mock result */
 export function stubSearch(query: string): string {
@@ -54,11 +55,25 @@ export function dependencyMapper(state: RcoState, recipeSteps: Array<{ agent: st
   return lines.join('\n');
 }
 
+const defaultState = (): RcoState => ({
+  sessionId: '',
+  recipe: '',
+  task: '',
+  currentStep: 0,
+  loopCount: 0,
+  outputs: {},
+  agentLogs: [],
+  startedAt: 0,
+  updatedAt: 0,
+});
+
 const TOOL_MAP: Record<string, (arg: string, state?: RcoState, steps?: Array<{ agent: string; output_to?: string }>) => string> = {
   search: (q) => stubSearch(q),
   code: (a, _s, _st) => stubCode(a),
   terminal: (c) => stubTerminal(c),
-  'dependency-mapper': (_arg, state, steps) => dependencyMapper(state ?? { sessionId: '', recipe: '', task: '', currentStep: 0, loopCount: 0, outputs: {}, agentLogs: [], startedAt: 0, updatedAt: 0 }, steps ?? []),
+  'dependency-mapper': (_arg, state, steps) => dependencyMapper(state ?? defaultState(), steps ?? []),
+  'graph-visualizer': (_arg, state, steps) =>
+    graphVisualizerDOT(state ?? defaultState(), steps ?? []),
 };
 
 export function runTool(

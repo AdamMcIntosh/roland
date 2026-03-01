@@ -28,7 +28,8 @@
     "rco": "node dist/rco/cli.js",
     "rco:dev": "npx tsx src/rco/cli.ts",
     "tauri:dev": "tauri dev",
-    "serve-dashboard": "node scripts/serve-dashboard.js"
+    "serve-dashboard": "node scripts/serve-dashboard.js",
+    "benchmark": "npx tsx src/benchmark.ts"
   },
   "keywords": [
     "agent-orchestration",
@@ -46,7 +47,9 @@
     "js-yaml": "^4.1.0",
     "ws": "^8.18.0",
     "yaml": "^2.6.1",
-    "zod": "^3.24.1"
+    "zod": "^3.24.1",
+    "hotkeys-js": "^3.13.0",
+    "papaparse": "^5.4.1"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0",
