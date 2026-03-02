@@ -238,12 +238,18 @@ The benchmark runs three sample tasks (e.g. "Build todo app", "CLI tool", "Bug f
 
 ## Documentation
 
-- [INSTALLATION.md](INSTALLATION.md) — Setup & IDE configuration
-- [RECIPES_CATALOG.md](RECIPES_CATALOG.md) — Complete recipe reference
-- [CHANGELOG.md](CHANGELOG.md) — Version history
-- [TESTING.md](TESTING.md) — Test strategy & running tests
-- [docs/guides/budget-guide.md](docs/guides/budget-guide.md) — Cost management
-- [docs/guides/cache-guide.md](docs/guides/cache-guide.md) — Caching strategies
+| Doc | Contents |
+|-----|----------|
+| [INSTALLATION.md](INSTALLATION.md) | Setup, IDE configuration, project portability |
+| [TESTING.md](TESTING.md) | Automated tests (Vitest), manual IDE tests, QA scenarios, benchmarks |
+| [RECIPES_CATALOG.md](RECIPES_CATALOG.md) | Complete recipe reference with agent chains |
+| [CHANGELOG.md](CHANGELOG.md) | Version history (Keep a Changelog format) |
+| [ROADMAP.md](ROADMAP.md) | v0.1 checklist, v0.2 sprints, v1.0 vision |
+| [docs/guides/budget-guide.md](docs/guides/budget-guide.md) | Cost management & spending limits |
+| [docs/guides/cache-guide.md](docs/guides/cache-guide.md) | Caching strategies |
+| [docs/blog-post.md](docs/blog-post.md) | "RCO: The Modular Alternative for Claude Code" |
+| [docs/beta-testers.md](docs/beta-testers.md) | Beta program — how to join & give feedback |
+| [docs/development-history.md](docs/development-history.md) | Internal: MVP through Phase 4 evolution |
 
 ---
 
