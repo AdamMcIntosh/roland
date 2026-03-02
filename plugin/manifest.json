@@ -9,6 +9,16 @@
       "permissions": ["read_workspace", "write_workspace"]
     },
     {
+      "name": "rco-run:mode",
+      "description": "Run an RCO execution mode with a task (e.g. adaptive-swarm --task \"Refactor module\")",
+      "permissions": ["read_workspace", "write_workspace"]
+    },
+    {
+      "name": "rco-new-agent",
+      "description": "Generate a custom agent YAML from a prompt description",
+      "permissions": ["read_workspace", "write_workspace"]
+    },
+    {
       "name": "rco-status",
       "description": "Show current RCO session status",
       "permissions": ["read_workspace"]
@@ -17,6 +27,11 @@
       "name": "rco-export",
       "description": "Export last session to Cursor rules and MCP snippet",
       "permissions": ["read_workspace", "write_workspace"]
+    },
+    {
+      "name": "rco-consent",
+      "description": "Set telemetry consent (yes/no)",
+      "permissions": ["read_workspace"]
     },
     {
       "name": "rco-run:mode",

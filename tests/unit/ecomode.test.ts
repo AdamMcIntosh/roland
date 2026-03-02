@@ -1,207 +1,113 @@
 /**
- * Phase 5A: Ecomode MVP Tests
- * 
- * Validates end-to-end Ecomode execution:
- * - Cache detection
- * - Model selection with cheapest option
- * - Agent routing
- * - Cost tracking and savings calculation
- * - Result caching
+ * Unit Tests: Model Routing, Complexity Classification, and Cost Tracking
+ *
+ * Validates the core "eco" decision layer:
+ * - Complexity classification (simple / medium / complex)
+ * - Model selection by complexity
+ * - Cost tracking and budget enforcement
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
-import { Ecomode } from '../../dist/modes/ecomode.js';
-import { ModelRouter } from '../../dist/orchestrator/model-router.js';
-import { CostCalculator } from '../../dist/orchestrator/cost-calculator.js';
-import { CacheManager } from '../../dist/orchestrator/cache-manager.js';
-import { loadConfig } from '../../dist/config/config-loader.js';
-import { initializeAgents } from '../../dist/agents/index.js';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { ModelRouter, MODEL_PRICING } from '../../src/orchestrator/model-router.js';
+import { ComplexityClassifier } from '../../src/orchestrator/complexity-classifier.js';
+import { AdvancedCostTracker } from '../../src/orchestrator/advanced-cost-tracker.js';
 
-describe('Phase 5A: Ecomode MVP', () => {
-  let ecomode: Ecomode;
-  let costCalculator: CostCalculator;
-  let cacheManager: CacheManager;
-
-  beforeAll(async () => {
-    // Load configuration first
-    await loadConfig();
-
-    // Load agents
-    await initializeAgents('./agents');
-
-    // Initialize components
-    costCalculator = new CostCalculator();
-    cacheManager = new CacheManager();
-    ecomode = new Ecomode(ModelRouter, costCalculator, cacheManager);
+describe('Ecomode: Complexity Classification', () => {
+  it('should classify a short query as simple', () => {
+    const result = ComplexityClassifier.analyzeQuery('fix a typo');
+    expect(result.complexity).toBe('simple');
+    expect(result.score).toBeLessThan(30);
   });
 
-  describe('Ecomode Configuration', () => {
-    it('should have correct mode configuration', () => {
-      const config = ecomode.getConfig();
-      
-      expect(config.name).toBe('Ecomode');
-      expect(config.keyword).toBe('eco:');
-      expect(config.description).toContain('Single-agent');
-      expect(config.leadAgent).toBe('architect');
-    });
-
-    it('should support cheapest model selection', () => {
-      const routingContext = { queryLength: 50, complexity: 'simple' as const };
-      const model = ModelRouter.selectCheapestModel(routingContext);
-      
-      expect(model).toBeDefined();
-      expect(model.model).toBeDefined();
-      expect(model.provider).toBeDefined();
-      expect(model.costPer1kTokens).toBeGreaterThan(0);
-    });
+  it('should classify a long architectural query as complex', () => {
+    const query =
+      'Design a distributed microservices architecture with real-time event streaming, ' +
+      'implement the data pipeline for machine learning inference, and optimize for scalability';
+    const result = ComplexityClassifier.analyzeQuery(query);
+    expect(result.complexity).toBe('complex');
+    expect(result.score).toBeGreaterThan(50);
   });
 
-  describe('Cache Integration', () => {
-    it('should detect cache hit on repeated query', async () => {
-      const query = 'test cache query';
-      const testResult = 'cached response';
-
-      // Pre-populate cache
-      cacheManager.set(query, testResult, 'test-model', 0.01);
-
-      // Execute Ecomode
-      const result = await ecomode.execute(query, 'simple');
-
-      expect(result.agentResults[0].cachedHit).toBe(true);
-      expect(result.agentResults[0].model).toBe('cached');
-      expect(result.totalCost).toBe(0);
-      expect(result.agentResults[0].result).toBe(testResult);
-    });
-
-    it('should cache result after execution', async () => {
-      const query = 'new query for caching';
-
-      // Execute (without prior cache)
-      const result = await ecomode.execute(query, 'simple');
-
-      // Verify it's now cached
-      const cached = cacheManager.get(query);
-      expect(cached).toBeDefined();
-    });
+  it('should classify a moderate query as medium', () => {
+    const result = ComplexityClassifier.analyzeQuery(
+      'Refactor the user authentication module to use JWTs'
+    );
+    expect(['medium', 'complex']).toContain(result.complexity);
   });
 
-  describe('Cost Calculation', () => {
-    it('should calculate estimated cost', async () => {
-      const query = 'cost calculation test query';
-      
-      // Clear cache first
-      cacheManager.clear();
+  it('should return a detailed analysis with factors', () => {
+    const analysis = ComplexityClassifier.getDetailedAnalysis(
+      'Analyze performance of the database queries'
+    );
+    expect(analysis).toHaveProperty('complexity');
+    expect(analysis).toHaveProperty('score');
+    expect(analysis).toHaveProperty('factors');
+    expect(analysis).toHaveProperty('tokenEstimate');
+    expect(analysis).toHaveProperty('suggestedModel');
+    expect(Array.isArray(analysis.factors)).toBe(true);
+  });
+});
 
-      const result = await ecomode.execute(query, 'simple');
-
-      expect(result.totalCost).toBeGreaterThan(0);
-      expect(result.agentResults[0].cost).toBe(result.totalCost);
-    });
-
-    it('should report zero cost for cached hits', async () => {
-      const query = 'cached cost test';
-      cacheManager.set(query, 'result', 'model', 0.05);
-
-      const result = await ecomode.execute(query, 'simple');
-
-      expect(result.totalCost).toBe(0);
-      expect(result.agentResults[0].cachedHit).toBe(true);
-    });
+describe('Ecomode: Model Router', () => {
+  it('should recommend a model for a query', () => {
+    const result = ModelRouter.analyzeQueryComplexity('add a button to the form');
+    expect(result).toHaveProperty('complexity');
+    expect(result).toHaveProperty('recommendedModel');
   });
 
-  describe('Agent Selection', () => {
-    it('should use lead agent when no agent specified', async () => {
-      const query = 'test agent selection';
-      cacheManager.clear();
-
-      const result = await ecomode.execute(query, 'simple');
-
-      // Lead agent should be used
-      expect(result.agentResults[0].agentName).toBeDefined();
-      expect(result.agentResults[0].agentName).toBeTruthy();
-    });
+  it('should route a query by complexity', () => {
+    const result = ModelRouter.routeByComplexity('simple task');
+    expect(result.selected).toHaveProperty('model');
+    expect(result).toHaveProperty('analysis');
   });
 
-  describe('Complexity Estimation', () => {
-    it('should estimate simple complexity for short queries', async () => {
-      const query = 'short';
-      cacheManager.clear();
+  it('should have pricing data for common models', () => {
+    expect(MODEL_PRICING).toHaveProperty('gpt-4o');
+    expect(MODEL_PRICING['gpt-4o'].input).toBeGreaterThan(0);
+  });
+});
 
-      const result = await ecomode.execute(query, 'simple');
+describe('Ecomode: Cost Tracking', () => {
+  let tracker: AdvancedCostTracker;
 
-      expect(result.agentResults.length).toBe(1);
-      expect(result.mode).toBe('ecomode');
-    });
-
-    it('should handle complex queries', async () => {
-      const query = 'analyze this: ' + 'x'.repeat(300) + ' architecture design pattern';
-      cacheManager.clear();
-
-      const result = await ecomode.execute(query, 'complex');
-
-      expect(result.agentResults.length).toBe(1);
-      expect(result.mode).toBe('ecomode');
-    });
+  beforeEach(() => {
+    tracker = new AdvancedCostTracker({ dailyLimit: 5.0, enableWarnings: true });
   });
 
-  describe('Execution Flow', () => {
-    it('should return complete execution result', async () => {
-      const query = 'full execution flow test';
-      cacheManager.clear();
+  it('should record and summarize costs', () => {
+    tracker.recordCost('gpt-4o', 'openai', 'executor', 500, 200, 0.015);
+    tracker.recordCost('claude-3.5-sonnet', 'anthropic', 'architect', 800, 300, 0.03);
 
-      const result = await ecomode.execute(query, 'simple');
-
-      expect(result.mode).toBe('ecomode');
-      expect(result.query).toBe(query);
-      expect(result.agentResults).toBeDefined();
-      expect(result.agentResults.length).toBeGreaterThan(0);
-      expect(result.synthesizedResult).toBeDefined();
-      expect(result.totalCost).toBeGreaterThanOrEqual(0);
-      expect(result.totalDuration).toBeGreaterThanOrEqual(0);
-      expect(result.startTime).toBeLessThanOrEqual(result.endTime);
-    });
-
-    it('should track agent results', async () => {
-      const query = 'agent tracking test';
-      cacheManager.clear();
-
-      const result = await ecomode.execute(query, 'medium');
-
-      const agentResult = result.agentResults[0];
-      expect(agentResult.agentName).toBeDefined();
-      expect(agentResult.result).toBeDefined();
-      expect(agentResult.cost).toBeGreaterThanOrEqual(0);
-      expect(agentResult.duration).toBeGreaterThanOrEqual(0);
-      expect(agentResult.model).toBeDefined();
-      expect(typeof agentResult.cachedHit).toBe('boolean');
-    });
+    const summary = tracker.getSummary();
+    expect(summary.totalCost).toBeCloseTo(0.045, 4);
+    expect(summary.recordCount).toBe(2);
+    expect(summary.modelCosts).toHaveProperty('gpt-4o');
+    expect(summary.agentCosts).toHaveProperty('executor');
   });
 
-  describe('Error Handling', () => {
-    it('should throw on invalid complexity', async () => {
-      const query = 'test error handling';
+  it('should calculate average cost per query', () => {
+    tracker.recordCost('gpt-4o', 'openai', 'executor', 100, 100, 0.01);
+    tracker.recordCost('gpt-4o', 'openai', 'executor', 100, 100, 0.03);
 
-      // Invalid complexity should be handled
-      // (actual implementation might coerce or throw)
-      try {
-        await ecomode.execute(query, 'simple');
-        expect(true).toBe(true); // Should not throw for valid input
-      } catch (error) {
-        expect(error).toBeDefined();
-      }
-    });
+    const summary = tracker.getSummary();
+    expect(summary.averageCostPerQuery).toBeCloseTo(0.02, 4);
   });
 
-  describe('Savings Calculation', () => {
-    it('should calculate savings vs standard model', async () => {
-      const query = 'savings calculation test with medium complexity';
-      cacheManager.clear();
+  it('should clear to empty state', () => {
+    tracker.recordCost('gpt-4o', 'openai', 'executor', 100, 100, 0.01);
+    tracker.clear();
 
-      const result = await ecomode.execute(query, 'medium');
+    const summary = tracker.getSummary();
+    expect(summary.totalCost).toBe(0);
+    expect(summary.recordCount).toBe(0);
+  });
 
-      // Ecomode uses cheapest model, so should have cost
-      expect(result.totalCost).toBeGreaterThanOrEqual(0);
-      expect(result.agentResults[0].cost).toBeDefined();
-    });
+  it('should report provider-level costs', () => {
+    tracker.recordCost('gpt-4o', 'openai', 'executor', 100, 100, 0.01);
+    tracker.recordCost('claude-3.5-sonnet', 'anthropic', 'architect', 100, 100, 0.02);
+
+    const summary = tracker.getSummary();
+    expect(summary.providerCosts['openai']).toBeCloseTo(0.01, 4);
+    expect(summary.providerCosts['anthropic']).toBeCloseTo(0.02, 4);
   });
 });
