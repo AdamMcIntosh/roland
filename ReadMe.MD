@@ -148,7 +148,7 @@ npm run rco -- --recipe PlanExecRevEx --task "Build a todo app"
 
 ```bash
 npm run qa -- --scenario todo-app        # Single scenario (mock workers)
-npm run qa:all                            # All 10 scenarios; timings vs OMC benchmark mocks
+npm run qa:all                            # All 10 scenarios; timings vs baseline benchmarks
 ```
 
 **Tests:**
@@ -177,7 +177,7 @@ RCO can run as a **Claude plugin** with slash commands (e.g. `/rco-run:recipe Pl
 - **Recipes** (`recipes/rco/*.yaml` or `recipes/<Name>.yaml`): Define `name`, `execution_mode` (`autonomous-loop` | `parallel-swarm` | `linear`), `max_loops`, and `workflow.steps`. Each step has `agent`, optional `input` (e.g. `{{user_task}}`), `output_to`, `loop_if` (substring in output to trigger loop), and `final_output: true`. Optional `subagents` override `agentRef` and `claude_model` per step.
 - **Config** (`config.yaml` → `rco`): `claude_models` (complex/medium/simple/explain), `eco_mode`, `task_routing` (pattern → agents), `dashboard_port`, `state_file`.
 
-#### RCO vs. OMC (Why RCO?)
+#### RCO vs. Alternatives (Why RCO?)
 
 RCO is a modular, IDE-hybrid alternative to other multi-agent code runners:
 
@@ -189,7 +189,7 @@ RCO is a modular, IDE-hybrid alternative to other multi-agent code runners:
 | **Original skills** | e.g. **dependency-mapper** (DOT graph of agent handoffs). | N/A. |
 | **Stability** | Zod validation, timeouts, retries, state file locking for parallel-swarm. | Varies. |
 
-Benchmark-style comparisons are available via `npm run qa:all` (mock workers; timings vs hardcoded OMC-style baseline). Real runs use real workers and depend on environment.
+Benchmark-style comparisons are available via `npm run qa:all` (mock workers; timings vs hardcoded baseline). Real runs use real workers and depend on environment.
 
 #### Benchmarks
 
@@ -257,7 +257,7 @@ npm run export-configs  # Regenerate IDE configs for this repo
 npm run rco -- --recipe PlanExecRevEx --task "..."  # RCO orchestrator (after build)
 npm run rco:dev -- --recipe PlanExecRevEx --task "..."  # RCO without building (tsx)
 npm run qa              # RCO QA: one scenario (todo-app), mock workers
-npm run qa:all           # RCO QA: all scenarios; timings vs OMC benchmark mocks
+npm run qa:all           # RCO QA: all scenarios; timings vs baseline benchmarks
 npm test                 # Run tests (watch)
 npm run test:run         # Run tests once
 npm run test:rco         # RCO tests only (orchestrator, loadConfig, stateLock, tools, Phase 2)
@@ -270,7 +270,7 @@ npm run clean            # Remove dist/
 npm start                # Start MCP server directly
 ```
 
-**RCO benchmark report:** Run `npm run qa:all` and use the printed timings (and diff vs OMC-style baseline) as a benchmark report. For real recipe runs, use `npm run rco` and check stderr for `console.time` output when `RCO_VERBOSE` is set.
+**RCO benchmark report:** Run `npm run qa:all` and use the printed timings (and diff vs baseline) as a benchmark report. For real recipe runs, use `npm run rco` and check stderr for `console.time` output when `RCO_VERBOSE` is set.
 
 ---
 

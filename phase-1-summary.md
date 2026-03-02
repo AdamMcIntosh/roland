@@ -12,10 +12,10 @@
   - **stateLock:** `acquireLock` / release, `writeStateUnlocked` / `readStateUnlocked`; `readStateUnlocked` returns null for missing file.
   - **tools:** `dependencyMapper` DOT output, `runTool` for known and unknown tools.
   - **orchestrator:** Runs with `runWorker` injected (mock), respects `workerTimeoutMs` and `workerRetries`, persists state and advances steps; integration run with real fork.
-- **Manual QA:** Scripts added: `npm run qa` (single scenario, default todo-app), `npm run qa:all` (10 scenarios). Timings compared to hardcoded OMC-style benchmark mocks; report printed to stdout.
+- **Manual QA:** Scripts added: `npm run qa` (single scenario, default todo-app), `npm run qa:all` (10 scenarios). Timings compared to hardcoded baseline benchmark mocks; report printed to stdout.
 - **Claude mock pivot:** In `agentWorker.ts`, optional **Puppeteer-based Claude simulation**: when `RCO_USE_PUPPETEER=1`, worker loads a local HTML fixture (`src/rco/fixtures/claude-mock-page.html`) via headless browser and reads the mock response. Inline mock remains default. YAMLs already use real model names (e.g. `claude-3-5-sonnet-20241022`).
 - **Performance:** Orchestrator: **profiling** via `console.time`/`timeEnd` (when `RCO_VERBOSE` not disabled), **configurable worker timeout** (default 60s) and **retries** (default 2). Verbose logging for worker path and options.
-- **Docs:** README updated with RCO usage (CLI, QA, tests, Puppeteer env, profiling), **RCO YAML guide** (agents, recipes, config), **“RCO vs. OMC”** section (modularity, eco mode, dependency-mapper, stability), and benchmark report instructions (`npm run qa:all` + `console.time` on real runs).
+- **Docs:** README updated with RCO usage (CLI, QA, tests, Puppeteer env, profiling), **RCO YAML guide** (agents, recipes, config), **“RCO vs. Alternatives”** section (modularity, eco mode, dependency-mapper, stability), and benchmark report instructions (`npm run qa:all` + `console.time` on real runs).
 
 ---
 
@@ -34,10 +34,10 @@
 | **Fixtures** | `src/rco/fixtures/claude-mock-page.html` — mock page for Puppeteer |
 | **Assets** | `scripts/copy-assets.js` — copy RCO fixtures to `dist/rco/fixtures` |
 | **Tests** | `tests/rco/orchestrator.test.ts` — loadConfig (incl. errors), stateLock, tools, orchestrator unit (mock worker) + integration (real fork) |
-| **QA** | `scripts/qa-scenarios.ts` — 10 scenarios, mock worker, OMC benchmark mocks, `--scenario`, `--all` |
+| **QA** | `scripts/qa-scenarios.ts` — 10 scenarios, mock worker, baseline benchmark mocks, `--scenario`, `--all` |
 | **Config** | `package.json` — scripts: `test:run`, `test:rco`, `qa`, `qa:all`; devDeps: `sinon`, `@types/sinon`, `puppeteer` |
 | **Vitest** | `vitest.config.ts` — globals, node env, include, timeouts |
-| **Docs** | `ReadMe.MD` — RCO usage, YAML guide, RCO vs OMC, benchmark report, dev scripts |
+| **Docs** | `ReadMe.MD` — RCO usage, YAML guide, RCO vs Alternatives, benchmark report, dev scripts |
 
 ---
 

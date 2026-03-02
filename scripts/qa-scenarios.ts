@@ -12,8 +12,8 @@ import { runOrchestrator, type RunWorkerFn } from '../src/rco/orchestrator.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '..');
 
-/** Hardcoded mock benchmarks (ms) for "OMC ultrapilot" equivalent tasks — for comparison only */
-const OMC_BENCHMARK_MS: Record<string, number> = {
+/** Hardcoded mock benchmarks (ms) for typical multi-agent runner baselines — for comparison only */
+const BASELINE_BENCHMARK_MS: Record<string, number> = {
   'todo-app': 12000,
   'bug-fix': 25000,
   'api-design': 15000,
@@ -99,15 +99,15 @@ function main(): void {
     const results: { name: string; ms: number; success: boolean; omcMs?: number }[] = [];
     for (const scenario of toRun) {
       const { ms, success } = await runScenario(scenario);
-      const omcMs = OMC_BENCHMARK_MS[scenario.name];
-      results.push({ name: scenario.name, ms, success, omcMs });
-      const diff = omcMs != null ? (ms - omcMs).toFixed(0) : 'N/A';
-      console.log(`${scenario.name}: ${ms}ms (success=${success})${omcMs != null ? ` | OMC benchmark: ${omcMs}ms (diff: ${diff}ms)` : ''}`);
+      const baselineMs = BASELINE_BENCHMARK_MS[scenario.name];
+      results.push({ name: scenario.name, ms, success, baselineMs });
+      const diff = baselineMs != null ? (ms - baselineMs).toFixed(0) : 'N/A';
+      console.log(`${scenario.name}: ${ms}ms (success=${success})${baselineMs != null ? ` | baseline: ${baselineMs}ms (diff: ${diff}ms)` : ''}`);
     }
     console.log('---');
     const totalMs = results.reduce((a, r) => a + r.ms, 0);
     console.log(`Total: ${totalMs}ms over ${results.length} scenario(s)`);
-    console.log('[RCO QA] Done. Compare timings to OMC benchmarks above (mock mode; real runs use real workers).');
+    console.log('[RCO QA] Done. Compare timings to baseline benchmarks above (mock mode; real runs use real workers).');
   })();
 }
 

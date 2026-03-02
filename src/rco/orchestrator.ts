@@ -25,12 +25,17 @@ function logVerbose(msg: string): void {
   if (RCO_VERBOSE) console.error(`[RCO orchestrator] ${msg}`);
 }
 
-/** Resolve agentWorker path: use dist/rco/agentWorker.js when running from src (e.g. Vitest). */
+/** Resolve agentWorker path: prefer dist/rco/agentWorker.js for forked processes. */
 function resolveWorkerPath(): string {
   const here = path.join(__dirname, 'agentWorker.js');
   if (fs.existsSync(here)) return here;
-  const distPath = path.join(__dirname, '..', '..', 'dist', 'rco', 'agentWorker.js');
-  if (fs.existsSync(distPath)) return distPath;
+  const distFallbacks = [
+    path.resolve(__dirname, '..', '..', 'dist', 'rco', 'agentWorker.js'),
+    path.resolve('dist', 'rco', 'agentWorker.js'),
+  ];
+  for (const p of distFallbacks) {
+    if (fs.existsSync(p)) return p;
+  }
   return here;
 }
 

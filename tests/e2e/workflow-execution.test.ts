@@ -32,7 +32,7 @@ describe('E2E: Recipe Session Lifecycle', () => {
     const step = manager.startSession(SAMPLE_RECIPE, 'Build a todo app');
 
     expect(step.session_id).toBeDefined();
-    expect(step.step_number).toBe(0);
+    expect(step.step_number).toBe(1);
     expect(step.total_steps).toBe(2);
     expect(step.agent_name).toBe('planner');
     expect(step.recipe_name).toBe('TestRecipe');

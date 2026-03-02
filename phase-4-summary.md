@@ -73,4 +73,4 @@
 | tests/e2e/phase4-*.test.ts | New — install, telemetry, release, beta-feedback |
 | phase-4-summary.md | This file |
 
-All code is original; no references to OMC in deliverables.
+All code is original; no references to external competitors in deliverables.
