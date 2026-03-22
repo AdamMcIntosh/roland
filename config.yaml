@@ -1,6 +1,6 @@
 # Roland Model Routing Configuration
 #
-# Budget-optimized for ~$75/month on OpenRouter.
+# Budget-optimized for ~$85/month on OpenRouter.
 # Strategy: DeepSeek V3 as workhorse, Pro for planning/review, Sonnet 4 for critical only.
 #
 # Estimated monthly cost at moderate usage (~15M tokens):

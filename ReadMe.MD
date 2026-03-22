@@ -89,7 +89,7 @@ Roland works as a [Goose](https://block.github.io/goose/) MCP extension with sma
 - **Smart dispatch**: Cheap dispatcher model → Roland triage → subagent on recommended model
 - **OpenRouter models**: All 44 agent YAMLs use current OpenRouter model IDs
 - **Goose recipes**: Pre-built workflow recipes in `goose/recipes/` (PlanExecRevEx, BugFix, SecurityAudit)
-- **Budget-optimized**: ~$23/month at moderate usage on a $75/month budget
+- **Budget-optimized**: ~$23/month at moderate usage on an $85/month budget
 
 See [INSTALLATION.md](INSTALLATION.md) for Goose setup instructions.
 
@@ -107,7 +107,7 @@ Roland isn't meant to handle every task. Use the right tool for the job:
 | Security audit | **Roland (SecurityAudit)** | Needs thorough, multi-step analysis |
 | New feature (plan → build → review) | **Roland (PlanExecRevEx)** | Multi-agent orchestration adds real value |
 
-**Hybrid approach**: ~70% of daily work stays in your IDE agent (zero OpenRouter cost). Roland handles the ~30% that benefits from smart model routing and multi-agent recipes. This keeps a $75/month OpenRouter budget under ~$23/month at moderate usage.
+**Hybrid approach**: ~70% of daily work stays in your IDE agent (zero OpenRouter cost). Roland handles the ~30% that benefits from smart model routing and multi-agent recipes. This keeps an $85/month OpenRouter budget under ~$23/month at moderate usage.
 
 #### Model tiers (budget-optimized)
 

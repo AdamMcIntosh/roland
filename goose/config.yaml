@@ -3,7 +3,7 @@
 # Copy this file to ~/.config/goose/config.yaml (or merge into your existing config).
 # Set OPENROUTER_API_KEY in your environment before running Goose.
 #
-# Budget: ~$75/month → estimated ~$23/month at moderate usage
+# Budget: ~$85/month → estimated ~$23/month at moderate usage
 # Dispatcher cost: ~$0.10/month (routing only, no real work)
 # Agent costs managed by Roland's triage — routes to cheapest adequate model.
 

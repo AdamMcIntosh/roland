@@ -71,7 +71,7 @@ Start a Goose session and set your monthly budget:
 > Use the manage_budget tool with action "set_limit" and daily_limit 2.50
 ```
 
-That's $2.50/day = ~$75/month. Roland will automatically switch to free models when you hit 80% ($60).
+That's $2.85/day = ~$85/month. Roland will automatically switch to free models when you hit 80% ($68).
 
 ### 4. Verify
 
@@ -148,7 +148,7 @@ This keeps ~70% of your work off the OpenRouter budget.
 
 ## Model Tiers
 
-Roland uses five model tiers, optimized for a $75/month budget:
+Roland uses five model tiers, optimized for an $85/month budget:
 
 | Tier | Model | Cost/1M tokens | Used for |
 |------|-------|---------------|----------|
@@ -225,7 +225,7 @@ All free models support tool calling and have 128K+ context. You can keep workin
 | BugFix (7 steps) | ~$0.14 |
 | SecurityAudit (4 steps) | ~$0.30 |
 
-At moderate usage: ~500 recipe runs/month within $75 budget.
+At moderate usage: ~500 recipe runs/month within $85 budget.
 
 ## Available Tools
 
