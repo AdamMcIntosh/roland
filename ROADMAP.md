@@ -1,5 +1,23 @@
 # RCO Roadmap
 
+# 1. Install Claude Code if you haven't
+npm install -g @anthropic-ai/claude-code
+
+# 2. Launch Claude Code in any project
+claude
+
+# 3. Inside Claude Code, install OMC
+/plugin marketplace add https://github.com/Yeachan-Heo/oh-my-claudecode
+/plugin install oh-my-claudecode
+/omc-setup
+
+# 4. Enable Team mode (recommended)
+# Add to ~/.claude/settings.json:
+# { "env": { "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" } }
+
+# 5. Try it
+autopilot: build a REST API for managing tasks
+
 Post–Phase 4 plan for Roland Code Orchestrator (RCO). v0.1 is beta-ready; v0.2 and beyond are planned in weekly sprints.
 
 ## v0.1 (current) — Beta release
@@ -10,6 +28,19 @@ Post–Phase 4 plan for Roland Code Orchestrator (RCO). v0.1 is beta-ready; v0.2
 - [x] Opt-in telemetry (Sentry), consent via `/rco-consent:yes`
 - [x] Beta program guide, sync stub (Git remotes planned)
 - [x] `npm run iterate` for version bump and changelog
+
+## v0.1.1 — Goose Integration (completed)
+
+- [x] Goose MCP extension configuration (`goose/config.yaml`, `goose/extension.yaml`)
+- [x] `.goosehints` file with dispatch workflow instructions
+- [x] `triage` tool returns `openrouter_model`, `persona_instructions`, `temperature`
+- [x] `route_model` tool returns `openrouter_model` with valid OpenRouter slugs
+- [x] All 44 agent YAMLs updated to current OpenRouter model IDs
+- [x] `config.yaml` updated with OpenRouter routing tiers and `goose` section
+- [x] Config loader Zod schema for `goose` config section
+- [x] Goose recipe generator script (`scripts/generate-goose-recipes.ts`)
+- [x] Pre-built Goose recipes: PlanExecRevEx, BugFix, SecurityAudit
+- [x] Documentation: README, INSTALLATION.md updated with Goose setup
 
 ## v0.2 — Weekly sprints (planned)
 

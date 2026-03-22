@@ -1,0 +1,35 @@
+id: roland-plan-exec-rev-ex
+version: 1.0.0
+title: Roland PlanExecRevEx — 4-Agent Coding Loop
+description: "Autonomous coding loop: plan → execute → review → explain"
+instructions: |-
+  You are orchestrating a 4-agent coding workflow using Roland.
+
+  ## Workflow
+
+  1. **Plan**: Call `triage` with the task, then as the planner persona, break the task into
+     detailed steps, required files, dependencies, and best practices.
+
+  2. **Execute**: Switch to executor persona. Implement the plan: edit/create files,
+     install deps, run tests. Handle errors autonomously.
+
+  3. **Review**: Switch to critic persona. Analyze the implementation for bugs,
+     performance issues, security vulnerabilities, and code smells. If issues found,
+     loop back to Execute (max 3 loops).
+
+  4. **Explain**: Summarize what was done, why each key decision was made, and
+     any trade-offs. Use clear language and diagrams if helpful.
+
+  ## Model Selection
+
+  Call Roland's `triage` tool at the start to get the recommended `openrouter_model`.
+  Use capable models (e.g., anthropic/claude-sonnet-4) for planning and review steps,
+  and balanced models (e.g., google/gemini-2.5-flash) for execution.
+
+  Alternatively, use `start_recipe` with recipe_name="PlanExecRevEx" for server-managed
+  step-by-step orchestration.
+extensions:
+  - name: developer
+    timeout: 300
+  - name: roland
+    timeout: 60

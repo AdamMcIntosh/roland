@@ -36,9 +36,17 @@ const SessionConfigSchema = z.object({
   mcp_defaults: SessionDefaultsSchema,
 });
 
+const GooseConfigSchema = z.object({
+  dispatcher_model: z.string().default('google/gemini-2.0-flash-exp:free'),
+  dispatcher_provider: z.string().default('openrouter'),
+  known_free_models: z.array(z.string()).default([]),
+  fallback_model: z.string().default('anthropic/claude-sonnet-4'),
+});
+
 const AppConfigSchema = z.object({
   routing: RoutingConfigSchema,
   roland: SessionConfigSchema,
+  goose: GooseConfigSchema.optional(),
 });
 
 // ============================================================================

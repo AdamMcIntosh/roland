@@ -38,6 +38,57 @@ import { fileURLToPath } from 'url';
 import YAML from 'yaml';
 
 // ============================================================================
+// OpenRouter Model Mapping
+// ============================================================================
+
+/**
+ * Maps complexity tiers to OpenRouter model IDs.
+ * Used by triage and route_model to return valid OpenRouter slugs.
+ */
+const OPENROUTER_MODELS: Record<string, string> = {
+  simple: 'google/gemini-2.5-flash',
+  medium: 'deepseek/deepseek-chat',
+  complex: 'anthropic/claude-sonnet-4',
+  explain: 'google/gemini-2.5-flash',
+};
+
+/**
+ * Maps agent names to their recommended OpenRouter model.
+ *
+ * Budget-optimized for ~$75/month (~$23/mo at moderate usage):
+ *   - Critical (architect, security):  claude-sonnet-4    (~15% budget, ~$11)
+ *   - High-value (planner, critic):    gemini-2.5-pro     (~15% budget, ~$11)
+ *   - Workhorse (most agents):         deepseek-chat (V3) (~55% budget, ~$1)
+ *   - Light (writer, explore, docs):   gemini-2.5-flash   (~10% budget, ~$0.50)
+ *   - Prototyping:                     grok-3-mini        (on-demand)
+ *   - Dispatcher:                      gemini-2.0-flash   (~$0.10)
+ *
+ * Fallback: if DeepSeek is down, agents fall back to gemini-2.5-flash.
+ */
+const AGENT_OPENROUTER_MODELS: Record<string, string> = {
+  // Critical — wrong output here is expensive to redo
+  architect: 'anthropic/claude-sonnet-4',
+  'security-reviewer': 'anthropic/claude-sonnet-4',
+  // High-value — thoroughness matters more than speed
+  planner: 'google/gemini-2.5-pro',
+  critic: 'google/gemini-2.5-pro',
+  'code-reviewer': 'google/gemini-2.5-pro',
+  // Workhorse — best coding per dollar
+  executor: 'deepseek/deepseek-chat',
+  researcher: 'deepseek/deepseek-chat',
+  designer: 'deepseek/deepseek-chat',
+  'qa-tester': 'deepseek/deepseek-chat',
+  'build-fixer': 'deepseek/deepseek-chat',
+  'tdd-guide': 'deepseek/deepseek-chat',
+  analyst: 'deepseek/deepseek-chat',
+  scientist: 'deepseek/deepseek-chat',
+  vision: 'deepseek/deepseek-chat',
+  // Light — fast, good enough for docs and navigation
+  writer: 'google/gemini-2.5-flash',
+  explore: 'google/gemini-2.5-flash',
+};
+
+// ============================================================================
 // MCP Server Implementation (v2)
 // ============================================================================
 
@@ -406,9 +457,22 @@ export class McpServer {
         };
         recommendation.suggested_mode = modeMap[complexity.complexity] || 'standard';
 
+        // --- Goose dispatch fields ---
+        const agentName = topAgent.score > 0 ? topAgent.name : 'executor';
+        const openrouterModel = AGENT_OPENROUTER_MODELS[agentName]
+          || OPENROUTER_MODELS[complexity.complexity]
+          || 'google/gemini-2.5-flash';
+
+        // Load persona instructions from agent YAML
+        const personaInstructions = this.loadAgentRolePrompt(agentName);
+
+        recommendation.openrouter_model = openrouterModel;
+        recommendation.persona_instructions = personaInstructions;
+        recommendation.temperature = 0.7;
+
         recommendation.instructions = suggestRecipe
-          ? `Adopt the "${recommendation.agent && (recommendation.agent as any).name}" persona. A multi-agent recipe "${topRecipe.name}" is recommended — offer to run it, or proceed as the recommended agent if the user prefers a single pass.`
-          : `Adopt the "${recommendation.agent && (recommendation.agent as any).name}" persona for this task. Apply that agent's expertise and thinking style to your response.`;
+          ? `Adopt the "${agentName}" persona. A multi-agent recipe "${topRecipe.name}" is recommended — offer to run it, or proceed as the recommended agent if the user prefers a single pass.`
+          : `Adopt the "${agentName}" persona for this task. Apply that agent's expertise and thinking style to your response.`;
 
         return recommendation;
       },
@@ -449,6 +513,47 @@ export class McpServer {
     }
 
     return parts.join(' ');
+  }
+
+  // --------------------------------------------------------------------------
+  // Agent YAML loader — read role_prompt from agents/*.yaml
+  // --------------------------------------------------------------------------
+
+  /**
+   * Resolve the agents directory relative to this file's location.
+   */
+  private static resolveAgentsDir(): string {
+    try {
+      const thisFile = fileURLToPath(import.meta.url);
+      const serverDir = path.dirname(thisFile);
+      const installDir = path.resolve(serverDir, '..');
+      const rootDir = path.resolve(installDir, '..');
+
+      const distAgents = path.join(installDir, 'agents');
+      if (fs.existsSync(distAgents)) return distAgents;
+
+      const srcAgents = path.join(rootDir, 'agents');
+      if (fs.existsSync(srcAgents)) return srcAgents;
+    } catch { /* fallback */ }
+    return path.join(process.cwd(), 'agents');
+  }
+
+  /**
+   * Load the role_prompt from an agent's YAML file.
+   * Returns a fallback prompt if the file doesn't exist.
+   */
+  private loadAgentRolePrompt(agentName: string): string {
+    try {
+      const agentsDir = McpServer.resolveAgentsDir();
+      const agentPath = path.join(agentsDir, `${agentName}.yaml`);
+      if (!fs.existsSync(agentPath)) {
+        return `You are the ${agentName} agent. Apply your specialized expertise to this task.`;
+      }
+      const raw = YAML.parse(fs.readFileSync(agentPath, 'utf-8'));
+      return raw?.role_prompt || `You are the ${agentName} agent. Apply your specialized expertise to this task.`;
+    } catch {
+      return `You are the ${agentName} agent. Apply your specialized expertise to this task.`;
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -514,8 +619,13 @@ export class McpServer {
           analysis.tokenEstimate * 2 // Rough output estimate
         );
 
+        // Map to OpenRouter model ID
+        const openrouterModel = OPENROUTER_MODELS[analysis.complexity]
+          || 'google/gemini-2.5-flash';
+
         return {
           recommended_model: recommendedModel,
+          openrouter_model: openrouterModel,
           complexity: analysis.complexity,
           score: analysis.score,
           token_estimate: analysis.tokenEstimate,

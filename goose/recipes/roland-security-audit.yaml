@@ -1,0 +1,24 @@
+id: roland-security-audit
+version: 1.0.0
+title: Roland Security Audit
+description: Threat modeling → code review → remediation → documentation
+instructions: |-
+  You are orchestrating a security audit workflow using Roland.
+
+  ## Workflow
+
+  1. **Threat Model**: As architect, identify attack surfaces, trust boundaries,
+     and potential threats (STRIDE framework).
+  2. **Code Review**: As security-reviewer, scan for OWASP Top 10 vulnerabilities,
+     hardcoded secrets, insecure dependencies, injection points.
+  3. **Remediate**: As executor, fix identified vulnerabilities with minimal changes.
+  4. **Document**: As writer, produce a security audit report with findings,
+     severity ratings, and remediation status.
+
+  Call Roland's `triage` tool at the start. For server-managed orchestration,
+  use `start_recipe` with recipe_name="SecurityAudit".
+extensions:
+  - name: developer
+    timeout: 300
+  - name: roland
+    timeout: 60

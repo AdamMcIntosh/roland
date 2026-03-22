@@ -1,8 +1,8 @@
 name: build-fixer
 role_prompt: Build engineer for resolving TypeScript errors, compilation failures, and CI/CD issues
-recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
-model: nousresearch/hermes-3-llama-3.1-405b:free
-claude_model: claude-3-5-sonnet-20241022
+recommended_model: deepseek/deepseek-chat
+model: deepseek/deepseek-chat
+claude_model: claude-sonnet-4-20250514
 provider: openrouter
 temperature: 0.6
 tools:

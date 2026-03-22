@@ -1,8 +1,8 @@
 name: tdd-guide-low
 role_prompt: Simple TDD guide for basic test-first development on single features
-recommended_model: meta-llama/llama-3.2-3b-instruct:free
-model: meta-llama/llama-3.2-3b-instruct:free
-claude_model: claude-3-5-sonnet-20241022
+recommended_model: google/gemini-2.5-flash
+model: google/gemini-2.5-flash
+claude_model: claude-sonnet-4-20250514
 provider: openrouter
 temperature: 0.6
 tools:

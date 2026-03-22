@@ -22,9 +22,17 @@ export interface SessionConfig {
   mcp_defaults: SessionDefaults;
 }
 
+export interface GooseConfig {
+  dispatcher_model: string;
+  dispatcher_provider: string;
+  known_free_models: string[];
+  fallback_model: string;
+}
+
 export interface AppConfig {
   routing: RoutingConfig;
   roland: SessionConfig;
+  goose?: GooseConfig;
   configPath?: string;
 }
 

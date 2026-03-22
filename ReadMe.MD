@@ -7,9 +7,9 @@
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)]()
 [![MCP](https://img.shields.io/badge/MCP-1.0.4-purple.svg)]()
 
-Roland is an MCP (Model Context Protocol) server that gives your IDE agent superpowers: multi-agent recipe workflows, auto-pilot triage, session cost tracking, budget management, and 32 specialized agent personas exported directly into VS Code (Copilot) and Cursor as native config files.
+Roland is an MCP (Model Context Protocol) server that gives your AI agent superpowers: multi-agent recipe workflows, auto-pilot triage, session cost tracking, budget management, and 32 specialized agent personas. Works with VS Code (Copilot), Cursor, and [Goose](https://block.github.io/goose/) (Block's open-source AI agent with OpenRouter).
 
-IDEs control which model runs your requests — Roland focuses on what they can't do: orchestrating multi-step workflows across specialized agents, tracking what you're spending, and triaging every prompt to the right persona.
+With Goose, Roland acts as a smart dispatcher: a cheap model handles routing, calls Roland's `triage` tool to analyze complexity, then spawns subagents on the recommended OpenRouter model with the right persona instructions. IDEs and Goose control which model runs — Roland focuses on what they can't do: orchestrating multi-step workflows across specialized agents, tracking what you're spending, and triaging every prompt to the right persona.
 
 **Version**: 2.0.0
 
@@ -84,6 +84,41 @@ IDEs provide zero insight into what you're spending. Roland fills that gap:
 - **Cost analytics** — understand where your tokens go across sessions
 - **Model routing (advisory)** — complexity analysis recommends the cheapest adequate model, but the IDE ultimately controls model selection
 
+### Goose Integration (OpenRouter)
+Roland works as a [Goose](https://block.github.io/goose/) MCP extension with smart model routing via OpenRouter:
+- **Smart dispatch**: Cheap dispatcher model → Roland triage → subagent on recommended model
+- **OpenRouter models**: All 44 agent YAMLs use current OpenRouter model IDs
+- **Goose recipes**: Pre-built workflow recipes in `goose/recipes/` (PlanExecRevEx, BugFix, SecurityAudit)
+- **Budget-optimized**: ~$23/month at moderate usage on a $75/month budget
+
+See [INSTALLATION.md](INSTALLATION.md) for Goose setup instructions.
+
+### When to Use Roland vs. Your IDE Agent
+
+Roland isn't meant to handle every task. Use the right tool for the job:
+
+| Task | Use | Why |
+|------|-----|-----|
+| Typo, rename, one-liner | **Windsurf / Cursor** | Direct edit, no overhead, no cost |
+| Small bug fix (single file) | **Windsurf / Cursor** | One LLM call is enough |
+| Simple refactor | **Windsurf / Cursor** | IDE agent handles it fine |
+| Multi-file bug, root cause unknown | **Roland (BugFix recipe)** | Multi-agent workflow finds root cause |
+| Architecture, system design | **Roland (architect)** | Routes to Sonnet 4 for best reasoning |
+| Security audit | **Roland (SecurityAudit)** | Needs thorough, multi-step analysis |
+| New feature (plan → build → review) | **Roland (PlanExecRevEx)** | Multi-agent orchestration adds real value |
+
+**Hybrid approach**: ~70% of daily work stays in your IDE agent (zero OpenRouter cost). Roland handles the ~30% that benefits from smart model routing and multi-agent recipes. This keeps a $75/month OpenRouter budget under ~$23/month at moderate usage.
+
+#### Model tiers (budget-optimized)
+
+| Tier | Model | Cost/1M tokens | Used for |
+|------|-------|---------------|----------|
+| Critical | `anthropic/claude-sonnet-4` | $3 / $15 | Architecture, security |
+| High-value | `google/gemini-2.5-pro` | $1.25 / $10 | Planning, code review |
+| Workhorse | `deepseek/deepseek-chat` (V3) | $0.27 / $1.10 | Implementation, testing, most work |
+| Light | `google/gemini-2.5-flash` | $0.15 / $0.60 | Docs, exploration |
+| Dispatcher | `google/gemini-2.0-flash` | $0.10 / $0.40 | Routing only |
+
 ### IDE-Native Integration
 Run `npm run init -- /path/to/your/project` to set up any project with Roland, or `npm run export-configs` for the Roland repo itself:
 - `.github/agents/*.agent.md` — VS Code Copilot agent personas (70 files: 32 agents + 38 recipe handoffs)
@@ -125,6 +160,26 @@ This copies all agent personas, recipe configs, MCP server config, and the auto-
 **Verify**: Ask your IDE agent to "Use the health_check tool" — you should get `status: healthy`.
 
 See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions (includes global Cursor config option).
+
+### Use with Goose
+
+```bash
+# 1. Install Goose: https://block.github.io/goose/
+# 2. Build Roland
+cd roland && npm install && npm run build
+
+# 3. Add Roland extension to your Goose config (~/.config/goose/config.yaml)
+#    See goose/config.yaml for a complete template
+
+# 4. Start a Goose session
+goose session
+
+# 5. Prompt normally — Roland auto-routes to the best model + persona
+> Build a REST API for managing tasks with authentication
+
+# 6. Run a Goose recipe
+goose run --recipe goose/recipes/roland-plan-exec-rev-ex.yaml --task "Build a todo app"
+```
 
 ### Roland Code Orchestrator (RCO)
 
@@ -215,8 +270,8 @@ The benchmark runs three sample tasks (e.g. "Build todo app", "CLI tool", "Bug f
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      IDE / MCP Client                       │
-│  (VS Code Copilot, Cursor, Claude Desktop)                 │
+│              IDE / MCP Client / Goose Agent                  │
+│  (VS Code Copilot, Cursor, Claude Desktop, Goose)          │
 ├─────────────────────────────────────────────────────────────┤
 │                   MCP Server (stdio)                        │
 │  (mcp-server.ts — 10 registered tools)                     │

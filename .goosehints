@@ -1,0 +1,73 @@
+# Roland Smart Dispatch — Instructions for Goose
+#
+# Roland is an MCP extension that provides intelligent model routing and
+# agent persona selection. Follow this workflow for every user request.
+
+## Dispatch Workflow
+
+1. **Always call `triage` first**: Before doing any work on a user's coding request,
+   call Roland's `triage` tool with the user's message. This analyzes the task and
+   returns the best agent persona, recommended OpenRouter model, and instructions.
+
+2. **Adopt the recommended persona**: The triage response includes `persona_instructions`
+   with the full role prompt. Use these instructions to shape your approach, expertise,
+   and thinking style for this task.
+
+3. **Use the recommended model for subagents**: When spawning subagents, use the
+   `openrouter_model` from the triage response. This ensures complex tasks get capable
+   models while simple tasks stay cheap.
+
+4. **Consider recipes for complex tasks**: If triage recommends a recipe workflow,
+   offer it to the user. Recipes orchestrate multiple specialized agents in sequence
+   (e.g., plan → execute → review → explain). Start recipes with `start_recipe` and
+   advance with `advance_recipe`.
+
+5. **Track costs**: After LLM work, call `track_cost` with token usage to maintain
+   session cost visibility. Check `manage_budget` if spending limits are active.
+
+## When to Use Roland vs. IDE Agent (Windsurf/Cursor)
+
+Roland is not meant to replace your IDE agent for every task. Use the right tool:
+
+**Use your IDE agent directly (Windsurf, Cursor) for:**
+- Typo fixes, renames, one-line changes
+- Small contained bug fixes (single file, obvious cause)
+- Simple refactors (extract variable, inline function)
+- Quick questions about the current file
+- Any task where a single LLM call is sufficient
+
+**Route through Roland (Goose) for:**
+- Multi-file bugs that need root cause investigation → BugFix recipe
+- Architecture decisions, system design → architect agent
+- Security audits → security-reviewer agent + SecurityAudit recipe
+- New features that need planning → PlanExecRevEx recipe
+- Tasks where model selection matters (complex = Sonnet 4, simple = DeepSeek)
+
+This hybrid approach keeps costs down: ~70% of daily work stays in your IDE (no
+OpenRouter cost), and Roland handles the ~30% that benefits from smart routing
+and multi-agent orchestration.
+
+## Skip Conditions
+
+Do NOT call triage when:
+- The user explicitly requests a specific agent (e.g., "use the architect agent")
+- The user is advancing a recipe step (use `advance_recipe` instead)
+- The message is a simple follow-up or clarification to the current task
+- The user asks about Roland itself (answer directly)
+- The task is a small fix that the IDE agent can handle directly
+
+## Example Flow
+
+```
+User: "Build a REST API for managing tasks with authentication"
+
+1. Call triage(message="Build a REST API for managing tasks with authentication")
+   → Returns: agent=architect, openrouter_model=anthropic/claude-sonnet-4,
+     recipe=RESTfulAPI, complexity=complex
+
+2. Inform user: "This is a complex task — I recommend the RESTfulAPI recipe
+   (architect → executor → critic → writer). Want to run the full workflow?"
+
+3. If yes: call start_recipe(recipe_name="RESTfulAPI", task="Build a REST API...")
+   If no: proceed as the architect persona using the recommended model
+```
