@@ -532,6 +532,36 @@ export class McpServer {
         recommendation.persona_instructions = personaInstructions;
         recommendation.temperature = 0.7;
 
+        // --- Execution strategy: smart triage for complex code ---
+        // Complex tasks: Sonnet 4 subagent writes the code, main session applies files
+        // Simple/medium tasks: main session (Flash) writes and applies directly
+        const isComplexExecution = complexity.complexity === 'complex' && !budgetDegraded;
+        if (isComplexExecution) {
+          recommendation.execution_strategy = {
+            mode: 'subagent_writes_code',
+            execution_model: 'anthropic/claude-sonnet-4',
+            apply_model: 'main_session',
+            reason: 'Complex task — Sonnet 4 subagent will write the code for higher quality. Main session applies files to disk.',
+            subagent_instructions: `You are a senior engineer writing production-ready code. Rules:\n`
+              + `1. OUTPUT FORMAT: For each file, output "📄 path/to/file.ts:" followed by the COMPLETE file content in a code block. `
+              + `Include ALL imports, types, error handling, and edge cases. Code must be ready to write to disk as-is.\n`
+              + `2. NO PLACEHOLDERS: Do NOT use "// TODO", "// ...", or "implement here". Write the real implementation.\n`
+              + `3. USE PROVIDED CONTEXT: You will receive actual file contents from the codebase. Use exact import paths, `
+              + `type names, and function signatures from those files. Do NOT guess or hallucinate APIs.\n`
+              + `4. INCLUDE TESTS: If modifying a module that has a test file, include the updated test file too.\n`
+              + `5. ERROR FIXES: If you receive error output, analyze the EXACT error message and stack trace. `
+              + `Fix the root cause, not symptoms. Include the complete fixed file, not just a diff.`,
+          };
+        } else {
+          recommendation.execution_strategy = {
+            mode: 'main_session_direct',
+            execution_model: 'main_session',
+            reason: budgetDegraded
+              ? 'Budget degraded — main session handles execution on free models.'
+              : 'Simple/medium task — main session (Flash) handles execution directly.',
+          };
+        }
+
         if (budgetDegraded) {
           recommendation.budget_degraded = true;
           recommendation.budget_notice = `Budget ≥80% used — switched to free model (${openrouterModel}). Quality may be reduced.`;
@@ -539,7 +569,9 @@ export class McpServer {
 
         recommendation.instructions = suggestRecipe
           ? `Adopt the "${agentName}" persona. A multi-agent recipe "${topRecipe.name}" is recommended — offer to run it, or proceed as the recommended agent if the user prefers a single pass.`
-          : `Adopt the "${agentName}" persona for this task. Apply that agent's expertise and thinking style to your response.`;
+          : isComplexExecution
+            ? `This is a complex task. Spawn a Sonnet 4 subagent to write the code (see execution_strategy), then apply the output to files yourself.`
+            : `Adopt the "${agentName}" persona for this task. Apply that agent's expertise and thinking style to your response.`;
 
         return recommendation;
       },

@@ -6,10 +6,11 @@
 # Estimated monthly cost at moderate usage (~15M tokens):
 #   Critical (claude-sonnet-4):     ~15% → ~$11/mo
 #   High-value (gemini-2.5-pro):    ~15% → ~$11/mo
-#   Workhorse (deepseek-chat V3):   ~55% → ~$1/mo
+#   Workhorse (deepseek-chat V3):   ~10% → ~$1/mo  (text-only subagents)
 #   Light (gemini-2.5-flash):       ~10% → ~$0.50/mo
-#   Dispatcher (gemini-2.0-flash):         → ~$0.10/mo
-#   Total estimate:                        → ~$23/mo (leaves ~$52 headroom)
+#   Main session (gemini-2.5-flash):       → ~$2/mo  (routing + file I/O)
+#   Smart triage: complex tasks use Sonnet 4 subagent for code authoring
+#   Total estimate:                        → ~$50/mo at moderate usage
 
 routing:
   simple:
