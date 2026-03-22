@@ -7,9 +7,9 @@
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)]()
 [![MCP](https://img.shields.io/badge/MCP-1.0.4-purple.svg)]()
 
-Roland is an MCP (Model Context Protocol) server that gives your IDE agent superpowers: multi-agent recipe workflows, auto-pilot triage, session cost tracking, budget management, and 32 specialized agent personas exported directly into VS Code (Copilot) and Cursor as native config files.
+Roland is an MCP (Model Context Protocol) server that gives your AI agent superpowers: multi-agent recipe workflows, auto-pilot triage, session cost tracking, budget management, and 32 specialized agent personas. Works with VS Code (Copilot), Cursor, and [Goose](https://block.github.io/goose/) (Block's open-source AI agent with OpenRouter).
 
-IDEs control which model runs your requests — Roland focuses on what they can't do: orchestrating multi-step workflows across specialized agents, tracking what you're spending, and triaging every prompt to the right persona.
+With Goose, Roland acts as a smart dispatcher: a cheap model handles routing, calls Roland's `triage` tool to analyze complexity, then spawns subagents on the recommended OpenRouter model with the right persona instructions. IDEs and Goose control which model runs — Roland focuses on what they can't do: orchestrating multi-step workflows across specialized agents, tracking what you're spending, and triaging every prompt to the right persona.
 
 **Version**: 2.0.0
 
@@ -84,6 +84,41 @@ IDEs provide zero insight into what you're spending. Roland fills that gap:
 - **Cost analytics** — understand where your tokens go across sessions
 - **Model routing (advisory)** — complexity analysis recommends the cheapest adequate model, but the IDE ultimately controls model selection
 
+### Goose Integration (OpenRouter)
+Roland works as a [Goose](https://block.github.io/goose/) MCP extension with smart model routing via OpenRouter:
+- **Smart dispatch**: Cheap dispatcher model → Roland triage → subagent on recommended model
+- **OpenRouter models**: All 44 agent YAMLs use current OpenRouter model IDs
+- **Goose recipes**: Pre-built workflow recipes in `goose/recipes/` (PlanExecRevEx, BugFix, SecurityAudit)
+- **Budget-optimized**: ~$23/month at moderate usage on a $75/month budget
+
+See [INSTALLATION.md](INSTALLATION.md) for Goose setup instructions.
+
+### When to Use Roland vs. Your IDE Agent
+
+Roland isn't meant to handle every task. Use the right tool for the job:
+
+| Task | Use | Why |
+|------|-----|-----|
+| Typo, rename, one-liner | **Windsurf / Cursor** | Direct edit, no overhead, no cost |
+| Small bug fix (single file) | **Windsurf / Cursor** | One LLM call is enough |
+| Simple refactor | **Windsurf / Cursor** | IDE agent handles it fine |
+| Multi-file bug, root cause unknown | **Roland (BugFix recipe)** | Multi-agent workflow finds root cause |
+| Architecture, system design | **Roland (architect)** | Routes to Sonnet 4 for best reasoning |
+| Security audit | **Roland (SecurityAudit)** | Needs thorough, multi-step analysis |
+| New feature (plan → build → review) | **Roland (PlanExecRevEx)** | Multi-agent orchestration adds real value |
+
+**Hybrid approach**: ~70% of daily work stays in your IDE agent (zero OpenRouter cost). Roland handles the ~30% that benefits from smart model routing and multi-agent recipes. This keeps a $75/month OpenRouter budget under ~$23/month at moderate usage.
+
+#### Model tiers (budget-optimized)
+
+| Tier | Model | Cost/1M tokens | Used for |
+|------|-------|---------------|----------|
+| Critical | `anthropic/claude-sonnet-4` | $3 / $15 | Architecture, security |
+| High-value | `google/gemini-2.5-pro` | $1.25 / $10 | Planning, code review |
+| Workhorse | `deepseek/deepseek-chat` (V3) | $0.27 / $1.10 | Implementation, testing, most work |
+| Light | `google/gemini-2.5-flash` | $0.15 / $0.60 | Docs, exploration |
+| Dispatcher | `google/gemini-2.0-flash` | $0.10 / $0.40 | Routing only |
+
 ### IDE-Native Integration
 Run `npm run init -- /path/to/your/project` to set up any project with Roland, or `npm run export-configs` for the Roland repo itself:
 - `.github/agents/*.agent.md` — VS Code Copilot agent personas (70 files: 32 agents + 38 recipe handoffs)
@@ -126,14 +161,117 @@ This copies all agent personas, recipe configs, MCP server config, and the auto-
 
 See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions (includes global Cursor config option).
 
+### Use with Goose
+
+```bash
+# 1. Install Goose: https://block.github.io/goose/
+# 2. Build Roland
+cd roland && npm install && npm run build
+
+# 3. Add Roland extension to your Goose config (~/.config/goose/config.yaml)
+#    See goose/config.yaml for a complete template
+
+# 4. Start a Goose session
+goose session
+
+# 5. Prompt normally — Roland auto-routes to the best model + persona
+> Build a REST API for managing tasks with authentication
+
+# 6. Run a Goose recipe
+goose run --recipe goose/recipes/roland-plan-exec-rev-ex.yaml --task "Build a todo app"
+```
+
+### Roland Code Orchestrator (RCO)
+
+RCO is a lightweight, Claude-centric multi-agent orchestrator that runs **outside** the MCP server: it uses Node.js `child_process.fork` for on-demand agent workers, YAML configs, and optional WebSocket monitoring.
+
+#### RCO usage
+
+**Basic run (PlanExecRevEx recipe):**
+
+```bash
+npm run build
+npm run rco -- --recipe PlanExecRevEx --task "Build a todo app"
+```
+
+- **Without building**: `npm run rco:dev -- --recipe PlanExecRevEx --task "Build a todo app"` (runs with tsx)
+- **With dashboard**: add `--dashboard` to start a WebSocket server on port 8080 (config: `config.yaml` → `rco.dashboard_port`)
+- **No Cursor export**: add `--no-export` to skip writing `.cursor/rules` and MCP JSON from the session
+- **Quiet**: add `--quiet` to reduce stderr logging
+
+**Manual QA and benchmarks:**
+
+```bash
+npm run qa -- --scenario todo-app        # Single scenario (mock workers)
+npm run qa:all                            # All 10 scenarios; timings vs baseline benchmarks
+```
+
+**Tests:**
+
+```bash
+npm run test:rco                          # RCO unit + integration tests only
+npm run test:run                          # Full test suite
+```
+
+**Optional Puppeteer-based Claude simulation** (headless browser mock): set `RCO_USE_PUPPETEER=1` before running RCO so the agent worker loads a local HTML mock page instead of an inline mock. Requires `puppeteer` installed.
+
+#### RCO Claude plugin (Phase 2)
+
+RCO can run as a **Claude plugin** with slash commands (e.g. `/rco-run:recipe PlanExecRevEx --task "..."`).
+
+- **Build plugin bundle:** `npm run build-plugin` → outputs `dist-plugin/plugin.js`.
+- **Manifest:** `plugin/manifest.json` defines commands (`rco-run:recipe`, `rco-run:mode`, `rco-new-agent`, `rco-status`, `rco-export`) and permissions.
+- **Custom agent creation:** Use `/rco-new-agent` with a prompt (e.g. "Create agent for testing") to generate a YAML template and save it to `agents/custom-<name>.yaml`. The next RCO run will load agents from disk and include the new file (auto-reload).
+- **Install via Claude marketplace simulation:** Package the `plugin/` folder and `dist-plugin/plugin.js` into a zip. In Claude Desktop or claude.ai, use the plugin installation flow and point to the manifest (or sideload the bundle). For local development, run the orchestrator via Node: `node dist-plugin/plugin.js` is not a standalone CLI — use the plugin entry from your Claude environment’s plugin loader, or run recipes with `npm run rco` as before.
+
+**Verbose profiling:** Orchestrator uses `console.time`/`timeEnd` when `RCO_VERBOSE` is not `0` or `false`. Worker timeout and retries are configurable via orchestrator options (default 60s timeout, 2 retries).
+
+#### RCO YAML guide
+
+- **Agents** (`agents/*.yaml`): Each file defines `name`, optional `role_prompt`, `claude_model` (e.g. `claude-3-5-sonnet-20241022`), `tools` (e.g. `search`, `code`, `dependency-mapper`). RCO uses the same 32 agent YAMLs as the rest of Roland; set `claude_model` for RCO to target that Claude model.
+- **Recipes** (`recipes/rco/*.yaml` or `recipes/<Name>.yaml`): Define `name`, `execution_mode` (`autonomous-loop` | `parallel-swarm` | `linear`), `max_loops`, and `workflow.steps`. Each step has `agent`, optional `input` (e.g. `{{user_task}}`), `output_to`, `loop_if` (substring in output to trigger loop), and `final_output: true`. Optional `subagents` override `agentRef` and `claude_model` per step.
+- **Config** (`config.yaml` → `rco`): `claude_models` (complex/medium/simple/explain), `eco_mode`, `task_routing` (pattern → agents), `dashboard_port`, `state_file`.
+
+#### RCO vs. Alternatives (Why RCO?)
+
+RCO is a modular, IDE-hybrid alternative to other multi-agent code runners:
+
+| Focus | RCO | Typical alternatives |
+|-------|-----|----------------------|
+| **Extensibility** | YAML-driven agents and recipes; add files to extend. | Often fixed workflows. |
+| **IDE + Claude** | Cursor export (`.cursor/rules` + MCP snippet), optional dashboard; single-model Claude focus. | Varies. |
+| **Eco mode** | Built-in: prefer Haiku for simple steps to reduce token usage. | Not standard. |
+| **Original skills** | e.g. **dependency-mapper** (DOT graph of agent handoffs). | N/A. |
+| **Stability** | Zod validation, timeouts, retries, state file locking for parallel-swarm. | Varies. |
+
+Benchmark-style comparisons are available via `npm run qa:all` (mock workers; timings vs hardcoded baseline). Real runs use real workers and depend on environment.
+
+#### Benchmarks
+
+Run sample tasks and compare RCO timing to a simulated baseline:
+
+```bash
+npm run benchmark
+```
+
+The benchmark runs three sample tasks (e.g. "Build todo app", "CLI tool", "Bug fix") with the RCO orchestrator and reports elapsed time and step count. A simulated baseline (fixed ms per step, no real execution) is printed for comparison. Results can be used to validate performance and document wins (e.g. RCO's modularity and eco mode reducing steps for simple tasks). For full QA scenarios and timings, use `npm run qa:all`.
+
+#### RCO features (summary)
+
+- **Claude pivot**: All agent models are Claude variants (e.g. `claude-3-5-sonnet-20241022`, `claude-3-haiku-20240307`). Mock by default; optional Puppeteer-based simulation or plug in a real Claude interface.
+- **Execution modes**: `autonomous-loop` (conditional looping, max 5 iterations), `parallel-swarm` (concurrent forks + file locking), `linear`, **adaptive-swarm** (scale steps by task complexity), **collab-mode** (pause for real-time user feedback via dashboard WebSocket).
+- **Tools/skills**: Stub tools (`search`, `code`, `terminal`) plus **dependency-mapper** (DOT graph for handoffs).
+- **Eco mode**, **task_routing**, **state** (`.rco-state.json`), **Cursor export** (session → `.cursor/rules` + MCP JSON).
+- **Phase 2:** Claude tool-calling prompts (JSON response parsing), session persistence (notepad prompts + local JSON fallback), dynamic Cursor rules from agent outputs, Tauri dashboard with Chart.js dependency view, Zod validation for prompts/state/outputs, VS Code extension stub for importing RCO sessions.
+
 ---
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      IDE / MCP Client                       │
-│  (VS Code Copilot, Cursor, Claude Desktop)                 │
+│              IDE / MCP Client / Goose Agent                  │
+│  (VS Code Copilot, Cursor, Claude Desktop, Goose)          │
 ├─────────────────────────────────────────────────────────────┤
 │                   MCP Server (stdio)                        │
 │  (mcp-server.ts — 10 registered tools)                     │
@@ -155,12 +293,18 @@ See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions (includes
 
 ## Documentation
 
-- [INSTALLATION.md](INSTALLATION.md) — Setup & IDE configuration
-- [RECIPES_CATALOG.md](RECIPES_CATALOG.md) — Complete recipe reference
-- [CHANGELOG.md](CHANGELOG.md) — Version history
-- [TESTING.md](TESTING.md) — Test strategy & running tests
-- [docs/guides/budget-guide.md](docs/guides/budget-guide.md) — Cost management
-- [docs/guides/cache-guide.md](docs/guides/cache-guide.md) — Caching strategies
+| Doc | Contents |
+|-----|----------|
+| [INSTALLATION.md](INSTALLATION.md) | Setup, IDE configuration, project portability |
+| [TESTING.md](TESTING.md) | Automated tests (Vitest), manual IDE tests, QA scenarios, benchmarks |
+| [RECIPES_CATALOG.md](RECIPES_CATALOG.md) | Complete recipe reference with agent chains |
+| [CHANGELOG.md](CHANGELOG.md) | Version history (Keep a Changelog format) |
+| [ROADMAP.md](ROADMAP.md) | v0.1 checklist, v0.2 sprints, v1.0 vision |
+| [docs/guides/budget-guide.md](docs/guides/budget-guide.md) | Cost management & spending limits |
+| [docs/guides/cache-guide.md](docs/guides/cache-guide.md) | Caching strategies |
+| [docs/blog-post.md](docs/blog-post.md) | "RCO: The Modular Alternative for Claude Code" |
+| [docs/beta-testers.md](docs/beta-testers.md) | Beta program — how to join & give feedback |
+| [docs/development-history.md](docs/development-history.md) | Internal: MVP through Phase 4 evolution |
 
 ---
 
@@ -171,11 +315,23 @@ npm run build           # Compile TypeScript → dist/
 npm run dev             # Watch mode (auto-rebuild)
 npm run init -- <path>  # Set up Roland in an external project
 npm run export-configs  # Regenerate IDE configs for this repo
-npm test                # Run tests
-npm run lint            # Lint check
-npm run clean           # Remove dist/
-npm start               # Start MCP server directly
+npm run rco -- --recipe PlanExecRevEx --task "..."  # RCO orchestrator (after build)
+npm run rco:dev -- --recipe PlanExecRevEx --task "..."  # RCO without building (tsx)
+npm run qa              # RCO QA: one scenario (todo-app), mock workers
+npm run qa:all           # RCO QA: all scenarios; timings vs baseline benchmarks
+npm test                 # Run tests (watch)
+npm run test:run         # Run tests once
+npm run test:rco         # RCO tests only (orchestrator, loadConfig, stateLock, tools, Phase 2)
+npm run build-plugin    # Bundle RCO plugin for Claude (esbuild → dist-plugin/plugin.js)
+npm run tauri:dev       # RCO dashboard (Tauri + Chart.js); start Node dashboard first: npm run rco -- --dashboard --task "..." in another terminal, or run WS on 8080
+npm run serve-dashboard # Serve dashboard-ui on port 8081 (used by tauri:dev)
+npm run benchmark       # RCO benchmark: sample tasks vs simulated baseline
+npm run lint             # Lint check
+npm run clean            # Remove dist/
+npm start                # Start MCP server directly
 ```
+
+**RCO benchmark report:** Run `npm run qa:all` and use the printed timings (and diff vs baseline) as a benchmark report. For real recipe runs, use `npm run rco` and check stderr for `console.time` output when `RCO_VERBOSE` is set.
 
 ---
 

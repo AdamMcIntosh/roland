@@ -1,0 +1,10 @@
+name: doc-writer
+role_prompt: Technical documentation writer. READMEs, API docs, inline comments, and user-facing guides with clear examples.
+
+
+provider: openrouter
+claude_model: claude-sonnet-4-20250514
+temperature: 0.6
+tools:
+  - search
+  - code

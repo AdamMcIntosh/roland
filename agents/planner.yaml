@@ -1,8 +1,10 @@
 name: planner
 role_prompt: Project planner for breaking complex tasks into sequenced, actionable implementation steps
-recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
-model: nousresearch/hermes-3-llama-3.1-405b:free
+recommended_model: google/gemini-2.5-pro
+model: google/gemini-2.5-pro
 provider: openrouter
+# RCO: Claude model for this agent (complex = Sonnet)
+claude_model: claude-sonnet-4-20250514
 temperature: 0.7
 tools:
   - search

@@ -1,7 +1,7 @@
 {
   "name": "roland",
-  "version": "2.0.0",
-  "description": "AI agent cost routing, analytics, and workflow orchestration via MCP",
+  "version": "0.1.0",
+  "description": "Roland Code Orchestrator (RCO) — modular Claude-native orchestration, agents, and workflows",
   "main": "dist/index.js",
   "type": "module",
   "bin": {
@@ -10,6 +10,11 @@
   },
   "scripts": {
     "build": "tsc && node scripts/copy-assets.js",
+    "build-npm": "npm run clean && tsc && node scripts/copy-assets.js",
+    "build-plugin": "node scripts/build-plugin.js",
+    "build-plugin-zip": "node scripts/build-plugin.js && node scripts/zip-plugin.js",
+    "build-tauri": "tauri build",
+    "iterate": "node scripts/iterate.js",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
     "mcp": "node dist/index.js",
@@ -18,7 +23,18 @@
     "lint": "eslint src/**/*.ts",
     "format": "prettier --write src/**/*.ts",
     "test": "vitest",
-    "clean": "rimraf dist"
+    "test:run": "vitest run",
+    "test:rco": "vitest run tests/rco",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "vitest run tests/e2e",
+    "qa": "npx tsx scripts/qa-scenarios.ts",
+    "qa:all": "npx tsx scripts/qa-scenarios.ts --all",
+    "clean": "rimraf dist dist-plugin",
+    "rco": "node dist/rco/cli.js",
+    "rco:dev": "npx tsx src/rco/cli.ts",
+    "tauri:dev": "tauri dev",
+    "serve-dashboard": "node scripts/serve-dashboard.js",
+    "benchmark": "npx tsx src/benchmark.ts"
   },
   "keywords": [
     "agent-orchestration",
@@ -26,22 +42,38 @@
     "ai",
     "orchestration",
     "agents",
-    "llm"
+    "llm",
+    "rco",
+    "claude"
   ],
   "author": "",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
+    "@sentry/node": "^8.0.0",
+    "chart.js": "^4.4.6",
+    "js-yaml": "^4.1.0",
+    "ws": "^8.18.0",
     "yaml": "^2.6.1",
-    "zod": "^3.24.1"
+    "zod": "^3.24.1",
+    "hotkeys-js": "^3.13.0",
+    "papaparse": "^5.4.1"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.5",
+    "@types/sinon": "^17.0.0",
+    "@types/ws": "^8.5.10",
     "@typescript-eslint/eslint-plugin": "^8.20.0",
     "@typescript-eslint/parser": "^8.20.0",
     "eslint": "^9.18.0",
     "prettier": "^3.4.2",
+    "puppeteer": "^23.0.0",
+    "archiver": "^7.0.0",
+    "esbuild": "^0.24.0",
     "rimraf": "^6.0.1",
+    "sinon": "^17.0.0",
     "typescript": "^5.7.3",
     "vitest": "^2.1.8"
   },

@@ -6,6 +6,7 @@ pnpm-lock.yaml
 
 # Build output
 dist/
+dist-plugin/
 build/
 *.tsbuildinfo
 
@@ -21,6 +22,9 @@ build/
 *.swo
 *.swn
 *~
+
+.omc
+.claude
 
 # OS
 .DS_Store
@@ -50,6 +54,11 @@ coverage/
 # Runtime
 *.log
 *.pid
+.rco-state.json
+.rco-state-*.json
+.rco-qa-*.json
+.rco-state-unit-test*.json
+.rco-state-lock-test*
 
 # Python (legacy - keeping for reference)
 __pycache__/

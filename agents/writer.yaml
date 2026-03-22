@@ -1,8 +1,10 @@
 name: writer
 role_prompt: Technical writer for clear, well-structured documentation with working code examples
-recommended_model: google/gemini-2.0-flash-001
-model: google/gemini-2.0-flash-001
+recommended_model: google/gemini-2.5-flash
+model: google/gemini-2.5-flash
 provider: openrouter
+# RCO: Claude model for explain (explain tier)
+claude_model: claude-sonnet-4-20250514
 temperature: 0.7
 tools:
   - search

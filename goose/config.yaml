@@ -1,0 +1,35 @@
+# Goose Configuration Template for Roland Integration
+#
+# Copy this file to ~/.config/goose/config.yaml (or merge into your existing config).
+# Set OPENROUTER_API_KEY in your environment before running Goose.
+#
+# Budget: ~$75/month → estimated ~$23/month at moderate usage
+# Dispatcher cost: ~$0.10/month (routing only, no real work)
+# Agent costs managed by Roland's triage — routes to cheapest adequate model.
+
+GOOSE_PROVIDER: openrouter
+GOOSE_MODEL: google/gemini-2.0-flash
+
+extensions:
+  roland:
+    type: stdio
+    cmd: "node"
+    args:
+      - "dist/index.js"
+    enabled: true
+    timeout: 300
+    description: "Smart model routing and agent persona selection"
+  developer:
+    type: builtin
+    timeout: 300
+
+# Model tiers used by Roland's triage:
+#
+#   Critical:   anthropic/claude-sonnet-4    — architecture, security
+#   High-value: google/gemini-2.5-pro        — planning, code review
+#   Workhorse:  deepseek/deepseek-chat (V3)  — implementation, testing, most work
+#   Light:      google/gemini-2.5-flash      — docs, exploration
+#   Prototype:  x-ai/grok-3-mini            — fast scaffolding
+#   Dispatcher: google/gemini-2.0-flash      — routing only
+#
+# If DeepSeek is down, agents fall back to gemini-2.5-flash automatically.

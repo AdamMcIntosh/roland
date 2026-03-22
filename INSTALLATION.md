@@ -185,6 +185,99 @@ No API key is required for the MCP tools themselves. All tools run locally. The 
 
 See [TESTING.md](TESTING.md) for a full testing walkthrough.
 
+## Goose Setup (OpenRouter)
+
+Roland works as a [Goose](https://block.github.io/goose/) MCP extension with smart model routing via OpenRouter.
+
+### How It Works
+
+```
+User prompt
+  → Goose main session (cheap/free dispatcher model)
+    → Calls Roland MCP extension `triage` tool
+      → Roland analyzes keywords/complexity (deterministic, no LLM)
+      → Returns: recommended OpenRouter model + agent persona + instructions
+    → Goose spawns subagent with recommended model + persona instructions
+      → Subagent does the actual work
+    → Result returned to user
+```
+
+### Prerequisites
+
+- **Goose**: Install from [block.github.io/goose](https://block.github.io/goose/)
+- **OpenRouter API key**: Sign up at [openrouter.ai](https://openrouter.ai/) and set `OPENROUTER_API_KEY`
+- **Roland**: Built (`npm run build`)
+
+### 1. Configure Goose
+
+Copy the template config or merge into your existing Goose config:
+
+```bash
+# Copy the template
+cp roland/goose/config.yaml ~/.config/goose/config.yaml
+
+# Or merge the roland extension into your existing config
+```
+
+Edit `~/.config/goose/config.yaml` and update the Roland extension path:
+
+```yaml
+extensions:
+  roland:
+    type: stdio
+    cmd: "node"
+    args:
+      - "/absolute/path/to/roland/dist/index.js"   # <-- UPDATE THIS
+    enabled: true
+    timeout: 300
+```
+
+### 2. Set Environment Variables
+
+```bash
+export OPENROUTER_API_KEY=sk-or-...your-key...
+```
+
+### 3. Verify
+
+```bash
+goose session
+# In the session, type:
+> /tools
+# You should see Roland's tools: triage, route_model, track_cost, etc.
+
+> Use the health_check tool
+# Should return: status: healthy
+```
+
+### 4. Use Goose Recipes (Optional)
+
+Run pre-built multi-agent workflows:
+
+```bash
+goose run --recipe goose/recipes/roland-plan-exec-rev-ex.yaml --task "Build a todo app"
+goose run --recipe goose/recipes/roland-bugfix.yaml --task "Fix the login timeout issue"
+goose run --recipe goose/recipes/roland-security-audit.yaml --task "Audit the auth module"
+```
+
+### Dispatcher Model Selection
+
+The dispatcher model handles routing only — it should be cheap/free and support tool calling. Recommended free models:
+
+| Model | Notes |
+|-------|-------|
+| `google/gemini-2.0-flash-exp:free` | Fast, good tool calling (default) |
+| `google/gemma-3-27b-it:free` | Solid alternative |
+| `mistralai/mistral-small-3.1-24b-instruct:free` | Good structured output |
+
+Change the dispatcher in `~/.config/goose/config.yaml`:
+
+```yaml
+GOOSE_MODEL: google/gemma-3-27b-it:free  # or any free model with tool calling
+```
+
+Roland's `triage` tool will recommend more capable (paid) models for the actual work — the dispatcher just needs to route.
+
 ## Troubleshooting
 
 | Problem | Fix |
