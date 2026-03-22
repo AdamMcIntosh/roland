@@ -37,11 +37,17 @@ roland:
 goose:
   dispatcher_model: google/gemini-2.0-flash    # Stable, ~$0.10/mo for routing
   dispatcher_provider: openrouter
-  known_free_models:
-    - google/gemini-2.0-flash-exp:free
-    - google/gemma-3-27b-it:free
-    - mistralai/mistral-small-3.1-24b-instruct:free
-  fallback_model: google/gemini-2.5-flash      # Budget-safe fallback
+  known_free_models:                              # All support tool calling, 128K+ context
+    - qwen/qwen3-coder:free                      # Best free coder, 262K, agentic focus
+    - nvidia/nemotron-3-super-120b-a12b:free      # Top SWE-Bench, multi-step planning
+    - minimax/minimax-m2.5:free                   # 197K, strong SWE-Bench
+    - arcee-ai/trinity-large-preview:free         # Complex toolchains
+    - mistralai/mistral-small-3.1-24b-instruct:free  # Fast structured output
+    - z-ai/glm-4.5-air:free                      # Thinking mode, agent-centric
+  fallback_model: google/gemini-2.5-flash         # Budget-safe paid fallback
+  budget_degradation_threshold: 0.8               # Switch to free models at 80%
+  free_model_coding: qwen/qwen3-coder:free        # Primary free model for coding
+  free_model_reasoning: nvidia/nemotron-3-super-120b-a12b:free  # Primary free for reasoning
 
 # Roland Code Orchestrator (RCO) — Claude-centric multi-agent orchestration
 rco:

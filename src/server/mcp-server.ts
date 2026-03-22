@@ -53,6 +53,33 @@ const OPENROUTER_MODELS: Record<string, string> = {
 };
 
 /**
+ * Free model fallbacks — used when budget exceeds 80%.
+ * All models support tool calling and have 128K+ context.
+ * Update these when better free models become available on OpenRouter.
+ *
+ * Last verified: March 2026
+ */
+const FREE_MODELS = {
+  // Primary: Qwen3 Coder — best free coding model, 262K context, native tool calling
+  primary: 'qwen/qwen3-coder:free',
+  // Secondary: NVIDIA Nemotron — top SWE-Bench, multi-step agentic coding
+  secondary: 'nvidia/nemotron-3-super-120b-a12b:free',
+  // Tier-specific free models
+  coding: 'qwen/qwen3-coder:free',               // Best free coder, agentic focus
+  reasoning: 'nvidia/nemotron-3-super-120b-a12b:free', // Multi-step planning, tool use
+  light: 'mistralai/mistral-small-3.1-24b-instruct:free', // Docs, fast structured output
+  // Additional fallbacks (if primary/secondary are rate-limited)
+  fallbacks: [
+    'minimax/minimax-m2.5:free',                  // 197K context, strong SWE-Bench
+    'arcee-ai/trinity-large-preview:free',        // Complex toolchains
+    'z-ai/glm-4.5-air:free',                      // Thinking mode, agent-centric
+  ],
+};
+
+/** Budget degradation threshold (0.0-1.0). At this %, all models switch to free. */
+const BUDGET_DEGRADATION_THRESHOLD = 0.8;
+
+/**
  * Maps agent names to their recommended OpenRouter model.
  *
  * Budget-optimized for ~$75/month (~$23/mo at moderate usage):
@@ -87,6 +114,34 @@ const AGENT_OPENROUTER_MODELS: Record<string, string> = {
   writer: 'google/gemini-2.5-flash',
   explore: 'google/gemini-2.5-flash',
 };
+
+/**
+ * Check if budget is in degraded mode (>=80% used).
+ * Returns the free model to use, or null if budget is fine.
+ */
+function getBudgetDegradedModel(agentName?: string): string | null {
+  const status = BudgetManager.getStatus();
+  if (!status.enabled) return null;
+
+  const usagePercent = status.maxBudget > 0
+    ? status.currentSpending / status.maxBudget
+    : 0;
+
+  if (usagePercent < BUDGET_DEGRADATION_THRESHOLD) return null;
+
+  // Budget exceeded threshold — return appropriate free model
+  if (agentName) {
+    // Security/architecture agents get the reasoning free model
+    if (['architect', 'security-reviewer', 'planner', 'critic', 'code-reviewer'].includes(agentName)) {
+      return FREE_MODELS.reasoning;
+    }
+    // Coding agents get the coding free model
+    if (['executor', 'build-fixer', 'qa-tester', 'tdd-guide', 'designer'].includes(agentName)) {
+      return FREE_MODELS.coding;
+    }
+  }
+  return FREE_MODELS.primary;
+}
 
 // ============================================================================
 // MCP Server Implementation (v2)
@@ -459,9 +514,16 @@ export class McpServer {
 
         // --- Goose dispatch fields ---
         const agentName = topAgent.score > 0 ? topAgent.name : 'executor';
-        const openrouterModel = AGENT_OPENROUTER_MODELS[agentName]
+        let openrouterModel = AGENT_OPENROUTER_MODELS[agentName]
           || OPENROUTER_MODELS[complexity.complexity]
           || 'google/gemini-2.5-flash';
+
+        // Budget degradation: switch to free models at 80% usage
+        const degradedModel = getBudgetDegradedModel(agentName);
+        const budgetDegraded = degradedModel !== null;
+        if (budgetDegraded) {
+          openrouterModel = degradedModel;
+        }
 
         // Load persona instructions from agent YAML
         const personaInstructions = this.loadAgentRolePrompt(agentName);
@@ -469,6 +531,11 @@ export class McpServer {
         recommendation.openrouter_model = openrouterModel;
         recommendation.persona_instructions = personaInstructions;
         recommendation.temperature = 0.7;
+
+        if (budgetDegraded) {
+          recommendation.budget_degraded = true;
+          recommendation.budget_notice = `Budget ≥80% used — switched to free model (${openrouterModel}). Quality may be reduced.`;
+        }
 
         recommendation.instructions = suggestRecipe
           ? `Adopt the "${agentName}" persona. A multi-agent recipe "${topRecipe.name}" is recommended — offer to run it, or proceed as the recommended agent if the user prefers a single pass.`
@@ -619,9 +686,15 @@ export class McpServer {
           analysis.tokenEstimate * 2 // Rough output estimate
         );
 
-        // Map to OpenRouter model ID
-        const openrouterModel = OPENROUTER_MODELS[analysis.complexity]
+        // Map to OpenRouter model ID (with budget degradation)
+        let openrouterModel = OPENROUTER_MODELS[analysis.complexity]
           || 'google/gemini-2.5-flash';
+
+        const degradedModel = getBudgetDegradedModel();
+        const budgetDegraded = degradedModel !== null;
+        if (budgetDegraded) {
+          openrouterModel = degradedModel;
+        }
 
         return {
           recommended_model: recommendedModel,
@@ -636,6 +709,10 @@ export class McpServer {
             name: f.name,
             weight: f.weight,
           })),
+          ...(budgetDegraded ? {
+            budget_degraded: true,
+            budget_notice: `Budget ≥80% used — switched to free model (${openrouterModel}). Quality may be reduced.`,
+          } : {}),
         };
       },
       {
