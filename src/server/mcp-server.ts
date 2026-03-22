@@ -88,7 +88,7 @@ const BUDGET_DEGRADATION_THRESHOLD = 0.8;
  *   - Workhorse (most agents):         deepseek-chat (V3) (~55% budget, ~$1)
  *   - Light (writer, explore, docs):   gemini-2.5-flash   (~10% budget, ~$0.50)
  *   - Prototyping:                     grok-3-mini        (on-demand)
- *   - Dispatcher:                      gemini-2.0-flash   (~$0.10)
+ *   - Main session:                    gemini-2.5-flash   (~$0.50)
  *
  * Fallback: if DeepSeek is down, agents fall back to gemini-2.5-flash.
  */

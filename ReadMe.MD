@@ -117,7 +117,7 @@ Roland isn't meant to handle every task. Use the right tool for the job:
 | High-value | `google/gemini-2.5-pro` | $1.25 / $10 | Planning, code review |
 | Workhorse | `deepseek/deepseek-chat` (V3) | $0.27 / $1.10 | Implementation, testing, most work |
 | Light | `google/gemini-2.5-flash` | $0.15 / $0.60 | Docs, exploration |
-| Dispatcher | `google/gemini-2.0-flash` | $0.10 / $0.40 | Routing only |
+| Main session | `google/gemini-2.5-flash` | $0.15 / $0.60 | Routing + file edits |
 
 ### IDE-Native Integration
 Run `npm run init -- /path/to/your/project` to set up any project with Roland, or `npm run export-configs` for the Roland repo itself:
@@ -296,6 +296,7 @@ The benchmark runs three sample tasks (e.g. "Build todo app", "CLI tool", "Bug f
 | Doc | Contents |
 |-----|----------|
 | [INSTALLATION.md](INSTALLATION.md) | Setup, IDE configuration, project portability |
+| [Goose User Guide](docs/guides/goose-user-guide.md) | Goose setup, model tiers, budget management, recipes |
 | [TESTING.md](TESTING.md) | Automated tests (Vitest), manual IDE tests, QA scenarios, benchmarks |
 | [RECIPES_CATALOG.md](RECIPES_CATALOG.md) | Complete recipe reference with agent chains |
 | [CHANGELOG.md](CHANGELOG.md) | Version history (Keep a Changelog format) |

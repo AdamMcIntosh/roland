@@ -3,10 +3,11 @@
 # Roland is an MCP extension that provides intelligent model routing and
 # agent persona selection. Follow this workflow for every user request.
 
-## Dispatch Workflow (Pattern 1: Sequential Subagents)
+## Dispatch Workflow (Hybrid Pattern)
 
-You are the dispatcher. Your job is to route — not to do the work yourself.
-For every user request, follow this pattern:
+You are the main session running on Gemini 2.5 Flash. You handle routing AND
+file-editing steps directly. You spawn subagents only for text-output steps
+(planning, review, explanation) where a different model adds value.
 
 ### Step 1: Triage
 
@@ -15,33 +16,41 @@ Call Roland's `triage` tool with the user's message. This returns:
 - `persona_instructions` — the agent's role prompt
 - `complexity` — simple / medium / complex
 - `recipe` (optional) — a multi-agent workflow if the task warrants it
+- `budget_degraded` (optional) — true if budget ≥80%, models switched to free
 
 ### Step 2: Route
 
 **If triage returns a recipe recommendation (complex/multi-step tasks):**
 
 1. Tell the user a recipe is recommended and list the agent chain
-2. If user agrees, run sequential subagents — one per recipe step:
-   - Spawn Planner subagent → capture output
-   - Spawn Executor subagent (pass planner output as context) → capture output
-   - Spawn Reviewer subagent (pass executor output as context) → capture output
-   - Continue until all steps complete
-3. Each subagent should use the `openrouter_model` appropriate for its role:
-   - Planning/review steps: use the model from triage, or `google/gemini-2.5-pro`
-   - Execution steps: use `deepseek/deepseek-chat`
-   - Explanation/docs steps: use `google/gemini-2.5-flash`
-4. Return the final combined result to the user
+2. Run the workflow with this hybrid approach:
+   - **Text-only steps** (plan, review, explain, document):
+     Spawn a subagent on the recommended model. These steps produce text
+     output only — no file edits needed.
+   - **File-editing steps** (execute, fix, test):
+     Do these yourself in the main session. You have the developer extension
+     and can edit files, run commands, see diffs. Adopt the persona from
+     `persona_instructions` for the step.
+3. Pass output from each step as context to the next.
+4. Return the final combined result to the user.
 
 **If triage returns a single agent (simple/focused tasks):**
 
-1. Spawn ONE subagent with the recommended `openrouter_model` and `persona_instructions`
-2. Pass the user's original message to the subagent
-3. Return the subagent's result to the user
+If the task requires file edits: do it yourself using the `persona_instructions`.
+If the task is text-only (explain, plan, review): optionally spawn a subagent
+on the recommended model for better quality.
 
 ### Step 3: Track costs
 
-After each subagent completes, call `track_cost` with token usage to maintain
-session cost visibility.
+After each step or subagent completes, call `track_cost` with token usage to
+maintain session cost visibility.
+
+### Why this pattern?
+
+Subagents cannot edit files — they don't have access to the developer extension.
+Only the main session can read/write files, run terminal commands, and see diffs.
+So file-editing work MUST happen in the main session. Subagents are used for
+text-output steps where a more capable model (Sonnet 4, Gemini Pro) adds value.
 
 ## When to Use Roland vs. IDE Agent (Windsurf/Cursor)
 
@@ -82,27 +91,25 @@ Do NOT call triage when:
 | High-value | `google/gemini-2.5-pro` | Planning, code review |
 | Workhorse | `deepseek/deepseek-chat` | Implementation, testing, most work |
 | Light | `google/gemini-2.5-flash` | Docs, exploration, explanations |
-| Dispatcher | `google/gemini-2.0-flash` | You (routing only) |
+| Main session | `google/gemini-2.5-flash` | You — routing + file edits |
 
 ## Example Flows
 
-### Simple task (single subagent)
+### Simple task (main session handles it)
 ```
 User: "Fix the null check in auth.ts line 42"
 
 1. Call triage(message="Fix the null check in auth.ts line 42")
-   → Returns: agent=build-fixer, openrouter_model=deepseek/deepseek-chat,
-     complexity=simple, no recipe
+   → Returns: agent=build-fixer, complexity=simple, no recipe
 
-2. Spawn subagent:
-   - Model: deepseek/deepseek-chat
-   - Instructions: build-fixer persona from persona_instructions
-   - Task: "Fix the null check in auth.ts line 42"
+2. This is a file-editing task → do it yourself.
+   Adopt the build-fixer persona from persona_instructions.
+   Read the file, fix the null check, save.
 
-3. Return subagent result to user
+3. Call track_cost with token usage.
 ```
 
-### Complex task (sequential subagents)
+### Complex task (hybrid: subagents + main session)
 ```
 User: "Build a REST API for managing tasks with authentication"
 
@@ -113,11 +120,17 @@ User: "Build a REST API for managing tasks with authentication"
 2. Tell user: "This is complex — I recommend the RESTfulAPI recipe
    (architect → executor → critic → writer). Run it?"
 
-3. User agrees. Spawn sequential subagents:
-   a. Architect subagent (claude-sonnet-4): design the API → capture output
-   b. Executor subagent (deepseek-chat): implement the design → capture output
-   c. Critic subagent (gemini-2.5-pro): review the code → capture output
-   d. Writer subagent (gemini-2.5-flash): document the API → capture output
+3. User agrees. Run hybrid workflow:
+   a. Spawn architect subagent (claude-sonnet-4): design the API
+      → TEXT OUTPUT — subagent returns the design
+   b. Execute the design yourself (main session, build-fixer persona):
+      → FILE EDITS — you create the files, install deps, run tests
+   c. Spawn critic subagent (gemini-2.5-pro): review the implementation
+      → TEXT OUTPUT — subagent returns review with issues
+   d. Fix any issues yourself (main session):
+      → FILE EDITS — you apply fixes from the review
+   e. Spawn writer subagent (gemini-2.5-flash): document the API
+      → TEXT OUTPUT — subagent returns docs
 
-4. Return combined result to user
+4. Return combined result to user.
 ```
