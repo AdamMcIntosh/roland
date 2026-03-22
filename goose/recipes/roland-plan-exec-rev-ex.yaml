@@ -1,33 +1,36 @@
 id: roland-plan-exec-rev-ex
 version: 1.0.0
-title: Roland PlanExecRevEx — 4-Agent Coding Loop
-description: "Autonomous coding loop: plan → execute → review → explain"
+title: "Roland PlanExecRevEx \u2014 4-Agent Coding Loop"
+description: "Autonomous coding loop: plan \u2192 execute \u2192 review \u2192 explain"
 instructions: |-
-  You are orchestrating a 4-agent coding workflow using Roland.
+  You are the dispatcher orchestrating a 4-agent coding workflow.
+  Spawn each step as a separate subagent on the appropriate model.
 
-  ## Workflow
+  ## Step 1: Plan (google/gemini-2.5-pro)
+  Spawn a planner subagent. It should break the task into detailed steps,
+  required files, dependencies, best practices, and risks.
+  Capture its full output.
 
-  1. **Plan**: Call `triage` with the task, then as the planner persona, break the task into
-     detailed steps, required files, dependencies, and best practices.
+  ## Step 2: Execute (deepseek/deepseek-chat)
+  Spawn an executor subagent. Pass the planner's output as context.
+  It should implement the plan: edit/create files, install deps, run tests.
+  Capture its full output.
 
-  2. **Execute**: Switch to executor persona. Implement the plan: edit/create files,
-     install deps, run tests. Handle errors autonomously.
+  ## Step 3: Review (google/gemini-2.5-pro)
+  Spawn a reviewer subagent. Pass the executor's output as context.
+  It should check for bugs, performance issues, security vulnerabilities,
+  and code smells. If critical issues are found, spawn another executor
+  subagent to fix them (max 3 loops).
+  Capture its full output.
 
-  3. **Review**: Switch to critic persona. Analyze the implementation for bugs,
-     performance issues, security vulnerabilities, and code smells. If issues found,
-     loop back to Execute (max 3 loops).
+  ## Step 4: Explain (google/gemini-2.5-flash)
+  Spawn an explainer subagent. Pass the final code and review output.
+  It should summarize what was done, key decisions, and trade-offs.
 
-  4. **Explain**: Summarize what was done, why each key decision was made, and
-     any trade-offs. Use clear language and diagrams if helpful.
+  Return the combined result to the user.
 
-  ## Model Selection
-
-  Call Roland's `triage` tool at the start to get the recommended `openrouter_model`.
-  Use capable models (e.g., anthropic/claude-sonnet-4) for planning and review steps,
-  and balanced models (e.g., google/gemini-2.5-flash) for execution.
-
-  Alternatively, use `start_recipe` with recipe_name="PlanExecRevEx" for server-managed
-  step-by-step orchestration.
+  ## Cost estimate
+  ~$0.08 per run at ~50K tokens/step.
 extensions:
   - name: developer
     timeout: 300
