@@ -36,7 +36,7 @@ roland:
 
 # Goose integration — smart dispatcher model routing via OpenRouter
 goose:
-  dispatcher_model: google/gemini-2.5-flash    # Main session: routing + execution (~$0.50/mo)
+  dispatcher_model: anthropic/claude-haiku-4.5  # Main session: routing + execution (~$4/mo)
   dispatcher_provider: openrouter
   known_free_models:                              # All support tool calling, 128K+ context
     - qwen/qwen3-coder:free                      # Best free coder, 262K, agentic focus

@@ -10,7 +10,7 @@ Roland is an MCP extension that makes Goose smarter about model selection. Inste
 
 ```
 You type a prompt
-  → Goose main session (Gemini 2.5 Flash — routing + file edits)
+  → Goose main session (Claude Haiku 4.5 — routing + file edits)
     → Calls Roland's triage tool
     → Roland analyzes: keywords, complexity, budget status
     → Returns: recommended model + agent persona + instructions
@@ -22,7 +22,7 @@ You type a prompt
 You don't need to think about which model to use. Roland handles it.
 
 **Why hybrid?** Subagents can't edit files — they don't have developer extension
-access. The main session (Gemini 2.5 Flash) handles all file operations, while
+access. The main session (Claude Haiku 4.5) handles all file operations, while
 subagents on more capable models (Sonnet 4, Gemini Pro) handle planning and review.
 
 ## Setup
@@ -45,7 +45,7 @@ Edit `~/.config/goose/config.yaml` — update the Roland path:
 
 ```yaml
 GOOSE_PROVIDER: openrouter
-GOOSE_MODEL: google/gemini-2.0-flash
+GOOSE_MODEL: anthropic/claude-haiku-4.5
 
 extensions:
   roland:
@@ -79,7 +79,7 @@ That's $2.85/day = ~$85/month. Roland will automatically switch to free models w
 > Use the health_check tool
 ```
 
-You should see `status: healthy` and a list of 10 tools.
+You should see `status: healthy` and a list of 11 tools.
 
 ## Daily Usage
 
@@ -160,7 +160,8 @@ Roland uses smart triage to route each task to the right model, optimized for an
 |------|-------|---------------|----------|
 | **Complex code + thinking** | `anthropic/claude-sonnet-4` | $3 / $15 | Code authoring (complex), architecture, security, planning, review — 40% of traffic, 94% of spend |
 | **Medium text tasks** | `deepseek/deepseek-chat` (V3) | $0.27 / $1.10 | Text-only subagents for medium complexity |
-| **Main session + light** | `google/gemini-2.5-flash` | $0.15 / $0.60 | Routing, file I/O, simple code, docs, exploration |
+| **Main session** | `anthropic/claude-haiku-4.5` | $1 / $5 | Routing, file I/O, tool calling — precise instruction following |
+| **Light** | `google/gemini-2.5-flash` | $0.15 / $0.60 | Docs, exploration |
 
 ### Smart triage execution strategy
 
@@ -229,9 +230,9 @@ All free models support tool calling and have 128K+ context. You can keep workin
 
 | Usage level | Tasks/day | Tokens/month | Cost | Headroom ($85) |
 |-------------|-----------|-------------|------|----------------|
-| Light | 5 | ~8M | **~$27** | $58 |
-| Moderate | 10 | ~15M | **~$50** | $35 |
-| Heavy | 20 | ~30M | **~$80** | $5 |
+| Light | 5 | ~8M | **~$28** | $57 |
+| Moderate | 10 | ~15M | **~$52** | $33 |
+| Heavy | 20 | ~30M | **~$82** | $3 |
 
 ~94% of spend goes to Sonnet 4 subagents (complex code + thinking). Everything else is cheap plumbing.
 
@@ -258,6 +259,7 @@ At moderate usage: ~400 recipe runs/month within $85 budget.
 | `list_recipes` | Browse available workflow recipes |
 | `start_recipe` | Begin a multi-agent recipe |
 | `advance_recipe` | Move to next recipe step |
+| `session_context` | Persistent memory for long sessions — decisions, files, patterns, migrations |
 | `health_check` | Server status |
 
 ## Agent Catalog

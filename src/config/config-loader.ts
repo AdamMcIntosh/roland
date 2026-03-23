@@ -37,7 +37,7 @@ const SessionConfigSchema = z.object({
 });
 
 const GooseConfigSchema = z.object({
-  dispatcher_model: z.string().default('google/gemini-2.5-flash'),
+  dispatcher_model: z.string().default('anthropic/claude-haiku-4.5'),
   dispatcher_provider: z.string().default('openrouter'),
   known_free_models: z.array(z.string()).default([]),
   fallback_model: z.string().default('google/gemini-2.5-flash'),

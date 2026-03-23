@@ -83,7 +83,7 @@ const BUDGET_DEGRADATION_THRESHOLD = 0.8;
 /**
  * Maps agent names to their recommended OpenRouter model.
  *
- * Budget-optimized for ~$75/month (~$23/mo at moderate usage):
+ * Budget-optimized for ~$85/month (~$52/mo at moderate usage):
  *   - Critical (architect, security):  claude-sonnet-4    (~15% budget, ~$11)
  *   - High-value (planner, critic):    gemini-2.5-pro     (~15% budget, ~$11)
  *   - Workhorse (most agents):         deepseek-chat (V3) (~55% budget, ~$1)

@@ -84,7 +84,7 @@ If you just want to test within the roland repo itself, the existing `.cursor/mc
 
 1. Open **Settings → MCP** — `roland` should show a green status
 2. Open chat and type: *"Use the health_check tool"*
-3. You should get `status: healthy` and a list of 9 tools
+3. You should get `status: healthy` and a list of 11 tools
 
 If the server shows red, rebuild (`npm run build` in the roland directory) and click **Restart** next to roland in Settings → MCP.
 
@@ -170,6 +170,7 @@ Once connected, the Roland MCP server provides:
 | `list_recipes` | Browse available workflow recipes |
 | `start_recipe` | Start a multi-agent recipe, get first step prompt |
 | `advance_recipe` | Advance recipe to next step or get summary |
+| `session_context` | Persistent memory for long sessions — tracks decisions, files, patterns |
 
 No API key is required for the MCP tools themselves. All tools run locally. The IDE's own model handles execution.
 
@@ -181,7 +182,7 @@ No API key is required for the MCP tools themselves. All tools run locally. The 
 2. Open any project in Cursor (with global config) or a project where you ran `init`
 3. Go to **Settings → MCP** and verify `roland` shows a green status
 4. Open Cursor chat and ask: *"Use the health_check tool"*
-5. You should get a response with `status: healthy` and a list of 9 tools
+5. You should get a response with `status: healthy` and a list of 11 tools
 
 See [TESTING.md](TESTING.md) for a full testing walkthrough.
 
@@ -266,17 +267,19 @@ The dispatcher model handles routing only — it should be cheap/free and suppor
 
 | Model | Notes |
 |-------|-------|
-| `google/gemini-2.0-flash-exp:free` | Fast, good tool calling (default) |
-| `google/gemma-3-27b-it:free` | Solid alternative |
-| `mistralai/mistral-small-3.1-24b-instruct:free` | Good structured output |
+| `anthropic/claude-haiku-4.5` | Best instruction following, reliable tool calling (default) |
+| `google/gemini-2.5-flash` | Cheaper alternative, good tool calling |
+| `google/gemini-2.0-flash-exp:free` | Free option (less reliable) |
 
-Change the dispatcher in `~/.config/goose/config.yaml`:
+Change the main session model in `~/.config/goose/config.yaml`:
 
 ```yaml
-GOOSE_MODEL: google/gemma-3-27b-it:free  # or any free model with tool calling
+GOOSE_MODEL: anthropic/claude-haiku-4.5   # $52/mo — precise instruction following (default)
+# GOOSE_MODEL: anthropic/claude-sonnet-4  # $95/mo — upgrade if Haiku isn't enough
+# GOOSE_MODEL: google/gemini-2.5-flash    # $18/mo — budget option
 ```
 
-Roland's `triage` tool will recommend more capable (paid) models for the actual work — the dispatcher just needs to route.
+The main session handles routing AND file edits. Sonnet 4 subagents handle complex code authoring via smart triage.
 
 ## Troubleshooting
 

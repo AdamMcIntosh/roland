@@ -5,7 +5,7 @@
 
 ## Dispatch Workflow (Hybrid Pattern)
 
-You are the main session running on Gemini 2.5 Flash. You handle routing AND
+You are the main session running on Claude Haiku 4.5. You handle routing AND
 file-editing steps directly. You spawn subagents only for text-output steps
 (planning, review, explanation) where a different model adds value.
 

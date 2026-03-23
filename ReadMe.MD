@@ -18,7 +18,7 @@ With Goose, Roland acts as a smart dispatcher: a cheap model handles routing, ca
 ## Key Features
 
 ### MCP Tools
-Ten tools exposed to any MCP-compatible client (VS Code Copilot, Cursor, Claude Desktop, etc.):
+Eleven tools exposed to any MCP-compatible client (VS Code Copilot, Cursor, Claude Desktop, Goose, etc.):
 
 | Tool | Purpose |
 |------|---------|
@@ -32,6 +32,7 @@ Ten tools exposed to any MCP-compatible client (VS Code Copilot, Cursor, Claude 
 | `list_recipes` | Browse available multi-agent workflow recipes |
 | `start_recipe` | Begin a multi-agent recipe session, get first step prompt |
 | `advance_recipe` | Submit step output, get next step or final summary |
+| `session_context` | Persistent session memory — decisions, files, patterns, migrations |
 
 ### 32 Specialized Agent Personas
 YAML-defined agents in `./agents/`, exported as IDE-native config files:
@@ -129,15 +130,16 @@ This gives you Sonnet 4 quality on complex enterprise code without paying Sonnet
 |------|-------|---------------|----------|
 | Complex code + thinking | `anthropic/claude-sonnet-4` | $3 / $15 | Code authoring, architecture, security, planning, review |
 | Medium text tasks | `deepseek/deepseek-chat` (V3) | $0.27 / $1.10 | Text-only subagents for medium tasks |
-| Main session + light | `google/gemini-2.5-flash` | $0.15 / $0.60 | Routing, file I/O, docs, exploration |
+| Main session | `anthropic/claude-haiku-4.5` | $1 / $5 | Routing, file I/O, tool calling — precise instruction following |
+| Light | `google/gemini-2.5-flash` | $0.15 / $0.60 | Docs, exploration |
 
-#### Monthly cost (~$50 at moderate usage, $85 budget)
+#### Monthly cost (~$52 at moderate usage, $85 budget)
 
 | Level | Cost | Headroom |
 |-------|------|----------|
-| Light (5 tasks/day) | ~$27 | $58 |
-| Moderate (10/day) | ~$50 | $35 |
-| Heavy (20/day) | ~$80 | $5 |
+| Light (5 tasks/day) | ~$28 | $57 |
+| Moderate (10/day) | ~$52 | $33 |
+| Heavy (20/day) | ~$82 | $3 |
 | At 80% ($68) | Degrades to free models | $0 after |
 
 ### IDE-Native Integration
@@ -295,7 +297,7 @@ The benchmark runs three sample tasks (e.g. "Build todo app", "CLI tool", "Bug f
 │  (VS Code Copilot, Cursor, Claude Desktop, Goose)          │
 ├─────────────────────────────────────────────────────────────┤
 │                   MCP Server (stdio)                        │
-│  (mcp-server.ts — 10 registered tools)                     │
+│  (mcp-server.ts — 11 registered tools)                     │
 ├─────────────────────────────────────────────────────────────┤
 │                  Orchestration Layer                        │
 │  (model-router, complexity-classifier, cost-tracker)       │
