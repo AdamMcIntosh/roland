@@ -84,7 +84,7 @@ If you just want to test within the roland repo itself, the existing `.cursor/mc
 
 1. Open **Settings → MCP** — `roland` should show a green status
 2. Open chat and type: *"Use the health_check tool"*
-3. You should get `status: healthy` and a list of 11 tools
+3. You should get `status: healthy` and a list of 20 tools
 
 If the server shows red, rebuild (`npm run build` in the roland directory) and click **Restart** next to roland in Settings → MCP.
 
@@ -135,6 +135,10 @@ npm run init -- /path/to/your/project
 | `.vscode/mcp.json` | VS Code MCP config (absolute path to Roland) |
 | `.github/agents/*.agent.md` | VS Code Copilot agent personas |
 | `.github/copilot-instructions.md` | Agent catalog & usage guide |
+| `.goose/config.yaml` | Goose + Roland config with smart routing instructions |
+| `.roland-permissions.json` | Permission policy for Goose sessions |
+| `roland-context.json` | Structured project context (rules, decisions, test patterns) |
+| `MIGRATION.md` | Human-readable companion to roland-context.json |
 
 If you use the **global Cursor config** (Option A above), you only need `init` when you want the agent persona files — the MCP server is already available everywhere.
 
@@ -162,7 +166,8 @@ Once connected, the Roland MCP server provides:
 | Tool | Purpose |
 |------|---------|
 | `health_check` | Server status & uptime |
-| `route_model` | Analyze complexity → recommend cheapest model |
+| `triage` | Analyze task → recommend agent, model, recipe |
+| `route_model` | Complexity analysis → cheapest suitable model |
 | `track_cost` | Log token usage, return session totals |
 | `manage_budget` | Get/set/reset spending limits |
 | `get_analytics` | Cost breakdowns by model/agent/provider |
@@ -171,6 +176,17 @@ Once connected, the Roland MCP server provides:
 | `start_recipe` | Start a multi-agent recipe, get first step prompt |
 | `advance_recipe` | Advance recipe to next step or get summary |
 | `session_context` | Persistent memory for long sessions — tracks decisions, files, patterns |
+| `preview_changes` | Generate unified diff + HTML preview of file changes |
+| `load_migration_context` | Load roland-context.json project context into session |
+| `update_migration_context` | Append rules, decisions, patterns to project context |
+| `run_goose_task` | Spawn autonomous Goose sub-session with file & shell access |
+| `git_status` | Current git status — staged, unstaged, untracked |
+| `git_diff` | Unified diff of working tree or staged changes |
+| `git_log` | Last N commits (oneline format) |
+| `git_commit` | Stage files and create a commit |
+| `analyze_screenshot` | Capture screen or load image, analyze with vision model |
+
+**Goose users get the full tool set.** VS Code/Cursor users get the routing and cost tools. `run_goose_task`, `git_*`, and `analyze_screenshot` are most useful when Roland is paired with Goose as the MCP client.
 
 No API key is required for the MCP tools themselves. All tools run locally. The IDE's own model handles execution.
 
@@ -182,7 +198,7 @@ No API key is required for the MCP tools themselves. All tools run locally. The 
 2. Open any project in Cursor (with global config) or a project where you ran `init`
 3. Go to **Settings → MCP** and verify `roland` shows a green status
 4. Open Cursor chat and ask: *"Use the health_check tool"*
-5. You should get a response with `status: healthy` and a list of 11 tools
+5. You should get a response with `status: healthy` and a list of 20 tools
 
 See [TESTING.md](TESTING.md) for a full testing walkthrough.
 
@@ -194,13 +210,15 @@ Roland works as a [Goose](https://block.github.io/goose/) MCP extension with sma
 
 ```
 User prompt
-  → Goose main session (cheap/free dispatcher model)
-    → Calls Roland MCP extension `triage` tool
-      → Roland analyzes keywords/complexity (deterministic, no LLM)
-      → Returns: recommended OpenRouter model + agent persona + instructions
-    → Goose spawns subagent with recommended model + persona instructions
-      → Subagent does the actual work
-    → Result returned to user
+  → Goose main session (coordinator)
+    → Roland MCP tools: triage, route_model, session_context
+      → Routes to best model for the job
+    → Goose Developer extension: text_editor + bash
+      → Reads/writes files, runs shell commands, runs tests
+    → run_goose_task: spawns focused sub-sessions for heavy coding
+    → git_status/diff/commit: native git workflow
+    → analyze_screenshot: vision analysis for UI/error debugging
+  → Result returned to user, session context updated
 ```
 
 ### Prerequisites
@@ -261,6 +279,29 @@ goose run --recipe goose/recipes/roland-bugfix.yaml --task "Fix the login timeou
 goose run --recipe goose/recipes/roland-security-audit.yaml --task "Audit the auth module"
 ```
 
+### 5. Init a Project (Recommended)
+
+Run `roland init` in your project directory to scaffold everything:
+
+```bash
+cd /path/to/roland
+npm run init -- /path/to/your/project
+```
+
+What gets created in your project:
+
+| File | Purpose |
+|------|---------|
+| `.goose/config.yaml` | Goose + Roland wiring with smart routing instructions |
+| `.roland-permissions.json` | Permission policy for Goose sessions (edit to add restrictions) |
+| `roland-context.json` | Structured project context (rules, decisions, patterns) |
+| `MIGRATION.md` | Human-readable companion to roland-context.json |
+| `.cursor/mcp.json` | Cursor MCP config |
+| `.vscode/mcp.json` | VS Code MCP config |
+| `.github/agents/*.agent.md` | Agent personas |
+
+The `.goose/config.yaml` wires Roland into every Goose session automatically — `load_migration_context` runs at session start, so the agent always has your project context.
+
 ### Dispatcher Model Selection
 
 The dispatcher model handles routing only — it should be cheap/free and support tool calling. Recommended free models:
@@ -307,8 +348,9 @@ npm run clean          # Remove dist/
 
 ## Next Steps
 
-1. **Read the agent catalog**: See `.github/copilot-instructions.md`
-2. **Try a recipe**: Invoke `@plan-exec-rev-ex-planner` with a coding task
-3. **Monitor costs**: Ask the agent to use `get_analytics`
-4. **Set a budget**: Ask the agent to use `manage_budget` with `set_limit`
-5. **Test recipes**: See [TESTING.md](TESTING.md)
+1. **Init your project**: `npm run init -- /path/to/project` — scaffolds all config files
+2. **Set your budget**: Ask the agent to use `manage_budget` with `set_limit`
+3. **Load project context**: Call `load_migration_context` at session start
+4. **Run a recipe**: `npx tsx scripts/run-recipe.ts --recipe BugFix --task "Fix login timeout"`
+5. **Monitor costs**: `get_analytics` — see where tokens are going
+6. **Read the guides**: See `docs/guides/goose-user-guide.md` for full usage

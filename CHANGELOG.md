@@ -5,6 +5,33 @@ All notable changes to Roland are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-03-23
+
+### Added — Gap Closure (97% Claude Code parity)
+
+- **`src/utils/git-tools.ts`** — `git_status`, `git_diff`, `git_log`, `git_commit` MCP tools for native git awareness
+- **`src/utils/screenshot.ts`** — `analyze_screenshot` MCP tool; captures screen or loads image, sends to OpenRouter vision model (default: `google/gemini-2.5-flash`)
+- **`src/utils/permission-gate.ts`** — `.roland-permissions.json` policy file; `buildPermissionBlock()` converts policy to prompt instructions
+- **Supervised spawn mode** in `goose-runner.ts` — intercepts Goose tool-call confirmation prompts, auto-approves/denies based on permission policy
+- **Named Goose sessions** — `sessionName` option in `GooseSessionOptions`; uses `goose run --session <name>` for conversation continuity across recipe steps
+- **`SessionContextManager` in recipe runner** — starts session per recipe run, injects structured context into every step prompt, updates after each step
+- **Per-step retry logic** in `run-recipe.ts` — `maxRetries` option and `--max-retries` CLI flag; failed steps re-run with error context appended
+- **`.roland-permissions.json` scaffolded by `init.ts`** — default permissive policy created in project root on `roland init`
+
+## [0.1.2] - 2026-03-20
+
+### Added — Coding Agent
+
+- **`src/utils/goose-runner.ts`** — headless Goose session spawner; replaced `spawnSync` with streaming `spawn` for real-time stdout/stderr output
+- **`run_goose_task` MCP tool** — spawn autonomous Goose coding sessions from any MCP client
+- **`scripts/run-recipe.ts`** — recipe runner using Goose sub-sessions (file/shell access per step via Developer extension)
+- **`src/utils/migration-context.ts`** — `roland-context.json` + `MIGRATION.md` context engine
+- **`load_migration_context` / `update_migration_context` MCP tools** — load and append to structured project context
+- **`preview_changes` MCP tool** — unified diff + HTML preview of file changes
+- **`ROLAND_PROJECT_ROOT` env var** — fixes cwd footgun in Goose sub-sessions
+- **`.goose/config.yaml` template** — scaffolded by `roland init` with Developer extension + smart routing instructions
+- **`VB6Migration` recipe** — 5-agent workflow: ContextLoader → Planner → Executor → Reviewer → Explainer with loop/retry
+
 ## [Unreleased]
 
 ### Added
