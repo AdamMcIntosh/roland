@@ -1,0 +1,48 @@
+# RCO Collab Mode — real-time user feedback during execution
+# Dashboard shows pause prompts; user submits feedback via WS to resume
+name: collab-mode
+description: "Pause after each step for user feedback via dashboard WebSocket"
+execution_mode: collab-mode
+max_loops: 3
+
+subagents:
+  - name: Planner
+    agentRef: planner
+    claude_model: claude-3-5-sonnet-20241022
+    prompt: |
+      You are the planning agent. For the task: {{user_task}}.
+      Output: Overview, Steps, Risks. Markdown.
+
+  - name: Executor
+    agentRef: executor
+    claude_model: claude-3-5-sonnet-20241022
+    prompt: |
+      You are the execution agent. Use plan and any [User feedback] from previous step.
+      Implement and output diffs/logs.
+
+  - name: Reviewer
+    agentRef: critic
+    claude_model: claude-3-5-sonnet-20241022
+    prompt: |
+      You are the review agent. Check Executor output. Suggest fixes or approve.
+
+  - name: Explainer
+    agentRef: writer
+    claude_model: claude-3-5-sonnet-20241022
+    prompt: |
+      You are the explanation agent. Explain final changes. Use [User feedback] if provided.
+
+workflow:
+  steps:
+    - agent: Planner
+      input: "{{user_task}}"
+      output_to: Executor
+    - agent: Executor
+      output_to: Reviewer
+    - agent: Reviewer
+      output_to: Explainer
+    - agent: Explainer
+      final_output: true
+
+options:
+  eco_mode: false

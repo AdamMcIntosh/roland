@@ -84,7 +84,7 @@ If you just want to test within the roland repo itself, the existing `.cursor/mc
 
 1. Open **Settings → MCP** — `roland` should show a green status
 2. Open chat and type: *"Use the health_check tool"*
-3. You should get `status: healthy` and a list of 9 tools
+3. You should get `status: healthy` and a list of 11 tools
 
 If the server shows red, rebuild (`npm run build` in the roland directory) and click **Restart** next to roland in Settings → MCP.
 
@@ -170,6 +170,7 @@ Once connected, the Roland MCP server provides:
 | `list_recipes` | Browse available workflow recipes |
 | `start_recipe` | Start a multi-agent recipe, get first step prompt |
 | `advance_recipe` | Advance recipe to next step or get summary |
+| `session_context` | Persistent memory for long sessions — tracks decisions, files, patterns |
 
 No API key is required for the MCP tools themselves. All tools run locally. The IDE's own model handles execution.
 
@@ -181,9 +182,104 @@ No API key is required for the MCP tools themselves. All tools run locally. The 
 2. Open any project in Cursor (with global config) or a project where you ran `init`
 3. Go to **Settings → MCP** and verify `roland` shows a green status
 4. Open Cursor chat and ask: *"Use the health_check tool"*
-5. You should get a response with `status: healthy` and a list of 9 tools
+5. You should get a response with `status: healthy` and a list of 11 tools
 
 See [TESTING.md](TESTING.md) for a full testing walkthrough.
+
+## Goose Setup (OpenRouter)
+
+Roland works as a [Goose](https://block.github.io/goose/) MCP extension with smart model routing via OpenRouter.
+
+### How It Works
+
+```
+User prompt
+  → Goose main session (cheap/free dispatcher model)
+    → Calls Roland MCP extension `triage` tool
+      → Roland analyzes keywords/complexity (deterministic, no LLM)
+      → Returns: recommended OpenRouter model + agent persona + instructions
+    → Goose spawns subagent with recommended model + persona instructions
+      → Subagent does the actual work
+    → Result returned to user
+```
+
+### Prerequisites
+
+- **Goose**: Install from [block.github.io/goose](https://block.github.io/goose/)
+- **OpenRouter API key**: Sign up at [openrouter.ai](https://openrouter.ai/) and set `OPENROUTER_API_KEY`
+- **Roland**: Built (`npm run build`)
+
+### 1. Configure Goose
+
+Copy the template config or merge into your existing Goose config:
+
+```bash
+# Copy the template
+cp roland/goose/config.yaml ~/.config/goose/config.yaml
+
+# Or merge the roland extension into your existing config
+```
+
+Edit `~/.config/goose/config.yaml` and update the Roland extension path:
+
+```yaml
+extensions:
+  roland:
+    type: stdio
+    cmd: "node"
+    args:
+      - "/absolute/path/to/roland/dist/index.js"   # <-- UPDATE THIS
+    enabled: true
+    timeout: 300
+```
+
+### 2. Set Environment Variables
+
+```bash
+export OPENROUTER_API_KEY=sk-or-...your-key...
+```
+
+### 3. Verify
+
+```bash
+goose session
+# In the session, type:
+> /tools
+# You should see Roland's tools: triage, route_model, track_cost, etc.
+
+> Use the health_check tool
+# Should return: status: healthy
+```
+
+### 4. Use Goose Recipes (Optional)
+
+Run pre-built multi-agent workflows:
+
+```bash
+goose run --recipe goose/recipes/roland-plan-exec-rev-ex.yaml --task "Build a todo app"
+goose run --recipe goose/recipes/roland-bugfix.yaml --task "Fix the login timeout issue"
+goose run --recipe goose/recipes/roland-security-audit.yaml --task "Audit the auth module"
+```
+
+### Dispatcher Model Selection
+
+The dispatcher model handles routing only — it should be cheap/free and support tool calling. Recommended free models:
+
+| Model | Notes |
+|-------|-------|
+| `anthropic/claude-haiku-4.5` | Best instruction following, reliable tool calling (default) |
+| `google/gemini-2.5-flash` | Cheaper alternative, good tool calling |
+| `google/gemini-2.0-flash-exp:free` | Free option (less reliable) |
+
+Change the main session model in `~/.config/goose/config.yaml`:
+
+```yaml
+GOOSE_MODEL: anthropic/claude-haiku-4.5   # $52/mo — precise instruction following (default)
+# GOOSE_MODEL: anthropic/claude-sonnet-4  # $95/mo — upgrade if Haiku isn't enough
+# GOOSE_MODEL: google/gemini-2.5-flash    # $18/mo — budget option
+```
+
+The main session handles routing AND file edits. Sonnet 4 subagents handle complex code authoring via smart triage.
 
 ## Troubleshooting
 

@@ -1,7 +1,8 @@
 name: tdd-guide
 role_prompt: TDD coach enforcing red-green-refactor cycle with meaningful, independent tests
-recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
-model: nousresearch/hermes-3-llama-3.1-405b:free
+recommended_model: deepseek/deepseek-chat
+model: deepseek/deepseek-chat
+claude_model: claude-sonnet-4-20250514
 provider: openrouter
 temperature: 0.6
 tools:

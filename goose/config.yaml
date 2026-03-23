@@ -1,0 +1,39 @@
+# Goose Configuration Template for Roland Integration
+#
+# Copy this file to ~/.config/goose/config.yaml (or merge into your existing config).
+# Set OPENROUTER_API_KEY in your environment before running Goose.
+#
+# Budget: ~$85/month → estimated ~$52/month at moderate usage
+# Main session cost: ~$4/month (Haiku 4.5 — routing + file edits)
+# Agent costs managed by Roland's triage — routes to cheapest adequate model.
+
+GOOSE_PROVIDER: openrouter
+# Main session model — handles routing, file editing, tool calling.
+# Haiku 4.5: best instruction following per dollar. Upgrade path:
+#   anthropic/claude-haiku-4.5    — $52/mo, A- instruction following (current)
+#   anthropic/claude-sonnet-4     — $95/mo, A+ everything (if Haiku isn't enough)
+GOOSE_MODEL: anthropic/claude-haiku-4.5
+
+extensions:
+  roland:
+    type: stdio
+    cmd: "node"
+    args:
+      - "dist/index.js"
+    enabled: true
+    timeout: 300
+    description: "Smart model routing and agent persona selection"
+  developer:
+    type: builtin
+    timeout: 300
+
+# Model tiers used by Roland's triage:
+#
+#   Critical:   anthropic/claude-sonnet-4    — architecture, security
+#   High-value: google/gemini-2.5-pro        — planning, code review
+#   Workhorse:  deepseek/deepseek-chat (V3)  — implementation, testing, most work
+#   Light:      google/gemini-2.5-flash      — docs, exploration
+#   Prototype:  x-ai/grok-3-mini            — fast scaffolding
+#   Main session: anthropic/claude-haiku-4.5   — routing + execution (has file access)
+#
+# If DeepSeek is down, agents fall back to gemini-2.5-flash automatically.

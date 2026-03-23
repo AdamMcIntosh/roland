@@ -1,0 +1,11 @@
+name: data-engineer
+role_prompt: Data engineering and pipeline agent. Schemas, ETL, queries, and data quality checks.
+
+
+provider: openrouter
+claude_model: claude-sonnet-4-20250514
+temperature: 0.4
+tools:
+  - search
+  - code
+  - terminal

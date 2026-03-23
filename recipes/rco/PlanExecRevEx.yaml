@@ -1,0 +1,56 @@
+# RCO Plan-Execute-Review-Explain (Claude-only, mock)
+name: PlanExecRevEx
+description: "Autonomous loop: Plan → Execute → Review → Explain (Claude variants only)"
+execution_mode: autonomous-loop
+max_loops: 5
+
+subagents:
+  - name: Planner
+    agentRef: planner
+    claude_model: claude-3-5-sonnet-20241022
+    prompt: |
+      You are the planning agent. For the task: {{user_task}}.
+      Break it down into detailed steps, required files, dependencies, best practices, risks, and high-level architecture.
+      Output only structured Markdown: Overview, Steps, Files, Best Practices, Risks.
+
+  - name: Executor
+    agentRef: executor
+    claude_model: claude-3-5-sonnet-20241022
+    prompt: |
+      You are the execution agent. Use the plan from Planner.
+      Implement changes: edit/create files, install deps if needed, run tests/commands.
+      Output: code diffs, execution logs, updated files.
+
+  - name: Reviewer
+    agentRef: critic
+    claude_model: claude-3-5-sonnet-20241022
+    prompt: |
+      You are the review agent. Analyze diffs/code from Executor.
+      Check for bugs, performance, security, code smells, best practices.
+      Suggest fixes or approve. If issues, flag for loop back.
+      Output: Summary, Flagged Items, Suggestions.
+
+  - name: Explainer
+    agentRef: writer
+    claude_model: claude-3-5-sonnet-20241022
+    prompt: |
+      You are the explanation agent. Take final changes from Reviewer/Executor.
+      Explain each key edit: what it does, why it's optimal, trade-offs, how it fits the plan.
+      Use bullet points and simple language.
+
+workflow:
+  steps:
+    - agent: Planner
+      input: "{{user_task}}"
+      output_to: Executor
+    - agent: Executor
+      output_to: Reviewer
+    - agent: Reviewer
+      loop_if: "issues found"
+      output_to: Explainer
+    - agent: Explainer
+      final_output: true
+
+options:
+  cache_messages: true
+  eco_mode: true

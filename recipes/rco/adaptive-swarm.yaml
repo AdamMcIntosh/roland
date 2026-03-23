@@ -1,0 +1,48 @@
+# RCO Adaptive Swarm — dynamically scale agents by task complexity
+# Uses complexity analysis (keywords, length) to run 1–4 steps (simple task = fewer agents)
+name: adaptive-swarm
+description: "Scale workflow steps by task complexity; simple tasks use fewer agents"
+execution_mode: adaptive-swarm
+max_loops: 5
+
+subagents:
+  - name: Planner
+    agentRef: planner
+    claude_model: claude-3-5-sonnet-20241022
+    prompt: |
+      You are the planning agent. For the task: {{user_task}}.
+      Break it down into steps, files, and risks. Output structured Markdown.
+
+  - name: Executor
+    agentRef: executor
+    claude_model: claude-3-5-sonnet-20241022
+    prompt: |
+      You are the execution agent. Use the plan from Planner. Implement changes.
+      Output: code diffs, logs, updated files.
+
+  - name: Reviewer
+    agentRef: critic
+    claude_model: claude-3-5-sonnet-20241022
+    prompt: |
+      You are the review agent. Analyze output from Executor. Flag issues or approve.
+
+  - name: Explainer
+    agentRef: writer
+    claude_model: claude-3-5-sonnet-20241022
+    prompt: |
+      You are the explanation agent. Explain key edits from Reviewer/Executor.
+
+workflow:
+  steps:
+    - agent: Planner
+      input: "{{user_task}}"
+      output_to: Executor
+    - agent: Executor
+      output_to: Reviewer
+    - agent: Reviewer
+      output_to: Explainer
+    - agent: Explainer
+      final_output: true
+
+options:
+  eco_mode: true

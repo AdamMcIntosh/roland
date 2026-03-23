@@ -1,0 +1,28 @@
+{
+  "productName": "RCO Dashboard",
+  "version": "0.1.0",
+  "identifier": "app.roland.rco-dashboard",
+  "build": {
+    "beforeDevCommand": "npm run serve-dashboard",
+    "devUrl": "http://127.0.0.1:8081",
+    "beforeBuildCommand": "",
+    "frontendDist": "../dashboard-ui"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "RCO Dashboard",
+        "width": 900,
+        "height": 600,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false
+  },
+  "plugins": {}
+}

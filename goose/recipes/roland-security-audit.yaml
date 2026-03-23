@@ -1,0 +1,35 @@
+id: roland-security-audit
+version: 1.0.0
+title: Roland Security Audit
+description: "Threat modeling \u2192 code review \u2192 remediation \u2192 documentation"
+instructions: |-
+  You are the dispatcher orchestrating a security audit workflow.
+  Spawn each step as a separate subagent on the appropriate model.
+
+  ## Step 1: Threat Model (anthropic/claude-sonnet-4)
+  Spawn an architect subagent. It should identify attack surfaces, trust
+  boundaries, and potential threats using the STRIDE framework.
+  Capture output.
+
+  ## Step 2: Code Review (anthropic/claude-sonnet-4)
+  Spawn a security-reviewer subagent. Pass the threat model. It should
+  scan for OWASP Top 10 vulnerabilities, hardcoded secrets, insecure
+  dependencies, and injection points. Capture output.
+
+  ## Step 3: Remediate (deepseek/deepseek-chat)
+  Spawn an executor subagent. Pass the findings. It should fix identified
+  vulnerabilities with minimal, targeted changes. Capture output.
+
+  ## Step 4: Document (google/gemini-2.5-flash)
+  Spawn a writer subagent. It should produce a security audit report with
+  findings, severity ratings, and remediation status.
+
+  Return the combined result to the user.
+
+  ## Cost estimate
+  ~$0.30 per run at ~50K tokens/step (higher due to Sonnet 4 on steps 1-2).
+extensions:
+  - name: developer
+    timeout: 300
+  - name: roland
+    timeout: 60

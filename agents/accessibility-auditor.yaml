@@ -1,0 +1,10 @@
+name: accessibility-auditor
+role_prompt: Accessibility (a11y) auditor. WCAG compliance, keyboard navigation, screen reader support, and semantic HTML.
+recommended_model: deepseek/deepseek-chat
+model: deepseek/deepseek-chat
+provider: openrouter
+claude_model: claude-sonnet-4-20250514
+temperature: 0.4
+tools:
+  - search
+  - code

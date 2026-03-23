@@ -1,0 +1,31 @@
+# Roland Extension Definition for Goose
+#
+# Add this block to the `extensions:` section of your Goose config
+# (~/.config/goose/config.yaml) to enable Roland's smart model routing.
+#
+# Prerequisites:
+#   1. Clone and build Roland: git clone ... && cd roland && npm install && npm run build
+#   2. Update the args path below to point to your Roland dist/index.js
+#   3. Set OPENROUTER_API_KEY in your environment
+
+roland:
+  type: stdio
+  cmd: "node"
+  args:
+    - "/path/to/roland/dist/index.js"   # <-- UPDATE THIS PATH
+  enabled: true
+  timeout: 300
+  description: "Smart model routing and agent persona selection"
+
+# Roland exposes these MCP tools to Goose:
+#
+#   triage          — Analyze prompt → recommend agent persona + OpenRouter model
+#   route_model     — Complexity analysis → cheapest adequate model
+#   track_cost      — Log token usage, return session totals
+#   manage_budget   — Get/set/reset spending limits
+#   get_analytics   — Cost & token breakdowns
+#   suggest_mode    — Recommend quick/standard/deep effort level
+#   list_recipes    — Browse multi-agent workflow recipes
+#   start_recipe    — Begin a recipe session
+#   advance_recipe  — Advance to next recipe step
+#   health_check    — Server status

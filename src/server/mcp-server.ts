@@ -45,10 +45,117 @@ import {
   writeRcoState,
   readRcoState,
 } from '../utils/migration-context.js';
+import { SessionContextManager } from './session-context.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import YAML from 'yaml';
+
+// ============================================================================
+// OpenRouter Model Mapping
+// ============================================================================
+
+/**
+ * Maps complexity tiers to OpenRouter model IDs.
+ * Used by triage and route_model to return valid OpenRouter slugs.
+ */
+const OPENROUTER_MODELS: Record<string, string> = {
+  simple: 'google/gemini-2.5-flash',
+  medium: 'deepseek/deepseek-chat',
+  complex: 'anthropic/claude-sonnet-4',
+  explain: 'google/gemini-2.5-flash',
+};
+
+/**
+ * Free model fallbacks — used when budget exceeds 80%.
+ * All models support tool calling and have 128K+ context.
+ * Update these when better free models become available on OpenRouter.
+ *
+ * Last verified: March 2026
+ */
+const FREE_MODELS = {
+  // Primary: Qwen3 Coder — best free coding model, 262K context, native tool calling
+  primary: 'qwen/qwen3-coder:free',
+  // Secondary: NVIDIA Nemotron — top SWE-Bench, multi-step agentic coding
+  secondary: 'nvidia/nemotron-3-super-120b-a12b:free',
+  // Tier-specific free models
+  coding: 'qwen/qwen3-coder:free',               // Best free coder, agentic focus
+  reasoning: 'nvidia/nemotron-3-super-120b-a12b:free', // Multi-step planning, tool use
+  light: 'mistralai/mistral-small-3.1-24b-instruct:free', // Docs, fast structured output
+  // Additional fallbacks (if primary/secondary are rate-limited)
+  fallbacks: [
+    'minimax/minimax-m2.5:free',                  // 197K context, strong SWE-Bench
+    'arcee-ai/trinity-large-preview:free',        // Complex toolchains
+    'z-ai/glm-4.5-air:free',                      // Thinking mode, agent-centric
+  ],
+};
+
+/** Budget degradation threshold (0.0-1.0). At this %, all models switch to free. */
+const BUDGET_DEGRADATION_THRESHOLD = 0.8;
+
+/**
+ * Maps agent names to their recommended OpenRouter model.
+ *
+ * Budget-optimized for ~$85/month (~$52/mo at moderate usage):
+ *   - Critical (architect, security):  claude-sonnet-4    (~15% budget, ~$11)
+ *   - High-value (planner, critic):    gemini-2.5-pro     (~15% budget, ~$11)
+ *   - Workhorse (most agents):         deepseek-chat (V3) (~55% budget, ~$1)
+ *   - Light (writer, explore, docs):   gemini-2.5-flash   (~10% budget, ~$0.50)
+ *   - Prototyping:                     grok-3-mini        (on-demand)
+ *   - Main session:                    gemini-2.5-flash   (~$0.50)
+ *
+ * Fallback: if DeepSeek is down, agents fall back to gemini-2.5-flash.
+ */
+const AGENT_OPENROUTER_MODELS: Record<string, string> = {
+  // Critical — wrong output here is expensive to redo
+  architect: 'anthropic/claude-sonnet-4',
+  'security-reviewer': 'anthropic/claude-sonnet-4',
+  // High-value — thoroughness matters more than speed
+  planner: 'google/gemini-2.5-pro',
+  critic: 'google/gemini-2.5-pro',
+  'code-reviewer': 'google/gemini-2.5-pro',
+  // Workhorse — best coding per dollar
+  executor: 'deepseek/deepseek-chat',
+  researcher: 'deepseek/deepseek-chat',
+  designer: 'deepseek/deepseek-chat',
+  'qa-tester': 'deepseek/deepseek-chat',
+  'build-fixer': 'deepseek/deepseek-chat',
+  'tdd-guide': 'deepseek/deepseek-chat',
+  analyst: 'deepseek/deepseek-chat',
+  scientist: 'deepseek/deepseek-chat',
+  vision: 'deepseek/deepseek-chat',
+  // Light — fast, good enough for docs and navigation
+  writer: 'google/gemini-2.5-flash',
+  explore: 'google/gemini-2.5-flash',
+};
+
+/**
+ * Check if budget is in degraded mode (>=80% used).
+ * Returns the free model to use, or null if budget is fine.
+ */
+function getBudgetDegradedModel(agentName?: string): string | null {
+  const status = BudgetManager.getStatus();
+  if (!status.enabled) return null;
+
+  const usagePercent = status.maxBudget > 0
+    ? status.currentSpending / status.maxBudget
+    : 0;
+
+  if (usagePercent < BUDGET_DEGRADATION_THRESHOLD) return null;
+
+  // Budget exceeded threshold — return appropriate free model
+  if (agentName) {
+    // Security/architecture agents get the reasoning free model
+    if (['architect', 'security-reviewer', 'planner', 'critic', 'code-reviewer'].includes(agentName)) {
+      return FREE_MODELS.reasoning;
+    }
+    // Coding agents get the coding free model
+    if (['executor', 'build-fixer', 'qa-tester', 'tdd-guide', 'designer'].includes(agentName)) {
+      return FREE_MODELS.coding;
+    }
+  }
+  return FREE_MODELS.primary;
+}
 
 // ============================================================================
 // MCP Server Implementation (v2)
@@ -61,6 +168,7 @@ export class McpServer {
   private toolDefinitions: Map<string, Tool>;
   private costTracker: AdvancedCostTracker;
   private recipeSessionManager: RecipeSessionManager;
+  private sessionContextManager: SessionContextManager;
   private recipesDir: string;
 
   constructor(config: AppConfig) {
@@ -78,8 +186,19 @@ export class McpServer {
     // Initialize recipe session manager (for IDE-driven recipe execution)
     this.recipeSessionManager = new RecipeSessionManager();
 
-    // Initialize budget manager
+    // Initialize session context manager (persistent memory for long sessions)
+    this.sessionContextManager = new SessionContextManager();
+
+    // Initialize budget manager with config from config.yaml
     BudgetManager.initialize();
+    if (config.goose) {
+      BudgetManager.configureFromAppConfig({
+        monthlyBudget: config.goose.monthly_budget,
+        warningThreshold: config.goose.budget_degradation_threshold,
+        billingCycleDay: config.goose.billing_cycle_day,
+        enabled: true,
+      });
+    }
 
     this.registerTools();
 
@@ -118,6 +237,7 @@ export class McpServer {
     this.registerLoadMigrationContext();
     this.registerUpdateMigrationContext();
     this.registerRunGooseTask();
+    this.registerSessionContext();
   }
 
   // --------------------------------------------------------------------------
@@ -430,9 +550,66 @@ export class McpServer {
         };
         recommendation.suggested_mode = modeMap[complexity.complexity] || 'standard';
 
+        // --- Goose dispatch fields ---
+        const agentName = topAgent.score > 0 ? topAgent.name : 'executor';
+        let openrouterModel = AGENT_OPENROUTER_MODELS[agentName]
+          || OPENROUTER_MODELS[complexity.complexity]
+          || 'google/gemini-2.5-flash';
+
+        // Budget degradation: switch to free models at 80% usage
+        const degradedModel = getBudgetDegradedModel(agentName);
+        const budgetDegraded = degradedModel !== null;
+        if (budgetDegraded) {
+          openrouterModel = degradedModel;
+        }
+
+        // Load persona instructions from agent YAML
+        const personaInstructions = this.loadAgentRolePrompt(agentName);
+
+        recommendation.openrouter_model = openrouterModel;
+        recommendation.persona_instructions = personaInstructions;
+        recommendation.temperature = 0.7;
+
+        // --- Execution strategy: smart triage for complex code ---
+        // Complex tasks: Sonnet 4 subagent writes the code, main session applies files
+        // Simple/medium tasks: main session (Flash) writes and applies directly
+        const isComplexExecution = complexity.complexity === 'complex' && !budgetDegraded;
+        if (isComplexExecution) {
+          recommendation.execution_strategy = {
+            mode: 'subagent_writes_code',
+            execution_model: 'anthropic/claude-sonnet-4',
+            apply_model: 'main_session',
+            reason: 'Complex task — Sonnet 4 subagent will write the code for higher quality. Main session applies files to disk.',
+            subagent_instructions: `You are a senior engineer writing production-ready code. Rules:\n`
+              + `1. OUTPUT FORMAT: For each file, output "📄 path/to/file.ts:" followed by the COMPLETE file content in a code block. `
+              + `Include ALL imports, types, error handling, and edge cases. Code must be ready to write to disk as-is.\n`
+              + `2. NO PLACEHOLDERS: Do NOT use "// TODO", "// ...", or "implement here". Write the real implementation.\n`
+              + `3. USE PROVIDED CONTEXT: You will receive actual file contents from the codebase. Use exact import paths, `
+              + `type names, and function signatures from those files. Do NOT guess or hallucinate APIs.\n`
+              + `4. INCLUDE TESTS: If modifying a module that has a test file, include the updated test file too.\n`
+              + `5. ERROR FIXES: If you receive error output, analyze the EXACT error message and stack trace. `
+              + `Fix the root cause, not symptoms. Include the complete fixed file, not just a diff.`,
+          };
+        } else {
+          recommendation.execution_strategy = {
+            mode: 'main_session_direct',
+            execution_model: 'main_session',
+            reason: budgetDegraded
+              ? 'Budget degraded — main session handles execution on free models.'
+              : 'Simple/medium task — main session (Flash) handles execution directly.',
+          };
+        }
+
+        if (budgetDegraded) {
+          recommendation.budget_degraded = true;
+          recommendation.budget_notice = `Budget ≥80% used — switched to free model (${openrouterModel}). Quality may be reduced.`;
+        }
+
         recommendation.instructions = suggestRecipe
-          ? `Adopt the "${recommendation.agent && (recommendation.agent as any).name}" persona. A multi-agent recipe "${topRecipe.name}" is recommended — offer to run it, or proceed as the recommended agent if the user prefers a single pass.`
-          : `Adopt the "${recommendation.agent && (recommendation.agent as any).name}" persona for this task. Apply that agent's expertise and thinking style to your response.`;
+          ? `Adopt the "${agentName}" persona. A multi-agent recipe "${topRecipe.name}" is recommended — offer to run it, or proceed as the recommended agent if the user prefers a single pass.`
+          : isComplexExecution
+            ? `This is a complex task. Spawn a Sonnet 4 subagent to write the code (see execution_strategy), then apply the output to files yourself.`
+            : `Adopt the "${agentName}" persona for this task. Apply that agent's expertise and thinking style to your response.`;
 
         return recommendation;
       },
@@ -473,6 +650,47 @@ export class McpServer {
     }
 
     return parts.join(' ');
+  }
+
+  // --------------------------------------------------------------------------
+  // Agent YAML loader — read role_prompt from agents/*.yaml
+  // --------------------------------------------------------------------------
+
+  /**
+   * Resolve the agents directory relative to this file's location.
+   */
+  private static resolveAgentsDir(): string {
+    try {
+      const thisFile = fileURLToPath(import.meta.url);
+      const serverDir = path.dirname(thisFile);
+      const installDir = path.resolve(serverDir, '..');
+      const rootDir = path.resolve(installDir, '..');
+
+      const distAgents = path.join(installDir, 'agents');
+      if (fs.existsSync(distAgents)) return distAgents;
+
+      const srcAgents = path.join(rootDir, 'agents');
+      if (fs.existsSync(srcAgents)) return srcAgents;
+    } catch { /* fallback */ }
+    return path.join(process.cwd(), 'agents');
+  }
+
+  /**
+   * Load the role_prompt from an agent's YAML file.
+   * Returns a fallback prompt if the file doesn't exist.
+   */
+  private loadAgentRolePrompt(agentName: string): string {
+    try {
+      const agentsDir = McpServer.resolveAgentsDir();
+      const agentPath = path.join(agentsDir, `${agentName}.yaml`);
+      if (!fs.existsSync(agentPath)) {
+        return `You are the ${agentName} agent. Apply your specialized expertise to this task.`;
+      }
+      const raw = YAML.parse(fs.readFileSync(agentPath, 'utf-8'));
+      return raw?.role_prompt || `You are the ${agentName} agent. Apply your specialized expertise to this task.`;
+    } catch {
+      return `You are the ${agentName} agent. Apply your specialized expertise to this task.`;
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -538,8 +756,19 @@ export class McpServer {
           analysis.tokenEstimate * 2 // Rough output estimate
         );
 
+        // Map to OpenRouter model ID (with budget degradation)
+        let openrouterModel = OPENROUTER_MODELS[analysis.complexity]
+          || 'google/gemini-2.5-flash';
+
+        const degradedModel = getBudgetDegradedModel();
+        const budgetDegraded = degradedModel !== null;
+        if (budgetDegraded) {
+          openrouterModel = degradedModel;
+        }
+
         return {
           recommended_model: recommendedModel,
+          openrouter_model: openrouterModel,
           complexity: analysis.complexity,
           score: analysis.score,
           token_estimate: analysis.tokenEstimate,
@@ -550,6 +779,10 @@ export class McpServer {
             name: f.name,
             weight: f.weight,
           })),
+          ...(budgetDegraded ? {
+            budget_degraded: true,
+            budget_notice: `Budget ≥80% used — switched to free model (${openrouterModel}). Quality may be reduced.`,
+          } : {}),
         };
       },
       {
@@ -687,6 +920,7 @@ export class McpServer {
         switch (action) {
           case 'get_status': {
             const status = BudgetManager.getStatus();
+            const daysUntilReset = BudgetManager.getDaysUntilReset();
             return {
               action: 'get_status',
               enabled: status.enabled,
@@ -697,6 +931,9 @@ export class McpServer {
                 ? ((status.currentSpending / status.maxBudget) * 100)
                 : 0,
               warning_threshold: `${(status.warningThreshold * 100).toFixed(0)}%`,
+              billing_cycle_day: status.billingCycleDay,
+              days_until_reset: daysUntilReset,
+              auto_reset: 'Spending resets to $0 on day ' + status.billingCycleDay + ' of each month',
             };
           }
 
@@ -1124,6 +1361,210 @@ export class McpServer {
           },
         },
         required: ['session_id', 'step_output'],
+      }
+    );
+  }
+
+  // --------------------------------------------------------------------------
+  // Parse a loaded Recipe into the session manager's ParsedRecipe format
+  // --------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // session_context — persistent memory for long coding sessions
+  // --------------------------------------------------------------------------
+  private registerSessionContext(): void {
+    this.registerTool(
+      'session_context',
+      'Persistent memory for long coding sessions. Tracks decisions, file changes, patterns, migration progress, and errors across subagent calls. Use this to maintain context continuity — call "get" before spawning subagents and "update" after each step.',
+      async (args: Record<string, unknown>) => {
+        const action = (args.action as string) || 'get';
+        const sessionId = args.session_id as string | undefined;
+
+        switch (action) {
+          case 'start': {
+            const task = args.task as string;
+            if (!task) {
+              throw new McpToolError('session_context', 'task is required for start action');
+            }
+            const id = args.id as string | undefined;
+            const session = this.sessionContextManager.start(task, id);
+            return {
+              action: 'start',
+              session_id: session.id,
+              task: session.task,
+              message: `Session "${session.id}" started. Call session_context with action="update" after each step to build context.`,
+            };
+          }
+
+          case 'get': {
+            const session = this.sessionContextManager.get(sessionId);
+            if (!session) {
+              return {
+                action: 'get',
+                message: 'No active session. Use action="start" with a task description to begin one.',
+              };
+            }
+            const formatted = this.sessionContextManager.formatForSubagent(session.id);
+            return {
+              action: 'get',
+              session_id: session.id,
+              task: session.task,
+              current_step: session.current_step,
+              context: formatted,
+              stats: {
+                decisions: session.decisions.length,
+                files_modified: session.files_modified.length,
+                patterns: session.patterns.length,
+                migrations: session.migration_map.length,
+                errors_resolved: session.errors_resolved.length,
+              },
+              instructions: 'Pass the "context" field to any subagent as part of its prompt to maintain session continuity.',
+            };
+          }
+
+          case 'update': {
+            const sid = sessionId || this.sessionContextManager.get()?.id;
+            if (!sid) {
+              throw new McpToolError('session_context', 'No active session. Use action="start" first.');
+            }
+
+            const updates: Record<string, unknown> = {};
+
+            if (args.decision) updates.decision = args.decision;
+            if (args.file_change) updates.file_change = args.file_change;
+            if (args.pattern) updates.pattern = args.pattern;
+            if (args.migration) updates.migration = args.migration;
+            if (args.error_resolved) updates.error_resolved = args.error_resolved;
+            if (args.note) updates.note = args.note;
+            if (args.advance_step !== undefined) updates.advance_step = args.advance_step;
+
+            const session = this.sessionContextManager.update(sid, updates);
+            if (!session) {
+              throw new McpToolError('session_context', `Session not found: ${sid}`);
+            }
+
+            return {
+              action: 'update',
+              session_id: session.id,
+              current_step: session.current_step,
+              updated: Object.keys(updates),
+              message: 'Context updated. Call action="get" before the next subagent to retrieve full context.',
+            };
+          }
+
+          case 'list': {
+            const sessions = this.sessionContextManager.list();
+            return {
+              action: 'list',
+              count: sessions.length,
+              sessions,
+            };
+          }
+
+          case 'resume': {
+            if (!sessionId) {
+              throw new McpToolError('session_context', 'session_id is required for resume action');
+            }
+            const session = this.sessionContextManager.get(sessionId);
+            if (!session) {
+              throw new McpToolError('session_context', `Session not found: ${sessionId}`);
+            }
+            const formatted = this.sessionContextManager.formatForSubagent(sessionId);
+            return {
+              action: 'resume',
+              session_id: session.id,
+              task: session.task,
+              current_step: session.current_step,
+              context: formatted,
+              message: `Resumed session "${session.id}" at step ${session.current_step}.`,
+            };
+          }
+
+          case 'delete': {
+            if (!sessionId) {
+              throw new McpToolError('session_context', 'session_id is required for delete action');
+            }
+            const deleted = this.sessionContextManager.delete(sessionId);
+            return {
+              action: 'delete',
+              session_id: sessionId,
+              deleted,
+            };
+          }
+
+          default:
+            throw new McpToolError('session_context', `Unknown action: ${action}. Use: start, get, update, list, resume, delete`);
+        }
+      },
+      {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['start', 'get', 'update', 'list', 'resume', 'delete'],
+            description: 'Action: start (new session), get (retrieve context), update (log changes), list (all sessions), resume (continue session), delete',
+          },
+          session_id: {
+            type: 'string',
+            description: 'Session ID (optional for get/update — uses most recent; required for resume/delete)',
+          },
+          task: {
+            type: 'string',
+            description: 'Task description (required for start)',
+          },
+          id: {
+            type: 'string',
+            description: 'Custom session ID (optional for start, auto-generated if omitted)',
+          },
+          decision: {
+            type: 'string',
+            description: 'Architectural or implementation decision to log (for update)',
+          },
+          file_change: {
+            type: 'object',
+            description: 'File change to log (for update)',
+            properties: {
+              path: { type: 'string', description: 'File path' },
+              action: { type: 'string', enum: ['created', 'modified', 'deleted'], description: 'What happened' },
+              summary: { type: 'string', description: 'Brief description of the change' },
+            },
+          },
+          pattern: {
+            type: 'object',
+            description: 'Established pattern to log (for update)',
+            properties: {
+              name: { type: 'string', description: 'Pattern name (e.g., "Repository pattern")' },
+              example_file: { type: 'string', description: 'File that demonstrates this pattern' },
+              description: { type: 'string', description: 'How this pattern is used in this project' },
+            },
+          },
+          migration: {
+            type: 'object',
+            description: 'Migration mapping entry (for update)',
+            properties: {
+              source: { type: 'string', description: 'Source file (e.g., "Modules/CustomerManager.vb")' },
+              target: { type: 'string', description: 'Target file (e.g., "src/Services/CustomerService.cs")' },
+              status: { type: 'string', enum: ['pending', 'in_progress', 'completed', 'skipped'] },
+              notes: { type: 'string', description: 'Migration notes' },
+            },
+          },
+          error_resolved: {
+            type: 'object',
+            description: 'Error that was resolved (for update)',
+            properties: {
+              error: { type: 'string', description: 'The error message' },
+              resolution: { type: 'string', description: 'How it was fixed' },
+            },
+          },
+          note: {
+            type: 'string',
+            description: 'Free-form note to add (for update)',
+          },
+          advance_step: {
+            type: 'boolean',
+            description: 'Increment the step counter (for update, default false)',
+          },
+        },
+        required: ['action'],
       }
     );
   }

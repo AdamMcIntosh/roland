@@ -1,32 +1,73 @@
 # Roland Model Routing Configuration
 #
-# Maps complexity tiers to recommended IDE models.
-# These are advisory — Roland returns the suggestion, and the IDE (Cursor/VS Code)
-# uses it to pick the right model for the task.
+# Budget-optimized for ~$85/month on OpenRouter.
+# Strategy: DeepSeek V3 as workhorse, Pro for planning/review, Sonnet 4 for critical only.
 #
-# Cursor models:  cursor-small, gpt-4o-mini, gpt-4o, claude-3.5-sonnet, claude-3-opus,
-#                 gemini-1.5-flash, gemini-1.5-pro, grok-fast, etc.
-# VS Code models: whatever GitHub Copilot provides (gpt-4o, claude-sonnet, etc.)
+# Estimated monthly cost at moderate usage (~15M tokens):
+#   Critical (claude-sonnet-4):     ~15% → ~$11/mo
+#   High-value (gemini-2.5-pro):    ~15% → ~$11/mo
+#   Workhorse (deepseek-chat V3):   ~10% → ~$1/mo  (text-only subagents)
+#   Light (gemini-2.5-flash):       ~10% → ~$0.50/mo
+#   Main session (gemini-2.5-flash):       → ~$2/mo  (routing + file I/O)
+#   Smart triage: complex tasks use Sonnet 4 subagent for code authoring
+#   Total estimate:                        → ~$50/mo at moderate usage
 
 routing:
   simple:
-    - cursor-small            # Fast, cheap — typo fixes, renames, small edits
-    - gpt-4o-mini             # Good fallback for simple tasks
-    - gemini-2.0-flash        # Fast alternative
+    - google/gemini-2.5-flash            # Light tasks — fast, cheap
+    - google/gemini-2.0-flash-exp:free   # Free fallback
   medium:
-    - gpt-4o                  # Balanced speed/quality for moderate tasks
-    - claude-3.5-sonnet       # Strong coding model
-    - gemini-1.5-pro          # Good alternative
+    - deepseek/deepseek-chat             # DeepSeek V3 — best coding per dollar
+    - google/gemini-2.5-flash            # Fallback if DeepSeek is down
   complex:
-    - claude-3.5-sonnet       # Best for complex architecture/reasoning
-    - gpt-4o                  # Strong alternative
-    - gemini-1.5-pro          # Capable fallback
+    - anthropic/claude-sonnet-4          # Best reasoning — architecture, security
+    - google/gemini-2.5-pro              # Strong alternative at lower cost
   explain:
-    - claude-3.5-sonnet       # Best for detailed explanations
-    - gpt-4o                  # Good explainer
-    - gemini-1.5-pro          # Thorough alternative
+    - google/gemini-2.5-flash            # Fast explanations
+    - deepseek/deepseek-chat             # More detailed if needed
+  prototype:
+    - x-ai/grok-3-mini                  # Fast iteration, scaffolding
+    - deepseek/deepseek-chat             # Fallback
 
 roland:
   mcp_defaults:
     temperature: 0.7
     max_tokens: 2000
+
+# Goose integration — smart dispatcher model routing via OpenRouter
+goose:
+  dispatcher_model: anthropic/claude-haiku-4.5  # Main session: routing + execution (~$4/mo)
+  dispatcher_provider: openrouter
+  known_free_models:                              # All support tool calling, 128K+ context
+    - qwen/qwen3-coder:free                      # Best free coder, 262K, agentic focus
+    - nvidia/nemotron-3-super-120b-a12b:free      # Top SWE-Bench, multi-step planning
+    - minimax/minimax-m2.5:free                   # 197K, strong SWE-Bench
+    - arcee-ai/trinity-large-preview:free         # Complex toolchains
+    - mistralai/mistral-small-3.1-24b-instruct:free  # Fast structured output
+    - z-ai/glm-4.5-air:free                      # Thinking mode, agent-centric
+  fallback_model: google/gemini-2.5-flash         # Budget-safe paid fallback
+  budget_degradation_threshold: 0.8               # Switch to free models at 80%
+  monthly_budget: 85                              # Monthly budget in USD
+  billing_cycle_day: 1                            # Day of month to auto-reset spending
+  free_model_coding: qwen/qwen3-coder:free        # Primary free model for coding
+  free_model_reasoning: nvidia/nemotron-3-super-120b-a12b:free  # Primary free for reasoning
+
+# Roland Code Orchestrator (RCO) — Claude-centric multi-agent orchestration
+rco:
+  claude_models:
+    complex: claude-sonnet-4-20250514
+    medium:  claude-sonnet-4-20250514
+    simple:  claude-haiku-4-5-20251001
+    explain: claude-sonnet-4-20250514
+  eco_mode: true
+  task_routing:
+    - pattern: "plan|architecture|design|break down"
+      agents: [planner, architect]
+    - pattern: "implement|build|code|fix"
+      agents: [executor, executor-high]
+    - pattern: "review|audit|security|test"
+      agents: [critic, code-reviewer, qa-tester]
+    - pattern: "explain|document|readme"
+      agents: [writer, explainer]
+  dashboard_port: 8080
+  state_file: .rco-state.json

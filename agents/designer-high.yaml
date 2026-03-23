@@ -1,7 +1,8 @@
 name: designer-high
 role_prompt: Senior UX/UI designer for complex design systems, interaction patterns, and accessibility
-recommended_model: nousresearch/hermes-3-llama-3.1-405b:free
-model: nousresearch/hermes-3-llama-3.1-405b:free
+recommended_model: google/gemini-2.5-pro
+model: google/gemini-2.5-pro
+claude_model: claude-sonnet-4-20250514
 provider: openrouter
 temperature: 0.8
 tools:

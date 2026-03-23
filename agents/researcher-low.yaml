@@ -1,7 +1,8 @@
 name: researcher-low
 role_prompt: Fast lookup researcher for quick API and documentation references
-recommended_model: meta-llama/llama-3.2-3b-instruct:free
-model: meta-llama/llama-3.2-3b-instruct:free
+recommended_model: google/gemini-2.5-flash
+model: google/gemini-2.5-flash
+claude_model: claude-sonnet-4-20250514
 provider: openrouter
 temperature: 0.6
 tools:
