@@ -72,6 +72,59 @@ Only the main session can read/write files, run terminal commands, and see diffs
 So file-editing work MUST happen in the main session. Subagents are used for
 text-output steps where a more capable model (Sonnet 4, Gemini Pro) adds value.
 
+## Session Context Tool (CRITICAL for long sessions)
+
+For any task that spans multiple steps or files, use the `session_context` tool
+to maintain persistent memory across subagent calls.
+
+### Starting a session
+
+At the beginning of any multi-step task, migration, or feature implementation:
+
+```
+session_context(action="start", task="Migrate CustomerManager.vb to C# service")
+```
+
+### Before spawning any subagent
+
+Always retrieve the full context and include it in the subagent prompt:
+
+```
+session_context(action="get")
+→ Returns structured context with all decisions, patterns, files, migrations
+→ Pass the "context" field directly into the subagent's prompt
+```
+
+### After each step completes
+
+Log what happened — decisions, file changes, patterns, errors:
+
+```
+session_context(action="update", advance_step=true,
+  decision="Using repository pattern with generic IRepository<T>",
+  file_change={path: "src/Repositories/CustomerRepository.cs", action: "created",
+    summary: "Generic repository implementation with EF Core"},
+  pattern={name: "Repository pattern", example_file: "src/Repositories/CustomerRepository.cs",
+    description: "Generic IRepository<T> with EF Core DbContext"})
+```
+
+For migrations, also log the source → target mapping:
+
+```
+session_context(action="update",
+  migration={source: "Modules/CustomerManager.vb", target: "src/Services/CustomerService.cs",
+    status: "completed", notes: "Split into service + repository"})
+```
+
+### Resuming a previous session
+
+Sessions persist to disk. Resume after a Goose restart:
+
+```
+session_context(action="list")    → see all sessions
+session_context(action="resume", session_id="...")  → resume with full context
+```
+
 ## Context Quality Rules (CRITICAL)
 
 These rules close the quality gap between Roland + Goose and Claude Code.
