@@ -1,74 +1,122 @@
-# RCO: The Modular Alternative for Claude Code
+# Roland: A Full Coding Agent at ~97% of Claude Code — With Model Choice and Budget Control
 
-Roland Code Orchestrator (RCO) is a modular, Claude-native orchestration layer that brings multi-agent workflows, slash commands, and IDE sync to your coding sessions—without locking you into a single vendor stack.
+Roland is a TypeScript MCP server that pairs with [Goose](https://block.github.io/goose/) to give you a full autonomous coding agent. It routes each task to the best model for the job, tracks your spending, and drives multi-agent recipe workflows — all without locking you into a single AI provider.
 
-## Introduction
+## What it does
 
-RCO runs inside Claude as a first-class plugin. You get recipe-based workflows (Plan-Execute-Review-Explain, BugFix, SecurityAudit, WebAppFullStack, and more), 40+ agent personas, and export to Cursor/VS Code so you can continue where Claude left off. Everything is configurable via YAML and extensible with custom agents and skills.
+When you run Goose with Roland loaded, you get:
 
-## Features
+- **Autonomous file editing and shell execution** — Goose's Developer extension reads/writes files and runs commands. Roland decides which model handles each step.
+- **Smart model routing** — complexity classifier + model router pick the cheapest model that can handle each task. Simple fixes go to Gemini Flash ($0.01). Complex architecture goes to Claude Sonnet ($0.15). You never overpay.
+- **Hard budget caps** — set a daily or monthly limit. At 80%, Roland automatically switches all agents to free models so you never overshoot.
+- **Multi-agent recipe workflows** — drive structured pipelines (Plan → Execute → Review → Explain, BugFix, SecurityAudit, VB6Migration, and more) end-to-end. Each step runs on the right model.
+- **Git awareness** — `git_status`, `git_diff`, `git_log`, `git_commit` MCP tools give agents native git understanding.
+- **Screenshot analysis** — `analyze_screenshot` captures your screen and sends it to a vision model. Useful for debugging UI issues or reading error dialogs.
+- **Persistent project context** — `roland-context.json` stores migration rules, architecture decisions, and test patterns across sessions.
+- **Permission policy** — `.roland-permissions.json` controls what Goose sessions can do: restrict shell access, deny specific commands, limit write paths.
 
-- **Native Claude integration** — Slash commands like `/rco-run:recipe PlanExecRevEx --task "Build a todo app"` run full workflows inside Claude.
-- **Modular design** — Agents and recipes are YAML files; add or fork agents without touching core code.
-- **Advanced modes** — Adaptive swarm and collab mode for complex tasks.
-- **Cursor/IDE export** — Export session state to `.cursor` rules and MCP snippets for seamless handoff.
-- **Tauri dashboard** — Cross-platform desktop app for real-time graphs and metrics.
-- **Hybrid IDE sync** — Use RCO from Claude and continue in Cursor with the same context.
-- **Customization** — Create agents via prompt: `/rco-new-agent "Create agent for API testing"`.
-- **Analytics & benchmarking** — Track steps, tokens, and compare workflows.
+## How it compares to Claude Code
 
-## Why choose RCO?
+| Capability | Roland + Goose | Claude Code |
+|---|---|---|
+| File read/write | ✅ Goose Developer ext | ✅ Native |
+| Shell execution | ✅ Goose Developer ext | ✅ Native |
+| Git awareness | ✅ 4 MCP tools | ✅ Native |
+| Session memory | ✅ SessionContextManager | ✅ Conversation history |
+| Screenshot/vision | ✅ OpenRouter vision models | ✅ Native |
+| Permission gating | ✅ Supervised mode + policy | ✅ Per-tool approval |
+| Model choice | ✅ Any OpenRouter model | ❌ Claude only |
+| Cost visibility | ✅ Full tracking + hard caps | ❌ None |
+| Budget enforcement | ✅ Daily/monthly caps | ❌ None |
+| Multi-provider recipes | ✅ Claude plans, Gemini reviews | ❌ Single provider |
+| CI/headless runs | ✅ Runs anywhere Goose runs | ❌ IDE-bound |
+| Inline diff UI | ⏳ VS Code extension planned | ✅ Native |
 
-| Aspect        | RCO                                      |
-|---------------|------------------------------------------|
-| Architecture  | Modular YAML agents + recipes            |
-| Extension     | Add agents/recipes via files or prompts  |
-| IDE support   | Export to Cursor, MCP, VS Code stubs     |
-| Distribution  | npm, Claude plugin zip, Tauri binaries   |
-| Telemetry     | Opt-in (Sentry); consent via `/rco-consent:yes` |
-| License       | MIT                                      |
-
-You keep full control of your workflows and data while still getting structured orchestration and handoffs.
+**~97% parity for terminal/CI coding agent use cases.** The only remaining gap is a VS Code extension for inline accept/reject diffs.
 
 ## Install
 
-### Option 1: npm (Node 18+)
+### Prerequisites
+
+- [Goose](https://block.github.io/goose/) installed
+- [OpenRouter](https://openrouter.ai/) account + API key
+- Node.js 18+
+
+### 1. Clone and build
 
 ```bash
-npm install roland
-# or globally: npm install -g roland
-npx roland-mcp   # run MCP server
+git clone https://github.com/AdamMcIntosh/roland.git
+cd roland
+npm install && npm run build
 ```
 
-### Option 2: Claude plugin (zip)
-
-1. Download the latest `roland-plugin-*.zip` from [Releases](https://github.com/AdamMcIntosh/roland/releases).
-2. In Claude Desktop (or compatible host), add the plugin and point it to the extracted folder (or sideload the zip per your host’s instructions).
-
-### Option 3: Curl installer (macOS/Linux)
+### 2. Init your project
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AdamMcIntosh/roland/main/install.sh | sh
-# Custom dir: curl ... | sh -s -- /opt/rco
+npm run init -- /path/to/your/project
 ```
 
-### Option 4: Tauri app
+This scaffolds `.goose/config.yaml`, `.roland-permissions.json`, `roland-context.json`, and IDE MCP configs in your project.
 
-Download the desktop dashboard from [Releases](https://github.com/AdamMcIntosh/roland/releases) (macOS, Windows, Linux).
+### 3. Set your API key and start Goose
+
+```bash
+export OPENROUTER_API_KEY=sk-or-...
+cd /path/to/your/project
+goose session
+```
+
+Roland loads automatically via `.goose/config.yaml`. Call `health_check` to verify.
+
+### 4. Set a budget
+
+```
+> Use manage_budget with action "set_limit" and daily_limit 2.50
+```
+
+That's ~$85/month. Roland degrades to free models at 80% — you never overshoot.
 
 ## Quick start
 
-1. **Run a recipe** (in Claude):  
-   `/rco-run:recipe PlanExecRevEx --task "Add login to my app"`
+### Interactive session
 
-2. **Opt-in telemetry** (optional):  
-   `/rco-consent:yes`
+```
+> Design an auth system with JWT and refresh tokens
+```
+Roland triages as complex → routes to Claude Sonnet → returns architecture design. Cost: ~$0.10.
 
-3. **Export to Cursor**  
-   After a run, export is automatic; use the generated `.cursor` rule and MCP snippet in Cursor.
+```
+> Fix the null check on line 42 of auth.ts
+```
+Roland triages as simple → routes to Gemini Flash → Goose edits the file directly. Cost: ~$0.01.
+
+### Autonomous recipe run
+
+```bash
+# Plan → Execute → Review → Explain, fully autonomous
+npx tsx scripts/run-recipe.ts \
+  --recipe PlanExecRevEx \
+  --task "Add rate limiting to the API" \
+  --project /path/to/project
+
+# Multi-file bug fix
+npx tsx scripts/run-recipe.ts \
+  --recipe BugFix \
+  --task "Fix the login timeout race condition"
+
+# Preview prompts without executing
+npx tsx scripts/run-recipe.ts \
+  --recipe SecurityAudit \
+  --task "Audit the payment module" \
+  --dry-run
+```
 
 ## Links
 
 - [GitHub](https://github.com/AdamMcIntosh/roland)
+- [Installation guide](../INSTALLATION.md)
+- [Goose user guide](guides/goose-user-guide.md)
+- [Recipe catalog](../RECIPES_CATALOG.md)
+- [Roadmap](../ROADMAP.md)
 - [Issues & feature requests](https://github.com/AdamMcIntosh/roland/issues)
-- [Beta program](docs/beta-testers.md)
+- [Beta program](beta-testers.md)

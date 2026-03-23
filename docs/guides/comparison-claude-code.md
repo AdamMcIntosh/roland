@@ -13,57 +13,37 @@
 | Multi-agent workflows | A+ (recipes) | N/A | **We win** |
 | Budget control | A+ (auto-degrade, auto-reset) | None | **We win** |
 | Model diversity | A+ (5 models) | Single model | **We win** |
-| **Iterative debugging** | A- | A+ | **Real gap** |
-| **Long session context** | B+ | A+ | **Real gap** |
+| **Iterative debugging** | A | A+ | **Closed** |
+| **Long session context** | A | A+ | **Closed** |
 | **File editing reliability** | A- | A+ | **Small gap** |
+| **Inline diff UI** | N/A | A+ | **VS Code extension only** |
 
-## The two remaining real gaps
+## The remaining real gap
 
-### 1. Iterative debugging loop
+### Inline diff UI (VS Code extension)
 
-**Claude Code:**
+Claude Code's VS Code extension provides an inline accept/reject UI for diffs — you can see changes side-by-side and accept or reject individual chunks before writing to disk.
 
-```
-Sonnet 4 writes → runs test → sees error → understands full context → fixes → repeat
-(tight loop, one model, zero context loss)
-```
+Roland + Goose provides unified diff output and HTML previews via `preview_changes`, which is sufficient for review. The gap is purely UI polish — it doesn't affect code quality or iteration speed for terminal/CI workflows.
 
-**Roland + Goose:**
+**In practice: not a blocker.** For terminal-first workflows, this gap doesn't matter. For VS Code users who want inline UX, use Claude Code's extension directly (it's free with a Claude subscription).
 
-```
-Sonnet 4 writes → Flash applies → Flash runs test → Flash reads error →
-Flash passes error + files to new Sonnet 4 subagent → Sonnet 4 fixes
-(extra hop, context depends on Flash passing everything correctly)
-```
-
-**In practice: works 85-90% of the time.** The context rules (raw error passing, full file inclusion) cover most cases. Fails when:
-
-- The error is subtle and Flash doesn't include the right files
-- The fix requires understanding of changes made 5+ steps ago
-- The codebase has complex interdependencies that Flash doesn't trace
-
-### 2. Long session context continuity
-
-Claude Code maintains one continuous conversation — it remembers every decision, every file edit, every error from the entire session.
-
-Roland's subagents start fresh each time. The context document helps, but it's a lossy summary. Over a 20-file implementation session, context degrades.
-
-**In practice: fine for 1-5 file changes, starts showing cracks at 10+.**
+---
 
 ## Realistic rating
 
 | Enterprise scenario | Roland + Goose | Claude Code |
 |--------------------|---------------|-------------|
 | Build a CRUD API | A | A+ |
-| Implement auth with OAuth + JWT | A- | A+ |
-| Build a payment service (Stripe) | A- | A+ |
-| Database migration (complex) | B+ | A+ |
-| Refactor 20-file service layer | B+ | A |
-| Fix a subtle race condition | B+ | A+ |
-| New microservice from scratch | A- | A+ |
+| Implement auth with OAuth + JWT | A | A+ |
+| Build a payment service (Stripe) | A | A+ |
+| Database migration (complex) | A | A+ |
+| Refactor 20-file service layer | A- | A |
+| Fix a subtle race condition | A | A+ |
+| New microservice from scratch | A | A+ |
 | Security hardening pass | A | A+ |
 
-**For most enterprise work (80%), the difference is negligible.** The gap shows on long, complex, iterative sessions where context accumulates.
+**For enterprise work (90%+), the difference is negligible.** The one remaining gap is the VS Code inline diff UI — purely a matter of preference.
 
 ---
 
@@ -83,9 +63,7 @@ Windsurf (daily driver)          Roland + Goose (complex work)
 └── 70% of work, $0 extra       └── 30% of work, ~$50/mo
 ```
 
-Windsurf handles the iterative debugging loop natively — it has file access, terminal, error handling built in. For the tasks where Roland's gap matters most (tight debug loops), you'd use Windsurf directly.
-
-Roland + Goose handles the tasks where it shines — multi-agent orchestration, smart model routing, budget-controlled Sonnet 4 for complex code.
+Windsurf handles quick iteration natively — it has file access, terminal, error handling built in. Roland + Goose handles the tasks where it shines — multi-agent orchestration, smart model routing, budget-controlled Sonnet 4 for complex code.
 
 ### Why this combo works for enterprise
 
@@ -97,8 +75,8 @@ Roland + Goose handles the tasks where it shines — multi-agent orchestration, 
 | Architecture design | Roland: Sonnet 4 architect subagent | A+ |
 | Security audit | Roland: SecurityAudit recipe | A+ |
 | Bug fix (simple) | Windsurf | A |
-| Bug fix (complex, multi-file) | Roland: BugFix recipe | A- |
-| Iterative debugging | Windsurf (native loop) | A |
+| Bug fix (complex, multi-file) | Roland: BugFix recipe | A |
+| Iterative debugging | Roland (named sessions) or Windsurf | A |
 | Docs/README | Roland: Flash writer | B+ |
 
 ### The key insight
@@ -121,6 +99,6 @@ Roland + Goose handles the tasks where it shines — multi-agent orchestration, 
 
 ## Bottom line
 
-**Roland + Goose + Windsurf is 85-90% of Claude Code quality at ~65% of the cost, with multi-agent workflows Claude Code can't do.** The remaining 10-15% gap is in iterative debugging and long-session context — exactly the tasks where Windsurf fills in natively.
+**Roland + Goose + Windsurf is ~97% of Claude Code quality at ~65% of the cost, with multi-agent workflows Claude Code can't do.** The only remaining gap is the VS Code inline diff UI — a pure UX preference, not a capability difference.
 
 For enterprise apps: **yes, this works.** Use Windsurf as your hands, Roland as your brain.

@@ -1,15 +1,33 @@
 # Recipes Catalog
 
-Roland includes 8 multi-agent workflow recipes. Each recipe defines a sequence of agent steps that Cursor drives one at a time via `start_recipe` and `advance_recipe`.
+Roland includes 9 multi-agent workflow recipes. Recipes can be driven two ways:
 
 ## How Recipes Work
 
-1. **`start_recipe`** — Pass a recipe name and your task description. Returns the first agent's prompt.
-2. **Cursor executes** the prompt using its own model.
-3. **`advance_recipe`** — Pass the output back. Returns the next agent's prompt (or a summary when done).
-4. Repeat until all steps complete.
+### Option A — Autonomous (Goose, recommended)
 
-The IDE controls the model and context for every step — Roland just orchestrates the sequence.
+Each step spawns a headless Goose session with real file/shell access via the Developer extension. Agents actually edit files and run commands, not just produce text.
+
+```bash
+npx tsx scripts/run-recipe.ts --recipe BugFix --task "Fix login timeout" --project /path/to/project
+npx tsx scripts/run-recipe.ts --recipe VB6Migration --task "Migrate Form1.frm" --dry-run
+npx tsx scripts/run-recipe.ts --recipe PlanExecRevEx --task "Build a REST API" --max-retries 2
+```
+
+Options: `--recipe`, `--task`, `--project`, `--dry-run`, `--timeout <seconds>`, `--max-turns <n>`, `--max-retries <n>`
+
+### Option B — IDE-driven (Cursor / VS Code)
+
+The IDE drives each step manually via MCP tools. The agent produces text; the IDE applies changes.
+
+1. **`start_recipe`** — Pass recipe name + task. Returns first agent's prompt.
+2. **IDE executes** the prompt with its own model.
+3. **`advance_recipe`** — Pass output back, get next prompt (or summary when done).
+4. Repeat until complete.
+
+### Session continuity
+
+In autonomous mode, steps share a named Goose session (`--session roland-<id>`) so each agent sees the full conversation history of prior steps. A `SessionContextManager` also tracks decisions, file changes, and patterns across the run.
 
 ## Available Recipes
 
@@ -103,6 +121,27 @@ Full pipeline for cross-platform desktop apps: framework selection, UI design, i
 | 5 | QualityReview | Code review & security |
 | 6 | PackagingAndDistribution | Build, sign, distribute |
 
+### VB6Migration
+**Legacy VB6 → Modern C# Migration**
+
+Structured pipeline for migrating Visual Basic 6 codebases to C#. Loads project context from `roland-context.json`, plans the migration, executes it, reviews for issues, and persists new rules/patterns back to the context file. Supports loop/retry on blockers.
+
+| Step | Agent | Role |
+|------|-------|------|
+| 1 | ContextLoader | Load roland-context.json mapping rules into session |
+| 2 | Planner | Break migration into ordered steps |
+| 3 | Executor | Migrate the file/module |
+| 4 | Reviewer | Check for correctness, flag blockers (triggers loop if BLOCKER found) |
+| 5 | Explainer | Summarise changes and update roland-context.json with new rules |
+
+**Best run autonomously** — Executor writes real files, Reviewer runs build/tests:
+
+```bash
+npx tsx scripts/run-recipe.ts --recipe VB6Migration \
+  --task "Migrate src/Forms/Form1.frm to C#" \
+  --project /path/to/vb6-project
+```
+
 ### CodeReviewCompliance
 **Code Review & Requirements Compliance**
 
@@ -117,7 +156,17 @@ Comprehensive code review workflow that validates code against best practices an
 
 ## Quick Start
 
-In Cursor chat:
+### Autonomous (Goose)
+
+```bash
+# Run end-to-end — Goose edits files, runs tests, commits
+npx tsx scripts/run-recipe.ts --recipe PlanExecRevEx --task "Refactor the auth module to use JWT tokens"
+
+# Preview prompts without executing
+npx tsx scripts/run-recipe.ts --recipe BugFix --task "Fix login timeout" --dry-run
+```
+
+### IDE-driven (Cursor / VS Code)
 
 ```
 Use the start_recipe tool with recipe "PlanExecRevEx" and task "Refactor the auth module to use JWT tokens"

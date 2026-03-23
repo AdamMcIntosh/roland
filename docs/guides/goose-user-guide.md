@@ -73,13 +73,58 @@ Start a Goose session and set your monthly budget:
 
 That's $2.85/day = ~$85/month. Roland will automatically switch to free models when you hit 80% ($68).
 
+## Coding Agent Features
+
+Roland + Goose is a full coding agent — not just a routing layer. When you start a Goose session with Roland loaded, you get:
+
+### File & shell access
+
+Goose's built-in Developer extension provides `text_editor` (read/write files) and `bash` (run shell commands). Every session can edit code, run tests, and commit changes.
+
+### Named session continuity
+
+Recipe runs use `goose run --session roland-<id>` so Goose preserves conversation history across steps. Each sub-agent sees the full context of what happened before it.
+
+### Supervised mode
+
+Set `supervised: true` when calling `run_goose_task` to enable supervised spawn mode. Roland intercepts Goose's tool-call confirmation prompts and auto-approves or auto-denies them based on `.roland-permissions.json`.
+
+### Permission policy
+
+`roland init` creates `.roland-permissions.json` in your project root. Edit it to restrict what Goose sessions can do:
+
+```json
+{
+  "allow_shell": true,
+  "allow_write": ["src/**", "tests/**"],
+  "deny_commands": ["rm -rf /", "shutdown"],
+  "deny_paths": [".env", ".roland-permissions.json"]
+}
+```
+
+### Screenshot analysis
+
+`analyze_screenshot` captures your primary screen and sends it to a vision model for analysis. Pass `file_path` to analyze an existing image instead:
+
+```
+> Use analyze_screenshot with prompt "What error is shown on screen?"
+```
+
+### Git awareness
+
+Four git MCP tools give agents native git understanding:
+- `git_status` — see what's staged/unstaged before committing
+- `git_diff` — review exact changes before asking for review
+- `git_log` — understand recent history
+- `git_commit` — commit changes after completing a task
+
 ### 4. Verify
 
 ```
 > Use the health_check tool
 ```
 
-You should see `status: healthy` and a list of 11 tools.
+You should see `status: healthy` and a list of 20 tools.
 
 ## Daily Usage
 
@@ -260,6 +305,15 @@ At moderate usage: ~400 recipe runs/month within $85 budget.
 | `start_recipe` | Begin a multi-agent recipe |
 | `advance_recipe` | Move to next recipe step |
 | `session_context` | Persistent memory for long sessions — decisions, files, patterns, migrations |
+| `preview_changes` | Generate unified diff + HTML preview of file changes |
+| `load_migration_context` | Load project migration context into session |
+| `update_migration_context` | Append rules, decisions, patterns to roland-context.json |
+| `run_goose_task` | Spawn autonomous Goose sub-session with file/shell access |
+| `git_status` | Current git status (staged, unstaged, untracked) |
+| `git_diff` | Unified diff of working tree or staged changes |
+| `git_log` | Last N commits (oneline format) |
+| `git_commit` | Stage files and create a commit |
+| `analyze_screenshot` | Capture screen or load image, analyze with vision model |
 | `health_check` | Server status |
 
 ## Agent Catalog
@@ -299,3 +353,5 @@ Full list: see `agents/*.yaml` in the Roland repo.
 3. **Let triage decide.** Don't manually pick models. Roland's routing is cheaper and usually right.
 4. **Check analytics weekly.** `get_analytics` shows where your tokens go. Adjust if one agent is burning too much.
 5. **Reset monthly.** `manage_budget` → `reset` at the start of each billing cycle.
+6. **Use git tools before reviews.** Run `git_diff` before calling the critic or security-reviewer subagent — they get the exact changeset context.
+7. **Screenshot debugging.** When you have a visual error or UI bug, `analyze_screenshot` can read the screen and describe what's wrong.

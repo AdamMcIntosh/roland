@@ -289,12 +289,15 @@ export async function runRecipe(opts: {
     }
 
     // Spawn a headless Goose session for this step, with retry on failure
+    // Named session preserves conversation history across steps
+    const gooseSessionName = session ? `roland-${session.id}` : undefined;
     let sessionResult = await spawnGooseSession({
       task: fullPrompt,
       model: gooseModel,
       projectRoot,
       timeoutMs,
       maxTurns,
+      sessionName: gooseSessionName,
     });
 
     let { output, exitCode, durationMs } = sessionResult;

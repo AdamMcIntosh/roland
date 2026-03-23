@@ -36,6 +36,7 @@ import { RecipeSessionManager, ParsedRecipe, SubagentDef, RecipeStepDef } from '
 import { generateDiff } from '../utils/diff-engine.js';
 import { normaliseGooseModel, spawnGooseSession, isGooseAvailable } from '../utils/goose-runner.js';
 import { gitStatus, gitDiff, gitLog, gitCommit } from '../utils/git-tools.js';
+import { analyzeScreenshot } from '../utils/screenshot.js';
 import {
   buildContextBlock,
   appendRule,
@@ -240,6 +241,7 @@ export class McpServer {
     this.registerRunGooseTask();
     this.registerSessionContext();
     this.registerGitTools();
+    this.registerAnalyzeScreenshot();
   }
 
   // --------------------------------------------------------------------------
@@ -2080,6 +2082,29 @@ export class McpServer {
           sha: result.sha,
           message: result.message,
           success: true,
+        };
+      }
+    );
+  }
+
+  // --------------------------------------------------------------------------
+  // analyze_screenshot — capture or load image, analyse with vision model
+  // --------------------------------------------------------------------------
+  private registerAnalyzeScreenshot(): void {
+    this.registerTool(
+      'analyze_screenshot',
+      'Capture the primary screen (or load an existing image file) and analyse it with a vision-capable model. Returns a text description of what is visible — code, errors, UI, etc. Useful when debugging visual issues or reading screenshots.',
+      async (args: Record<string, unknown>) => {
+        const filePath = typeof args.file_path === 'string' ? args.file_path : undefined;
+        const prompt = typeof args.prompt === 'string' ? args.prompt
+          : 'Describe what you see in this image, focusing on any code, error messages, UI elements, or anything relevant to software development.';
+        const model = typeof args.model === 'string' ? args.model : 'google/gemini-2.5-flash';
+
+        const result = await analyzeScreenshot({ filePath, prompt, model });
+        return {
+          analysis: result.analysis,
+          model: result.model,
+          source: result.capturedNow ? 'screen capture' : result.imagePath,
         };
       }
     );

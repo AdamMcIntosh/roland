@@ -39,6 +39,17 @@
 - [x] `ROLAND_PROJECT_ROOT` env var support — fixes cwd footgun in Goose sessions
 - [x] `.goose/config.yaml` template with Developer extension + smart routing instructions
 
+### v0.1.3 — Gap Closure (completed)
+
+- [x] `src/utils/git-tools.ts` — `git_status`, `git_diff`, `git_log`, `git_commit` MCP tools
+- [x] `src/utils/screenshot.ts` — `analyze_screenshot` MCP tool with OpenRouter vision models
+- [x] `src/utils/permission-gate.ts` — `.roland-permissions.json` policy + prompt-level enforcement
+- [x] Supervised spawn mode in `goose-runner.ts` — auto-approve/deny Goose tool confirmations
+- [x] Named Goose sessions (`--session roland-<id>`) — conversation continuity across recipe steps
+- [x] `SessionContextManager` wired into `run-recipe.ts` — structured cross-step memory
+- [x] Per-step retry logic in `run-recipe.ts` (`--max-retries` CLI flag)
+- [x] Streaming output in `goose-runner.ts` — real-time stdout/stderr via `spawn`
+
 ### v0.2 — Weekly sprints (planned)
 
 #### Week 1: Bug fixes and stability

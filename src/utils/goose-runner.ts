@@ -13,7 +13,7 @@
 
 import { spawn } from 'child_process';
 import { execSync } from 'child_process';
-import { getPermissionBlock } from './permission-gate.js';
+import { getPermissionBlock, readPermissions } from './permission-gate.js';
 
 // ============================================================================
 // Types
@@ -40,6 +40,18 @@ export interface GooseSessionOptions {
   maxTurns?: number;
   /** Called with each stdout/stderr chunk as it arrives. */
   onChunk?: (chunk: string) => void;
+  /**
+   * Named session for continuity across calls. When provided, uses
+   * `goose run --session <name>` instead of `--no-session`, so Goose
+   * preserves conversation history between invocations.
+   */
+  sessionName?: string;
+  /**
+   * Supervised mode — intercept Goose tool-call confirmation prompts
+   * and auto-approve/deny based on the project permission policy.
+   * Requires GOOSE_MODE != 'auto' (set automatically when true).
+   */
+  supervised?: boolean;
 }
 
 // ============================================================================
@@ -117,6 +129,8 @@ export function spawnGooseSession(options: GooseSessionOptions): Promise<GooseSe
     timeoutMs = 300_000,
     maxTurns = 30,
     onChunk,
+    sessionName,
+    supervised = false,
   } = options;
 
   return new Promise((resolve, reject) => {
@@ -133,9 +147,9 @@ export function spawnGooseSession(options: GooseSessionOptions): Promise<GooseSe
 
     const env: Record<string, string> = {
       ...process.env as Record<string, string>,
-      GOOSE_MODE: 'auto',
+      // In supervised mode we leave GOOSE_MODE unset so Goose prompts for confirmations
+      ...(supervised ? {} : { GOOSE_MODE: 'auto' }),
       GOOSE_MAX_TURNS: String(maxTurns),
-      GOOSE_DISABLE_SESSION_NAMING: 'true',
       GOOSE_CONTEXT_STRATEGY: 'summarize',
       GOOSE_PROVIDER: model.provider,
       GOOSE_MODEL: model.model,
@@ -143,13 +157,19 @@ export function spawnGooseSession(options: GooseSessionOptions): Promise<GooseSe
       ...extraEnv,
     };
 
+    // Named sessions preserve conversation history; anonymous sessions start fresh
+    const sessionArgs: string[] = sessionName
+      ? ['--session', sessionName]
+      : ['--no-session'];
+
     const t0 = Date.now();
     const chunks: string[] = [];
 
-    const child = spawn('goose', ['run', '--no-session', '-t', effectiveTask], {
+    const child = spawn('goose', ['run', ...sessionArgs, '-t', effectiveTask], {
       cwd: projectRoot,
       env,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      // Supervised mode needs a writable stdin so we can respond to confirmations
+      stdio: supervised ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'],
     });
 
     const handleChunk = (data: Buffer) => {
@@ -159,8 +179,40 @@ export function spawnGooseSession(options: GooseSessionOptions): Promise<GooseSe
       onChunk?.(text);
     };
 
-    child.stdout.on('data', handleChunk);
-    child.stderr.on('data', handleChunk);
+    child.stdout!.on('data', handleChunk);
+    child.stderr!.on('data', handleChunk);
+
+    // Supervised mode — detect Goose tool-call confirmation prompts and
+    // auto-approve or auto-deny based on the project permission policy.
+    if (supervised && child.stdin) {
+      const policy = readPermissions(projectRoot);
+      const denyCommands = policy.deny_commands ?? [];
+      const denyPaths = policy.deny_paths ?? [];
+
+      // Patterns that indicate Goose is waiting for confirmation
+      const confirmPatterns = [/\(y\/n\)/i, /\[y\/N\]/i, /allow\?/i, /approve\?/i, /confirm\?/i];
+
+      let pending = '';
+      child.stdout!.on('data', (data: Buffer) => {
+        pending += data.toString();
+
+        const isConfirmPrompt = confirmPatterns.some(p => p.test(pending));
+        if (!isConfirmPrompt) return;
+
+        // Decide: deny if pending text mentions a denied command or path
+        const lower = pending.toLowerCase();
+        const denied =
+          (policy.allow_shell === false) ||
+          denyCommands.some(cmd => lower.includes(cmd.toLowerCase())) ||
+          denyPaths.some(p => lower.includes(p.toLowerCase()));
+
+        const response = denied ? 'n\n' : 'y\n';
+        const decision = denied ? '🚫 DENY' : '✅ ALLOW';
+        process.stdout.write(`\n[Roland supervised] ${decision}\n`);
+        child.stdin!.write(response);
+        pending = '';
+      });
+    }
 
     // Enforce timeout
     const timer = setTimeout(() => {
