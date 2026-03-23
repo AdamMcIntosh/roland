@@ -1,0 +1,62 @@
+{
+  "agents": [
+    {
+      "agent_id": "aa80a3414ba4903d8",
+      "agent_type": "Explore",
+      "started_at": "2026-03-23T12:30:13.311Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-03-23T12:32:23.609Z",
+      "duration_ms": 130298
+    },
+    {
+      "agent_id": "aa556f3eaf0275090",
+      "agent_type": "oh-my-claudecode:analyst",
+      "started_at": "2026-03-23T13:26:53.646Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-03-23T13:29:42.041Z",
+      "duration_ms": 168395
+    },
+    {
+      "agent_id": "a5ed033a074e766da",
+      "agent_type": "oh-my-claudecode:architect",
+      "started_at": "2026-03-23T13:49:02.962Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-03-23T13:50:35.490Z",
+      "duration_ms": 92528
+    },
+    {
+      "agent_id": "aa499b42724de365c",
+      "agent_type": "oh-my-claudecode:code-reviewer",
+      "started_at": "2026-03-23T13:49:11.485Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-03-23T13:52:18.344Z",
+      "duration_ms": 186859
+    },
+    {
+      "agent_id": "a3129bc1c8a1e1024",
+      "agent_type": "oh-my-claudecode:document-specialist",
+      "started_at": "2026-03-23T13:59:58.655Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-03-23T14:19:12.860Z",
+      "duration_ms": 1154205
+    },
+    {
+      "agent_id": "afe0c6a3299c7daa4",
+      "agent_type": "oh-my-claudecode:planner",
+      "started_at": "2026-03-23T14:31:55.557Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-03-23T14:34:38.060Z",
+      "duration_ms": 162503
+    }
+  ],
+  "total_spawned": 6,
+  "total_completed": 6,
+  "total_failed": 0,
+  "last_updated": "2026-03-23T14:34:38.163Z"
+}

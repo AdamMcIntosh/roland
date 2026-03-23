@@ -1,0 +1,112 @@
+name: VB6 to C# Migration Workflow
+description: "Context-aware VB6→C# migration: load playbook → plan → execute → review → explain"
+lead_model: claude-sonnet-4-5
+
+subagents:
+  - name: ContextLoader
+    provider: openrouter
+    model: claude-haiku-4-5-20251001
+    prompt: |
+      You are the context initialisation agent for a VB6→C# migration project.
+
+      Your job:
+      1. Call the `load_migration_context` MCP tool (init_session: true) to retrieve the full
+         project playbook — mapping rules, past decisions, and test patterns.
+      2. Summarise the loaded context in ≤10 bullet points so downstream agents can orient quickly.
+      3. Identify which mapping rules are most relevant to the current task: {{user_task}}
+      4. Output: a concise "Session Brief" that the Planner will use as its system context.
+
+      Format your output as:
+      ## Session Brief
+      **Task**: <one-line restatement>
+      **Relevant Rules**: <numbered list from loaded context>
+      **Watch-outs**: <any past decisions that constrain this task>
+      **Suggested Approach**: <1-2 sentences>
+
+  - name: Planner
+    provider: openrouter
+    model: claude-sonnet-4-5
+    prompt: |
+      You are the migration planning agent. Use the Session Brief from @ContextLoader and the
+      original task: {{user_task}}
+
+      Produce a detailed, step-by-step migration plan:
+      - List every VB6 construct that must be translated, with its C# equivalent from the rules.
+      - Flag any construct NOT covered by existing rules (these need new rules added after).
+      - Define acceptance criteria for each step.
+      - Estimate complexity: Simple / Medium / Complex per file or module.
+
+      Output structured Markdown: Overview, Steps, Gaps (missing rules), Risks, Acceptance Criteria.
+
+  - name: Executor
+    provider: openrouter
+    model: claude-sonnet-4-5
+    prompt: |
+      You are the migration execution agent. Follow the plan from @Planner exactly.
+
+      For each step:
+      1. Produce the C# equivalent of the VB6 code.
+      2. Apply all relevant mapping rules from the context.
+      3. Add XML doc comments where the VB6 had comments.
+      4. Flag any VB6 constructs you cannot map (output them as <!-- TODO: migrate --> blocks).
+      5. If you discover a new mapping rule, output it as:
+         NEW_RULE: <vb6_pattern> → <csharp_equivalent> [notes: ...]
+
+      Output: complete C# code blocks, inline TODO flags, NEW_RULE declarations.
+
+  - name: Reviewer
+    provider: openrouter
+    model: gemini-2.5-flash
+    prompt: |
+      You are the migration review agent. Analyse the C# output from @Executor.
+
+      Check for:
+      - Correctness: does the C# faithfully replicate the VB6 behaviour?
+      - Missing translations: any remaining VB6-isms (On Error GoTo, Variant, Late Binding, etc.)?
+      - C# best practices: null safety, async/await where appropriate, SOLID principles.
+      - NEW_RULE declarations: are they sound? Should they be added to the playbook?
+
+      If issues exist, flag with severity: BLOCKER | WARN | INFO.
+      Output: Review Summary, Flagged Items (with severity), Approved NEW_RULEs.
+
+  - name: Explainer
+    provider: openrouter
+    model: claude-sonnet-4-5
+    prompt: |
+      You are the explanation and knowledge-capture agent.
+
+      1. Summarise the migration changes in plain English for a developer unfamiliar with VB6.
+      2. For each Approved NEW_RULE from @Reviewer, call `update_migration_context` with type=rule
+         so the playbook is updated for future sessions.
+      3. If any architectural decisions were made, call `update_migration_context` with type=decision.
+      4. Produce a "Migration Log" entry: what was migrated, what rules were applied, what was added.
+
+      Output: Plain-English Summary, Migration Log, Confirmation of context updates made.
+
+workflow:
+  steps:
+    - agent: ContextLoader
+      input: "{{user_task}}"
+      output_to: Planner
+
+    - agent: Planner
+      output_to: Executor
+
+    - agent: Executor
+      output_to: Reviewer
+
+    - agent: Reviewer
+      loop_if: "BLOCKER"
+      loop_to: Executor
+      output_to: Explainer
+
+    - agent: Explainer
+      final_output: true
+
+options:
+  cache_messages: true
+  max_loops: 2
+
+settings:
+  require_context_load: true
+  auto_update_context: true

@@ -1,0 +1,277 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1774268999910,
+  "projectRoot": "c:\\Users\\amcintosh1\\source\\repos\\roland",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": ">=18.0.0",
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "tsconfig.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "vitest",
+        "version": "2.1.8",
+        "category": "testing"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": "Node.js 18.0.0"
+  },
+  "build": {
+    "buildCommand": "npm run build",
+    "testCommand": "npm test",
+    "lintCommand": "npm run lint",
+    "devCommand": "npm run dev",
+    "scripts": {
+      "build": "tsc && node scripts/copy-assets.js",
+      "dev": "tsc --watch",
+      "start": "node dist/index.js",
+      "mcp": "node dist/index.js",
+      "export-configs": "npx tsx scripts/export-ide-configs.ts",
+      "init": "npx tsx scripts/init.ts",
+      "lint": "eslint src/**/*.ts",
+      "format": "prettier --write src/**/*.ts",
+      "test": "vitest",
+      "clean": "rimraf dist"
+    }
+  },
+  "conventions": {
+    "namingStyle": "camelCase",
+    "importStyle": null,
+    "testPattern": "*.test.ts",
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "scripts",
+      "src",
+      "tests"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "agents": {
+      "path": "agents",
+      "purpose": null,
+      "fileCount": 34,
+      "lastAccessed": 1774268999843,
+      "keyFiles": [
+        "analyst.yaml",
+        "architect-low.yaml",
+        "architect-medium.yaml",
+        "architect.yaml",
+        "build-fixer-low.yaml"
+      ]
+    },
+    "config": {
+      "path": "config",
+      "purpose": "Configuration files",
+      "fileCount": 0,
+      "lastAccessed": 1774268999855,
+      "keyFiles": []
+    },
+    "dist": {
+      "path": "dist",
+      "purpose": "Distribution/build output",
+      "fileCount": 5,
+      "lastAccessed": 1774268999870,
+      "keyFiles": [
+        "config.yaml",
+        "index.d.ts",
+        "index.d.ts.map",
+        "index.js",
+        "index.js.map"
+      ]
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 0,
+      "lastAccessed": 1774268999873,
+      "keyFiles": []
+    },
+    "recipes": {
+      "path": "recipes",
+      "purpose": null,
+      "fileCount": 9,
+      "lastAccessed": 1774268999874,
+      "keyFiles": [
+        "BugFix.yaml",
+        "CodeReviewCompliance.yaml",
+        "DesktopApp.yaml",
+        "DocumentationRefactor.yaml",
+        "MicroservicesArchitecture.yaml"
+      ]
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 7,
+      "lastAccessed": 1774268999874,
+      "keyFiles": [
+        "copy-assets.js",
+        "export-ide-configs.ts",
+        "fetch-anthropic-models.js",
+        "fetch-google-models.js",
+        "fetch-grok-models.js"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 1,
+      "lastAccessed": 1774268999875,
+      "keyFiles": [
+        "index.ts"
+      ]
+    },
+    "tests": {
+      "path": "tests",
+      "purpose": "Test files",
+      "fileCount": 1,
+      "lastAccessed": 1774268999875,
+      "keyFiles": [
+        "integration.test.ts"
+      ]
+    },
+    "dist\\config": {
+      "path": "dist\\config",
+      "purpose": "Configuration files",
+      "fileCount": 4,
+      "lastAccessed": 1774268999877,
+      "keyFiles": [
+        "config-loader.d.ts",
+        "config-loader.d.ts.map",
+        "config-loader.js"
+      ]
+    },
+    "src\\config": {
+      "path": "src\\config",
+      "purpose": "Configuration files",
+      "fileCount": 1,
+      "lastAccessed": 1774268999879,
+      "keyFiles": [
+        "config-loader.ts"
+      ]
+    },
+    "src\\utils": {
+      "path": "src\\utils",
+      "purpose": "Utility functions",
+      "fileCount": 4,
+      "lastAccessed": 1774268999880,
+      "keyFiles": [
+        "budget-manager.ts",
+        "errors.ts",
+        "logger.ts"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "src\\server\\mcp-server.ts",
+      "accessCount": 59,
+      "lastAccessed": 1774276613792,
+      "type": "file"
+    },
+    {
+      "path": "src\\utils\\migration-context.ts",
+      "accessCount": 11,
+      "lastAccessed": 1774276329020,
+      "type": "file"
+    },
+    {
+      "path": "scripts\\run-recipe.ts",
+      "accessCount": 9,
+      "lastAccessed": 1774276576340,
+      "type": "file"
+    },
+    {
+      "path": "scripts\\init.ts",
+      "accessCount": 9,
+      "lastAccessed": 1774276646111,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 6,
+      "lastAccessed": 1774273753506,
+      "type": "directory"
+    },
+    {
+      "path": "package.json",
+      "accessCount": 4,
+      "lastAccessed": 1774276334478,
+      "type": "file"
+    },
+    {
+      "path": "tsconfig.json",
+      "accessCount": 3,
+      "lastAccessed": 1774273747953,
+      "type": "file"
+    },
+    {
+      "path": "recipes\\VB6Migration.yaml",
+      "accessCount": 3,
+      "lastAccessed": 1774273764162,
+      "type": "file"
+    },
+    {
+      "path": "src",
+      "accessCount": 3,
+      "lastAccessed": 1774273772340,
+      "type": "directory"
+    },
+    {
+      "path": "src\\server\\recipe-session.ts",
+      "accessCount": 2,
+      "lastAccessed": 1774272445952,
+      "type": "file"
+    },
+    {
+      "path": "src\\utils\\errors.ts",
+      "accessCount": 1,
+      "lastAccessed": 1774269151330,
+      "type": "file"
+    },
+    {
+      "path": "src\\utils\\diff-engine.ts",
+      "accessCount": 1,
+      "lastAccessed": 1774271131516,
+      "type": "file"
+    },
+    {
+      "path": "recipes\\PlanExecRevEx.yaml",
+      "accessCount": 1,
+      "lastAccessed": 1774271615839,
+      "type": "file"
+    },
+    {
+      "path": "src\\utils\\goose-runner.ts",
+      "accessCount": 1,
+      "lastAccessed": 1774276511181,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

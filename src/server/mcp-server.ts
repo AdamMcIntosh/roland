@@ -15,6 +15,7 @@
  *   list_recipes    — available workflow recipes
  *   start_recipe    — begin a recipe session, return first step prompt
  *   advance_recipe  — submit step output, get next step or summary
+ *   preview_changes — generate markdown diff + optional HTML preview of file changes
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -32,6 +33,18 @@ import { ModelRouter } from '../orchestrator/model-router.js';
 import { AdvancedCostTracker, getGlobalTracker } from '../orchestrator/advanced-cost-tracker.js';
 import { BudgetManager } from '../utils/budget-manager.js';
 import { RecipeSessionManager, ParsedRecipe, SubagentDef, RecipeStepDef } from './recipe-session.js';
+import { generateDiff } from '../utils/diff-engine.js';
+import { normaliseGooseModel, spawnGooseSession, isGooseAvailable } from '../utils/goose-runner.js';
+import {
+  buildContextBlock,
+  appendRule,
+  appendDecision,
+  appendTestPattern,
+  appendCustomSection,
+  readContext,
+  writeRcoState,
+  readRcoState,
+} from '../utils/migration-context.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -101,6 +114,10 @@ export class McpServer {
     this.registerListRecipes();
     this.registerStartRecipe();
     this.registerAdvanceRecipe();
+    this.registerPreviewChanges();
+    this.registerLoadMigrationContext();
+    this.registerUpdateMigrationContext();
+    this.registerRunGooseTask();
   }
 
   // --------------------------------------------------------------------------
@@ -298,6 +315,13 @@ export class McpServer {
       description: 'Desktop app: architect → design → implement → test → review → package',
       triggers: ['desktop', 'electron', 'tauri', 'native app', 'gui', 'desktop app', 'cross-platform', 'maui', 'installable', 'offline app'],
       agents: ['architect', 'designer', 'executor', 'qa-tester', 'critic', 'writer'],
+    },
+    {
+      name: 'VB6Migration',
+      fileKey: 'VB6Migration',
+      description: 'VB6→C# migration: load context → triage → plan → execute → review → explain',
+      triggers: ['vb6', 'visual basic', 'vb 6', 'migrate', 'migration', 'legacy', 'vb6 to c#', 'vb to csharp', 'modernize', 'rewrite'],
+      agents: ['planner', 'executor', 'reviewer', 'explainer'],
     },
   ];
 
@@ -972,7 +996,7 @@ export class McpServer {
   private registerStartRecipe(): void {
     this.registerTool(
       'start_recipe',
-      'Start a multi-agent recipe session. Returns the first step\'s system prompt and user prompt for you to execute. Then call advance_recipe with your output to get the next step. Available recipes: BugFix, RESTfulAPI, SecurityAudit, WebAppFullStack, MicroservicesArchitecture, PlanExecRevEx, DocumentationRefactor, DesktopApp.',
+      'Start a multi-agent recipe session. Returns the first step\'s system prompt and user prompt for you to execute. Then call advance_recipe with your output to get the next step. Available recipes: BugFix, RESTfulAPI, SecurityAudit, WebAppFullStack, MicroservicesArchitecture, PlanExecRevEx, DocumentationRefactor, DesktopApp, VB6Migration.',
       async (args: Record<string, unknown>) => {
         const recipeName = args.recipe_name as string;
         const userTask = args.task as string;
@@ -1202,6 +1226,333 @@ export class McpServer {
     this.server.onclose = () => {
       logger.info('🔌 MCP Server closed');
     };
+  }
+
+  // --------------------------------------------------------------------------
+  // load_migration_context — inject project context block into the session
+  // --------------------------------------------------------------------------
+  private registerLoadMigrationContext(): void {
+    this.registerTool(
+      'load_migration_context',
+      'Load the project migration context (roland-context.json + .rco-state.json) and return a prompt-ready markdown block. Call this at the start of every session to inject mapping rules, past decisions, and test patterns. Optionally initialise a new session ID.',
+      async (args: Record<string, unknown>) => {
+        // Pass undefined when no explicit project_root so findProjectRoot()
+        // correctly checks ROLAND_PROJECT_ROOT before falling back to cwd.
+        const projectRoot = typeof args.project_root === 'string' && args.project_root
+          ? args.project_root
+          : undefined;
+
+        const initSession = args.init_session === true;
+
+        if (initSession) {
+          const sessionId = `session-${Date.now()}`;
+          writeRcoState(
+            {
+              sessionId,
+              startedAt: new Date().toISOString(),
+              activeRecipe: null,
+              stepIndex: 0,
+              context: {},
+            },
+            projectRoot
+          );
+        }
+
+        const contextBlock = buildContextBlock(projectRoot);
+        const ctx = readContext(projectRoot);
+        const state = readRcoState(projectRoot);
+
+        return {
+          context_block: contextBlock,
+          summary: {
+            project: `${ctx.project.sourceLanguage}→${ctx.project.targetLanguage}: ${ctx.project.description}`,
+            rules_count: ctx.rules.length,
+            decisions_count: ctx.decisions.length,
+            test_patterns_count: ctx.testPatterns.length,
+            custom_sections: Object.keys(ctx.customSections),
+            session_id: state?.sessionId ?? null,
+          },
+          instructions: 'Paste the context_block into your system prompt or prepend it to the user task before planning. Use update_migration_context to add new rules or decisions discovered during this session.',
+        };
+      },
+      {
+        type: 'object',
+        properties: {
+          project_root: {
+            type: 'string',
+            description: 'Absolute path to the project directory (default: ROLAND_PROJECT_ROOT env var, then cwd)',
+          },
+          init_session: {
+            type: 'boolean',
+            description: 'If true, creates a fresh .rco-state.json with a new session ID (default: false)',
+          },
+        },
+        required: [],
+      }
+    );
+  }
+
+  // --------------------------------------------------------------------------
+  // update_migration_context — append rules / decisions / patterns / sections
+  // --------------------------------------------------------------------------
+  private registerUpdateMigrationContext(): void {
+    this.registerTool(
+      'update_migration_context',
+      'Append a new mapping rule, architectural decision, test pattern, or custom section to roland-context.json and regenerate MIGRATION.md. Use this whenever a new VB6→C# pattern or project decision is discovered.',
+      async (args: Record<string, unknown>) => {
+        const type = args.type as string;
+        const projectRoot = typeof args.project_root === 'string' && args.project_root
+          ? args.project_root
+          : undefined;
+
+        if (!type) throw new McpToolError('update_migration_context', '"type" is required');
+
+        switch (type) {
+          case 'rule': {
+            const pattern = args.pattern as string;
+            const replacement = args.replacement as string;
+            if (!pattern || !replacement) {
+              throw new McpToolError('update_migration_context', '"pattern" and "replacement" required for type=rule');
+            }
+            const rule = appendRule(pattern, replacement, args.notes as string | undefined, projectRoot);
+            return { added: 'rule', rule, message: `Rule #${rule.id} added and MIGRATION.md updated.`, updated_context_block: buildContextBlock(projectRoot), instructions: 'Re-prepend updated_context_block to your context to reflect the new rule.' };
+          }
+
+          case 'decision': {
+            const description = args.description as string;
+            const rationale = args.rationale as string;
+            if (!description || !rationale) {
+              throw new McpToolError('update_migration_context', '"description" and "rationale" required for type=decision');
+            }
+            const decision = appendDecision(description, rationale, projectRoot);
+            return { added: 'decision', decision, message: `Decision #${decision.id} added and MIGRATION.md updated.`, updated_context_block: buildContextBlock(projectRoot), instructions: 'Re-prepend updated_context_block to your context to reflect the new decision.' };
+          }
+
+          case 'test_pattern': {
+            const name = args.name as string;
+            const patternDescription = args.description as string;
+            if (!name || !patternDescription) {
+              throw new McpToolError('update_migration_context', '"name" and "description" required for type=test_pattern');
+            }
+            const tp = appendTestPattern(name, patternDescription, args.example as string | undefined, projectRoot);
+            return { added: 'test_pattern', test_pattern: tp, message: `Test pattern #${tp.id} added and MIGRATION.md updated.`, updated_context_block: buildContextBlock(projectRoot), instructions: 'Re-prepend updated_context_block to your context to reflect the new test pattern.' };
+          }
+
+          case 'section': {
+            const section = args.section as string;
+            const content = args.content as string;
+            if (!section || !content) {
+              throw new McpToolError('update_migration_context', '"section" and "content" required for type=section');
+            }
+            appendCustomSection(section, content, projectRoot);
+            return { added: 'section', section, message: `Custom section "${section}" updated in roland-context.json and MIGRATION.md.`, updated_context_block: buildContextBlock(projectRoot), instructions: 'Re-prepend updated_context_block to your context to reflect the new section.' };
+          }
+
+          default:
+            throw new McpToolError('update_migration_context', `Unknown type "${type}". Use: rule, decision, test_pattern, section`);
+        }
+      },
+      {
+        type: 'object',
+        properties: {
+          type: {
+            type: 'string',
+            enum: ['rule', 'decision', 'test_pattern', 'section'],
+            description: 'What to append: "rule" (mapping pattern), "decision" (architectural decision), "test_pattern", or "section" (freeform)',
+          },
+          project_root: {
+            type: 'string',
+            description: 'Absolute path to the project directory (default: ROLAND_PROJECT_ROOT env var, then cwd)',
+          },
+          // rule fields
+          pattern: { type: 'string', description: '[rule] VB6 pattern or construct being replaced' },
+          replacement: { type: 'string', description: '[rule] C# equivalent' },
+          notes: { type: 'string', description: '[rule] Optional notes or caveats' },
+          // decision fields
+          description: { type: 'string', description: '[decision | test_pattern] Short description' },
+          rationale: { type: 'string', description: '[decision] Why this decision was made' },
+          // test_pattern fields
+          name: { type: 'string', description: '[test_pattern] Pattern name' },
+          example: { type: 'string', description: '[test_pattern] Optional code example' },
+          // section fields
+          section: { type: 'string', description: '[section] Section heading' },
+          content: { type: 'string', description: '[section] Markdown content to append' },
+        },
+        required: ['type'],
+      }
+    );
+  }
+
+  // --------------------------------------------------------------------------
+  // run_goose_task — spawn a headless Goose session with smart model routing
+  // --------------------------------------------------------------------------
+  private registerRunGooseTask(): void {
+    this.registerTool(
+      'run_goose_task',
+      'Spawn a headless Goose coding session for a task. Goose has full file read/write and shell access via its Developer extension. Roland automatically routes to the cheapest adequate model using complexity analysis. Returns the session output.',
+      async (args: Record<string, unknown>) => {
+        const task = args.task as string;
+        if (!task) throw new McpToolError('run_goose_task', '"task" is required');
+
+        if (!isGooseAvailable()) {
+          return {
+            error: 'goose CLI not found in PATH',
+            install: 'https://block.github.io/goose/',
+            tip: 'Install Goose and ensure it is in PATH, then retry.',
+          };
+        }
+
+        const projectRoot = typeof args.project_root === 'string' && args.project_root
+          ? args.project_root
+          : undefined;
+
+        const maxTurns = typeof args.max_turns === 'number' ? args.max_turns : 30;
+        const timeoutMs = typeof args.timeout_seconds === 'number'
+          ? args.timeout_seconds * 1000
+          : 300_000;
+
+        // Auto-route: use provided model or derive from complexity analysis
+        let modelId = typeof args.model === 'string' ? args.model : null;
+        let routingInfo: Record<string, unknown> = {};
+
+        if (!modelId) {
+          try {
+            const routing = ModelRouter.routeByComplexity(task);
+            modelId = routing.selected.model;
+            routingInfo = {
+              auto_routed: true,
+              complexity: ComplexityClassifier.getDetailedAnalysis(task).complexity,
+              model_selected: modelId,
+              estimated_cost: routing.selected.costPer1kTokens,
+            };
+          } catch {
+            modelId = 'claude-sonnet-4-5'; // safe default
+            routingInfo = { auto_routed: false, model_selected: modelId };
+          }
+        }
+
+        const gooseModel = normaliseGooseModel(modelId);
+
+        logger.info(`🦆 Spawning Goose session: ${gooseModel.provider}/${gooseModel.model}`);
+
+        const result = await spawnGooseSession({
+          task,
+          model: gooseModel,
+          projectRoot,
+          maxTurns,
+          timeoutMs,
+        });
+
+        return {
+          output: result.output,
+          exit_code: result.exitCode,
+          duration_seconds: Math.round(result.durationMs / 1000),
+          model_used: `${result.modelUsed.provider}/${result.modelUsed.model}`,
+          routing: routingInfo,
+          success: result.exitCode === 0,
+        };
+      },
+      {
+        type: 'object',
+        properties: {
+          task: {
+            type: 'string',
+            description: 'Full task description for the Goose session. Include all context needed — Goose will read files, run commands, and edit code autonomously.',
+          },
+          model: {
+            type: 'string',
+            description: 'Model ID to use (e.g. "claude-sonnet-4-5", "gpt-4o"). Omit to auto-route based on task complexity.',
+          },
+          project_root: {
+            type: 'string',
+            description: 'Working directory for the Goose session (default: ROLAND_PROJECT_ROOT env var, then cwd)',
+          },
+          max_turns: {
+            type: 'number',
+            description: 'Maximum LLM turns Goose is allowed (default: 30)',
+          },
+          timeout_seconds: {
+            type: 'number',
+            description: 'Session timeout in seconds (default: 300)',
+          },
+        },
+        required: ['task'],
+      }
+    );
+  }
+
+  // --------------------------------------------------------------------------
+  // preview_changes — markdown diff + optional HTML preview
+  // --------------------------------------------------------------------------
+  private registerPreviewChanges(): void {
+    this.registerTool(
+      'preview_changes',
+      'Generate a markdown unified diff and optional HTML preview comparing original vs modified content. Returns diff stats (additions/deletions) alongside formatted output.',
+      async (args: Record<string, unknown>) => {
+        const original = args.original as string;
+        const modified = args.modified as string;
+
+        if (typeof original !== 'string') {
+          throw new McpToolError('preview_changes', '"original" must be a string');
+        }
+        if (typeof modified !== 'string') {
+          throw new McpToolError('preview_changes', '"modified" must be a string');
+        }
+
+        const filename = typeof args.filename === 'string' ? args.filename : 'file';
+        const format = (args.format as string) ?? 'markdown';
+        const contextLines = typeof args.context_lines === 'number'
+          ? Math.max(0, Math.floor(args.context_lines))
+          : 3;
+
+        if (!['markdown', 'html', 'both'].includes(format)) {
+          throw new McpToolError('preview_changes', '"format" must be one of: markdown, html, both');
+        }
+
+        const includeHtml = format === 'html' || format === 'both';
+
+        const result = generateDiff(original, modified, { filename, contextLines, includeHtml });
+
+        return {
+          filename,
+          stats: {
+            additions: result.additions,
+            deletions: result.deletions,
+            hunks: result.hunks.length,
+            unchanged: original.split('\n').length - result.deletions,
+          },
+          markdown_diff: format !== 'html' ? result.markdownDiff : undefined,
+          html_preview: includeHtml ? result.htmlPreview : undefined,
+        };
+      },
+      {
+        type: 'object',
+        properties: {
+          original: {
+            type: 'string',
+            description: 'Original file content (before changes)',
+          },
+          modified: {
+            type: 'string',
+            description: 'Modified file content (after changes)',
+          },
+          filename: {
+            type: 'string',
+            description: 'File name shown in the diff header (default: "file")',
+          },
+          format: {
+            type: 'string',
+            enum: ['markdown', 'html', 'both'],
+            description: 'Output format — "markdown" (default), "html", or "both"',
+          },
+          context_lines: {
+            type: 'number',
+            description: 'Lines of context around each change (default: 3)',
+          },
+        },
+        required: ['original', 'modified'],
+      }
+    );
   }
 
   // ==========================================================================
