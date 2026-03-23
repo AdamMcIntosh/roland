@@ -11,8 +11,9 @@
  *   - Developer extension enabled in ~/.config/goose/config.yaml
  */
 
-import { spawnSync } from 'child_process';
+import { spawn } from 'child_process';
 import { execSync } from 'child_process';
+import { getPermissionBlock } from './permission-gate.js';
 
 // ============================================================================
 // Types
@@ -37,6 +38,8 @@ export interface GooseSessionOptions {
   extraEnv?: Record<string, string>;
   timeoutMs?: number;
   maxTurns?: number;
+  /** Called with each stdout/stderr chunk as it arrives. */
+  onChunk?: (chunk: string) => void;
 }
 
 // ============================================================================
@@ -46,24 +49,12 @@ export interface GooseSessionOptions {
 /**
  * Map a bare model ID (as used in Roland recipe YAMLs) to a Goose
  * provider + model pair that can be set via GOOSE_PROVIDER / GOOSE_MODEL.
- *
- * All models route through OpenRouter by default, which supports the widest
- * range and preserves Roland's budget-enforcement logic.
- * Exceptions: models with an explicit provider prefix are split on '/'.
  */
 export function normaliseGooseModel(modelId: string): GooseModel {
-  // Already provider-scoped (e.g. "anthropic/claude-sonnet-4-5")
   if (modelId.includes('/')) {
-    const slash = modelId.indexOf('/');
-    return {
-      provider: 'openrouter',
-      model: modelId, // OpenRouter accepts full namespaced IDs
-    };
-    // Suppress unused variable warning by using the split result only when needed
-    void slash;
+    return { provider: 'openrouter', model: modelId };
   }
 
-  // Bare model names — normalise to provider/model for OpenRouter
   const prefixMap: Array<[RegExp, string]> = [
     [/^claude-/, 'anthropic/'],
     [/^gpt-/, 'openai/'],
@@ -89,9 +80,6 @@ export function normaliseGooseModel(modelId: string): GooseModel {
 // PATH detection
 // ============================================================================
 
-/**
- * Returns true if the `goose` CLI is available in PATH.
- */
 export function isGooseAvailable(): boolean {
   try {
     const cmd = process.platform === 'win32' ? 'where goose' : 'which goose';
@@ -102,37 +90,25 @@ export function isGooseAvailable(): boolean {
   }
 }
 
-/**
- * Returns the goose version string, or null if not available.
- */
 export function getGooseVersion(): string | null {
   try {
-    const result = execSync('goose --version', { encoding: 'utf-8', stdio: 'pipe' });
-    return result.trim();
+    return execSync('goose --version', { encoding: 'utf-8', stdio: 'pipe' }).trim();
   } catch {
     return null;
   }
 }
 
 // ============================================================================
-// Session spawner
+// Session spawner — streaming
 // ============================================================================
 
 /**
  * Spawn a headless Goose session for a single task.
  *
- * Goose will have access to all extensions configured in ~/.config/goose/config.yaml
- * (including Developer = file read/write + shell) plus any Roland MCP tools if Roland
- * is configured there.
- *
- * @param options.task        The full task prompt (system + user blended as instructions)
- * @param options.model       Model to use (defaults to claude-sonnet-4-5 via OpenRouter)
- * @param options.projectRoot Working directory for the Goose session (defaults to cwd)
- * @param options.extraEnv    Additional environment variables injected into the process
- * @param options.timeoutMs   Per-session timeout in ms (default: 300,000 = 5 min)
- * @param options.maxTurns    Max LLM turns Goose is allowed (default: 30)
+ * Streams stdout/stderr in real-time to process.stdout and optionally to the
+ * `onChunk` callback. Returns the full buffered output on completion.
  */
-export async function spawnGooseSession(options: GooseSessionOptions): Promise<GooseSessionResult> {
+export function spawnGooseSession(options: GooseSessionOptions): Promise<GooseSessionResult> {
   const {
     task,
     model = normaliseGooseModel('claude-sonnet-4-5'),
@@ -140,64 +116,73 @@ export async function spawnGooseSession(options: GooseSessionOptions): Promise<G
     extraEnv = {},
     timeoutMs = 300_000,
     maxTurns = 30,
+    onChunk,
   } = options;
 
-  if (!isGooseAvailable()) {
-    throw new Error(
-      'Goose CLI not found in PATH. Install it from https://block.github.io/goose/ then re-run.'
-    );
-  }
+  return new Promise((resolve, reject) => {
+    if (!isGooseAvailable()) {
+      reject(new Error(
+        'Goose CLI not found in PATH. Install it from https://block.github.io/goose/ then re-run.'
+      ));
+      return;
+    }
 
-  const env: Record<string, string> = {
-    ...process.env as Record<string, string>,
-    // Headless / non-interactive mode
-    GOOSE_MODE: 'auto',
-    GOOSE_MAX_TURNS: String(maxTurns),
-    GOOSE_DISABLE_SESSION_NAMING: 'true',
-    GOOSE_CONTEXT_STRATEGY: 'summarize',
-    // Model routing
-    GOOSE_PROVIDER: model.provider,
-    GOOSE_MODEL: model.model,
-    // Project root for Roland tools
-    ROLAND_PROJECT_ROOT: projectRoot,
-    // Caller overrides last
-    ...extraEnv,
-  };
+    // Prepend permission policy block to task (if any restrictions are set)
+    const permBlock = getPermissionBlock(projectRoot);
+    const effectiveTask = permBlock ? `${permBlock}\n\n${task}` : task;
 
-  // Sanitise task to be safe as a CLI argument: use stdin approach via echo
-  // to avoid shell injection from arbitrary task strings.
-  const t0 = Date.now();
+    const env: Record<string, string> = {
+      ...process.env as Record<string, string>,
+      GOOSE_MODE: 'auto',
+      GOOSE_MAX_TURNS: String(maxTurns),
+      GOOSE_DISABLE_SESSION_NAMING: 'true',
+      GOOSE_CONTEXT_STRATEGY: 'summarize',
+      GOOSE_PROVIDER: model.provider,
+      GOOSE_MODEL: model.model,
+      ROLAND_PROJECT_ROOT: projectRoot,
+      ...extraEnv,
+    };
 
-  const result = spawnSync(
-    'goose',
-    ['run', '--no-session', '-t', task],
-    {
+    const t0 = Date.now();
+    const chunks: string[] = [];
+
+    const child = spawn('goose', ['run', '--no-session', '-t', effectiveTask], {
       cwd: projectRoot,
       env,
-      timeout: timeoutMs,
-      encoding: 'utf-8',
-      maxBuffer: 10 * 1024 * 1024, // 10 MB
-    }
-  );
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
 
-  const durationMs = Date.now() - t0;
+    const handleChunk = (data: Buffer) => {
+      const text = data.toString();
+      chunks.push(text);
+      process.stdout.write(text);
+      onChunk?.(text);
+    };
 
-  if (result.error) {
-    if ((result.error as NodeJS.ErrnoException).code === 'ETIMEDOUT') {
-      throw new Error(`Goose session timed out after ${timeoutMs / 1000}s`);
-    }
-    throw new Error(`Goose process error: ${result.error.message}`);
-  }
+    child.stdout.on('data', handleChunk);
+    child.stderr.on('data', handleChunk);
 
-  const output = [result.stdout ?? '', result.stderr ?? '']
-    .filter(Boolean)
-    .join('\n')
-    .trim();
+    // Enforce timeout
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM');
+      // Give it 5s to exit cleanly before SIGKILL
+      setTimeout(() => child.kill('SIGKILL'), 5000);
+      reject(new Error(`Goose session timed out after ${timeoutMs / 1000}s`));
+    }, timeoutMs);
 
-  return {
-    output,
-    exitCode: result.status ?? 1,
-    durationMs,
-    modelUsed: model,
-  };
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(new Error(`Goose process error: ${err.message}`));
+    });
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({
+        output: chunks.join('').trim(),
+        exitCode: code ?? 1,
+        durationMs: Date.now() - t0,
+        modelUsed: model,
+      });
+    });
+  });
 }

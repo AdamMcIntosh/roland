@@ -178,6 +178,23 @@ function main() {
     console.log(`   ⏭️  .goose/config.yaml already exists — skipping`);
   }
 
+  // ── Step 6: Scaffold .roland-permissions.json ────────────────────────────
+  const permissionsPath = path.join(targetDir, '.roland-permissions.json');
+  if (!fs.existsSync(permissionsPath)) {
+    const defaultPerms = {
+      allow_shell: true,
+      allow_write: true,
+      allow_read: true,
+      deny_commands: ['rm -rf /', 'shutdown', 'reboot', 'format'],
+      deny_paths: ['.git/objects', '.env', '.roland-permissions.json'],
+      extra_instructions: '',
+    };
+    fs.writeFileSync(permissionsPath, JSON.stringify(defaultPerms, null, 2), 'utf-8');
+    console.log(`   ✅ Created .roland-permissions.json`);
+  } else {
+    console.log(`   ⏭️  .roland-permissions.json already exists — skipping`);
+  }
+
   console.log(`\n🎉 Roland is ready in ${targetDir}`);
   console.log(`\nNext steps:`);
   console.log(`  1. Open ${targetDir} in Cursor or VS Code`);

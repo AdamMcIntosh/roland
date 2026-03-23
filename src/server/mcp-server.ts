@@ -35,6 +35,7 @@ import { BudgetManager } from '../utils/budget-manager.js';
 import { RecipeSessionManager, ParsedRecipe, SubagentDef, RecipeStepDef } from './recipe-session.js';
 import { generateDiff } from '../utils/diff-engine.js';
 import { normaliseGooseModel, spawnGooseSession, isGooseAvailable } from '../utils/goose-runner.js';
+import { gitStatus, gitDiff, gitLog, gitCommit } from '../utils/git-tools.js';
 import {
   buildContextBlock,
   appendRule,
@@ -238,6 +239,7 @@ export class McpServer {
     this.registerUpdateMigrationContext();
     this.registerRunGooseTask();
     this.registerSessionContext();
+    this.registerGitTools();
   }
 
   // --------------------------------------------------------------------------
@@ -2011,6 +2013,76 @@ export class McpServer {
       const message = error instanceof Error ? error.message : String(error);
       throw new McpServerError(`Failed to start MCP server: ${message}`);
     }
+  }
+
+  // --------------------------------------------------------------------------
+  // git_status / git_diff / git_log / git_commit
+  // --------------------------------------------------------------------------
+  private registerGitTools(): void {
+    this.registerTool(
+      'git_status',
+      'Return the current git status (staged, unstaged, untracked files). Useful before planning file edits or commits.',
+      async (args: Record<string, unknown>) => {
+        const cwd = typeof args.project_root === 'string' && args.project_root
+          ? args.project_root
+          : (process.env['ROLAND_PROJECT_ROOT']?.trim() || process.cwd());
+        const result = gitStatus(cwd);
+        return {
+          staged: result.staged,
+          unstaged: result.unstaged,
+          untracked: result.untracked,
+          summary: `${result.staged.length} staged, ${result.unstaged.length} unstaged, ${result.untracked.length} untracked`,
+          raw: result.raw,
+        };
+      }
+    );
+
+    this.registerTool(
+      'git_diff',
+      'Return a unified diff of current changes. Pass staged=true for staged-only diff, file_path to limit to one file.',
+      async (args: Record<string, unknown>) => {
+        const cwd = typeof args.project_root === 'string' && args.project_root
+          ? args.project_root
+          : (process.env['ROLAND_PROJECT_ROOT']?.trim() || process.cwd());
+        const staged = args.staged === true;
+        const filePath = typeof args.file_path === 'string' ? args.file_path : undefined;
+        const maxLines = typeof args.max_lines === 'number' ? args.max_lines : 500;
+        const diff = gitDiff(cwd, { staged, filePath, maxLines });
+        return { diff: diff || '(no changes)', staged, file_path: filePath ?? null };
+      }
+    );
+
+    this.registerTool(
+      'git_log',
+      'Return the last N commits from git log (one-line format). Defaults to 10.',
+      async (args: Record<string, unknown>) => {
+        const cwd = typeof args.project_root === 'string' && args.project_root
+          ? args.project_root
+          : (process.env['ROLAND_PROJECT_ROOT']?.trim() || process.cwd());
+        const limit = typeof args.limit === 'number' ? args.limit : 10;
+        const log = gitLog(cwd, limit);
+        return { log: log || '(no commits)', limit };
+      }
+    );
+
+    this.registerTool(
+      'git_commit',
+      'Stage files and create a git commit. Pass files[] to stage specific paths, or omit to stage all changes (git add -A).',
+      async (args: Record<string, unknown>) => {
+        const cwd = typeof args.project_root === 'string' && args.project_root
+          ? args.project_root
+          : (process.env['ROLAND_PROJECT_ROOT']?.trim() || process.cwd());
+        const message = args.message as string;
+        if (!message) throw new McpToolError('git_commit', 'message is required');
+        const files = Array.isArray(args.files) ? (args.files as string[]) : undefined;
+        const result = gitCommit(cwd, message, files);
+        return {
+          sha: result.sha,
+          message: result.message,
+          success: true,
+        };
+      }
+    );
   }
 
   async stop(): Promise<void> {

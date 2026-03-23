@@ -29,6 +29,7 @@ import {
   isGooseAvailable,
   getGooseVersion,
 } from '../src/utils/goose-runner.js';
+import { SessionContextManager } from '../src/server/session-context.js';
 
 // ============================================================================
 // Types
@@ -161,6 +162,7 @@ export async function runRecipe(opts: {
   dryRun?: boolean;
   timeoutMs?: number;
   maxTurns?: number;
+  maxRetries?: number;
 }): Promise<RunSummary> {
   const {
     recipeName,
@@ -171,6 +173,7 @@ export async function runRecipe(opts: {
     dryRun = false,
     timeoutMs = 300_000,
     maxTurns = 30,
+    maxRetries = 1,
   } = opts;
 
   if (!dryRun && !isGooseAvailable()) {
@@ -210,6 +213,10 @@ export async function runRecipe(opts: {
   const outputs = new Map<string, string>();
   const stepResults: StepOutput[] = [];
 
+  // Start a session context to track decisions and progress across steps
+  const sessionMgr = new SessionContextManager();
+  const session = dryRun ? null : sessionMgr.start(task);
+
   const gooseVersion = dryRun ? null : getGooseVersion();
 
   console.log(`\n🎬 Roland Recipe Runner${dryRun ? ' (DRY RUN)' : ''}`);
@@ -236,10 +243,14 @@ export async function runRecipe(opts: {
     const gooseModel = normaliseGooseModel(modelId);
 
     // Build the full task prompt for this Goose session:
-    // context block + subagent system prompt + interpolated user task
-    const systemSection = contextBlock
-      ? `${contextBlock}\n\n---\n\n${subagent.prompt}`
-      : subagent.prompt;
+    // context block + session context + subagent system prompt + interpolated user task
+    const sessionContextBlock = session
+      ? sessionMgr.formatForSubagent(session.id)
+      : '';
+
+    const systemSection = [contextBlock, sessionContextBlock, subagent.prompt]
+      .filter(Boolean)
+      .join('\n\n---\n\n');
 
     const userSection = interpolatePrompt(
       step.input ?? `Complete your role for the task: ${task}`,
@@ -277,8 +288,8 @@ export async function runRecipe(opts: {
       continue;
     }
 
-    // Spawn a headless Goose session for this step
-    const sessionResult = await spawnGooseSession({
+    // Spawn a headless Goose session for this step, with retry on failure
+    let sessionResult = await spawnGooseSession({
       task: fullPrompt,
       model: gooseModel,
       projectRoot,
@@ -286,13 +297,37 @@ export async function runRecipe(opts: {
       maxTurns,
     });
 
-    const { output, exitCode, durationMs } = sessionResult;
+    let { output, exitCode, durationMs } = sessionResult;
+    let retryCount = 0;
+
+    while (exitCode !== 0 && retryCount < maxRetries) {
+      retryCount++;
+      console.log(`   ⚠️  exit code ${exitCode} — retry ${retryCount}/${maxRetries}`);
+      const retryPrompt = `${fullPrompt}\n\n## Previous attempt failed\nThe prior attempt exited with code ${exitCode}. Output:\n${output.slice(0, 1000)}\n\nPlease fix any issues and complete the task.`;
+      sessionResult = await spawnGooseSession({
+        task: retryPrompt,
+        model: gooseModel,
+        projectRoot,
+        timeoutMs,
+        maxTurns,
+      });
+      ({ output, exitCode, durationMs } = sessionResult);
+    }
+
     outputs.set(subagent.name, output);
 
     if (exitCode !== 0) {
-      console.log(`   ⚠️  exit code ${exitCode} (${(durationMs / 1000).toFixed(1)}s) — continuing`);
+      console.log(`   ⚠️  exit code ${exitCode} after ${retryCount} retry/retries (${(durationMs / 1000).toFixed(1)}s) — continuing`);
     } else {
-      console.log(`   ✅ done (${(durationMs / 1000).toFixed(1)}s, ${output.length} chars)`);
+      console.log(`   ✅ done (${(durationMs / 1000).toFixed(1)}s, ${output.length} chars)${retryCount > 0 ? ` [recovered after ${retryCount} retry]` : ''}`);
+    }
+
+    // Update session context with step result
+    if (session) {
+      sessionMgr.update(session.id, {
+        note: `Step ${stepNum} — ${subagent.name} (${gooseModel.model}): exit ${exitCode}, ${output.length} chars`,
+        advance_step: true,
+      });
     }
 
     // Check loop condition
@@ -409,6 +444,7 @@ async function main() {
   const dryRun = args['dry-run'] === true;
   const timeout = args['timeout'] ? Number(args['timeout']) * 1000 : 300_000;
   const maxTurns = args['max-turns'] ? Number(args['max-turns']) : 30;
+  const maxRetries = args['max-retries'] ? Number(args['max-retries']) : 1;
 
   if (!recipe || !task) {
     console.error(
@@ -420,7 +456,7 @@ async function main() {
   }
 
   try {
-    await runRecipe({ recipeName: recipe, task, projectRoot: project, dryRun, timeoutMs: timeout, maxTurns });
+    await runRecipe({ recipeName: recipe, task, projectRoot: project, dryRun, timeoutMs: timeout, maxTurns, maxRetries });
   } catch (err) {
     console.error(`\n❌ ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
