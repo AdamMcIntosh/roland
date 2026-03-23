@@ -37,10 +37,13 @@ const SessionConfigSchema = z.object({
 });
 
 const GooseConfigSchema = z.object({
-  dispatcher_model: z.string().default('google/gemini-2.0-flash-exp:free'),
+  dispatcher_model: z.string().default('google/gemini-2.5-flash'),
   dispatcher_provider: z.string().default('openrouter'),
   known_free_models: z.array(z.string()).default([]),
-  fallback_model: z.string().default('anthropic/claude-sonnet-4'),
+  fallback_model: z.string().default('google/gemini-2.5-flash'),
+  monthly_budget: z.number().min(0).default(85),
+  billing_cycle_day: z.number().min(1).max(28).default(1),
+  budget_degradation_threshold: z.number().min(0).max(1).default(0.8),
 });
 
 const AppConfigSchema = z.object({

@@ -3,12 +3,12 @@
 # Copy this file to ~/.config/goose/config.yaml (or merge into your existing config).
 # Set OPENROUTER_API_KEY in your environment before running Goose.
 #
-# Budget: ~$75/month → estimated ~$23/month at moderate usage
+# Budget: ~$85/month → estimated ~$23/month at moderate usage
 # Dispatcher cost: ~$0.10/month (routing only, no real work)
 # Agent costs managed by Roland's triage — routes to cheapest adequate model.
 
 GOOSE_PROVIDER: openrouter
-GOOSE_MODEL: google/gemini-2.0-flash
+GOOSE_MODEL: google/gemini-2.5-flash
 
 extensions:
   roland:
@@ -30,6 +30,6 @@ extensions:
 #   Workhorse:  deepseek/deepseek-chat (V3)  — implementation, testing, most work
 #   Light:      google/gemini-2.5-flash      — docs, exploration
 #   Prototype:  x-ai/grok-3-mini            — fast scaffolding
-#   Dispatcher: google/gemini-2.0-flash      — routing only
+#   Main session: google/gemini-2.5-flash     — routing + execution (has file access)
 #
 # If DeepSeek is down, agents fall back to gemini-2.5-flash automatically.

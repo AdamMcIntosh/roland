@@ -1,15 +1,16 @@
 # Roland Model Routing Configuration
 #
-# Budget-optimized for ~$75/month on OpenRouter.
+# Budget-optimized for ~$85/month on OpenRouter.
 # Strategy: DeepSeek V3 as workhorse, Pro for planning/review, Sonnet 4 for critical only.
 #
 # Estimated monthly cost at moderate usage (~15M tokens):
 #   Critical (claude-sonnet-4):     ~15% → ~$11/mo
 #   High-value (gemini-2.5-pro):    ~15% → ~$11/mo
-#   Workhorse (deepseek-chat V3):   ~55% → ~$1/mo
+#   Workhorse (deepseek-chat V3):   ~10% → ~$1/mo  (text-only subagents)
 #   Light (gemini-2.5-flash):       ~10% → ~$0.50/mo
-#   Dispatcher (gemini-2.0-flash):         → ~$0.10/mo
-#   Total estimate:                        → ~$23/mo (leaves ~$52 headroom)
+#   Main session (gemini-2.5-flash):       → ~$2/mo  (routing + file I/O)
+#   Smart triage: complex tasks use Sonnet 4 subagent for code authoring
+#   Total estimate:                        → ~$50/mo at moderate usage
 
 routing:
   simple:
@@ -35,13 +36,21 @@ roland:
 
 # Goose integration — smart dispatcher model routing via OpenRouter
 goose:
-  dispatcher_model: google/gemini-2.0-flash    # Stable, ~$0.10/mo for routing
+  dispatcher_model: google/gemini-2.5-flash    # Main session: routing + execution (~$0.50/mo)
   dispatcher_provider: openrouter
-  known_free_models:
-    - google/gemini-2.0-flash-exp:free
-    - google/gemma-3-27b-it:free
-    - mistralai/mistral-small-3.1-24b-instruct:free
-  fallback_model: google/gemini-2.5-flash      # Budget-safe fallback
+  known_free_models:                              # All support tool calling, 128K+ context
+    - qwen/qwen3-coder:free                      # Best free coder, 262K, agentic focus
+    - nvidia/nemotron-3-super-120b-a12b:free      # Top SWE-Bench, multi-step planning
+    - minimax/minimax-m2.5:free                   # 197K, strong SWE-Bench
+    - arcee-ai/trinity-large-preview:free         # Complex toolchains
+    - mistralai/mistral-small-3.1-24b-instruct:free  # Fast structured output
+    - z-ai/glm-4.5-air:free                      # Thinking mode, agent-centric
+  fallback_model: google/gemini-2.5-flash         # Budget-safe paid fallback
+  budget_degradation_threshold: 0.8               # Switch to free models at 80%
+  monthly_budget: 85                              # Monthly budget in USD
+  billing_cycle_day: 1                            # Day of month to auto-reset spending
+  free_model_coding: qwen/qwen3-coder:free        # Primary free model for coding
+  free_model_reasoning: nvidia/nemotron-3-super-120b-a12b:free  # Primary free for reasoning
 
 # Roland Code Orchestrator (RCO) — Claude-centric multi-agent orchestration
 rco:

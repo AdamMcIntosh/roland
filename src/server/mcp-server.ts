@@ -53,6 +53,33 @@ const OPENROUTER_MODELS: Record<string, string> = {
 };
 
 /**
+ * Free model fallbacks — used when budget exceeds 80%.
+ * All models support tool calling and have 128K+ context.
+ * Update these when better free models become available on OpenRouter.
+ *
+ * Last verified: March 2026
+ */
+const FREE_MODELS = {
+  // Primary: Qwen3 Coder — best free coding model, 262K context, native tool calling
+  primary: 'qwen/qwen3-coder:free',
+  // Secondary: NVIDIA Nemotron — top SWE-Bench, multi-step agentic coding
+  secondary: 'nvidia/nemotron-3-super-120b-a12b:free',
+  // Tier-specific free models
+  coding: 'qwen/qwen3-coder:free',               // Best free coder, agentic focus
+  reasoning: 'nvidia/nemotron-3-super-120b-a12b:free', // Multi-step planning, tool use
+  light: 'mistralai/mistral-small-3.1-24b-instruct:free', // Docs, fast structured output
+  // Additional fallbacks (if primary/secondary are rate-limited)
+  fallbacks: [
+    'minimax/minimax-m2.5:free',                  // 197K context, strong SWE-Bench
+    'arcee-ai/trinity-large-preview:free',        // Complex toolchains
+    'z-ai/glm-4.5-air:free',                      // Thinking mode, agent-centric
+  ],
+};
+
+/** Budget degradation threshold (0.0-1.0). At this %, all models switch to free. */
+const BUDGET_DEGRADATION_THRESHOLD = 0.8;
+
+/**
  * Maps agent names to their recommended OpenRouter model.
  *
  * Budget-optimized for ~$75/month (~$23/mo at moderate usage):
@@ -61,7 +88,7 @@ const OPENROUTER_MODELS: Record<string, string> = {
  *   - Workhorse (most agents):         deepseek-chat (V3) (~55% budget, ~$1)
  *   - Light (writer, explore, docs):   gemini-2.5-flash   (~10% budget, ~$0.50)
  *   - Prototyping:                     grok-3-mini        (on-demand)
- *   - Dispatcher:                      gemini-2.0-flash   (~$0.10)
+ *   - Main session:                    gemini-2.5-flash   (~$0.50)
  *
  * Fallback: if DeepSeek is down, agents fall back to gemini-2.5-flash.
  */
@@ -87,6 +114,34 @@ const AGENT_OPENROUTER_MODELS: Record<string, string> = {
   writer: 'google/gemini-2.5-flash',
   explore: 'google/gemini-2.5-flash',
 };
+
+/**
+ * Check if budget is in degraded mode (>=80% used).
+ * Returns the free model to use, or null if budget is fine.
+ */
+function getBudgetDegradedModel(agentName?: string): string | null {
+  const status = BudgetManager.getStatus();
+  if (!status.enabled) return null;
+
+  const usagePercent = status.maxBudget > 0
+    ? status.currentSpending / status.maxBudget
+    : 0;
+
+  if (usagePercent < BUDGET_DEGRADATION_THRESHOLD) return null;
+
+  // Budget exceeded threshold — return appropriate free model
+  if (agentName) {
+    // Security/architecture agents get the reasoning free model
+    if (['architect', 'security-reviewer', 'planner', 'critic', 'code-reviewer'].includes(agentName)) {
+      return FREE_MODELS.reasoning;
+    }
+    // Coding agents get the coding free model
+    if (['executor', 'build-fixer', 'qa-tester', 'tdd-guide', 'designer'].includes(agentName)) {
+      return FREE_MODELS.coding;
+    }
+  }
+  return FREE_MODELS.primary;
+}
 
 // ============================================================================
 // MCP Server Implementation (v2)
@@ -116,8 +171,16 @@ export class McpServer {
     // Initialize recipe session manager (for IDE-driven recipe execution)
     this.recipeSessionManager = new RecipeSessionManager();
 
-    // Initialize budget manager
+    // Initialize budget manager with config from config.yaml
     BudgetManager.initialize();
+    if (config.goose) {
+      BudgetManager.configureFromAppConfig({
+        monthlyBudget: config.goose.monthly_budget,
+        warningThreshold: config.goose.budget_degradation_threshold,
+        billingCycleDay: config.goose.billing_cycle_day,
+        enabled: true,
+      });
+    }
 
     this.registerTools();
 
@@ -459,9 +522,16 @@ export class McpServer {
 
         // --- Goose dispatch fields ---
         const agentName = topAgent.score > 0 ? topAgent.name : 'executor';
-        const openrouterModel = AGENT_OPENROUTER_MODELS[agentName]
+        let openrouterModel = AGENT_OPENROUTER_MODELS[agentName]
           || OPENROUTER_MODELS[complexity.complexity]
           || 'google/gemini-2.5-flash';
+
+        // Budget degradation: switch to free models at 80% usage
+        const degradedModel = getBudgetDegradedModel(agentName);
+        const budgetDegraded = degradedModel !== null;
+        if (budgetDegraded) {
+          openrouterModel = degradedModel;
+        }
 
         // Load persona instructions from agent YAML
         const personaInstructions = this.loadAgentRolePrompt(agentName);
@@ -470,9 +540,46 @@ export class McpServer {
         recommendation.persona_instructions = personaInstructions;
         recommendation.temperature = 0.7;
 
+        // --- Execution strategy: smart triage for complex code ---
+        // Complex tasks: Sonnet 4 subagent writes the code, main session applies files
+        // Simple/medium tasks: main session (Flash) writes and applies directly
+        const isComplexExecution = complexity.complexity === 'complex' && !budgetDegraded;
+        if (isComplexExecution) {
+          recommendation.execution_strategy = {
+            mode: 'subagent_writes_code',
+            execution_model: 'anthropic/claude-sonnet-4',
+            apply_model: 'main_session',
+            reason: 'Complex task — Sonnet 4 subagent will write the code for higher quality. Main session applies files to disk.',
+            subagent_instructions: `You are a senior engineer writing production-ready code. Rules:\n`
+              + `1. OUTPUT FORMAT: For each file, output "📄 path/to/file.ts:" followed by the COMPLETE file content in a code block. `
+              + `Include ALL imports, types, error handling, and edge cases. Code must be ready to write to disk as-is.\n`
+              + `2. NO PLACEHOLDERS: Do NOT use "// TODO", "// ...", or "implement here". Write the real implementation.\n`
+              + `3. USE PROVIDED CONTEXT: You will receive actual file contents from the codebase. Use exact import paths, `
+              + `type names, and function signatures from those files. Do NOT guess or hallucinate APIs.\n`
+              + `4. INCLUDE TESTS: If modifying a module that has a test file, include the updated test file too.\n`
+              + `5. ERROR FIXES: If you receive error output, analyze the EXACT error message and stack trace. `
+              + `Fix the root cause, not symptoms. Include the complete fixed file, not just a diff.`,
+          };
+        } else {
+          recommendation.execution_strategy = {
+            mode: 'main_session_direct',
+            execution_model: 'main_session',
+            reason: budgetDegraded
+              ? 'Budget degraded — main session handles execution on free models.'
+              : 'Simple/medium task — main session (Flash) handles execution directly.',
+          };
+        }
+
+        if (budgetDegraded) {
+          recommendation.budget_degraded = true;
+          recommendation.budget_notice = `Budget ≥80% used — switched to free model (${openrouterModel}). Quality may be reduced.`;
+        }
+
         recommendation.instructions = suggestRecipe
           ? `Adopt the "${agentName}" persona. A multi-agent recipe "${topRecipe.name}" is recommended — offer to run it, or proceed as the recommended agent if the user prefers a single pass.`
-          : `Adopt the "${agentName}" persona for this task. Apply that agent's expertise and thinking style to your response.`;
+          : isComplexExecution
+            ? `This is a complex task. Spawn a Sonnet 4 subagent to write the code (see execution_strategy), then apply the output to files yourself.`
+            : `Adopt the "${agentName}" persona for this task. Apply that agent's expertise and thinking style to your response.`;
 
         return recommendation;
       },
@@ -619,9 +726,15 @@ export class McpServer {
           analysis.tokenEstimate * 2 // Rough output estimate
         );
 
-        // Map to OpenRouter model ID
-        const openrouterModel = OPENROUTER_MODELS[analysis.complexity]
+        // Map to OpenRouter model ID (with budget degradation)
+        let openrouterModel = OPENROUTER_MODELS[analysis.complexity]
           || 'google/gemini-2.5-flash';
+
+        const degradedModel = getBudgetDegradedModel();
+        const budgetDegraded = degradedModel !== null;
+        if (budgetDegraded) {
+          openrouterModel = degradedModel;
+        }
 
         return {
           recommended_model: recommendedModel,
@@ -636,6 +749,10 @@ export class McpServer {
             name: f.name,
             weight: f.weight,
           })),
+          ...(budgetDegraded ? {
+            budget_degraded: true,
+            budget_notice: `Budget ≥80% used — switched to free model (${openrouterModel}). Quality may be reduced.`,
+          } : {}),
         };
       },
       {
@@ -773,6 +890,7 @@ export class McpServer {
         switch (action) {
           case 'get_status': {
             const status = BudgetManager.getStatus();
+            const daysUntilReset = BudgetManager.getDaysUntilReset();
             return {
               action: 'get_status',
               enabled: status.enabled,
@@ -783,6 +901,9 @@ export class McpServer {
                 ? ((status.currentSpending / status.maxBudget) * 100)
                 : 0,
               warning_threshold: `${(status.warningThreshold * 100).toFixed(0)}%`,
+              billing_cycle_day: status.billingCycleDay,
+              days_until_reset: daysUntilReset,
+              auto_reset: 'Spending resets to $0 on day ' + status.billingCycleDay + ' of each month',
             };
           }
 

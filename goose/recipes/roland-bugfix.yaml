@@ -1,24 +1,45 @@
 id: roland-bugfix
 version: 1.0.0
-title: Roland BugFix — Systematic Bug Resolution
-description: Triage → research → architect → fix → test → review → document
+title: "Roland BugFix \u2014 Systematic Bug Resolution"
+description: "Triage \u2192 research \u2192 architect \u2192 fix \u2192 test \u2192 review \u2192 document"
 instructions: |-
-  You are orchestrating a systematic bug resolution workflow using Roland.
+  You are the dispatcher orchestrating a systematic bug resolution workflow.
+  Spawn each step as a separate subagent on the appropriate model.
 
-  ## Workflow
+  ## Step 1: Triage (deepseek/deepseek-chat)
+  Spawn an analyst subagent. It should analyze the bug report, classify
+  severity, and identify affected components. Capture output.
 
-  1. **Triage**: Analyze the bug report. Classify severity, identify affected components.
-  2. **Research**: Investigate root cause. Search codebase, check logs, trace execution.
-  3. **Architect**: Design the fix. Consider side effects, breaking changes, alternatives.
-  4. **Execute**: Implement the fix with minimal, targeted changes.
-  5. **Test**: Write and run tests covering the fix and edge cases.
-  6. **Review**: Verify the fix is correct, complete, and doesn't introduce regressions.
-  7. **Document**: Update docs/changelog if needed. Summarize the fix.
+  ## Step 2: Research (deepseek/deepseek-chat)
+  Spawn a researcher subagent. Pass triage output. It should investigate
+  root cause: search codebase, check logs, trace execution. Capture output.
 
-  If tests fail or review finds issues, loop back to Execute (max 3 loops).
+  ## Step 3: Architect (anthropic/claude-sonnet-4)
+  Spawn an architect subagent. Pass research output. It should design the
+  fix, considering side effects, breaking changes, and alternatives.
+  Capture output.
 
-  Call Roland's `triage` tool at the start. For server-managed orchestration,
-  use `start_recipe` with recipe_name="BugFix".
+  ## Step 4: Execute (deepseek/deepseek-chat)
+  Spawn an executor subagent. Pass the fix design. It should implement
+  the fix with minimal, targeted changes. Capture output.
+
+  ## Step 5: Test (deepseek/deepseek-chat)
+  Spawn a qa-tester subagent. Pass the implementation. It should write
+  and run tests covering the fix and edge cases. Capture output.
+
+  ## Step 6: Review (google/gemini-2.5-pro)
+  Spawn a critic subagent. Pass code + test results. It should verify
+  correctness and check for regressions. If critical issues found,
+  loop back to Execute (max 3 loops). Capture output.
+
+  ## Step 7: Document (google/gemini-2.5-flash)
+  Spawn a writer subagent. It should update docs/changelog and
+  summarize the fix.
+
+  Return the combined result to the user.
+
+  ## Cost estimate
+  ~$0.14 per run at ~50K tokens/step.
 extensions:
   - name: developer
     timeout: 300

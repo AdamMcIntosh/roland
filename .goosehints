@@ -3,27 +3,151 @@
 # Roland is an MCP extension that provides intelligent model routing and
 # agent persona selection. Follow this workflow for every user request.
 
-## Dispatch Workflow
+## Dispatch Workflow (Hybrid Pattern)
 
-1. **Always call `triage` first**: Before doing any work on a user's coding request,
-   call Roland's `triage` tool with the user's message. This analyzes the task and
-   returns the best agent persona, recommended OpenRouter model, and instructions.
+You are the main session running on Gemini 2.5 Flash. You handle routing AND
+file-editing steps directly. You spawn subagents only for text-output steps
+(planning, review, explanation) where a different model adds value.
 
-2. **Adopt the recommended persona**: The triage response includes `persona_instructions`
-   with the full role prompt. Use these instructions to shape your approach, expertise,
-   and thinking style for this task.
+### Step 1: Triage
 
-3. **Use the recommended model for subagents**: When spawning subagents, use the
-   `openrouter_model` from the triage response. This ensures complex tasks get capable
-   models while simple tasks stay cheap.
+Call Roland's `triage` tool with the user's message. This returns:
+- `openrouter_model` — the recommended model for the task
+- `persona_instructions` — the agent's role prompt
+- `complexity` — simple / medium / complex
+- `recipe` (optional) — a multi-agent workflow if the task warrants it
+- `budget_degraded` (optional) — true if budget ≥80%, models switched to free
 
-4. **Consider recipes for complex tasks**: If triage recommends a recipe workflow,
-   offer it to the user. Recipes orchestrate multiple specialized agents in sequence
-   (e.g., plan → execute → review → explain). Start recipes with `start_recipe` and
-   advance with `advance_recipe`.
+### Step 2: Check execution_strategy
 
-5. **Track costs**: After LLM work, call `track_cost` with token usage to maintain
-   session cost visibility. Check `manage_budget` if spending limits are active.
+Triage returns an `execution_strategy` field that tells you how to handle code:
+
+**`execution_strategy.mode = "subagent_writes_code"` (complex tasks):**
+
+A Sonnet 4 subagent writes the code. You apply it to files.
+
+1. Spawn a subagent on the `execution_strategy.execution_model` (claude-sonnet-4)
+2. Pass the user's task + `execution_strategy.subagent_instructions` + any relevant
+   file contents from disk (IMPORTANT: read files first and include them as context)
+3. The subagent returns complete file contents with paths
+4. You (main session) write those files to disk, run tests, verify
+
+If tests fail or errors occur:
+- Read the FULL error output
+- Read ALL relevant source files from disk
+- Spawn another Sonnet 4 subagent with the error + file contents
+- Apply the fix
+
+CRITICAL: Always include actual file contents when spawning subagents. Do NOT
+summarize or describe files — include the full text. This preserves context.
+
+**`execution_strategy.mode = "main_session_direct"` (simple/medium tasks):**
+
+You handle it yourself. Write code and edit files directly using the
+`persona_instructions` from triage.
+
+### Step 3: Handle recipes
+
+**If triage also returns a recipe recommendation:**
+
+1. Tell the user a recipe is recommended and list the agent chain
+2. Run the workflow with this approach per step:
+   - **Text-only steps** (plan, review, explain, document):
+     Spawn a subagent on the recommended model.
+   - **Code-writing steps** (execute, fix, test):
+     Check execution_strategy. If complex → Sonnet 4 subagent writes code,
+     you apply. If simple → you write directly.
+3. IMPORTANT: Between steps, always read current file state from disk before
+   passing context to the next subagent. Don't rely on stale context.
+4. Return the final combined result to the user.
+
+### Step 4: Track costs
+
+After each step or subagent completes, call `track_cost` with token usage.
+
+### Why this pattern?
+
+Subagents cannot edit files — they don't have access to the developer extension.
+Only the main session can read/write files, run terminal commands, and see diffs.
+So file-editing work MUST happen in the main session. Subagents are used for
+text-output steps where a more capable model (Sonnet 4, Gemini Pro) adds value.
+
+## Context Quality Rules (CRITICAL)
+
+These rules close the quality gap between Roland + Goose and Claude Code.
+Follow them strictly — they determine whether subagents produce A+ or B- output.
+
+### Rule 1: Always read from disk before spawning subagents
+
+Before spawning ANY subagent (especially code-writing ones), you MUST:
+
+1. List files in the relevant directories (`ls`, `find`, or glob)
+2. Read ALL files that are likely related:
+   - Files the user mentioned
+   - Files that import/export shared types
+   - Configuration files (tsconfig, package.json, .env.example)
+   - Test files for the module being changed
+   - Adjacent files in the same directory
+3. Include the FULL file contents in the subagent prompt
+
+Do NOT summarize files. Do NOT describe them. Include the raw text.
+The subagent must see the exact same codebase state that you see.
+
+Example — WRONG:
+  "The auth service exports a login function that takes email and password"
+
+Example — RIGHT:
+  "📄 src/services/auth.ts:\n```typescript\n[full file contents here]\n```"
+
+### Rule 2: Pass raw output, never interpret errors
+
+When an error occurs (test failure, build error, runtime crash):
+
+1. Capture the EXACT terminal output — full stack trace, full error message
+2. Read ALL source files referenced in the error (file paths in stack traces)
+3. Pass everything verbatim to the Sonnet 4 subagent
+4. Do NOT summarize, trim, or interpret the error yourself
+
+Let Sonnet 4 do the analysis. Your job is to be a transparent pipe.
+
+Example — WRONG:
+  "The test failed because the mock isn't returning the right value"
+
+Example — RIGHT:
+  "Terminal output:\n```\nFAILED src/services/auth.test.ts > login > should
+  handle expired tokens\nError: Expected 401 but received 200\n    at Object.
+  <anonymous> (src/services/auth.test.ts:47:5)\n```\n\n📄 src/services/auth.
+  test.ts:\n[full file]\n\n📄 src/services/auth.ts:\n[full file]"
+
+### Rule 3: Maintain a context document across steps
+
+For multi-step workflows (recipes), maintain a running context document and
+pass it to every subagent. Update it after each step:
+
+```
+## Running Context
+### Files modified
+- src/services/payment.ts (created in step 2)
+- src/webhooks/stripe.ts (created in step 2, fixed in step 4)
+- src/types/payment.ts (created in step 2)
+
+### Key decisions
+- Using Stripe webhooks with signature verification (architect, step 1)
+- Idempotency via database unique constraint on event_id (architect, step 1)
+- Express middleware pattern for webhook validation (executor, step 2)
+
+### Errors encountered and resolved
+- Step 3: Missing return type on processWebhook — fixed in step 4
+- Step 5: Test mock didn't include webhook signature — fixed in step 5
+
+### Current state
+- All 12 tests passing
+- Build clean
+- Ready for review
+```
+
+Always refresh file contents from disk before each step — the context document
+tracks WHAT changed, but subagents need the actual current file contents.
 
 ## When to Use Roland vs. IDE Agent (Windsurf/Cursor)
 
@@ -38,8 +162,8 @@ Roland is not meant to replace your IDE agent for every task. Use the right tool
 
 **Route through Roland (Goose) for:**
 - Multi-file bugs that need root cause investigation → BugFix recipe
-- Architecture decisions, system design → architect agent
-- Security audits → security-reviewer agent + SecurityAudit recipe
+- Architecture decisions, system design → architect agent (Sonnet 4)
+- Security audits → security-reviewer + SecurityAudit recipe
 - New features that need planning → PlanExecRevEx recipe
 - Tasks where model selection matters (complex = Sonnet 4, simple = DeepSeek)
 
@@ -56,18 +180,85 @@ Do NOT call triage when:
 - The user asks about Roland itself (answer directly)
 - The task is a small fix that the IDE agent can handle directly
 
-## Example Flow
+## Model Tiers (Budget: $85/month)
 
+| Tier | Model | Use for |
+|------|-------|---------|
+| Critical | `anthropic/claude-sonnet-4` | Architecture, security |
+| High-value | `google/gemini-2.5-pro` | Planning, code review |
+| Workhorse | `deepseek/deepseek-chat` | Implementation, testing, most work |
+| Light | `google/gemini-2.5-flash` | Docs, exploration, explanations |
+| Main session | `google/gemini-2.5-flash` | You — routing + file edits |
+
+## Example Flows
+
+### Simple task (main session handles it)
+```
+User: "Fix the null check in auth.ts line 42"
+
+1. Call triage(message="Fix the null check in auth.ts line 42")
+   → Returns: execution_strategy.mode="main_session_direct", complexity=simple
+
+2. execution_strategy says main_session_direct → do it yourself.
+   Adopt the build-fixer persona from persona_instructions.
+   Read the file, fix the null check, save.
+
+3. Call track_cost with token usage.
+```
+
+### Complex task (Sonnet 4 writes code, you apply)
+```
+User: "Implement a payment service with Stripe webhooks and idempotency"
+
+1. Call triage(message="Implement a payment service with Stripe webhooks...")
+   → Returns: execution_strategy.mode="subagent_writes_code",
+     execution_model="anthropic/claude-sonnet-4", complexity=complex
+
+2. Read relevant existing files from disk (package.json, existing services, types)
+
+3. Spawn Sonnet 4 subagent with:
+   - execution_strategy.subagent_instructions
+   - The user's task
+   - Full contents of relevant files
+   → Sonnet 4 returns complete file contents with paths
+
+4. Write each file to disk. Run tests.
+
+5. If tests fail:
+   - Read full error output + source files
+   - Spawn another Sonnet 4 subagent with error context
+   - Apply the fix
+
+6. Call track_cost with token usage.
+```
+
+### Complex task with recipe (multi-agent + smart execution)
 ```
 User: "Build a REST API for managing tasks with authentication"
 
-1. Call triage(message="Build a REST API for managing tasks with authentication")
-   → Returns: agent=architect, openrouter_model=anthropic/claude-sonnet-4,
+1. Call triage(...)
+   → Returns: execution_strategy.mode="subagent_writes_code",
      recipe=RESTfulAPI, complexity=complex
 
-2. Inform user: "This is a complex task — I recommend the RESTfulAPI recipe
-   (architect → executor → critic → writer). Want to run the full workflow?"
+2. Tell user: "This is complex — I recommend the RESTfulAPI recipe."
 
-3. If yes: call start_recipe(recipe_name="RESTfulAPI", task="Build a REST API...")
-   If no: proceed as the architect persona using the recommended model
+3. User agrees. Run workflow:
+   a. Spawn architect subagent (claude-sonnet-4): design the API
+      → TEXT OUTPUT — returns the design
+
+   b. Read existing files from disk, then spawn Sonnet 4 executor subagent:
+      pass the design + file contents + subagent_instructions
+      → Returns complete code with file paths
+      → You write files to disk, run tests, fix errors
+
+   c. Read current files from disk, spawn critic subagent (claude-sonnet-4):
+      → TEXT OUTPUT — returns review with issues
+
+   d. If issues: spawn Sonnet 4 subagent with issues + file contents
+      → Returns fixes → you apply and re-test
+
+   e. Spawn writer subagent (gemini-2.5-flash): document the API
+      → TEXT OUTPUT — returns docs
+
+4. Return combined result to user.
 ```
