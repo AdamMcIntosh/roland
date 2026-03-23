@@ -171,8 +171,16 @@ export class McpServer {
     // Initialize recipe session manager (for IDE-driven recipe execution)
     this.recipeSessionManager = new RecipeSessionManager();
 
-    // Initialize budget manager
+    // Initialize budget manager with config from config.yaml
     BudgetManager.initialize();
+    if (config.goose) {
+      BudgetManager.configureFromAppConfig({
+        monthlyBudget: config.goose.monthly_budget,
+        warningThreshold: config.goose.budget_degradation_threshold,
+        billingCycleDay: config.goose.billing_cycle_day,
+        enabled: true,
+      });
+    }
 
     this.registerTools();
 
@@ -882,6 +890,7 @@ export class McpServer {
         switch (action) {
           case 'get_status': {
             const status = BudgetManager.getStatus();
+            const daysUntilReset = BudgetManager.getDaysUntilReset();
             return {
               action: 'get_status',
               enabled: status.enabled,
@@ -892,6 +901,9 @@ export class McpServer {
                 ? ((status.currentSpending / status.maxBudget) * 100)
                 : 0,
               warning_threshold: `${(status.warningThreshold * 100).toFixed(0)}%`,
+              billing_cycle_day: status.billingCycleDay,
+              days_until_reset: daysUntilReset,
+              auto_reset: 'Spending resets to $0 on day ' + status.billingCycleDay + ' of each month',
             };
           }
 

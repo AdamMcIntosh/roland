@@ -89,13 +89,19 @@ You should see `status: healthy` and a list of 10 tools.
 > Fix the null check in auth.ts line 42
 ```
 
-Roland triages this as a simple bug fix → spawns one subagent on DeepSeek V3 (cheap, good coder) → done.
+Roland triages this as simple (`execution_strategy.mode = "main_session_direct"`) → Flash fixes it directly → done. Cost: ~$0.01.
 
 ```
 > Design a microservices architecture for our payment system
 ```
 
-Roland triages this as complex architecture → spawns architect subagent on Claude Sonnet 4 (best reasoning) → returns detailed design.
+Roland triages this as complex → spawns architect subagent on Sonnet 4 → returns detailed design. Cost: ~$0.15.
+
+```
+> Implement a payment service with Stripe webhooks and idempotency
+```
+
+Roland triages this as complex (`execution_strategy.mode = "subagent_writes_code"`) → spawns Sonnet 4 subagent to write the code → main session applies files to disk → runs tests. If tests fail, spawns another Sonnet 4 subagent with full error output + file contents → applies fix. Cost: ~$0.15-0.30.
 
 ### Use recipes for big tasks
 
@@ -148,15 +154,26 @@ This keeps ~70% of your work off the OpenRouter budget.
 
 ## Model Tiers
 
-Roland uses five model tiers, optimized for an $85/month budget:
+Roland uses smart triage to route each task to the right model, optimized for an $85/month budget:
 
 | Tier | Model | Cost/1M tokens | Used for |
 |------|-------|---------------|----------|
-| **Critical** | `anthropic/claude-sonnet-4` | $3 / $15 | Architecture, security — wrong answers here are expensive to redo |
-| **High-value** | `google/gemini-2.5-pro` | $1.25 / $10 | Planning, code review — thoroughness over speed |
-| **Workhorse** | `deepseek/deepseek-chat` (V3) | $0.27 / $1.10 | Implementation, testing — best coding per dollar |
-| **Light** | `google/gemini-2.5-flash` | $0.15 / $0.60 | Docs, exploration, explanations |
-| **Main session** | `google/gemini-2.5-flash` | $0.15 / $0.60 | Routing + file edits (your primary model) |
+| **Complex code + thinking** | `anthropic/claude-sonnet-4` | $3 / $15 | Code authoring (complex), architecture, security, planning, review — 40% of traffic, 94% of spend |
+| **Medium text tasks** | `deepseek/deepseek-chat` (V3) | $0.27 / $1.10 | Text-only subagents for medium complexity |
+| **Main session + light** | `google/gemini-2.5-flash` | $0.15 / $0.60 | Routing, file I/O, simple code, docs, exploration |
+
+### Smart triage execution strategy
+
+Roland's `triage` tool returns an `execution_strategy` that determines how code gets written:
+
+| Complexity | Strategy | Who writes code | Quality |
+|-----------|----------|----------------|---------|
+| Simple/medium | `main_session_direct` | Flash (main session) | B+ |
+| Complex | `subagent_writes_code` | Sonnet 4 (subagent) | A+ |
+
+For complex tasks, Sonnet 4 writes complete, production-ready code. The main session
+(Flash) just applies it to files. This gives you A+ code quality on complex enterprise
+work without paying Sonnet 4 prices for every small edit.
 
 ### Tiered agent variants
 
@@ -188,18 +205,17 @@ Roland picks the right variant based on complexity.
 > Use get_analytics with group_by "model"
 ```
 
-### What happens at 80%
+### What happens at 80% ($68)
 
 When you hit 80% of your budget, Roland automatically switches all agents to free models:
 
 | Normal model | Degraded to | Quality impact |
 |-------------|-------------|----------------|
 | `anthropic/claude-sonnet-4` | `nvidia/nemotron-3-super-120b-a12b:free` | Good reasoning, slightly less precise |
-| `google/gemini-2.5-pro` | `nvidia/nemotron-3-super-120b-a12b:free` | Same |
 | `deepseek/deepseek-chat` | `qwen/qwen3-coder:free` | Comparable coding quality |
 | `google/gemini-2.5-flash` | `mistralai/mistral-small-3.1-24b-instruct:free` | Similar speed, good enough |
 
-All free models support tool calling and have 128K+ context. You can keep working — quality drops slightly but you never overshoot your budget.
+All free models support tool calling and have 128K+ context. You can keep working — quality drops but you never overshoot your budget. The `execution_strategy` will also switch to `main_session_direct` to avoid spawning paid subagents.
 
 ### Reset at month start
 
@@ -211,21 +227,23 @@ All free models support tool calling and have 128K+ context. You can keep workin
 
 ### Monthly forecast
 
-| Usage level | Tasks/day | Tokens/month | Cost |
-|-------------|-----------|-------------|------|
-| Light | 5 | ~8M | **~$12** |
-| Moderate | 10 | ~15M | **~$23** |
-| Heavy | 20 | ~30M | **~$46** |
+| Usage level | Tasks/day | Tokens/month | Cost | Headroom ($85) |
+|-------------|-----------|-------------|------|----------------|
+| Light | 5 | ~8M | **~$27** | $58 |
+| Moderate | 10 | ~15M | **~$50** | $35 |
+| Heavy | 20 | ~30M | **~$80** | $5 |
+
+~94% of spend goes to Sonnet 4 subagents (complex code + thinking). Everything else is cheap plumbing.
 
 ### Per recipe run
 
-| Recipe | Cost |
-|--------|------|
-| PlanExecRevEx (4 steps) | ~$0.08 |
-| BugFix (7 steps) | ~$0.14 |
-| SecurityAudit (4 steps) | ~$0.30 |
+| Recipe | Models used | Cost |
+|--------|-----------|------|
+| PlanExecRevEx (4 steps) | Sonnet 4 ×2, Flash ×2 | ~$0.15 |
+| BugFix (7 steps) | Sonnet 4 ×3, Flash ×3, DeepSeek ×1 | ~$0.25 |
+| SecurityAudit (4 steps) | Sonnet 4 ×2, DeepSeek ×1, Flash ×1 | ~$0.35 |
 
-At moderate usage: ~500 recipe runs/month within $85 budget.
+At moderate usage: ~400 recipe runs/month within $85 budget.
 
 ## Available Tools
 
@@ -246,18 +264,18 @@ At moderate usage: ~500 recipe runs/month within $85 budget.
 
 Roland has 44 agent personas. The most commonly used:
 
-| Agent | Specialty | Default model |
-|-------|-----------|---------------|
-| **architect** | System design, component diagrams, trade-offs | Claude Sonnet 4 |
-| **executor** | Write clean, working code | DeepSeek V3 |
-| **planner** | Break tasks into actionable steps | Gemini 2.5 Pro |
-| **critic** | Code review, find bugs, improvements | Gemini 2.5 Pro |
-| **security-reviewer** | Vulnerability scanning, OWASP, hardening | Claude Sonnet 4 |
-| **qa-tester** | Write and run tests, edge cases | DeepSeek V3 |
-| **researcher** | Codebase exploration, root cause investigation | DeepSeek V3 |
-| **writer** | Technical docs, README, API docs | Gemini 2.5 Flash |
-| **build-fixer** | TypeScript errors, CI/CD issues | DeepSeek V3 |
-| **designer** | UI/UX, component layout, accessibility | DeepSeek V3 |
+| Agent | Specialty | Simple tasks | Complex tasks |
+|-------|-----------|-------------|---------------|
+| **architect** | System design, trade-offs | Sonnet 4 (subagent) | Sonnet 4 (subagent) |
+| **executor** | Write clean, working code | Flash (main session) | Sonnet 4 writes → Flash applies |
+| **planner** | Break tasks into steps | Sonnet 4 (subagent) | Sonnet 4 (subagent) |
+| **critic** | Code review, improvements | Sonnet 4 (subagent) | Sonnet 4 (subagent) |
+| **security-reviewer** | Vulnerability scanning | Sonnet 4 (subagent) | Sonnet 4 (subagent) |
+| **qa-tester** | Tests, edge cases | Flash (main session) | Sonnet 4 writes → Flash applies |
+| **researcher** | Root cause investigation | DeepSeek (subagent) | Sonnet 4 (subagent) |
+| **writer** | Docs, README, API docs | Flash (main session) | Flash (main session) |
+| **build-fixer** | Build errors, CI/CD | Flash (main session) | Sonnet 4 writes → Flash applies |
+| **designer** | UI/UX, components | Flash (main session) | Sonnet 4 writes → Flash applies |
 
 Full list: see `agents/*.yaml` in the Roland repo.
 

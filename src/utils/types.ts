@@ -27,6 +27,9 @@ export interface GooseConfig {
   dispatcher_provider: string;
   known_free_models: string[];
   fallback_model: string;
+  monthly_budget: number;
+  billing_cycle_day: number;
+  budget_degradation_threshold: number;
 }
 
 export interface AppConfig {

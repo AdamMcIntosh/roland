@@ -47,6 +47,8 @@ goose:
     - z-ai/glm-4.5-air:free                      # Thinking mode, agent-centric
   fallback_model: google/gemini-2.5-flash         # Budget-safe paid fallback
   budget_degradation_threshold: 0.8               # Switch to free models at 80%
+  monthly_budget: 85                              # Monthly budget in USD
+  billing_cycle_day: 1                            # Day of month to auto-reset spending
   free_model_coding: qwen/qwen3-coder:free        # Primary free model for coding
   free_model_reasoning: nvidia/nemotron-3-super-120b-a12b:free  # Primary free for reasoning
 

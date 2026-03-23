@@ -86,38 +86,59 @@ IDEs provide zero insight into what you're spending. Roland fills that gap:
 
 ### Goose Integration (OpenRouter)
 Roland works as a [Goose](https://block.github.io/goose/) MCP extension with smart model routing via OpenRouter:
-- **Smart dispatch**: Cheap dispatcher model → Roland triage → subagent on recommended model
-- **OpenRouter models**: All 44 agent YAMLs use current OpenRouter model IDs
-- **Goose recipes**: Pre-built workflow recipes in `goose/recipes/` (PlanExecRevEx, BugFix, SecurityAudit)
-- **Budget-optimized**: ~$23/month at moderate usage on an $85/month budget
+- **Smart triage**: Analyzes complexity → routes simple tasks to Flash, complex tasks to Sonnet 4
+- **Hybrid execution**: Sonnet 4 subagent writes complex code, main session applies files to disk
+- **Multi-agent recipes**: PlanExecRevEx, BugFix, SecurityAudit with per-step model selection
+- **Budget protection**: Auto-degrades to free models at 80% spend (~$68 of $85 budget)
+- **~$50/month** at moderate usage for near Claude Code quality (A/A-)
 
-See [INSTALLATION.md](INSTALLATION.md) for Goose setup instructions.
+See [INSTALLATION.md](INSTALLATION.md) for Goose setup and the [Goose User Guide](docs/guides/goose-user-guide.md) for full details.
+
+### Smart Triage — How It Works
+
+Roland's `triage` tool returns an `execution_strategy` that tells Goose how to handle each task:
+
+```
+Simple/medium task (70% of work):
+  → Main session (Flash) writes code and edits files directly
+  → Cost: ~$0.01 per task
+
+Complex task (30% of work):
+  → Sonnet 4 subagent writes the code (A+ quality)
+  → Main session applies it to files mechanically
+  → Cost: ~$0.15 per task
+```
+
+This gives you Sonnet 4 quality on complex enterprise code without paying Sonnet 4 prices for every typo fix. Combined with context quality rules (full file passing, raw error forwarding, running context documents), the quality approaches Claude Code at half the cost.
 
 ### When to Use Roland vs. Your IDE Agent
 
-Roland isn't meant to handle every task. Use the right tool for the job:
-
 | Task | Use | Why |
 |------|-----|-----|
-| Typo, rename, one-liner | **Windsurf / Cursor** | Direct edit, no overhead, no cost |
+| Typo, rename, one-liner | **Windsurf / Cursor** | Direct edit, no cost |
 | Small bug fix (single file) | **Windsurf / Cursor** | One LLM call is enough |
 | Simple refactor | **Windsurf / Cursor** | IDE agent handles it fine |
-| Multi-file bug, root cause unknown | **Roland (BugFix recipe)** | Multi-agent workflow finds root cause |
-| Architecture, system design | **Roland (architect)** | Routes to Sonnet 4 for best reasoning |
-| Security audit | **Roland (SecurityAudit)** | Needs thorough, multi-step analysis |
-| New feature (plan → build → review) | **Roland (PlanExecRevEx)** | Multi-agent orchestration adds real value |
+| Multi-file bug, root cause unknown | **Roland (BugFix recipe)** | Multi-agent workflow, Sonnet 4 diagnosis |
+| Architecture, system design | **Roland (architect)** | Sonnet 4 subagent for best reasoning |
+| Security audit | **Roland (SecurityAudit)** | Sonnet 4 threat modeling + code review |
+| Complex feature (plan → build → review) | **Roland (PlanExecRevEx)** | Sonnet 4 writes code, multi-agent review |
 
-**Hybrid approach**: ~70% of daily work stays in your IDE agent (zero OpenRouter cost). Roland handles the ~30% that benefits from smart model routing and multi-agent recipes. This keeps an $85/month OpenRouter budget under ~$23/month at moderate usage.
-
-#### Model tiers (budget-optimized)
+#### Model tiers
 
 | Tier | Model | Cost/1M tokens | Used for |
 |------|-------|---------------|----------|
-| Critical | `anthropic/claude-sonnet-4` | $3 / $15 | Architecture, security |
-| High-value | `google/gemini-2.5-pro` | $1.25 / $10 | Planning, code review |
-| Workhorse | `deepseek/deepseek-chat` (V3) | $0.27 / $1.10 | Implementation, testing, most work |
-| Light | `google/gemini-2.5-flash` | $0.15 / $0.60 | Docs, exploration |
-| Main session | `google/gemini-2.5-flash` | $0.15 / $0.60 | Routing + file edits |
+| Complex code + thinking | `anthropic/claude-sonnet-4` | $3 / $15 | Code authoring, architecture, security, planning, review |
+| Medium text tasks | `deepseek/deepseek-chat` (V3) | $0.27 / $1.10 | Text-only subagents for medium tasks |
+| Main session + light | `google/gemini-2.5-flash` | $0.15 / $0.60 | Routing, file I/O, docs, exploration |
+
+#### Monthly cost (~$50 at moderate usage, $85 budget)
+
+| Level | Cost | Headroom |
+|-------|------|----------|
+| Light (5 tasks/day) | ~$27 | $58 |
+| Moderate (10/day) | ~$50 | $35 |
+| Heavy (20/day) | ~$80 | $5 |
+| At 80% ($68) | Degrades to free models | $0 after |
 
 ### IDE-Native Integration
 Run `npm run init -- /path/to/your/project` to set up any project with Roland, or `npm run export-configs` for the Roland repo itself:
@@ -297,6 +318,7 @@ The benchmark runs three sample tasks (e.g. "Build todo app", "CLI tool", "Bug f
 |-----|----------|
 | [INSTALLATION.md](INSTALLATION.md) | Setup, IDE configuration, project portability |
 | [Goose User Guide](docs/guides/goose-user-guide.md) | Goose setup, model tiers, budget management, recipes |
+| [Roland vs Claude Code](docs/guides/comparison-claude-code.md) | Honest quality comparison, enterprise workflow, cost analysis |
 | [TESTING.md](TESTING.md) | Automated tests (Vitest), manual IDE tests, QA scenarios, benchmarks |
 | [RECIPES_CATALOG.md](RECIPES_CATALOG.md) | Complete recipe reference with agent chains |
 | [CHANGELOG.md](CHANGELOG.md) | Version history (Keep a Changelog format) |
