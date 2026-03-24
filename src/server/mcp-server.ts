@@ -1856,11 +1856,16 @@ export class McpServer {
           ? args.timeout_seconds * 1000
           : 300_000;
 
-        // Auto-route: use provided model or derive from complexity analysis
-        let modelId = typeof args.model === 'string' ? args.model : null;
+        // Force model overrides everything — bypasses routing entirely
+        const forceModel = typeof args.force_model === 'string' ? args.force_model : null;
+
+        // Auto-route: use force_model > provided model > complexity analysis
+        let modelId = forceModel ?? (typeof args.model === 'string' ? args.model : null);
         let routingInfo: Record<string, unknown> = {};
 
-        if (!modelId) {
+        if (forceModel) {
+          routingInfo = { auto_routed: false, forced: true, model_selected: forceModel };
+        } else if (!modelId) {
           try {
             const routing = ModelRouter.routeByComplexity(task);
             modelId = routing.selected.model;
@@ -1876,7 +1881,7 @@ export class McpServer {
           }
         }
 
-        const gooseModel = normaliseGooseModel(modelId);
+        const gooseModel = normaliseGooseModel(modelId ?? 'claude-sonnet-4-5');
 
         logger.info(`🦆 Spawning Goose session: ${gooseModel.provider}/${gooseModel.model}`);
 

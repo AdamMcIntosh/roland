@@ -41,6 +41,11 @@
       {
         "command": "roland.showPending",
         "title": "Roland: Show Pending Changes"
+      },
+      {
+        "command": "roland.showPreview",
+        "title": "Roland: Show Preview",
+        "icon": "$(preview)"
       }
     ],
     "menus": {

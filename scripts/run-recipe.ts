@@ -21,6 +21,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
 import YAML from 'yaml';
 import { buildContextBlock } from '../src/utils/migration-context.js';
 import {
@@ -50,6 +51,8 @@ interface RecipeStep {
   loop_to?: string;
   final_output?: boolean;
   condition?: string;
+  /** Shell command to verify step output (e.g. "npm test", "npm run build"). If it fails, the step is auto-retried with error context. */
+  verify_command?: string;
 }
 
 interface RecipeOptions {
@@ -163,6 +166,10 @@ export async function runRecipe(opts: {
   timeoutMs?: number;
   maxTurns?: number;
   maxRetries?: number;
+  /** Force all steps to use a specific model tier: 'high' (Sonnet 4), 'medium' (Flash), 'low' (free models) */
+  forceTier?: 'high' | 'medium' | 'low';
+  /** Force all steps to use a specific model ID (overrides forceTier and recipe model) */
+  forceModel?: string;
 }): Promise<RunSummary> {
   const {
     recipeName,
@@ -174,7 +181,16 @@ export async function runRecipe(opts: {
     timeoutMs = 300_000,
     maxTurns = 30,
     maxRetries = 1,
+    forceTier,
+    forceModel,
   } = opts;
+
+  // Tier-to-model mapping for --force-tier
+  const tierModels: Record<string, string> = {
+    high: 'anthropic/claude-sonnet-4',
+    medium: 'google/gemini-2.5-flash',
+    low: 'google/gemini-2.0-flash-exp:free',
+  };
 
   if (!dryRun && !isGooseAvailable()) {
     throw new Error(
@@ -239,8 +255,13 @@ export async function runRecipe(opts: {
       throw new Error(`Step ${stepNum}: agent "${step.agent}" not found in subagents list.`);
     }
 
-    const modelId = subagent.model ?? recipeYaml.lead_model ?? 'claude-sonnet-4-5';
-    const gooseModel = normaliseGooseModel(modelId);
+    // Model resolution: forceModel > forceTier > recipe subagent model > lead_model > default
+    const resolvedModelId = forceModel
+      ?? (forceTier ? tierModels[forceTier] : undefined)
+      ?? subagent.model
+      ?? recipeYaml.lead_model
+      ?? 'claude-sonnet-4-5';
+    const gooseModel = normaliseGooseModel(resolvedModelId);
 
     // Build the full task prompt for this Goose session:
     // context block + session context + subagent system prompt + interpolated user task
@@ -315,6 +336,50 @@ export async function runRecipe(opts: {
         maxTurns,
       });
       ({ output, exitCode, durationMs } = sessionResult);
+    }
+
+    // Self-correction: if step has a verify_command, run it and auto-fix on failure
+    if (step.verify_command && exitCode === 0 && !dryRun) {
+      let verifyPassed = false;
+      let verifyAttempts = 0;
+      const maxVerifyRetries = maxRetries;
+
+      while (!verifyPassed && verifyAttempts <= maxVerifyRetries) {
+        try {
+          console.log(`   🔍 Verifying: ${step.verify_command}`);
+          execSync(step.verify_command, {
+            cwd: projectRoot,
+            stdio: 'pipe',
+            encoding: 'utf-8',
+            timeout: 60_000,
+          });
+          verifyPassed = true;
+          console.log(`   ✅ Verification passed`);
+        } catch (verifyErr: unknown) {
+          verifyAttempts++;
+          const errOutput = verifyErr instanceof Error && 'stdout' in verifyErr
+            ? String((verifyErr as { stdout: string }).stdout).slice(0, 1000)
+            : String(verifyErr).slice(0, 500);
+
+          if (verifyAttempts > maxVerifyRetries) {
+            console.log(`   ⚠️  Verification failed after ${verifyAttempts} attempt(s) — continuing`);
+            break;
+          }
+
+          console.log(`   🔧 Verification failed — self-correcting (attempt ${verifyAttempts}/${maxVerifyRetries})...`);
+          const fixPrompt = `${fullPrompt}\n\n## Self-correction required\nThe verification command \`${step.verify_command}\` failed after your changes.\n\nError output:\n\`\`\`\n${errOutput}\n\`\`\`\n\nFix the issues so that \`${step.verify_command}\` passes. Do not skip or modify the verification command.`;
+
+          sessionResult = await spawnGooseSession({
+            task: fixPrompt,
+            model: gooseModel,
+            projectRoot,
+            timeoutMs,
+            maxTurns,
+            sessionName: gooseSessionName,
+          });
+          ({ output, exitCode, durationMs } = sessionResult);
+        }
+      }
     }
 
     outputs.set(subagent.name, output);
@@ -448,18 +513,21 @@ async function main() {
   const timeout = args['timeout'] ? Number(args['timeout']) * 1000 : 300_000;
   const maxTurns = args['max-turns'] ? Number(args['max-turns']) : 30;
   const maxRetries = args['max-retries'] ? Number(args['max-retries']) : 1;
+  const forceTier = args['force-tier'] as 'high' | 'medium' | 'low' | undefined;
+  const forceModel = args['force-model'] as string | undefined;
 
   if (!recipe || !task) {
     console.error(
       'Usage: npx tsx scripts/run-recipe.ts ' +
       '--recipe <name> --task "<description>" ' +
-      '[--project <path>] [--dry-run] [--timeout <seconds>] [--max-turns <n>]'
+      '[--project <path>] [--dry-run] [--timeout <seconds>] [--max-turns <n>]\n' +
+      '[--force-tier high|medium|low] [--force-model <provider/model>] [--max-retries <n>]'
     );
     process.exit(1);
   }
 
   try {
-    await runRecipe({ recipeName: recipe, task, projectRoot: project, dryRun, timeoutMs: timeout, maxTurns, maxRetries });
+    await runRecipe({ recipeName: recipe, task, projectRoot: project, dryRun, timeoutMs: timeout, maxTurns, maxRetries, forceTier, forceModel });
   } catch (err) {
     console.error(`\n❌ ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
