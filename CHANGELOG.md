@@ -5,6 +5,21 @@ All notable changes to Roland are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-03-24
+
+### Added — Full Claude Code Parity
+
+- **`extension/` — Roland Diff VS Code extension** — inline accept/reject diffs using native `vscode.diff` API; watches `.omc/pending-changes/` for proposed changes, shows side-by-side diff with Apply/Discard buttons, status bar with pending count, bulk apply/discard all
+- **`Dockerfile` + `scripts/roland-docker.sh`** — Docker container isolation for process-level permission gating; mounts only the project directory, no host filesystem access outside the mount; one command to run sandboxed Goose sessions
+- **`.dockerignore`** — optimized Docker build context (excludes node_modules, src, tests, docs)
+- **`preview_changes` writes pending change files** — automatically writes `.omc/pending-changes/<file>-<timestamp>.json` manifests for VS Code extension consumption; opt-out via `write_pending: false`
+
+### Changed
+
+- **Comparison docs updated** — all gaps closed; only remaining difference is setup complexity (~10 min vs ~30 sec)
+- **Blog post rewritten** — reflects full coding agent with Goose integration, not just MCP server
+- **Beta testers guide rewritten** — updated testing commands and focus areas for current feature set
+
 ## [0.1.3] - 2026-03-23
 
 ### Added — Gap Closure (97% Claude Code parity)

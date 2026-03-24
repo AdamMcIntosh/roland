@@ -322,6 +322,76 @@ GOOSE_MODEL: anthropic/claude-haiku-4.5   # $52/mo — precise instruction follo
 
 The main session handles routing AND file edits. Sonnet 4 subagents handle complex code authoring via smart triage.
 
+## Docker Setup (Sandboxed Sessions)
+
+Run Roland + Goose inside a Docker container for process-level permission isolation. The container can only access the mounted project directory — no host filesystem, home directory, or system commands outside the mount.
+
+### Build the image
+
+```bash
+cd /path/to/roland
+npm run build
+docker build -t roland-goose:latest .
+```
+
+### Run a sandboxed session
+
+```bash
+# Interactive session
+./scripts/roland-docker.sh /path/to/project session
+
+# Headless task
+./scripts/roland-docker.sh /path/to/project run --no-session -t "Fix the auth bug"
+
+# Current directory
+./scripts/roland-docker.sh .
+```
+
+The script auto-builds the image if it doesn't exist. Set `OPENROUTER_API_KEY` in your environment before running.
+
+### What the container mounts
+
+| Mount | Access | Purpose |
+|-------|--------|---------|
+| `/workspace` (your project) | Read-write | File editing, git, tests |
+| `.goose/config.yaml` | Read-only | Goose + Roland wiring |
+
+Everything else (home directory, system files, other projects) is inaccessible. This is **stronger** than Claude Code's per-tool approval — the container physically cannot reach outside the project.
+
+## VS Code Extension (Inline Diffs)
+
+The `roland-diff` extension provides inline accept/reject diffs using VS Code's native diff viewer.
+
+### Install
+
+```bash
+cd /path/to/roland/extension
+npm install
+npm run compile
+```
+
+Then in VS Code: **Extensions → ... → Install from VSIX** (or use `code --install-extension roland-diff-0.1.0.vsix` after packaging with `npm run package`).
+
+For development, open the `extension/` folder in VS Code and press **F5** to launch the Extension Development Host.
+
+### How it works
+
+1. Roland's `preview_changes` tool writes proposed changes to `.omc/pending-changes/`
+2. The extension watches that directory and opens VS Code's native side-by-side diff
+3. **Apply** (checkmark) writes the proposed content to the original file
+4. **Discard** (trash) deletes the pending change
+5. Status bar shows the count of pending changes — click to browse
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `Roland: Apply Change` | Apply the current diff to the original file |
+| `Roland: Discard Change` | Discard the current proposed change |
+| `Roland: Apply All Pending Changes` | Bulk apply all pending changes |
+| `Roland: Discard All Pending Changes` | Bulk discard all pending changes |
+| `Roland: Show Pending Changes` | Quick picker to browse all pending diffs |
+
 ## Troubleshooting
 
 | Problem | Fix |

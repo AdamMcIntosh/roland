@@ -1958,6 +1958,29 @@ export class McpServer {
 
         const result = generateDiff(original, modified, { filename, contextLines, includeHtml });
 
+        // Write pending change file for VS Code extension consumption
+        const writePending = args.write_pending !== false;
+        let pendingFile: string | undefined;
+        if (writePending && filename !== 'file') {
+          try {
+            const projectRoot = process.env.ROLAND_PROJECT_ROOT || process.cwd();
+            const pendingDir = path.join(projectRoot, '.omc', 'pending-changes');
+            fs.mkdirSync(pendingDir, { recursive: true });
+            const safeName = filename.replace(/[/\\:]/g, '_');
+            const ts = Date.now();
+            pendingFile = path.join(pendingDir, `${safeName}-${ts}.json`);
+            fs.writeFileSync(pendingFile, JSON.stringify({
+              originalPath: filename,
+              proposedContent: modified,
+              description: `${result.additions} additions, ${result.deletions} deletions`,
+              tool: 'preview_changes',
+              timestamp: new Date().toISOString(),
+            }, null, 2), 'utf-8');
+          } catch {
+            // Non-fatal — extension just won't pick it up
+          }
+        }
+
         return {
           filename,
           stats: {
@@ -1968,6 +1991,7 @@ export class McpServer {
           },
           markdown_diff: format !== 'html' ? result.markdownDiff : undefined,
           html_preview: includeHtml ? result.htmlPreview : undefined,
+          pending_change_file: pendingFile,
         };
       },
       {
@@ -1993,6 +2017,10 @@ export class McpServer {
           context_lines: {
             type: 'number',
             description: 'Lines of context around each change (default: 3)',
+          },
+          write_pending: {
+            type: 'boolean',
+            description: 'Write a pending change file for VS Code extension consumption (default: true). Set false to skip.',
           },
         },
         required: ['original', 'modified'],

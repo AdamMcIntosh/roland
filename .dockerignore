@@ -1,0 +1,14 @@
+node_modules/
+.git/
+.omc/
+extension/
+*.md
+*.yaml
+.cursor/
+.vscode/
+.github/
+tests/
+src/
+tsconfig.json
+vitest.config.ts
+.eslintrc.*
