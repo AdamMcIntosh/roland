@@ -1,6 +1,6 @@
 /**
  * Query Complexity Classifier
- * 
+ *
  * Analyzes queries to determine complexity and required model tier
  * Uses multiple heuristics:
  * - Token count estimation
@@ -9,6 +9,158 @@
  * - Context size indicators
  * - Domain-specific complexity
  */
+
+import https from 'https';
+import { AppConfig } from '../utils/types.js';
+import { logger } from '../utils/logger.js';
+
+// Module-level cache for semantic classification results
+const semanticCache = new Map<string, { result: ComplexityAnalysis; timestamp: number }>();
+
+const VALID_TIERS = new Set(['local', 'simple', 'medium', 'complex']);
+
+const SEMANTIC_SYSTEM_PROMPT = `Classify the coding task complexity. Respond with ONLY one word: local, simple, medium, or complex.
+
+local: trivial fix — typo, rename, add/remove import, fix comma, formatting
+simple: clear single-file task, obvious approach
+medium: multi-file changes, some ambiguity, needs project context
+complex: architecture, security, multi-step reasoning, system design`;
+
+/**
+ * Make a POST request using Node's built-in https module.
+ * Returns the response body as a string, or rejects on error/timeout.
+ */
+function httpsPost(
+  url: string,
+  body: string,
+  headers: Record<string, string>,
+  timeoutMs: number
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const urlObj = new URL(url);
+    const options = {
+      hostname: urlObj.hostname,
+      path: urlObj.pathname + urlObj.search,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        ...headers,
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk: Buffer) => chunks.push(chunk));
+      res.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+      res.on('error', reject);
+    });
+
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error(`Request timed out after ${timeoutMs}ms`));
+    });
+
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+/**
+ * Call OpenRouter with a free model to semantically classify query complexity.
+ * Returns a ComplexityAnalysis if successful, or null on any failure.
+ */
+export async function semanticClassify(
+  query: string,
+  config?: AppConfig
+): Promise<ComplexityAnalysis | null> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return null;
+
+  const classifierCfg = config?.classifier;
+  const enabled = classifierCfg?.semantic_enabled ?? true;
+  if (!enabled) return null;
+
+  const freeModel = classifierCfg?.semantic_model ?? 'qwen/qwen3-coder:free';
+  const timeoutMs = classifierCfg?.semantic_timeout_ms ?? 3000;
+  const cacheTtlMs = classifierCfg?.cache_ttl_ms ?? 300000;
+
+  // Cache lookup — use first 200 chars as key
+  const cacheKey = query.slice(0, 200);
+  const cached = semanticCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < cacheTtlMs) {
+    return cached.result;
+  }
+
+  try {
+    const postData = JSON.stringify({
+      model: freeModel,
+      messages: [
+        { role: 'system', content: SEMANTIC_SYSTEM_PROMPT },
+        { role: 'user', content: query },
+      ],
+      max_tokens: 10,
+      temperature: 0,
+    });
+
+    const responseText = await httpsPost(
+      'https://openrouter.ai/api/v1/chat/completions',
+      postData,
+      {
+        Authorization: `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://github.com/AdamMcIntosh/roland',
+        'X-Title': 'Roland MCP',
+      },
+      timeoutMs
+    );
+
+    const json = JSON.parse(responseText) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+
+    const rawContent = json.choices?.[0]?.message?.content ?? '';
+    const tier = rawContent.toLowerCase().trim().split(/\s/)[0];
+
+    if (!VALID_TIERS.has(tier)) {
+      logger.info(`[Classifier] semantic returned invalid tier "${tier}", falling back to heuristic`);
+      return null;
+    }
+
+    const complexity = tier as 'local' | 'simple' | 'medium' | 'complex';
+    const result: ComplexityAnalysis = {
+      complexity,
+      score: 0, // Semantic classifier doesn't produce a numeric score
+      factors: [{ name: 'Semantic Classification', weight: 100, detected: true }],
+      tokenEstimate: Math.ceil(query.length / 4),
+      suggestedModel: ComplexityClassifier['suggestModel'](complexity, 0),
+    };
+
+    semanticCache.set(cacheKey, { result, timestamp: Date.now() });
+    return result;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.info(`[Classifier] semantic error: ${msg}, falling back to heuristic`);
+    return null;
+  }
+}
+
+/**
+ * Async entry point that tries semantic classification first,
+ * then falls back to the keyword heuristic.
+ */
+export async function classifyWithSemantic(
+  query: string,
+  config?: AppConfig
+): Promise<ComplexityAnalysis> {
+  const semantic = await semanticClassify(query, config);
+  if (semantic) {
+    logger.info(`[Classifier] semantic: ${semantic.complexity}`);
+    return semantic;
+  }
+  const heuristic = ComplexityClassifier.getDetailedAnalysis(query);
+  logger.info(`[Classifier] heuristic fallback: ${heuristic.complexity}`);
+  return heuristic;
+}
 
 export interface ComplexityAnalysis {
   complexity: 'local' | 'simple' | 'medium' | 'complex';

@@ -40,11 +40,25 @@ export interface GooseConfig {
   budget_degradation_threshold: number;
 }
 
+export interface ClassifierConfig {
+  semantic_enabled?: boolean;
+  semantic_model?: string;
+  semantic_timeout_ms?: number;
+  cache_ttl_ms?: number;
+}
+
+export interface DiffStreamConfig {
+  enabled: boolean;
+  port: number;
+}
+
 export interface AppConfig {
   routing: RoutingConfig;
   roland: SessionConfig;
   goose?: GooseConfig;
   ollama?: OllamaConfig;
+  classifier?: ClassifierConfig;
+  diff_stream?: DiffStreamConfig;
   configPath?: string;
 }
 

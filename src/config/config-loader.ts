@@ -54,11 +54,25 @@ const GooseConfigSchema = z.object({
   budget_degradation_threshold: z.number().min(0).max(1).default(0.8),
 });
 
+const ClassifierConfigSchema = z.object({
+  semantic_enabled: z.boolean().default(true),
+  semantic_model: z.string().default('qwen/qwen3-coder:free'),
+  semantic_timeout_ms: z.number().min(100).default(3000),
+  cache_ttl_ms: z.number().min(0).default(300000),
+});
+
+const DiffStreamConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  port: z.number().min(1024).max(65535).default(8089),
+});
+
 const AppConfigSchema = z.object({
   routing: RoutingConfigSchema,
   roland: SessionConfigSchema,
   goose: GooseConfigSchema.optional(),
   ollama: OllamaConfigSchema.optional(),
+  classifier: ClassifierConfigSchema.optional(),
+  diff_stream: DiffStreamConfigSchema.optional(),
 });
 
 // ============================================================================

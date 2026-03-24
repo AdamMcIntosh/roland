@@ -12,6 +12,12 @@
 #   Smart triage: complex tasks use Sonnet 4 subagent for code authoring
 #   Total estimate:                        → ~$50/mo at moderate usage
 
+classifier:
+  semantic_enabled: true                 # Use free OpenRouter model for classification; falls back to keyword heuristic
+  semantic_model: "qwen/qwen3-coder:free"  # Free model with 262K context
+  semantic_timeout_ms: 3000             # Hard timeout — falls back to heuristic on timeout
+  cache_ttl_ms: 300000                  # 5-minute cache to avoid redundant calls
+
 ollama:
   enabled: false                         # Set to true to enable local model routing
   base_url: "http://localhost:11434"
@@ -79,3 +85,7 @@ rco:
       agents: [writer, explainer]
   dashboard_port: 8080
   state_file: .rco-state.json
+
+diff_stream:
+  enabled: true
+  port: 8089

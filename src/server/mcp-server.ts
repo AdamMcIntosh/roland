@@ -28,7 +28,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { AppConfig } from '../utils/types.js';
 import { McpServerError, McpToolError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
-import { ComplexityClassifier, ComplexityAnalysis } from '../orchestrator/complexity-classifier.js';
+import { ComplexityClassifier, ComplexityAnalysis, classifyWithSemantic } from '../orchestrator/complexity-classifier.js';
 import { ModelRouter } from '../orchestrator/model-router.js';
 import { AdvancedCostTracker, getGlobalTracker } from '../orchestrator/advanced-cost-tracker.js';
 import { BudgetManager } from '../utils/budget-manager.js';
@@ -37,6 +37,7 @@ import { generateDiff } from '../utils/diff-engine.js';
 import { normaliseGooseModel, spawnGooseSession, isGooseAvailable } from '../utils/goose-runner.js';
 import { gitStatus, gitDiff, gitLog, gitCommit } from '../utils/git-tools.js';
 import { analyzeScreenshot } from '../utils/screenshot.js';
+import { getDiffStreamServer, initDiffStreamServer } from './diff-stream.js';
 import {
   buildContextBlock,
   appendRule,
@@ -285,6 +286,16 @@ export class McpServer {
             model: ollamaCfg.model,
           };
         }
+
+        // Classifier section
+        const apiKeyAvailable = Boolean(process.env.OPENROUTER_API_KEY);
+        const classifierCfg = this.config.classifier;
+        const semanticEnabled = classifierCfg?.semantic_enabled ?? true;
+        result.classifier = {
+          mode: apiKeyAvailable && semanticEnabled ? 'semantic' : 'heuristic',
+          semantic_model: classifierCfg?.semantic_model ?? 'qwen/qwen3-coder:free',
+          api_key_available: apiKeyAvailable,
+        };
 
         return result;
       },
@@ -575,7 +586,7 @@ export class McpServer {
         const topRecipe = recipeScores[0];
 
         // --- Complexity analysis ---
-        const complexity = ComplexityClassifier.getDetailedAnalysis(message);
+        const complexity = await classifyWithSemantic(message, this.config);
 
         // --- Decide if a recipe is warranted ---
         // Recipes are for substantial, multi-step work
@@ -809,7 +820,7 @@ export class McpServer {
         const budgetHint = (args.budget as string) || 'moderate';
 
         // Run complexity analysis
-        const analysis = ComplexityClassifier.getDetailedAnalysis(query);
+        const analysis = await classifyWithSemantic(query, this.config);
 
         // Get routing recommendation with fallbacks
         let routing;
@@ -2319,6 +2330,24 @@ export class McpServer {
           }
         }
 
+        // Broadcast diff event to any connected VS Code extension clients
+        try {
+          const diffServer = getDiffStreamServer();
+          if (diffServer && diffServer.getClientCount() > 0) {
+            const { randomUUID } = await import('crypto');
+            diffServer.broadcastDiff({
+              type: 'diff:new',
+              id: randomUUID(),
+              file: filename !== 'file' ? filename : undefined,
+              original,
+              modified,
+              timestamp: Date.now(),
+            });
+          }
+        } catch {
+          // Non-fatal — WebSocket broadcast failure should not affect tool result
+        }
+
         return {
           filename,
           stats: {
@@ -2377,6 +2406,14 @@ export class McpServer {
       await this.server.connect(transport);
       logger.success('✅ MCP Server connected and ready');
       logger.info(`📦 Tools: ${this.getTools().join(', ')}`);
+
+      // Start the diff stream WebSocket server
+      const diffStreamPort = this.config.diff_stream?.port ?? 8089;
+      const diffStreamEnabled = this.config.diff_stream?.enabled !== false;
+      if (diffStreamEnabled) {
+        const diffServer = initDiffStreamServer(diffStreamPort);
+        diffServer.start();
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new McpServerError(`Failed to start MCP server: ${message}`);
@@ -2479,6 +2516,9 @@ export class McpServer {
   async stop(): Promise<void> {
     try {
       logger.info('🛑 Stopping MCP Server...');
+      // Stop the diff stream WebSocket server
+      const diffServer = getDiffStreamServer();
+      if (diffServer) diffServer.stop();
       await this.server.close();
       logger.success('✅ MCP Server stopped');
     } catch (error) {
