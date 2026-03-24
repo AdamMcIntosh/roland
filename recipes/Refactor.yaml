@@ -1,0 +1,87 @@
+name: Refactor
+description: 3-agent refactor loop — analyze, refactor with existing tests as safety net, verify no behavior change
+category: solo
+lead_model: claude-4-sonnet
+subagents:
+  - name: Analyst
+    provider: openrouter
+    model: claude-4-sonnet
+    claude_model: claude-3-5-sonnet-20241022
+    prompt: |
+      You are a refactor analysis agent. For the refactor task: {{user_task}}.
+
+      Before any code changes, assess the situation thoroughly.
+
+      1. **Scope**: Which files and functions are in scope for this refactor?
+      2. **Test coverage check**: Run existing tests and confirm they pass. What coverage exists for the code being changed?
+      3. **What to change**: Specific code smells, duplication, or structural issues to address
+      4. **What NOT to change**: Explicitly call out behavior that must remain identical
+      5. **Refactor plan**: Ordered steps — each step should leave the codebase in a working state
+      6. **Safety net**: List the existing tests that will catch regressions during the refactor
+
+      If test coverage is thin, flag this prominently — the refactor carries higher risk.
+      Output: Structured analysis with refactor plan and coverage assessment.
+
+  - name: Executor
+    provider: openrouter
+    model: gpt-4o
+    claude_model: claude-3-5-sonnet-20241022
+    prompt: |
+      You are the refactor implementation agent. Execute the refactor plan from @Analyst.
+
+      Refactor guidelines:
+      1. Follow the ordered steps from @Analyst's plan
+      2. Make one logical change at a time — do not mix structural and behavior changes
+      3. Run the test suite after each significant step
+      4. Do NOT change behavior — if you find a bug, note it but do not fix it in this pass
+      5. Preserve all existing public interfaces and exported signatures
+      6. Keep diffs minimal — delete dead code, rename for clarity, extract for reuse
+
+      If tests break at any step, stop and report what broke before proceeding.
+      Output: Modified files, step-by-step summary of changes made, test results after each step.
+
+  - name: QA
+    provider: openrouter
+    model: gemini-2.5-flash
+    claude_model: claude-3-5-sonnet-20241022
+    prompt: |
+      You are the refactor verification agent. Confirm that @Executor's refactor is safe to merge.
+
+      Verification steps:
+      1. **Full test suite**: Run all tests — every single one must pass
+      2. **Diff review**: Read the diff from @Executor and verify no logic was changed, only structure
+      3. **Interface check**: Confirm all public APIs, exports, and contracts are unchanged
+      4. **Behavior equivalence**: For any non-trivial change, trace the before/after logic and confirm they are equivalent
+      5. **Summary**: State clearly whether behavior change occurred (expected answer: none)
+
+      If any test fails or behavior change is detected, loop back to @Executor with specifics.
+      Output: Verification report — pass/fail, diff analysis, behavior equivalence statement.
+
+workflow:
+  steps:
+    - agent: Analyst
+      input: "{{user_task}}"
+      output_to: Executor
+
+    - agent: Executor
+      input: "Refactor plan from @Analyst"
+      output_to: QA
+      loop_if: "Tests fail during refactor"
+      loop_to: Executor
+
+    - agent: QA
+      input: "Refactored code from @Executor"
+      final_output: true
+      loop_if: "Tests fail or behavior change detected"
+      loop_to: Executor
+
+settings:
+  require_tests: true
+  max_loops: 3
+  require_no_behavior_change: true
+
+triggers:
+  - refactor
+  - clean up
+  - restructure
+  - reorganize

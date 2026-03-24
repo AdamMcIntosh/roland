@@ -383,7 +383,46 @@ export class McpServer {
     description: string;
     triggers: string[];
     agents: string[];
+    category?: 'solo' | 'enterprise';
   }> = [
+    // ------------------------------------------------------------------
+    // Solo recipes — lean, fast, preferred when their triggers match
+    // ------------------------------------------------------------------
+    {
+      name: 'QuickShip',
+      fileKey: 'QuickShip',
+      description: 'Solo 3-agent loop: plan → implement with tests → QA and auto-commit',
+      triggers: ['ship', 'implement', 'build', 'add feature'],
+      agents: ['planner', 'executor', 'qa'],
+      category: 'solo',
+    },
+    {
+      name: 'Spike',
+      fileKey: 'Spike',
+      description: 'Solo feasibility spike: explore → prototype, no tests required',
+      triggers: ['spike', 'prototype', 'explore', 'try', 'experiment'],
+      agents: ['explorer', 'executor'],
+      category: 'solo',
+    },
+    {
+      name: 'Refactor',
+      fileKey: 'Refactor',
+      description: 'Solo refactor: analyze + check coverage → refactor → verify no behavior change',
+      triggers: ['refactor', 'clean up', 'restructure', 'reorganize'],
+      agents: ['analyst', 'executor', 'qa'],
+      category: 'solo',
+    },
+    {
+      name: 'Debug',
+      fileKey: 'Debug',
+      description: 'Solo debug: reproduce + isolate root cause → fix with regression test',
+      triggers: ['debug', 'fix bug', 'broken', 'failing', 'error', 'crash'],
+      agents: ['researcher', 'executor'],
+      category: 'solo',
+    },
+    // ------------------------------------------------------------------
+    // Enterprise recipes — multi-agent, full pipeline
+    // ------------------------------------------------------------------
     {
       name: 'PlanExecRevEx',
       fileKey: 'PlanExecRevEx',
@@ -486,6 +525,8 @@ export class McpServer {
           .slice(0, 2);
 
         // --- Score recipes ---
+        // Solo recipes get a +3 bonus when their triggers match, so they are
+        // preferred over enterprise recipes for the same keyword.
         const recipeScores = McpServer.RECIPE_CATALOG.map(recipe => {
           let score = 0;
           const matchedTriggers: string[] = [];
@@ -496,7 +537,8 @@ export class McpServer {
               matchedTriggers.push(trigger);
             }
           }
-          return { ...recipe, score, matchedTriggers };
+          const soloBonus = score > 0 && recipe.category === 'solo' ? 3 : 0;
+          return { ...recipe, score: score + soloBonus, matchedTriggers };
         });
 
         recipeScores.sort((a, b) => b.score - a.score);

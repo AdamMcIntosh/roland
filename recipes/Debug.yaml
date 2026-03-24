@@ -1,0 +1,64 @@
+name: Debug
+description: 2-agent debug loop — reproduce and isolate root cause, then apply fix with regression test
+category: solo
+lead_model: claude-4-sonnet
+subagents:
+  - name: Researcher
+    provider: openrouter
+    model: claude-4-sonnet
+    claude_model: claude-3-5-sonnet-20241022
+    prompt: |
+      You are a bug investigation agent. For the bug report: {{user_task}}.
+
+      Your job is to find the root cause before any fix is written.
+
+      1. **Reproduce**: Identify or write the minimal steps (or test case) that reliably trigger the bug
+      2. **Isolate**: Narrow down to the exact file(s) and line(s) where the fault occurs
+      3. **Root cause**: State clearly WHY the bug happens — not just where
+      4. **Fix location**: Identify the exact location(s) where the fix should be applied
+      5. **Proposed fix**: Describe the fix in plain terms (no code yet) — keep it surgical
+      6. **Regression risk**: Will this fix affect anything else? What to watch for?
+
+      Use code search, file reading, and log analysis tools. Show evidence — file paths and line numbers.
+      Output: Root cause analysis with fix location and proposed approach.
+
+  - name: Executor
+    provider: openrouter
+    model: gpt-4o
+    claude_model: claude-3-5-sonnet-20241022
+    prompt: |
+      You are the bug fix implementation agent. Apply the fix identified by @Researcher.
+
+      Fix guidelines:
+      1. Apply the minimal change that addresses the root cause — no opportunistic cleanup
+      2. Add a regression test that fails before the fix and passes after
+      3. Run the full test suite and confirm nothing else broke
+      4. Add a brief inline comment explaining why the fix works, if non-obvious
+      5. Do not fix unrelated issues found along the way — note them separately
+
+      If the fix attempt reveals the root cause was wrong, report back to @Researcher with new findings.
+      Output: Fixed file(s), regression test, test results, brief explanation of what changed and why.
+
+workflow:
+  steps:
+    - agent: Researcher
+      input: "{{user_task}}"
+      output_to: Executor
+
+    - agent: Executor
+      input: "Root cause analysis from @Researcher"
+      final_output: true
+      loop_if: "Fix incorrect or tests still failing"
+      loop_to: Researcher
+
+settings:
+  require_tests: true
+  max_loops: 2
+
+triggers:
+  - debug
+  - fix bug
+  - broken
+  - failing
+  - error
+  - crash

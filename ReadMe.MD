@@ -156,16 +156,37 @@ Run `npm run init -- /path/to/your/project` to set up any project with Roland, o
 ### Prerequisites
 - **Node.js** >= 18.0.0
 
-### Install & Build
+### One-Command Setup
 
 ```bash
-git clone https://github.com/yourusername/roland.git
+npx roland-setup
+```
+
+This single command will:
+1. Check your environment (Node.js version, Goose)
+2. Prompt for your [OpenRouter API key](https://openrouter.ai/) and validate it
+3. Clone Roland into `~/.roland/roland/` (or `git pull` if it already exists)
+4. Build Roland (`npm install && npm run build`)
+5. Initialise the current directory with agent configs and MCP settings
+6. Save your API key to `~/.roland/config.yaml`
+
+**Verify**: Ask your IDE agent to "Use the health_check tool" — you should get `status: healthy`.
+
+### Manual Setup
+
+<details>
+<summary>Click to expand manual setup steps</summary>
+
+#### Install & Build
+
+```bash
+git clone https://github.com/AdamMcIntosh/roland.git
 cd roland
 npm install
 npm run build
 ```
 
-### Use in Any Project
+#### Use in Any Project
 
 After building, run the init command to set up Roland in your target project:
 
@@ -184,24 +205,23 @@ This copies all agent personas, recipe configs, MCP server config, and the auto-
 
 See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions (includes global Cursor config option).
 
+</details>
+
 ### Use with Goose
 
 ```bash
 # 1. Install Goose: https://block.github.io/goose/
-# 2. Build Roland
-cd roland && npm install && npm run build
+# 2. Run one-command setup (handles clone + build + init)
+npx roland-setup
 
-# 3. Add Roland extension to your Goose config (~/.config/goose/config.yaml)
-#    See goose/config.yaml for a complete template
-
-# 4. Start a Goose session
+# 3. Start a Goose session
 goose session
 
-# 5. Prompt normally — Roland auto-routes to the best model + persona
+# 4. Prompt normally — Roland auto-routes to the best model + persona
 > Build a REST API for managing tasks with authentication
 
-# 6. Run a Goose recipe
-goose run --recipe goose/recipes/roland-plan-exec-rev-ex.yaml --task "Build a todo app"
+# 5. Run a Goose recipe
+goose run --recipe ~/.roland/roland/goose/recipes/roland-plan-exec-rev-ex.yaml --task "Build a todo app"
 ```
 
 ### Roland Code Orchestrator (RCO)

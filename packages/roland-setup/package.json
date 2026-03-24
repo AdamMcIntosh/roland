@@ -1,0 +1,25 @@
+{
+  "name": "roland-setup",
+  "version": "0.1.0",
+  "description": "One-command setup for Roland Code Orchestrator",
+  "bin": {
+    "roland-setup": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "prompts": "^2.4.2",
+    "chalk": "^4.1.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/prompts": "^2.4.9",
+    "@types/node": "^20.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT"
+}
