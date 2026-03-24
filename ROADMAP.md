@@ -8,7 +8,7 @@
 
 ### v0.1 (current) — Beta release
 
-- [x] Packaging: npm, plugin zip, Tauri binaries
+- [x] Packaging: npm, plugin zip
 - [x] Install script (curl), GitHub release workflow
 - [x] Blog post and docs, issue templates, GitHub Discussions
 - [x] Opt-in telemetry (Sentry), consent via `/rco-consent:yes`

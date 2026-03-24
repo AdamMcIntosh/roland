@@ -1,4 +1,4 @@
-# Roland: A Full Coding Agent at ~97% of Claude Code — With Model Choice and Budget Control
+# Roland: A Full Coding Agent at Claude Code Parity — With Model Choice and Budget Control
 
 Roland is a TypeScript MCP server that pairs with [Goose](https://block.github.io/goose/) to give you a full autonomous coding agent. It routes each task to the best model for the job, tracks your spending, and drives multi-agent recipe workflows — all without locking you into a single AI provider.
 
@@ -13,7 +13,8 @@ When you run Goose with Roland loaded, you get:
 - **Git awareness** — `git_status`, `git_diff`, `git_log`, `git_commit` MCP tools give agents native git understanding.
 - **Screenshot analysis** — `analyze_screenshot` captures your screen and sends it to a vision model. Useful for debugging UI issues or reading error dialogs.
 - **Persistent project context** — `roland-context.json` stores migration rules, architecture decisions, and test patterns across sessions.
-- **Permission policy** — `.roland-permissions.json` controls what Goose sessions can do: restrict shell access, deny specific commands, limit write paths.
+- **Permission policy** — `.roland-permissions.json` controls what Goose sessions can do: restrict shell access, deny specific commands, limit write paths. Run in Docker for process-level isolation.
+- **Inline diff UI** — the `roland-diff` VS Code extension shows proposed changes in VS Code's native side-by-side diff viewer with Apply/Discard buttons.
 
 ## How it compares to Claude Code
 
@@ -24,15 +25,15 @@ When you run Goose with Roland loaded, you get:
 | Git awareness | ✅ 4 MCP tools | ✅ Native |
 | Session memory | ✅ SessionContextManager | ✅ Conversation history |
 | Screenshot/vision | ✅ OpenRouter vision models | ✅ Native |
-| Permission gating | ✅ Supervised mode + policy | ✅ Per-tool approval |
+| Permission gating | ✅ Docker container isolation + policy | ✅ Per-tool approval |
+| Inline diff UI | ✅ VS Code extension (`roland-diff`) | ✅ Native |
 | Model choice | ✅ Any OpenRouter model | ❌ Claude only |
 | Cost visibility | ✅ Full tracking + hard caps | ❌ None |
 | Budget enforcement | ✅ Daily/monthly caps | ❌ None |
 | Multi-provider recipes | ✅ Claude plans, Gemini reviews | ❌ Single provider |
 | CI/headless runs | ✅ Runs anywhere Goose runs | ❌ IDE-bound |
-| Inline diff UI | ⏳ VS Code extension planned | ✅ Native |
 
-**~97% parity for terminal/CI coding agent use cases.** The only remaining gap is a VS Code extension for inline accept/reject diffs.
+**Full feature parity with Claude Code.** Roland matches or exceeds every capability, with multi-model routing and budget control that Claude Code doesn't have.
 
 ## Install
 

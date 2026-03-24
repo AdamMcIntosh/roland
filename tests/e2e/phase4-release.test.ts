@@ -50,6 +50,5 @@ describe('E2E Phase 4: Release builds', () => {
     expect(pkg.scripts).toHaveProperty('build-npm');
     expect(pkg.scripts).toHaveProperty('build-plugin');
     expect(pkg.scripts).toHaveProperty('build-plugin-zip');
-    expect(pkg.scripts).toHaveProperty('build-tauri');
   });
 });

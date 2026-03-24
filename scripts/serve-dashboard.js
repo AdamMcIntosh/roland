@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Serve dashboard-ui for Tauri dev (port 8081). */
+/** Serve dashboard-ui on port 8081. */
 const http = require('http');
 const fs = require('fs');
 const path = require('path');

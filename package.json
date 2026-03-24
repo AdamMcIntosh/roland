@@ -13,7 +13,6 @@
     "build-npm": "npm run clean && tsc && node scripts/copy-assets.js",
     "build-plugin": "node scripts/build-plugin.js",
     "build-plugin-zip": "node scripts/build-plugin.js && node scripts/zip-plugin.js",
-    "build-tauri": "tauri build",
     "iterate": "node scripts/iterate.js",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
@@ -32,7 +31,6 @@
     "clean": "rimraf dist dist-plugin",
     "rco": "node dist/rco/cli.js",
     "rco:dev": "npx tsx src/rco/cli.ts",
-    "tauri:dev": "tauri dev",
     "serve-dashboard": "node scripts/serve-dashboard.js",
     "benchmark": "npx tsx src/benchmark.ts"
   },
@@ -60,7 +58,6 @@
     "papaparse": "^5.4.1"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.0.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.5",
     "@types/sinon": "^17.0.0",

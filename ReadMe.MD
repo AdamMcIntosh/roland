@@ -285,7 +285,7 @@ The benchmark runs three sample tasks (e.g. "Build todo app", "CLI tool", "Bug f
 - **Execution modes**: `autonomous-loop` (conditional looping, max 5 iterations), `parallel-swarm` (concurrent forks + file locking), `linear`, **adaptive-swarm** (scale steps by task complexity), **collab-mode** (pause for real-time user feedback via dashboard WebSocket).
 - **Tools/skills**: Stub tools (`search`, `code`, `terminal`) plus **dependency-mapper** (DOT graph for handoffs).
 - **Eco mode**, **task_routing**, **state** (`.rco-state.json`), **Cursor export** (session → `.cursor/rules` + MCP JSON).
-- **Phase 2:** Claude tool-calling prompts (JSON response parsing), session persistence (notepad prompts + local JSON fallback), dynamic Cursor rules from agent outputs, Tauri dashboard with Chart.js dependency view, Zod validation for prompts/state/outputs, VS Code extension stub for importing RCO sessions.
+- **Phase 2:** Claude tool-calling prompts (JSON response parsing), session persistence (notepad prompts + local JSON fallback), dynamic Cursor rules from agent outputs, Zod validation for prompts/state/outputs, VS Code extension stub for importing RCO sessions.
 
 ---
 
@@ -348,8 +348,7 @@ npm test                 # Run tests (watch)
 npm run test:run         # Run tests once
 npm run test:rco         # RCO tests only (orchestrator, loadConfig, stateLock, tools, Phase 2)
 npm run build-plugin    # Bundle RCO plugin for Claude (esbuild → dist-plugin/plugin.js)
-npm run tauri:dev       # RCO dashboard (Tauri + Chart.js); start Node dashboard first: npm run rco -- --dashboard --task "..." in another terminal, or run WS on 8080
-npm run serve-dashboard # Serve dashboard-ui on port 8081 (used by tauri:dev)
+npm run serve-dashboard # Serve dashboard-ui on port 8081
 npm run benchmark       # RCO benchmark: sample tasks vs simulated baseline
 npm run lint             # Lint check
 npm run clean            # Remove dist/
