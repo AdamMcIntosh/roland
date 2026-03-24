@@ -253,4 +253,4 @@ Opens WebSocket on port 8080. In another terminal, run `npm run serve-dashboard`
 
 ## Cross-Platform Notes
 
-All tests run on Windows, macOS, and Linux. The CI release workflow (`.github/workflows/release.yml`) builds Tauri binaries across all three platforms. The install scripts cover macOS/Linux (`install.sh`) and Windows (`install.ps1`).
+All tests run on Windows, macOS, and Linux. The CI release workflow (`.github/workflows/release.yml`) builds npm packages and plugin zips across all three platforms. The install scripts cover macOS/Linux (`install.sh`) and Windows (`install.ps1`).

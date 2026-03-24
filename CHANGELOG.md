@@ -5,9 +5,24 @@ All notable changes to Roland are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-03-24
+
+### Added — Full Claude Code Parity
+
+- **`extension/` — Roland Diff VS Code extension** — inline accept/reject diffs using native `vscode.diff` API; watches `.omc/pending-changes/` for proposed changes, shows side-by-side diff with Apply/Discard buttons, status bar with pending count, bulk apply/discard all
+- **`Dockerfile` + `scripts/roland-docker.sh`** — Docker container isolation for process-level permission gating; mounts only the project directory, no host filesystem access outside the mount; one command to run sandboxed Goose sessions
+- **`.dockerignore`** — optimized Docker build context (excludes node_modules, src, tests, docs)
+- **`preview_changes` writes pending change files** — automatically writes `.omc/pending-changes/<file>-<timestamp>.json` manifests for VS Code extension consumption; opt-out via `write_pending: false`
+
+### Changed
+
+- **Comparison docs updated** — all gaps closed; only remaining difference is setup complexity (~10 min vs ~30 sec)
+- **Blog post rewritten** — reflects full coding agent with Goose integration, not just MCP server
+- **Beta testers guide rewritten** — updated testing commands and focus areas for current feature set
+
 ## [0.1.3] - 2026-03-23
 
-### Added — Gap Closure (97% Claude Code parity)
+### Added — Gap Closure (Claude Code parity)
 
 - **`src/utils/git-tools.ts`** — `git_status`, `git_diff`, `git_log`, `git_commit` MCP tools for native git awareness
 - **`src/utils/screenshot.ts`** — `analyze_screenshot` MCP tool; captures screen or loads image, sends to OpenRouter vision model (default: `google/gemini-2.5-flash`)
@@ -38,9 +53,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Responsive-design agent** — cross-device compatibility, mobile-first layouts, breakpoint strategy, fluid typography, flexible grids (standard + low tier)
 - **CodeReviewCompliance recipe** — 4-agent workflow: Researcher → Code-Reviewer → Critic → Writer for code review against requirements
 - **DesktopApp recipe** — 6-agent workflow for cross-platform desktop apps (Electron, Tauri, .NET MAUI)
-- **RCO Phase 4: Beta release** — packaging (npm, plugin zip, Tauri), install scripts (sh + ps1), CI/CD release workflow, telemetry (Sentry opt-in), sync stub, ROADMAP
+- **RCO Phase 4: Beta release** — packaging (npm, plugin zip), install scripts (sh + ps1), CI/CD release workflow, telemetry (Sentry opt-in), sync stub, ROADMAP
 - **RCO Phase 3: Feature expansion** — adaptive-swarm mode, collab-mode, 12 new agents, eco-optimizer, graph-visualizer, `/rco-new-agent`, dashboard analytics/CSV/dark mode/hotkeys, benchmarks
-- **RCO Phase 2: Claude integration** — plugin with slash commands, manifest.json, Claude prompt hooks, session persistence, Zod schemas, Tauri dashboard, VS Code extension stub
+- **RCO Phase 2: Claude integration** — plugin with slash commands, manifest.json, Claude prompt hooks, session persistence, Zod schemas, VS Code extension stub
 - **RCO Phase 1: Validation** — expanded Vitest suite, QA scenarios, Puppeteer mock, timeouts/retries, profiling
 - **RCO MVP** — YAML-driven orchestrator with child_process.fork, 5 execution modes, WebSocket dashboard, Cursor export, CLI
 

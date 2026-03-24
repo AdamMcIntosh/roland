@@ -335,6 +335,46 @@ Roland has 44 agent personas. The most commonly used:
 
 Full list: see `agents/*.yaml` in the Roland repo.
 
+## Docker Sandboxing
+
+Run Goose sessions inside a Docker container for process-level permission isolation. The container can only access the mounted project directory — no host filesystem access outside the mount.
+
+### Build and run
+
+```bash
+# Build the image (one-time)
+cd /path/to/roland
+docker build -t roland-goose:latest .
+
+# Interactive sandboxed session
+./scripts/roland-docker.sh /path/to/project session
+
+# Headless task in sandbox
+./scripts/roland-docker.sh /path/to/project run --no-session -t "Fix the auth bug"
+```
+
+The script auto-builds the image if it doesn't exist. This is **stronger** than prompt-level permission gating — the container physically cannot access files outside your project.
+
+## VS Code Extension (Inline Diffs)
+
+The `roland-diff` extension shows proposed changes in VS Code's native diff viewer with Apply/Discard buttons.
+
+### Install
+
+```bash
+cd /path/to/roland/extension
+npm install && npm run compile
+```
+
+Then install via VS Code: **Extensions → ... → Install from VSIX**, or press **F5** from the `extension/` folder for development mode.
+
+### How it works
+
+1. When `preview_changes` runs, it writes a manifest to `.omc/pending-changes/`
+2. The extension detects it and opens a side-by-side diff
+3. Click **Apply** (checkmark) to write the change, or **Discard** (trash) to drop it
+4. Status bar shows pending change count
+
 ## Troubleshooting
 
 | Problem | Fix |

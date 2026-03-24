@@ -111,7 +111,7 @@ export function stopDashboard(): void {
 }
 
 /**
- * Broadcast dependency graph (nodes/edges) for Tauri dashboard Chart.js visualization.
+ * Broadcast dependency graph (nodes/edges) for dashboard Chart.js visualization.
  * Call from orchestrator when state or workflow steps are available.
  */
 export function broadcastGraph(

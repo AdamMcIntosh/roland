@@ -1,0 +1,76 @@
+{
+  "name": "roland-diff",
+  "displayName": "Roland Diff",
+  "description": "Inline accept/reject diffs for Roland MCP server",
+  "version": "0.1.0",
+  "publisher": "AdamMcIntosh",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AdamMcIntosh/roland"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "workspaceContains:.omc/pending-changes"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "roland.applyChange",
+        "title": "Roland: Apply Change",
+        "icon": "$(check)"
+      },
+      {
+        "command": "roland.discardChange",
+        "title": "Roland: Discard Change",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "roland.applyAll",
+        "title": "Roland: Apply All Pending Changes"
+      },
+      {
+        "command": "roland.discardAll",
+        "title": "Roland: Discard All Pending Changes"
+      },
+      {
+        "command": "roland.showPending",
+        "title": "Roland: Show Pending Changes"
+      },
+      {
+        "command": "roland.showPreview",
+        "title": "Roland: Show Preview",
+        "icon": "$(preview)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "when": "resourceScheme == roland-pending",
+          "command": "roland.applyChange",
+          "group": "navigation@1"
+        },
+        {
+          "when": "resourceScheme == roland-pending",
+          "command": "roland.discardChange",
+          "group": "navigation@2"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.37",
+    "@types/vscode": "^1.110.0",
+    "typescript": "^5.9.3"
+  }
+}
