@@ -1,4 +1,4 @@
-# Roland: A Full Coding Agent at Claude Code Parity — With Model Choice and Budget Control
+# Roland: A Multi-Model Coding Agent — With Model Choice and Budget Control
 
 Roland is a TypeScript MCP server that pairs with [Goose](https://block.github.io/goose/) to give you a full autonomous coding agent. It routes each task to the best model for the job, tracks your spending, and drives multi-agent recipe workflows — all without locking you into a single AI provider.
 
@@ -33,7 +33,7 @@ When you run Goose with Roland loaded, you get:
 | Multi-provider recipes | ✅ Claude plans, Gemini reviews | ❌ Single provider |
 | CI/headless runs | ✅ Runs anywhere Goose runs | ❌ IDE-bound |
 
-**Full feature parity with Claude Code.** Roland matches or exceeds every capability, with multi-model routing and budget control that Claude Code doesn't have.
+**Multi-model routing and budget control that Claude Code doesn't have.** Roland covers the core coding agent capabilities — file editing, shell execution, git, vision, diffs, permissions — through Goose, while adding cost visibility, model flexibility, and multi-agent recipes on top.
 
 ## Install
 

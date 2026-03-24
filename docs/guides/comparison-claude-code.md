@@ -65,23 +65,11 @@ This is **stronger** than Claude Code's per-tool approval dialog — the contain
 
 ---
 
-## Realistic enterprise ratings
+## Where each tool shines
 
-| Scenario | Roland + Goose | Claude Code |
-|---|---|---|
-| Build a CRUD API | A+ | A+ |
-| Implement auth with OAuth + JWT | A+ | A+ |
-| Build a payment service (Stripe) | A+ | A+ |
-| Database migration (complex) | A+ | A+ |
-| Refactor 20-file service layer | A | A |
-| Fix a subtle race condition | A+ | A+ |
-| New microservice from scratch | A+ | A+ |
-| Security hardening pass | A+ | A+ |
-| Large-scale legacy migration | A+ | A |
-| CI-integrated code generation | A+ | N/A |
-| Multi-model cost optimization | A+ | N/A |
+**Roland's strengths**: cost visibility and hard budget caps, multi-model routing (100+ models via OpenRouter), multi-agent recipe workflows, CI/headless execution, Docker sandboxing, YAML extensibility.
 
-**For enterprise work, there is no meaningful quality gap.** Roland wins on cost, model flexibility, automation, and sandboxing. Claude Code wins on setup simplicity.
+**Claude Code's strengths**: zero-friction setup, deeply integrated native tooling (file editing, git, streaming), sophisticated context management, consistent model quality (always Claude), mature ecosystem backed by Anthropic.
 
 ---
 
@@ -107,14 +95,12 @@ Windsurf / Cursor (daily driver)      Roland + Goose (heavy lifting)
 | Claude Code | $100/mo per seat | $300/mo |
 | **Savings** | **~30%** | **~35-50%** |
 
-Roland + Goose gives you full Claude Code capability at ~65% of the cost, with multi-agent workflows, model routing, and container sandboxing that Claude Code can't do.
+Roland + Goose covers the core coding agent workflows at ~65% of the cost, with multi-agent recipes, model routing, and container sandboxing that Claude Code doesn't offer.
 
 ---
 
 ## Bottom line
 
-**Roland + Goose is at full feature parity with Claude Code.** The only difference is setup time (~10 minutes vs ~30 seconds).
-
-For everything else — file editing, shell execution, git, vision, diffs, permissions, session memory — Roland matches or exceeds Claude Code. And it adds model routing, budget enforcement, multi-agent recipes, and CI/headless support that Claude Code doesn't have.
+Roland and Claude Code solve different problems well. Claude Code is the simpler, more polished single-agent experience with best-in-class native tooling. Roland adds multi-model routing, budget enforcement, multi-agent recipes, and CI/headless support that Claude Code doesn't have — at the cost of more setup and a younger, less battle-tested ecosystem.
 
 **Use Windsurf as your hands, Roland as your brain.**

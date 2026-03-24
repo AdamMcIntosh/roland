@@ -91,7 +91,7 @@ Roland works as a [Goose](https://block.github.io/goose/) MCP extension with sma
 - **Hybrid execution**: Sonnet 4 subagent writes complex code, main session applies files to disk
 - **Multi-agent recipes**: PlanExecRevEx, BugFix, SecurityAudit with per-step model selection
 - **Budget protection**: Auto-degrades to free models at 80% spend (~$68 of $85 budget)
-- **~$50/month** at moderate usage for near Claude Code quality (A/A-)
+- **~$50/month** at moderate usage (10 tasks/day)
 
 See [INSTALLATION.md](INSTALLATION.md) for Goose setup and the [Goose User Guide](docs/guides/goose-user-guide.md) for full details.
 
@@ -105,12 +105,12 @@ Simple/medium task (70% of work):
   → Cost: ~$0.01 per task
 
 Complex task (30% of work):
-  → Sonnet 4 subagent writes the code (A+ quality)
+  → Sonnet 4 subagent writes the code
   → Main session applies it to files mechanically
   → Cost: ~$0.15 per task
 ```
 
-This gives you Sonnet 4 quality on complex enterprise code without paying Sonnet 4 prices for every typo fix. Combined with context quality rules (full file passing, raw error forwarding, running context documents), the quality approaches Claude Code at half the cost.
+This gives you Sonnet 4 quality on complex tasks without paying Sonnet 4 prices for every typo fix.
 
 ### When to Use Roland vs. Your IDE Agent
 

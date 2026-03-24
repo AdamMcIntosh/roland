@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.4] - 2026-03-24
 
-### Added — Full Claude Code Parity
+### Added — Inline Diffs & Docker Sandboxing
 
 - **`extension/` — Roland Diff VS Code extension** — inline accept/reject diffs using native `vscode.diff` API; watches `.omc/pending-changes/` for proposed changes, shows side-by-side diff with Apply/Discard buttons, status bar with pending count, bulk apply/discard all
 - **`Dockerfile` + `scripts/roland-docker.sh`** — Docker container isolation for process-level permission gating; mounts only the project directory, no host filesystem access outside the mount; one command to run sandboxed Goose sessions
@@ -16,13 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Comparison docs updated** — all gaps closed; only remaining difference is setup complexity (~10 min vs ~30 sec)
+- **Comparison docs updated** — honest strengths/weaknesses breakdown vs Claude Code
 - **Blog post rewritten** — reflects full coding agent with Goose integration, not just MCP server
 - **Beta testers guide rewritten** — updated testing commands and focus areas for current feature set
 
 ## [0.1.3] - 2026-03-23
 
-### Added — Gap Closure (Claude Code parity)
+### Added — Git Tools, Permissions & Session Continuity
 
 - **`src/utils/git-tools.ts`** — `git_status`, `git_diff`, `git_log`, `git_commit` MCP tools for native git awareness
 - **`src/utils/screenshot.ts`** — `analyze_screenshot` MCP tool; captures screen or loads image, sends to OpenRouter vision model (default: `google/gemini-2.5-flash`)
