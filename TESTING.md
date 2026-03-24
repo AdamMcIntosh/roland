@@ -27,7 +27,7 @@ Runs the full suite (11 test files, 90 tests). Requires a fresh build — the fo
 |---------|-------|
 | `npm test` | Watch mode (re-runs on changes) |
 | `npm run test:run` | Single run, all tests |
-| `npm run test:rco` | RCO orchestrator + Phase 2 tests only |
+| `npm run test:rco` | RCO orchestrator tests only |
 | `npm run test:e2e` | E2E tests only (install, telemetry, release, workflow) |
 | `npm run test:coverage` | Full run with V8 coverage report |
 
@@ -88,7 +88,6 @@ tests/
 - `adaptive-swarm`: step count scales with task complexity
 - Skills: eco-optimizer model selection, graph-visualizer DOT output
 - Customization: `generateAndSaveCustomAgent` creates YAML
-- Plugin: `rco-run:mode` and `rco-new-agent` commands registered
 
 **E2E — `workflow-execution.test.ts`** (6 tests)
 - `RecipeSessionManager`: start session, advance through steps, summary generation

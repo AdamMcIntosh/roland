@@ -8,10 +8,10 @@
 
 ### v0.1 (current) — Beta release
 
-- [x] Packaging: npm, plugin zip
+- [x] Packaging: npm
 - [x] Install script (curl), GitHub release workflow
 - [x] Blog post and docs, issue templates, GitHub Discussions
-- [x] Opt-in telemetry (Sentry), consent via `/rco-consent:yes`
+- [x] Opt-in telemetry (Sentry)
 - [x] Beta program guide, sync stub (Git remotes planned)
 - [x] `npm run iterate` for version bump and changelog
 

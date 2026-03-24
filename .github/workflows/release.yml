@@ -1,4 +1,4 @@
-# Auto release on version tag. Builds npm-ready dist and plugin zip.
+# Auto release on version tag. Builds npm-ready dist.
 name: Release
 
 on:
@@ -27,28 +27,16 @@ jobs:
       - name: Build npm package (publish-ready)
         run: npm run build-npm
 
-      - name: Build plugin zip
-        run: npm run build-plugin-zip
-
       - name: Upload npm dist artifact
         uses: actions/upload-artifact@v4
         with:
           name: dist-npm
           path: dist/
 
-      - name: Upload plugin zip artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: plugin-zip
-          path: dist-plugin/*.zip
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           draft: false
           generate_release_notes: true
-          files: |
-            dist-plugin/*.zip
-          artifacts: dist-npm, plugin-zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

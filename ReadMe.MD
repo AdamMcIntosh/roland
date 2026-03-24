@@ -258,15 +258,6 @@ npm run test:run                          # Full test suite
 
 **Optional Puppeteer-based Claude simulation** (headless browser mock): set `RCO_USE_PUPPETEER=1` before running RCO so the agent worker loads a local HTML mock page instead of an inline mock. Requires `puppeteer` installed.
 
-#### RCO Claude plugin (Phase 2)
-
-RCO can run as a **Claude plugin** with slash commands (e.g. `/rco-run:recipe PlanExecRevEx --task "..."`).
-
-- **Build plugin bundle:** `npm run build-plugin` → outputs `dist-plugin/plugin.js`.
-- **Manifest:** `plugin/manifest.json` defines commands (`rco-run:recipe`, `rco-run:mode`, `rco-new-agent`, `rco-status`, `rco-export`) and permissions.
-- **Custom agent creation:** Use `/rco-new-agent` with a prompt (e.g. "Create agent for testing") to generate a YAML template and save it to `agents/custom-<name>.yaml`. The next RCO run will load agents from disk and include the new file (auto-reload).
-- **Install via Claude marketplace simulation:** Package the `plugin/` folder and `dist-plugin/plugin.js` into a zip. In Claude Desktop or claude.ai, use the plugin installation flow and point to the manifest (or sideload the bundle). For local development, run the orchestrator via Node: `node dist-plugin/plugin.js` is not a standalone CLI — use the plugin entry from your Claude environment’s plugin loader, or run recipes with `npm run rco` as before.
-
 **Verbose profiling:** Orchestrator uses `console.time`/`timeEnd` when `RCO_VERBOSE` is not `0` or `false`. Worker timeout and retries are configurable via orchestrator options (default 60s timeout, 2 retries).
 
 #### RCO YAML guide
@@ -305,7 +296,7 @@ The benchmark runs three sample tasks (e.g. "Build todo app", "CLI tool", "Bug f
 - **Execution modes**: `autonomous-loop` (conditional looping, max 5 iterations), `parallel-swarm` (concurrent forks + file locking), `linear`, **adaptive-swarm** (scale steps by task complexity), **collab-mode** (pause for real-time user feedback via dashboard WebSocket).
 - **Tools/skills**: Stub tools (`search`, `code`, `terminal`) plus **dependency-mapper** (DOT graph for handoffs).
 - **Eco mode**, **task_routing**, **state** (`.rco-state.json`), **Cursor export** (session → `.cursor/rules` + MCP JSON).
-- **Phase 2:** Claude tool-calling prompts (JSON response parsing), session persistence (notepad prompts + local JSON fallback), dynamic Cursor rules from agent outputs, Zod validation for prompts/state/outputs, VS Code extension stub for importing RCO sessions.
+- **Session persistence** (notepad prompts + local JSON fallback), dynamic Cursor rules from agent outputs, Zod validation for prompts/state/outputs.
 
 ---
 
@@ -366,8 +357,7 @@ npm run qa              # RCO QA: one scenario (todo-app), mock workers
 npm run qa:all           # RCO QA: all scenarios; timings vs baseline benchmarks
 npm test                 # Run tests (watch)
 npm run test:run         # Run tests once
-npm run test:rco         # RCO tests only (orchestrator, loadConfig, stateLock, tools, Phase 2)
-npm run build-plugin    # Bundle RCO plugin for Claude (esbuild → dist-plugin/plugin.js)
+npm run test:rco         # RCO tests only (orchestrator, loadConfig, stateLock, tools)
 npm run serve-dashboard # Serve dashboard-ui on port 8081
 npm run benchmark       # RCO benchmark: sample tasks vs simulated baseline
 npm run lint             # Lint check

@@ -1,5 +1,5 @@
 /**
- * Phase 4 E2E: Release builds (build-npm, build-plugin-zip).
+ * Phase 4 E2E: Release builds (build-npm).
  * Validates that build scripts exist and dist/ contains expected outputs.
  * Uses a non-destructive approach: runs `tsc` + copy-assets without rimraf
  * to avoid clobbering dist/ for concurrent fork tests.
@@ -34,21 +34,8 @@ describe('E2E Phase 4: Release builds', () => {
     expect(fs.existsSync(cli)).toBe(true);
   });
 
-  it('build-plugin produces dist-plugin/plugin.js', () => {
-    try {
-      execSync('node scripts/build-plugin.js', { cwd: root, stdio: 'pipe' });
-    } catch (e) {
-      console.error('build-plugin failed:', (e as { stderr?: Buffer }).stderr?.toString());
-      throw e;
-    }
-    const pluginJs = path.join(root, 'dist-plugin', 'plugin.js');
-    expect(fs.existsSync(pluginJs)).toBe(true);
-  });
-
   it('build scripts are defined in package.json', () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf-8'));
     expect(pkg.scripts).toHaveProperty('build-npm');
-    expect(pkg.scripts).toHaveProperty('build-plugin');
-    expect(pkg.scripts).toHaveProperty('build-plugin-zip');
   });
 });

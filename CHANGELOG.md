@@ -53,9 +53,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Responsive-design agent** — cross-device compatibility, mobile-first layouts, breakpoint strategy, fluid typography, flexible grids (standard + low tier)
 - **CodeReviewCompliance recipe** — 4-agent workflow: Researcher → Code-Reviewer → Critic → Writer for code review against requirements
 - **DesktopApp recipe** — 6-agent workflow for cross-platform desktop apps (Electron, Tauri, .NET MAUI)
-- **RCO Phase 4: Beta release** — packaging (npm, plugin zip), install scripts (sh + ps1), CI/CD release workflow, telemetry (Sentry opt-in), sync stub, ROADMAP
-- **RCO Phase 3: Feature expansion** — adaptive-swarm mode, collab-mode, 12 new agents, eco-optimizer, graph-visualizer, `/rco-new-agent`, dashboard analytics/CSV/dark mode/hotkeys, benchmarks
-- **RCO Phase 2: Claude integration** — plugin with slash commands, manifest.json, Claude prompt hooks, session persistence, Zod schemas, VS Code extension stub
+- **RCO Phase 4: Beta release** — packaging (npm), install scripts (sh + ps1), CI/CD release workflow, telemetry (Sentry opt-in), sync stub, ROADMAP
+- **RCO Phase 3: Feature expansion** — adaptive-swarm mode, collab-mode, 12 new agents, eco-optimizer, graph-visualizer, dashboard analytics/CSV/dark mode/hotkeys, benchmarks
+- **RCO Phase 2: Session persistence & validation** — Zod schemas, session persistence (notepad prompts + local JSON fallback), dynamic Cursor rules from agent outputs
 - **RCO Phase 1: Validation** — expanded Vitest suite, QA scenarios, Puppeteer mock, timeouts/retries, profiling
 - **RCO MVP** — YAML-driven orchestrator with child_process.fork, 5 execution modes, WebSocket dashboard, Cursor export, CLI
 
