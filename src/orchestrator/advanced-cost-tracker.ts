@@ -24,6 +24,7 @@ export interface CostRecord {
 export interface CostSummary {
   totalCost: number;
   totalTokens: number;
+  localTokens: number;
   modelCosts: Record<string, number>;
   agentCosts: Record<string, number>;
   providerCosts: Record<string, number>;
@@ -71,6 +72,9 @@ export class AdvancedCostTracker {
     cost: number,
     options?: { query?: string; cached?: boolean }
   ): void {
+    // Local provider (Ollama) is always $0 regardless of token counts
+    const effectiveCost = provider === 'local' ? 0 : cost;
+
     const record: CostRecord = {
       timestamp: Date.now(),
       model,
@@ -78,7 +82,7 @@ export class AdvancedCostTracker {
       agent,
       inputTokens,
       outputTokens,
-      cost,
+      cost: effectiveCost,
       query: options?.query,
       cached: options?.cached ?? false,
     };
@@ -138,10 +142,17 @@ export class AdvancedCostTracker {
     const providerCosts: Record<string, number> = {};
     let totalCost = 0;
     let totalTokens = 0;
+    let localTokens = 0;
 
     for (const record of this.records) {
       totalCost += record.cost;
-      totalTokens += record.inputTokens + record.outputTokens;
+      const recordTokens = record.inputTokens + record.outputTokens;
+      totalTokens += recordTokens;
+
+      // Track tokens processed locally (zero cost)
+      if (record.provider === 'local') {
+        localTokens += recordTokens;
+      }
 
       // Aggregate by model
       modelCosts[record.model] = (modelCosts[record.model] || 0) + record.cost;
@@ -157,6 +168,7 @@ export class AdvancedCostTracker {
     return {
       totalCost,
       totalTokens,
+      localTokens,
       modelCosts,
       agentCosts,
       providerCosts,
@@ -269,6 +281,11 @@ export class AdvancedCostTracker {
     report += 'By Provider:\n';
     for (const { provider, cost, percentage } of this.getProviderBreakdown()) {
       report += `  ${provider.padEnd(20)} $${cost.toFixed(4).padStart(8)} (${percentage.toFixed(1)}%)\n`;
+    }
+
+    // Local token offload
+    if (summary.localTokens > 0) {
+      report += `\nLocal tokens (Ollama): ${summary.localTokens.toLocaleString()} tokens, $0.00\n`;
     }
 
     // Budget status

@@ -28,7 +28,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { AppConfig } from '../utils/types.js';
 import { McpServerError, McpToolError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
-import { ComplexityClassifier, ComplexityAnalysis } from '../orchestrator/complexity-classifier.js';
+import { ComplexityClassifier, ComplexityAnalysis, classifyWithSemantic } from '../orchestrator/complexity-classifier.js';
 import { ModelRouter } from '../orchestrator/model-router.js';
 import { AdvancedCostTracker, getGlobalTracker } from '../orchestrator/advanced-cost-tracker.js';
 import { BudgetManager } from '../utils/budget-manager.js';
@@ -37,6 +37,7 @@ import { generateDiff } from '../utils/diff-engine.js';
 import { normaliseGooseModel, spawnGooseSession, isGooseAvailable } from '../utils/goose-runner.js';
 import { gitStatus, gitDiff, gitLog, gitCommit } from '../utils/git-tools.js';
 import { analyzeScreenshot } from '../utils/screenshot.js';
+import { getDiffStreamServer, initDiffStreamServer } from './diff-stream.js';
 import {
   buildContextBlock,
   appendRule,
@@ -48,6 +49,8 @@ import {
   readRcoState,
 } from '../utils/migration-context.js';
 import { SessionContextManager } from './session-context.js';
+import { ProjectContextManager } from './project-context.js';
+import { QualityTracker, initializeQualityTracker } from '../orchestrator/quality-tracker.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -171,6 +174,8 @@ export class McpServer {
   private costTracker: AdvancedCostTracker;
   private recipeSessionManager: RecipeSessionManager;
   private sessionContextManager: SessionContextManager;
+  private projectContextManager: ProjectContextManager;
+  private qualityTracker: QualityTracker;
   private recipesDir: string;
 
   constructor(config: AppConfig) {
@@ -190,6 +195,14 @@ export class McpServer {
 
     // Initialize session context manager (persistent memory for long sessions)
     this.sessionContextManager = new SessionContextManager();
+
+    // Initialize project context manager (cross-session knowledge base)
+    const projectRoot = process.env.ROLAND_PROJECT_ROOT || process.cwd();
+    this.projectContextManager = new ProjectContextManager(projectRoot);
+    this.sessionContextManager.setProjectContext(this.projectContextManager);
+
+    // Initialize quality tracker (model A/B quality signals, persisted to .roland/)
+    this.qualityTracker = initializeQualityTracker(projectRoot);
 
     // Initialize budget manager with config from config.yaml
     BudgetManager.initialize();
@@ -240,6 +253,8 @@ export class McpServer {
     this.registerUpdateMigrationContext();
     this.registerRunGooseTask();
     this.registerSessionContext();
+    this.registerProjectContext();
+    this.registerQualitySignal();
     this.registerGitTools();
     this.registerAnalyzeScreenshot();
   }
@@ -251,13 +266,39 @@ export class McpServer {
     this.registerTool(
       'health_check',
       'Check the health status of the Roland MCP server',
-      async () => ({
-        status: 'healthy',
-        version: '2.0.0',
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
-        tools: this.getTools(),
-      }),
+      async () => {
+        const result: Record<string, unknown> = {
+          status: 'healthy',
+          version: '2.0.0',
+          timestamp: new Date().toISOString(),
+          uptime: process.uptime(),
+          tools: this.getTools(),
+        };
+
+        // Include ollama section only when enabled in config
+        if (this.config.ollama?.enabled) {
+          const ollamaCfg = this.config.ollama;
+          const health = await ModelRouter.checkOllamaHealth(ollamaCfg.base_url);
+          result.ollama = {
+            enabled: true,
+            available: health.available,
+            base_url: ollamaCfg.base_url,
+            model: ollamaCfg.model,
+          };
+        }
+
+        // Classifier section
+        const apiKeyAvailable = Boolean(process.env.OPENROUTER_API_KEY);
+        const classifierCfg = this.config.classifier;
+        const semanticEnabled = classifierCfg?.semantic_enabled ?? true;
+        result.classifier = {
+          mode: apiKeyAvailable && semanticEnabled ? 'semantic' : 'heuristic',
+          semantic_model: classifierCfg?.semantic_model ?? 'qwen/qwen3-coder:free',
+          api_key_available: apiKeyAvailable,
+        };
+
+        return result;
+      },
       { type: 'object', properties: {}, required: [] }
     );
   }
@@ -383,7 +424,46 @@ export class McpServer {
     description: string;
     triggers: string[];
     agents: string[];
+    category?: 'solo' | 'enterprise';
   }> = [
+    // ------------------------------------------------------------------
+    // Solo recipes — lean, fast, preferred when their triggers match
+    // ------------------------------------------------------------------
+    {
+      name: 'QuickShip',
+      fileKey: 'QuickShip',
+      description: 'Solo 3-agent loop: plan → implement with tests → QA and auto-commit',
+      triggers: ['ship', 'implement', 'build', 'add feature'],
+      agents: ['planner', 'executor', 'qa'],
+      category: 'solo',
+    },
+    {
+      name: 'Spike',
+      fileKey: 'Spike',
+      description: 'Solo feasibility spike: explore → prototype, no tests required',
+      triggers: ['spike', 'prototype', 'explore', 'try', 'experiment'],
+      agents: ['explorer', 'executor'],
+      category: 'solo',
+    },
+    {
+      name: 'Refactor',
+      fileKey: 'Refactor',
+      description: 'Solo refactor: analyze + check coverage → refactor → verify no behavior change',
+      triggers: ['refactor', 'clean up', 'restructure', 'reorganize'],
+      agents: ['analyst', 'executor', 'qa'],
+      category: 'solo',
+    },
+    {
+      name: 'Debug',
+      fileKey: 'Debug',
+      description: 'Solo debug: reproduce + isolate root cause → fix with regression test',
+      triggers: ['debug', 'fix bug', 'broken', 'failing', 'error', 'crash'],
+      agents: ['researcher', 'executor'],
+      category: 'solo',
+    },
+    // ------------------------------------------------------------------
+    // Enterprise recipes — multi-agent, full pipeline
+    // ------------------------------------------------------------------
     {
       name: 'PlanExecRevEx',
       fileKey: 'PlanExecRevEx',
@@ -486,6 +566,8 @@ export class McpServer {
           .slice(0, 2);
 
         // --- Score recipes ---
+        // Solo recipes get a +3 bonus when their triggers match, so they are
+        // preferred over enterprise recipes for the same keyword.
         const recipeScores = McpServer.RECIPE_CATALOG.map(recipe => {
           let score = 0;
           const matchedTriggers: string[] = [];
@@ -496,14 +578,15 @@ export class McpServer {
               matchedTriggers.push(trigger);
             }
           }
-          return { ...recipe, score, matchedTriggers };
+          const soloBonus = score > 0 && recipe.category === 'solo' ? 3 : 0;
+          return { ...recipe, score: score + soloBonus, matchedTriggers };
         });
 
         recipeScores.sort((a, b) => b.score - a.score);
         const topRecipe = recipeScores[0];
 
         // --- Complexity analysis ---
-        const complexity = ComplexityClassifier.getDetailedAnalysis(message);
+        const complexity = await classifyWithSemantic(message, this.config);
 
         // --- Decide if a recipe is warranted ---
         // Recipes are for substantial, multi-step work
@@ -546,13 +629,37 @@ export class McpServer {
           };
         }
 
-        // Mode suggestion (quick / standard / deep)
+        // Mode suggestion (quick / standard / deep / local)
         const modeMap: Record<string, string> = {
+          local: 'local',
           simple: 'quick',
           medium: 'standard',
           complex: 'deep',
         };
         recommendation.suggested_mode = modeMap[complexity.complexity] || 'standard';
+
+        // --- Local (Ollama) tier handling ---
+        if (complexity.complexity === 'local' && this.config.ollama?.enabled) {
+          const ollamaCfg = this.config.ollama;
+          const ollamaHealth = await ModelRouter.checkOllamaHealth(ollamaCfg.base_url);
+          if (ollamaHealth.available) {
+            recommendation.provider = 'local';
+            recommendation.ollama_model = ollamaCfg.model;
+            recommendation.ollama_base_url = ollamaCfg.base_url;
+            // Return early with local routing info — no openrouter model needed
+            recommendation.instructions = `This is a trivial task. Route to local Ollama model "${ollamaCfg.model}" at ${ollamaCfg.base_url}. $0 cost.`;
+            return recommendation;
+          } else {
+            // Ollama unavailable — fall back to configured tier
+            const fallbackTier = ollamaCfg.fallback_to || 'simple';
+            recommendation.provider = 'openrouter';
+            recommendation.ollama_fallback = true;
+            recommendation.ollama_fallback_reason = 'Ollama unavailable';
+            recommendation.ollama_fallback_tier = fallbackTier;
+            // Override complexity level for downstream model selection
+            (complexity as { complexity: string }).complexity = fallbackTier;
+          }
+        }
 
         // --- Goose dispatch fields ---
         const agentName = topAgent.score > 0 ? topAgent.name : 'executor';
@@ -713,7 +820,7 @@ export class McpServer {
         const budgetHint = (args.budget as string) || 'moderate';
 
         // Run complexity analysis
-        const analysis = ComplexityClassifier.getDetailedAnalysis(query);
+        const analysis = await classifyWithSemantic(query, this.config);
 
         // Get routing recommendation with fallbacks
         let routing;
@@ -1080,6 +1187,31 @@ export class McpServer {
             tokens: r.inputTokens + r.outputTokens,
           }));
         }
+
+        // Quality analytics
+        const allQuality = this.qualityTracker.getModelQuality() as import('../orchestrator/quality-tracker.js').ModelQuality[];
+        let qualityRecommendation: string | null = null;
+
+        // Find worst model with > 10 signals and best alternative in same tier
+        const worstModel = allQuality
+          .filter(q => q.total_tasks > 10)
+          .sort((a, b) => a.accept_rate - b.accept_rate)[0];
+
+        if (worstModel) {
+          for (const tier of worstModel.worst_task_types) {
+            const recs = this.qualityTracker.getRecommendation(tier);
+            const best = recs[0];
+            if (best && best.model !== worstModel.model && best.score - worstModel.accept_rate > 0.2) {
+              qualityRecommendation = `Consider switching ${tier} tasks from ${worstModel.model} to ${best.model} (accept rate: ${(worstModel.accept_rate * 100).toFixed(0)}% → ${(best.score * 100).toFixed(0)}%)`;
+              break;
+            }
+          }
+        }
+
+        result.quality = {
+          models: allQuality,
+          recommendation: qualityRecommendation,
+        };
 
         return result;
       },
@@ -1574,6 +1706,218 @@ export class McpServer {
   }
 
   // --------------------------------------------------------------------------
+  // project_context — cross-session knowledge base
+  // --------------------------------------------------------------------------
+  private registerProjectContext(): void {
+    this.registerTool(
+      'project_context',
+      'Persistent cross-session knowledge base. Compounds conventions, patterns, decisions, and error resolutions over time. Entries gain confidence with repeated observation and stale entries are pruned automatically.',
+      async (args: Record<string, unknown>) => {
+        const action = (args.action as string) || 'read';
+        const ctx = this.projectContextManager;
+
+        switch (action) {
+          case 'read': {
+            const type = args.type as 'convention' | 'pattern' | 'decision' | 'error' | undefined;
+            const entries = ctx.query(type);
+            return { action: 'read', type: type || 'all', entries };
+          }
+
+          case 'observe': {
+            const type = args.type as 'convention' | 'pattern' | 'decision' | 'error';
+            if (!type) {
+              throw new McpToolError('project_context', 'type is required for observe action');
+            }
+            const data: Record<string, unknown> = {};
+            if (args.description) data.description = args.description;
+            if (args.category) data.category = args.category;
+            if (args.examples) data.examples = args.examples;
+            if (args.rationale) data.rationale = args.rationale;
+            if (args.error_pattern) data.error_pattern = args.error_pattern;
+            if (args.resolution) data.resolution = args.resolution;
+            if (args.files) data.files = args.files;
+            if (args.name) data.name = args.name;
+            ctx.observe(type, data);
+            await ctx.save();
+            return { action: 'observe', type, message: 'Entry observed and saved.' };
+          }
+
+          case 'format': {
+            return { action: 'format', content: ctx.formatForPrompt() };
+          }
+
+          case 'pin': {
+            const id = args.id as string;
+            if (!id) throw new McpToolError('project_context', 'id is required for pin action');
+            const found = ctx.pin(id);
+            if (found) await ctx.save();
+            return { action: 'pin', id, found };
+          }
+
+          case 'unpin': {
+            const id = args.id as string;
+            if (!id) throw new McpToolError('project_context', 'id is required for unpin action');
+            const found = ctx.unpin(id);
+            if (found) await ctx.save();
+            return { action: 'unpin', id, found };
+          }
+
+          case 'remove': {
+            const id = args.id as string;
+            if (!id) throw new McpToolError('project_context', 'id is required for remove action');
+            const removed = ctx.remove(id);
+            if (removed) await ctx.save();
+            return { action: 'remove', id, removed };
+          }
+
+          case 'prune': {
+            const count = ctx.prune();
+            if (count > 0) await ctx.save();
+            return { action: 'prune', removed: count };
+          }
+
+          case 'reset': {
+            ctx.reset();
+            await ctx.save();
+            return { action: 'reset', message: 'All entries cleared. Project metadata preserved.' };
+          }
+
+          default:
+            throw new McpToolError('project_context', `Unknown action: ${action}. Use: read, observe, format, pin, unpin, remove, prune, reset`);
+        }
+      },
+      {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['read', 'observe', 'format', 'pin', 'unpin', 'remove', 'prune', 'reset'],
+            description: 'Action to perform on the project knowledge base',
+          },
+          type: {
+            type: 'string',
+            enum: ['convention', 'pattern', 'decision', 'error'],
+            description: 'Entry type (required for observe, optional filter for read)',
+          },
+          id: {
+            type: 'string',
+            description: 'Entry ID (required for pin, unpin, remove)',
+          },
+          description: {
+            type: 'string',
+            description: 'Description of the convention, pattern, or decision (for observe)',
+          },
+          category: {
+            type: 'string',
+            description: 'Convention category: naming, file-structure, import-style, test-pattern, etc. (for observe type=convention)',
+          },
+          examples: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Example strings demonstrating the convention (for observe type=convention)',
+          },
+          name: {
+            type: 'string',
+            description: 'Pattern name (for observe type=pattern)',
+          },
+          files: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'File paths where this pattern appears (for observe type=pattern)',
+          },
+          rationale: {
+            type: 'string',
+            description: 'Reasoning behind the decision (for observe type=decision)',
+          },
+          error_pattern: {
+            type: 'string',
+            description: 'What the error looks like (for observe type=error)',
+          },
+          resolution: {
+            type: 'string',
+            description: 'How the error was fixed (for observe type=error)',
+          },
+        },
+        required: ['action'],
+      }
+    );
+  }
+
+  // --------------------------------------------------------------------------
+  // quality_signal — record quality feedback for a model response
+  // --------------------------------------------------------------------------
+  private registerQualitySignal(): void {
+    this.registerTool(
+      'quality_signal',
+      'Record quality feedback for a model response. Call after each agent response with accept/retry/reject/manual_fix to help Roland learn which models work best for your codebase.',
+      async (args: Record<string, unknown>) => {
+        const model = args.model as string;
+        const signal = args.signal as 'accept' | 'retry' | 'reject' | 'manual_fix';
+
+        if (!model) {
+          throw new McpToolError('quality_signal', 'model is required');
+        }
+        if (!signal || !['accept', 'retry', 'reject', 'manual_fix'].includes(signal)) {
+          throw new McpToolError('quality_signal', 'signal must be one of: accept, retry, reject, manual_fix');
+        }
+
+        const provider = (args.provider as string) || 'openrouter';
+        const task_type = (args.task_type as string) || 'unknown';
+        const complexity_tier = (args.complexity_tier as string) || 'unknown';
+        const retry_model = args.retry_model as string | undefined;
+
+        await this.qualityTracker.recordSignal(
+          model,
+          provider,
+          task_type,
+          complexity_tier,
+          signal,
+          retry_model
+        );
+
+        const quality = this.qualityTracker.getModelQuality(model);
+        return {
+          recorded: true,
+          model,
+          signal,
+          quality,
+        };
+      },
+      {
+        type: 'object',
+        properties: {
+          model: {
+            type: 'string',
+            description: 'The model that generated the response',
+          },
+          signal: {
+            type: 'string',
+            enum: ['accept', 'retry', 'reject', 'manual_fix'],
+            description: 'Quality signal for the response',
+          },
+          provider: {
+            type: 'string',
+            description: 'Provider for the model (default: openrouter)',
+          },
+          task_type: {
+            type: 'string',
+            description: 'Complexity tier or task category',
+          },
+          complexity_tier: {
+            type: 'string',
+            description: 'Complexity tier: local, simple, medium, complex',
+          },
+          retry_model: {
+            type: 'string',
+            description: 'If signal is retry, which model was used instead',
+          },
+        },
+        required: ['model', 'signal'],
+      }
+    );
+  }
+
+  // --------------------------------------------------------------------------
   // Parse a loaded Recipe into the session manager's ParsedRecipe format
   // --------------------------------------------------------------------------
   private parseRecipeForSession(recipeData: any): ParsedRecipe {
@@ -1986,6 +2330,24 @@ export class McpServer {
           }
         }
 
+        // Broadcast diff event to any connected VS Code extension clients
+        try {
+          const diffServer = getDiffStreamServer();
+          if (diffServer && diffServer.getClientCount() > 0) {
+            const { randomUUID } = await import('crypto');
+            diffServer.broadcastDiff({
+              type: 'diff:new',
+              id: randomUUID(),
+              file: filename !== 'file' ? filename : undefined,
+              original,
+              modified,
+              timestamp: Date.now(),
+            });
+          }
+        } catch {
+          // Non-fatal — WebSocket broadcast failure should not affect tool result
+        }
+
         return {
           filename,
           stats: {
@@ -2044,6 +2406,14 @@ export class McpServer {
       await this.server.connect(transport);
       logger.success('✅ MCP Server connected and ready');
       logger.info(`📦 Tools: ${this.getTools().join(', ')}`);
+
+      // Start the diff stream WebSocket server
+      const diffStreamPort = this.config.diff_stream?.port ?? 8089;
+      const diffStreamEnabled = this.config.diff_stream?.enabled !== false;
+      if (diffStreamEnabled) {
+        const diffServer = initDiffStreamServer(diffStreamPort);
+        diffServer.start();
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new McpServerError(`Failed to start MCP server: ${message}`);
@@ -2146,6 +2516,9 @@ export class McpServer {
   async stop(): Promise<void> {
     try {
       logger.info('🛑 Stopping MCP Server...');
+      // Stop the diff stream WebSocket server
+      const diffServer = getDiffStreamServer();
+      if (diffServer) diffServer.stop();
       await this.server.close();
       logger.success('✅ MCP Server stopped');
     } catch (error) {

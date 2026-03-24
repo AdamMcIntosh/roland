@@ -156,16 +156,37 @@ Run `npm run init -- /path/to/your/project` to set up any project with Roland, o
 ### Prerequisites
 - **Node.js** >= 18.0.0
 
-### Install & Build
+### One-Command Setup
 
 ```bash
-git clone https://github.com/yourusername/roland.git
+npx roland-setup
+```
+
+This single command will:
+1. Check your environment (Node.js version, Goose)
+2. Prompt for your [OpenRouter API key](https://openrouter.ai/) and validate it
+3. Clone Roland into `~/.roland/roland/` (or `git pull` if it already exists)
+4. Build Roland (`npm install && npm run build`)
+5. Initialise the current directory with agent configs and MCP settings
+6. Save your API key to `~/.roland/config.yaml`
+
+**Verify**: Ask your IDE agent to "Use the health_check tool" — you should get `status: healthy`.
+
+### Manual Setup
+
+<details>
+<summary>Click to expand manual setup steps</summary>
+
+#### Install & Build
+
+```bash
+git clone https://github.com/AdamMcIntosh/roland.git
 cd roland
 npm install
 npm run build
 ```
 
-### Use in Any Project
+#### Use in Any Project
 
 After building, run the init command to set up Roland in your target project:
 
@@ -184,24 +205,23 @@ This copies all agent personas, recipe configs, MCP server config, and the auto-
 
 See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions (includes global Cursor config option).
 
+</details>
+
 ### Use with Goose
 
 ```bash
 # 1. Install Goose: https://block.github.io/goose/
-# 2. Build Roland
-cd roland && npm install && npm run build
+# 2. Run one-command setup (handles clone + build + init)
+npx roland-setup
 
-# 3. Add Roland extension to your Goose config (~/.config/goose/config.yaml)
-#    See goose/config.yaml for a complete template
-
-# 4. Start a Goose session
+# 3. Start a Goose session
 goose session
 
-# 5. Prompt normally — Roland auto-routes to the best model + persona
+# 4. Prompt normally — Roland auto-routes to the best model + persona
 > Build a REST API for managing tasks with authentication
 
-# 6. Run a Goose recipe
-goose run --recipe goose/recipes/roland-plan-exec-rev-ex.yaml --task "Build a todo app"
+# 5. Run a Goose recipe
+goose run --recipe ~/.roland/roland/goose/recipes/roland-plan-exec-rev-ex.yaml --task "Build a todo app"
 ```
 
 ### Roland Code Orchestrator (RCO)
@@ -237,15 +257,6 @@ npm run test:run                          # Full test suite
 ```
 
 **Optional Puppeteer-based Claude simulation** (headless browser mock): set `RCO_USE_PUPPETEER=1` before running RCO so the agent worker loads a local HTML mock page instead of an inline mock. Requires `puppeteer` installed.
-
-#### RCO Claude plugin (Phase 2)
-
-RCO can run as a **Claude plugin** with slash commands (e.g. `/rco-run:recipe PlanExecRevEx --task "..."`).
-
-- **Build plugin bundle:** `npm run build-plugin` → outputs `dist-plugin/plugin.js`.
-- **Manifest:** `plugin/manifest.json` defines commands (`rco-run:recipe`, `rco-run:mode`, `rco-new-agent`, `rco-status`, `rco-export`) and permissions.
-- **Custom agent creation:** Use `/rco-new-agent` with a prompt (e.g. "Create agent for testing") to generate a YAML template and save it to `agents/custom-<name>.yaml`. The next RCO run will load agents from disk and include the new file (auto-reload).
-- **Install via Claude marketplace simulation:** Package the `plugin/` folder and `dist-plugin/plugin.js` into a zip. In Claude Desktop or claude.ai, use the plugin installation flow and point to the manifest (or sideload the bundle). For local development, run the orchestrator via Node: `node dist-plugin/plugin.js` is not a standalone CLI — use the plugin entry from your Claude environment’s plugin loader, or run recipes with `npm run rco` as before.
 
 **Verbose profiling:** Orchestrator uses `console.time`/`timeEnd` when `RCO_VERBOSE` is not `0` or `false`. Worker timeout and retries are configurable via orchestrator options (default 60s timeout, 2 retries).
 
@@ -285,7 +296,7 @@ The benchmark runs three sample tasks (e.g. "Build todo app", "CLI tool", "Bug f
 - **Execution modes**: `autonomous-loop` (conditional looping, max 5 iterations), `parallel-swarm` (concurrent forks + file locking), `linear`, **adaptive-swarm** (scale steps by task complexity), **collab-mode** (pause for real-time user feedback via dashboard WebSocket).
 - **Tools/skills**: Stub tools (`search`, `code`, `terminal`) plus **dependency-mapper** (DOT graph for handoffs).
 - **Eco mode**, **task_routing**, **state** (`.rco-state.json`), **Cursor export** (session → `.cursor/rules` + MCP JSON).
-- **Phase 2:** Claude tool-calling prompts (JSON response parsing), session persistence (notepad prompts + local JSON fallback), dynamic Cursor rules from agent outputs, Zod validation for prompts/state/outputs, VS Code extension stub for importing RCO sessions.
+- **Session persistence** (notepad prompts + local JSON fallback), dynamic Cursor rules from agent outputs, Zod validation for prompts/state/outputs.
 
 ---
 
@@ -346,8 +357,7 @@ npm run qa              # RCO QA: one scenario (todo-app), mock workers
 npm run qa:all           # RCO QA: all scenarios; timings vs baseline benchmarks
 npm test                 # Run tests (watch)
 npm run test:run         # Run tests once
-npm run test:rco         # RCO tests only (orchestrator, loadConfig, stateLock, tools, Phase 2)
-npm run build-plugin    # Bundle RCO plugin for Claude (esbuild → dist-plugin/plugin.js)
+npm run test:rco         # RCO tests only (orchestrator, loadConfig, stateLock, tools)
 npm run serve-dashboard # Serve dashboard-ui on port 8081
 npm run benchmark       # RCO benchmark: sample tasks vs simulated baseline
 npm run lint             # Lint check

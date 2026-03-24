@@ -6,10 +6,25 @@
  * the model. No server-side LLM calls are made.
  */
 
+import http from 'http';
 import { getConfig } from '../config/config-loader.js';
 import { ModelSelection, RoutingContext } from '../utils/types.js';
 import { RoutingError } from '../utils/errors.js';
 import { ComplexityClassifier } from './complexity-classifier.js';
+import { getGlobalQualityTracker } from './quality-tracker.js';
+
+// ============================================================================
+// Ollama health check cache (module-level, shared across all ModelRouter calls)
+// ============================================================================
+
+interface OllamaHealthCache {
+  available: boolean;
+  models: string[];
+  timestamp: number;
+}
+
+let _ollamaHealthCache: OllamaHealthCache | null = null;
+const OLLAMA_CACHE_TTL_MS = 60_000; // 60 seconds
 
 /**
  * Estimated cost per million tokens for common IDE models.
@@ -45,6 +60,54 @@ export class ModelRouter {
   }
 
   /**
+   * Check Ollama availability. Caches result for 60 seconds.
+   * Uses Node's built-in http module (Ollama is always localhost HTTP).
+   */
+  static checkOllamaHealth(baseUrl: string): Promise<{ available: boolean; models: string[] }> {
+    // Return cached result if fresh
+    if (
+      _ollamaHealthCache &&
+      Date.now() - _ollamaHealthCache.timestamp < OLLAMA_CACHE_TTL_MS
+    ) {
+      return Promise.resolve({
+        available: _ollamaHealthCache.available,
+        models: _ollamaHealthCache.models,
+      });
+    }
+
+    return new Promise((resolve) => {
+      const url = new URL('/api/tags', baseUrl);
+      const req = http.get(
+        { hostname: url.hostname, port: url.port || 11434, path: url.pathname, timeout: 2000 },
+        (res) => {
+          let body = '';
+          res.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+          res.on('end', () => {
+            try {
+              const parsed = JSON.parse(body) as { models?: Array<{ name: string }> };
+              const models = (parsed.models || []).map((m) => m.name);
+              _ollamaHealthCache = { available: true, models, timestamp: Date.now() };
+              resolve({ available: true, models });
+            } catch {
+              _ollamaHealthCache = { available: false, models: [], timestamp: Date.now() };
+              resolve({ available: false, models: [] });
+            }
+          });
+        }
+      );
+      req.on('error', () => {
+        _ollamaHealthCache = { available: false, models: [], timestamp: Date.now() };
+        resolve({ available: false, models: [] });
+      });
+      req.on('timeout', () => {
+        req.destroy();
+        _ollamaHealthCache = { available: false, models: [], timestamp: Date.now() };
+        resolve({ available: false, models: [] });
+      });
+    });
+  }
+
+  /**
    * Route query based on automatic complexity detection.
    * Returns recommended model + alternatives from config.
    */
@@ -53,9 +116,18 @@ export class ModelRouter {
   ): { selected: ModelSelection; fallbacks: ModelSelection[]; analysis: ReturnType<typeof ComplexityClassifier.getDetailedAnalysis> } {
     const analysis = ComplexityClassifier.getDetailedAnalysis(query);
 
+    // If local tier, check if Ollama is enabled and available (sync fallback)
+    let complexity = analysis.complexity;
+    if (complexity === 'local') {
+      const config = getConfig();
+      if (!config?.ollama?.enabled) {
+        complexity = (config?.ollama?.fallback_to ?? 'simple') as typeof complexity;
+      }
+    }
+
     const context: RoutingContext = {
       queryLength: query.length,
-      complexity: analysis.complexity,
+      complexity,
     };
 
     const routing = this.selectModelWithFallback(context);
@@ -68,6 +140,7 @@ export class ModelRouter {
 
   /**
    * Select primary model + fallbacks for a complexity tier.
+   * When tier is `local`, falls back if Ollama is disabled in config.
    */
   static selectModelWithFallback(
     context: RoutingContext,
@@ -77,21 +150,55 @@ export class ModelRouter {
       throw new RoutingError('Configuration not loaded. Call loadConfig() first.');
     }
 
-    const complexity = context.complexity || 'simple';
+    let complexity = context.complexity || 'simple';
+
+    // Local tier: fall back if Ollama not enabled
+    if (complexity === 'local' && !config.ollama?.enabled) {
+      complexity = (config.ollama?.fallback_to ?? 'simple') as typeof complexity;
+    }
+
     const models = config.routing[complexity as keyof typeof config.routing];
 
     if (!models || models.length === 0) {
       throw new RoutingError(`No models configured for complexity level: ${complexity}`);
     }
 
+    const isLocalTier = complexity === 'local';
+    const provider: 'local' | 'openrouter' | 'cursor' = isLocalTier ? 'local' : 'openrouter';
+
     const selections: ModelSelection[] = models.map((model) => ({
       model,
-      tier: complexity as 'simple' | 'medium' | 'complex' | 'explain',
-      costPer1kTokens: this.estimateCostPer1k(model),
+      tier: complexity as 'local' | 'simple' | 'medium' | 'complex' | 'explain',
+      costPer1kTokens: isLocalTier ? 0 : this.estimateCostPer1k(model),
+      provider,
     }));
 
-    const selected = selections[0];
+    let selected = selections[0];
     const fallbacks = selections.slice(1);
+
+    // Quality adjustment: if selected model has < 50% accept rate for this tier
+    // AND there's an alternative with > 70% AND both have > 10 signals, swap.
+    const qualityTracker = getGlobalQualityTracker();
+    if (qualityTracker && !isLocalTier) {
+      const recommendations = qualityTracker.getRecommendation(complexity);
+      if (recommendations.length > 0) {
+        const selectedQuality = qualityTracker.getModelQuality(selected.model);
+        const sq = Array.isArray(selectedQuality) ? null : selectedQuality;
+        if (sq && sq.total_tasks > 10 && sq.accept_rate < 0.5) {
+          const best = recommendations[0];
+          if (best.model !== selected.model && best.score > 0.7) {
+            // Swap to the better-quality model
+            selected = {
+              model: best.model,
+              tier: selected.tier,
+              costPer1kTokens: this.estimateCostPer1k(best.model),
+              provider,
+              quality_adjusted: true,
+            };
+          }
+        }
+      }
+    }
 
     return { selected, fallbacks };
   }
@@ -100,7 +207,7 @@ export class ModelRouter {
    * Get all configured models for a complexity level.
    */
   static getModelsForComplexity(
-    complexity: 'simple' | 'medium' | 'explain' | 'complex'
+    complexity: 'local' | 'simple' | 'medium' | 'explain' | 'complex'
   ): string[] {
     const config = getConfig();
     if (!config) return [];

@@ -11,8 +11,6 @@
   "scripts": {
     "build": "tsc && node scripts/copy-assets.js",
     "build-npm": "npm run clean && tsc && node scripts/copy-assets.js",
-    "build-plugin": "node scripts/build-plugin.js",
-    "build-plugin-zip": "node scripts/build-plugin.js && node scripts/zip-plugin.js",
     "iterate": "node scripts/iterate.js",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
@@ -28,7 +26,7 @@
     "test:e2e": "vitest run tests/e2e",
     "qa": "npx tsx scripts/qa-scenarios.ts",
     "qa:all": "npx tsx scripts/qa-scenarios.ts --all",
-    "clean": "rimraf dist dist-plugin",
+    "clean": "rimraf dist",
     "rco": "node dist/rco/cli.js",
     "rco:dev": "npx tsx src/rco/cli.ts",
     "serve-dashboard": "node scripts/serve-dashboard.js",

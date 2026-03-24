@@ -31,6 +31,66 @@ In autonomous mode, steps share a named Goose session (`--session roland-<id>`) 
 
 ## Available Recipes
 
+### Solo Recipes
+
+Lean, fast recipes optimised for solo developers. Fewer agents, less ceremony, preferred by triage when their trigger keywords match.
+
+#### QuickShip
+**3-Agent Ship Loop**
+Plan, implement with tests inline, QA and auto-commit — all in one pass.
+
+| Step | Agent | Role |
+|------|-------|------|
+| 1 | Planner | Brief actionable breakdown — no architecture deep-dive |
+| 2 | Executor | Implement feature + write tests inline |
+| 3 | QA | Run tests, verify, auto-commit if passing |
+
+Settings: `auto_commit: true`, `max_loops: 2`, `require_tests: true`
+Triggers: `ship`, `implement`, `build`, `add feature`
+
+#### Spike
+**2-Agent Feasibility Spike**
+Explore the problem space, then prototype — no tests required.
+
+| Step | Agent | Role |
+|------|-------|------|
+| 1 | Explorer | Investigate feasibility, find relevant code, recommend approach |
+| 2 | Executor | Prototype implementation |
+
+Settings: `require_tests: false`, `max_loops: 1`
+Triggers: `spike`, `prototype`, `explore`, `try`, `experiment`
+
+#### Refactor
+**3-Agent Refactor Loop**
+Analyse coverage, refactor with existing tests as safety net, verify no behavior change.
+
+| Step | Agent | Role |
+|------|-------|------|
+| 1 | Analyst | Identify what to change, check test coverage |
+| 2 | Executor | Refactor using existing test suite as safety net |
+| 3 | QA | Run full suite, diff review, verify behavior unchanged |
+
+Settings: `require_tests: true`, `max_loops: 3`, `require_no_behavior_change: true`
+Triggers: `refactor`, `clean up`, `restructure`, `reorganize`
+
+#### Debug
+**2-Agent Debug Loop**
+Reproduce and isolate root cause, then apply fix with regression test.
+
+| Step | Agent | Role |
+|------|-------|------|
+| 1 | Researcher | Reproduce, isolate root cause, identify fix location |
+| 2 | Executor | Apply fix + add regression test |
+
+Settings: `require_tests: true`, `max_loops: 2`
+Triggers: `debug`, `fix bug`, `broken`, `failing`, `error`, `crash`
+
+---
+
+### Enterprise Recipes
+
+Full multi-agent pipelines for larger, team-scale work.
+
 ### PlanExecRevEx
 **4-Agent Coding Team**
 Autonomous loop: plan → execute → review → explain.

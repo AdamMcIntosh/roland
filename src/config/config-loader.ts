@@ -21,10 +21,18 @@ import { logger } from '../utils/logger.js';
 // ============================================================================
 
 const RoutingConfigSchema = z.object({
+  local: z.array(z.string()).default(['codellama:7b']),
   simple: z.array(z.string()).min(1),
   medium: z.array(z.string()).min(1),
   complex: z.array(z.string()).min(1),
   explain: z.array(z.string()).min(1),
+});
+
+const OllamaConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  base_url: z.string().default('http://localhost:11434'),
+  model: z.string().default('codellama:7b'),
+  fallback_to: z.string().default('simple'),
 });
 
 const SessionDefaultsSchema = z.object({
@@ -46,10 +54,25 @@ const GooseConfigSchema = z.object({
   budget_degradation_threshold: z.number().min(0).max(1).default(0.8),
 });
 
+const ClassifierConfigSchema = z.object({
+  semantic_enabled: z.boolean().default(true),
+  semantic_model: z.string().default('qwen/qwen3-coder:free'),
+  semantic_timeout_ms: z.number().min(100).default(3000),
+  cache_ttl_ms: z.number().min(0).default(300000),
+});
+
+const DiffStreamConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  port: z.number().min(1024).max(65535).default(8089),
+});
+
 const AppConfigSchema = z.object({
   routing: RoutingConfigSchema,
   roland: SessionConfigSchema,
   goose: GooseConfigSchema.optional(),
+  ollama: OllamaConfigSchema.optional(),
+  classifier: ClassifierConfigSchema.optional(),
+  diff_stream: DiffStreamConfigSchema.optional(),
 });
 
 // ============================================================================
@@ -207,7 +230,7 @@ export class ConfigLoader {
   /**
    * Get a specific model from routing configuration
    */
-  static getModel(config: AppConfig, complexity: 'simple' | 'medium' | 'complex' | 'explain'): string {
+  static getModel(config: AppConfig, complexity: 'local' | 'simple' | 'medium' | 'complex' | 'explain'): string {
     const models = config.routing[complexity];
     if (!models || models.length === 0) {
       throw new ConfigError(`No models configured for complexity: ${complexity}`);
@@ -218,7 +241,7 @@ export class ConfigLoader {
   /**
    * Get all available models for a complexity level
    */
-  static getModels(config: AppConfig, complexity: 'simple' | 'medium' | 'complex' | 'explain'): string[] {
+  static getModels(config: AppConfig, complexity: 'local' | 'simple' | 'medium' | 'complex' | 'explain'): string[] {
     const models = config.routing[complexity];
     if (!models) {
       return [];

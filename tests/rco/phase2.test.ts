@@ -7,12 +7,6 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import {
-  parseRunRecipeArgs,
-  handlePluginCommand,
-  runRecipeFromPlugin,
-  RCO_PLUGIN_COMMANDS,
-} from '../../src/plugin.js';
-import {
   buildNotepadStorePrompt,
   buildNotepadRetrievePrompt,
   parseNotepadResponse,
@@ -28,49 +22,6 @@ import type { RcoState } from '../../src/rco/types.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '../..');
-
-describe('RCO Phase 2: Plugin', () => {
-  it('RCO_PLUGIN_COMMANDS includes rco-run:recipe', () => {
-    const names = RCO_PLUGIN_COMMANDS.map((c) => c.name);
-    expect(names).toContain('rco-run:recipe');
-    expect(names).toContain('rco-status');
-    expect(names).toContain('rco-export');
-  });
-
-  it('parseRunRecipeArgs parses recipe and task', () => {
-    const out = parseRunRecipeArgs(['PlanExecRevEx', '--task', 'Build a CLI']);
-    expect(out.recipe).toBe('PlanExecRevEx');
-    expect(out.task).toBe('Build a CLI');
-  });
-
-  it('parseRunRecipeArgs accepts --no-export', () => {
-    const out = parseRunRecipeArgs(['PlanExecRevEx', '--task', 'Task', '--no-export']);
-    expect(out.options?.noExport).toBe(true);
-  });
-
-  it('handlePluginCommand returns text for rco-status', async () => {
-    const text = await handlePluginCommand('rco-status', []);
-    expect(text).toContain('RCO status');
-  });
-
-  it('handlePluginCommand returns text for unknown command', async () => {
-    const text = await handlePluginCommand('unknown-cmd', []);
-    expect(text).toContain('Unknown RCO command');
-  });
-
-  it('runRecipeFromPlugin runs PlanExecRevEx and returns result', async () => {
-    const result = await runRecipeFromPlugin([
-      'PlanExecRevEx',
-      '--task',
-      'Short test task',
-      '--no-export',
-    ]);
-    expect(result.success).toBe(true);
-    expect(result.sessionId).toMatch(/^rco-/);
-    expect(result.steps).toBeGreaterThan(0);
-    expect(result.synthesizedOutput).toContain('Planner');
-  }, 25000);
-});
 
 describe('RCO Phase 2: Schemas', () => {
   it('parseClaudeResponseText extracts JSON output', () => {

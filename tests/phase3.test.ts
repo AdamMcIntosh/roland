@@ -1,6 +1,6 @@
 /**
  * Phase 3 tests: new modes (adaptive-swarm), skills (eco-optimizer, graph-visualizer),
- * customization (rco-new-agent), and dashboard metrics/CSV data shape.
+ * and dashboard metrics/CSV data shape.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -15,11 +15,6 @@ import {
   ECO_MODELS,
 } from '../src/skills.js';
 import { runTool } from '../src/rco/tools.js';
-import {
-  parseRunModeArgs,
-  generateAndSaveCustomAgent,
-  RCO_PLUGIN_COMMANDS,
-} from '../src/plugin.js';
 import type { RcoState } from '../src/rco/types.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -120,49 +115,6 @@ describe('Phase 3: skills', () => {
     expect(out).toContain('digraph');
     expect(out).toContain('A');
     expect(out).toContain('B');
-  });
-});
-
-describe('Phase 3: customization (rco-new-agent)', () => {
-  const tmpAgents = path.join(projectRoot, 'tmp-phase3-agents');
-
-  afterEach(() => {
-    if (fs.existsSync(tmpAgents)) {
-      fs.rmSync(tmpAgents, { recursive: true, force: true });
-    }
-  });
-
-  it('generateAndSaveCustomAgent creates YAML file with slug name', () => {
-    const { path: filePath, name } = generateAndSaveCustomAgent(
-      'Create agent for testing',
-      tmpAgents
-    );
-    expect(name).toBe('testing');
-    expect(filePath).toContain('custom-testing.yaml');
-    expect(fs.existsSync(filePath)).toBe(true);
-    const content = fs.readFileSync(filePath, 'utf-8');
-    expect(content).toContain('name: testing');
-    expect(content).toContain('role_prompt: Create agent for testing');
-    expect(content).toContain('claude_model');
-    expect(content).toContain('search');
-  });
-});
-
-describe('Phase 3: plugin run mode', () => {
-  it('parseRunModeArgs parses mode and task', () => {
-    const r1 = parseRunModeArgs(['adaptive-swarm', '--task', 'Build todo']);
-    expect(r1.mode).toBe('adaptive-swarm');
-    expect(r1.task).toBe('Build todo');
-
-    const r2 = parseRunModeArgs(['--task', 'Fix bug', 'collab-mode']);
-    expect(r2.mode).toBe('collab-mode');
-    expect(r2.task).toBe('Fix bug');
-  });
-
-  it('RCO_PLUGIN_COMMANDS includes rco-run:mode and rco-new-agent', () => {
-    const names = RCO_PLUGIN_COMMANDS.map((c) => c.name);
-    expect(names).toContain('rco-run:mode');
-    expect(names).toContain('rco-new-agent');
   });
 });
 

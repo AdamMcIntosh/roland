@@ -13,6 +13,7 @@
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../utils/logger.js';
+import { ProjectContextManager } from './project-context.js';
 
 // ============================================================================
 // Types
@@ -75,9 +76,18 @@ export interface SessionContext {
 export class SessionContextManager {
   private static readonly SESSION_DIR = '.cache/sessions';
   private sessions: Map<string, SessionContext> = new Map();
+  private projectContext: ProjectContextManager | null = null;
 
   constructor() {
     this.loadAllSessions();
+  }
+
+  /**
+   * Wire in a ProjectContextManager so session observations compound into
+   * the cross-session knowledge base.
+   */
+  setProjectContext(ctx: ProjectContextManager): void {
+    this.projectContext = ctx;
   }
 
   /**
@@ -206,6 +216,10 @@ export class SessionContextManager {
         step: session.current_step,
         timestamp: now,
       });
+      this.projectContext?.observe('decision', {
+        description: updates.decision,
+        rationale: '',
+      });
     }
 
     if (updates.file_change) {
@@ -235,6 +249,11 @@ export class SessionContextManager {
       } else {
         session.patterns.push({ ...updates.pattern, timestamp: now });
       }
+      this.projectContext?.observe('pattern', {
+        name: updates.pattern.name,
+        description: updates.pattern.description,
+        files: updates.pattern.example_file ? [updates.pattern.example_file] : [],
+      });
     }
 
     if (updates.migration) {
@@ -258,6 +277,10 @@ export class SessionContextManager {
         step: session.current_step,
         timestamp: now,
       });
+      this.projectContext?.observe('error', {
+        error_pattern: updates.error_resolved.error,
+        resolution: updates.error_resolved.resolution,
+      });
     }
 
     if (updates.note) {
@@ -277,6 +300,15 @@ export class SessionContextManager {
     if (!session) return '';
 
     const parts: string[] = [];
+
+    // Prepend cross-session project knowledge if available
+    if (this.projectContext) {
+      const projectBlock = this.projectContext.formatForPrompt();
+      if (projectBlock) {
+        parts.push(projectBlock);
+        parts.push('');
+      }
+    }
 
     parts.push(`## Session Context`);
     parts.push(`Task: ${session.task}`);

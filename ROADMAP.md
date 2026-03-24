@@ -1,6 +1,6 @@
 # Roland Roadmap
 
-> Last updated: 2026-03-23
+> Last updated: 2026-03-24
 
 ---
 
@@ -8,10 +8,10 @@
 
 ### v0.1 (current) — Beta release
 
-- [x] Packaging: npm, plugin zip
+- [x] Packaging: npm
 - [x] Install script (curl), GitHub release workflow
 - [x] Blog post and docs, issue templates, GitHub Discussions
-- [x] Opt-in telemetry (Sentry), consent via `/rco-consent:yes`
+- [x] Opt-in telemetry (Sentry)
 - [x] Beta program guide, sync stub (Git remotes planned)
 - [x] `npm run iterate` for version bump and changelog
 
@@ -83,8 +83,8 @@
 
 ## Gap Tracking vs Claude Code
 
-> Current estimate: Roland + Goose covers ~75% of Claude Code for coding agent use cases.
-> For terminal/CI workflows (e.g. VB6 migration): ~90% coverage.
+> Roland + Goose covers the core coding agent workflows with different strengths than Claude Code:
+> multi-model routing, cost control, recipe workflows, and CI/headless execution.
 
 ### What Roland + Goose Does Better
 
@@ -97,52 +97,24 @@
 | Portability | Runs anywhere Goose runs: CI, cron, headless servers | IDE-bound |
 | Budget enforcement | Daily/monthly caps, per-query limits | None |
 
-### Remaining Gaps
+### Closed Gaps
 
-#### 1. No streaming output
-**Priority:** High | **Effort:** Low (~2h)
-Goose's `spawnSync` blocks until the session finishes — no output visible during long runs.
-**Fix:** Switch `spawnSync` → `spawn` with stdout piped line-by-line in `src/utils/goose-runner.ts`.
+| Gap | Fixed In | How |
+|-----|----------|-----|
+| Streaming output | v0.1.2 | `spawn` with piped stdout/stderr in `goose-runner.ts` |
+| Git-native tools | v0.1.3 | `git_status`, `git_diff`, `git_log`, `git_commit` MCP tools |
+| Permission gating | v0.1.3 | Docker sandboxing + `.roland-permissions.json` policy |
+| Session continuity | v0.1.3 | Named Goose sessions + `SessionContextManager` |
+| Inline diff UI | v0.1.4 | `roland-diff` VS Code extension with Apply/Discard |
+| Sub-agent context | v0.1.5 | `ProjectContextManager` persists knowledge to disk across sessions — shared memory not needed |
+| Semantic routing | v0.1.5 | Free OpenRouter model classifies complexity semantically, keyword heuristic as fallback |
+| Streaming diffs | v0.1.5 | WebSocket bridge (`DiffStreamServer`) pushes diffs to VS Code extension in real-time |
 
-#### 2. No git-native integration
-**Priority:** Medium | **Effort:** Medium (~3h)
-Roland has no MCP tools that reason about git state (staged files, blame, commit history).
-**Fix:** New `git_tools` module — `git_status`, `git_diff`, `git_log`, `git_commit` wrappers.
+### Future Enhancements
 
-#### 3. Permission gating is coarser
-**Priority:** Medium | **Effort:** Medium (~4h)
-`GOOSE_MODE=auto` suppresses all confirmations. No per-tool allow/deny policy.
-**Fix:** Roland middleware that intercepts Goose tool calls and applies a configurable policy.
-
-#### 4. Session continuity across invocations
-**Priority:** Medium | **Effort:** Low (~1h)
-Each `goose run --no-session` starts fresh. Conversation history is lost between sessions.
-**Fix:** Named Goose sessions (`goose run --session <name>`) + Roland appending decisions to `roland-context.json` at session end.
-
-#### 5. Sub-agent spawning is process-level
-**Priority:** Low | **Effort:** High
-`run_goose_task` spawns a new process — no shared in-memory context between sub-sessions.
-**Fix:** Long-running Goose session manager or shared state protocol. Disk-based `roland-context.json` is a reasonable substitute for most tasks.
-
-#### 6. Open file / editor awareness
-**Priority:** Low for CLI | **Effort:** High (requires extension)
-Goose only knows the filesystem — no awareness of which file is open or cursor position.
-**Fix:** VS Code extension exposing active editor context as an MCP tool.
-
-#### 7. Inline diff UI (accept/reject in editor)
-**Priority:** Low for CLI | **Effort:** High (requires extension)
-`preview_changes` generates correct diffs but no IDE widget to surface them as actionable UI.
-**Fix:** VS Code or Cursor extension. Not fixable at the CLI/MCP layer.
-
-### Quick Wins (ranked by impact/effort)
-
-| # | Gap | Effort | Impact |
-|---|---|---|---|
-| 1 | Streaming output (`spawn` instead of `spawnSync`) | Low (~2h) | High |
-| 2 | Git-native MCP tools (`git_status`, `git_diff`, `git_commit`) | Medium (~3h) | Medium |
-| 3 | Permission gating middleware | Medium (~4h) | Medium |
-| 4 | Named session continuity via `--session` | Low (~1h) | Medium |
-| 5 | Inline diff UI | High (VS Code extension) | Low for CLI users |
+#### Editor awareness
+**Priority:** Low | **Status:** Nice-to-have
+Goose doesn't know which file is open or where the cursor is. The `roland-diff` VS Code extension could expose `vscode.window.activeTextEditor` context via the WebSocket bridge as an MCP tool. Low priority — solo devs typically specify file context in their prompts, and this mainly benefits pair-programming UX patterns.
 
 ---
 

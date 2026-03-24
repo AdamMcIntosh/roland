@@ -7,10 +7,18 @@
 // ============================================================================
 
 export interface RoutingConfig {
+  local: string[];
   simple: string[];
   medium: string[];
   complex: string[];
   explain: string[];
+}
+
+export interface OllamaConfig {
+  enabled: boolean;
+  base_url: string;
+  model: string;
+  fallback_to: string;
 }
 
 export interface SessionDefaults {
@@ -32,10 +40,25 @@ export interface GooseConfig {
   budget_degradation_threshold: number;
 }
 
+export interface ClassifierConfig {
+  semantic_enabled?: boolean;
+  semantic_model?: string;
+  semantic_timeout_ms?: number;
+  cache_ttl_ms?: number;
+}
+
+export interface DiffStreamConfig {
+  enabled: boolean;
+  port: number;
+}
+
 export interface AppConfig {
   routing: RoutingConfig;
   roland: SessionConfig;
   goose?: GooseConfig;
+  ollama?: OllamaConfig;
+  classifier?: ClassifierConfig;
+  diff_stream?: DiffStreamConfig;
   configPath?: string;
 }
 
@@ -126,13 +149,15 @@ export interface McpResponse {
 
 export interface ModelSelection {
   model: string;
-  tier: 'simple' | 'medium' | 'complex' | 'explain';
+  tier: 'local' | 'simple' | 'medium' | 'complex' | 'explain';
   costPer1kTokens: number;
+  provider?: 'local' | 'openrouter' | 'cursor';
+  quality_adjusted?: boolean;
 }
 
 export interface RoutingContext {
   queryLength: number;
-  complexity: 'simple' | 'medium' | 'complex';
+  complexity: 'local' | 'simple' | 'medium' | 'complex';
   keywords?: string[];
   forceModel?: string;
 }

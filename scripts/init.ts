@@ -240,6 +240,40 @@ function main() {
     console.log(`   ⏭️  .roland-permissions.json already exists — skipping`);
   }
 
+  // ── Step 7: Scaffold .roland/ directory + project-context.json ───────────
+  const rolandDir = path.join(targetDir, '.roland');
+  if (!fs.existsSync(rolandDir)) {
+    fs.mkdirSync(rolandDir, { recursive: true });
+  }
+  const projectContextPath = path.join(rolandDir, 'project-context.json');
+  if (!fs.existsSync(projectContextPath)) {
+    const defaultContext = {
+      version: '1.0',
+      project: {
+        name: path.basename(targetDir),
+      },
+      conventions: [],
+      patterns: [],
+      decisions: [],
+      errors: [],
+      last_updated: new Date().toISOString(),
+    };
+    fs.writeFileSync(projectContextPath, JSON.stringify(defaultContext, null, 2), 'utf-8');
+    console.log(`   ✅ Created .roland/project-context.json`);
+  } else {
+    console.log(`   ⏭️  .roland/project-context.json already exists — skipping`);
+  }
+
+  const modelQualityPath = path.join(rolandDir, 'model-quality.json');
+  if (!fs.existsSync(modelQualityPath)) {
+    fs.writeFileSync(modelQualityPath, '[]', 'utf-8');
+    console.log(`   ✅ Created .roland/model-quality.json`);
+  } else {
+    console.log(`   ⏭️  .roland/model-quality.json already exists — skipping`);
+  }
+
+  console.log(`   💡 Consider adding .roland/ to your .gitignore`);
+
   console.log(`\n🎉 Roland is ready in ${targetDir}`);
   console.log(`\nNext steps:`);
   console.log(`  1. Open ${targetDir} in Cursor or VS Code`);

@@ -1,6 +1,6 @@
 /**
  * Phase 4: Opt-in telemetry via Sentry (errors and sessions).
- * Initialized only when user has consented (e.g. /rco-consent:yes).
+ * Initialized only when user has consented.
  * DSN is a placeholder; set SENTRY_DSN or RCO_SENTRY_DSN for real reporting.
  */
 
@@ -37,7 +37,7 @@ export function hasConsent(scope: 'user' | 'project' = 'user'): boolean {
   }
 }
 
-/** Persist consent (e.g. after /rco-consent:yes). */
+/** Persist consent. */
 export function setConsent(scope: 'user' | 'project' = 'user'): void {
   const p = getConsentPath(scope);
   fs.writeFileSync(p, JSON.stringify({ consent: true }, null, 2), 'utf-8');

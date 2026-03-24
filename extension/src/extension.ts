@@ -1,9 +1,12 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import WebSocket from 'ws';
 
 const PENDING_DIR = '.omc/pending-changes';
 const RECIPE_RUNS_DIR = '.omc/recipe-runs';
+const DIFF_STREAM_PORT = 8089;
+const RECONNECT_INTERVAL_MS = 5000;
 
 /** Tracks which pending file maps to which original file */
 interface PendingChange {
@@ -12,10 +15,71 @@ interface PendingChange {
   relativeName: string;
 }
 
+/** A streamed diff received via WebSocket */
+interface StreamedDiff {
+  id: string;
+  file: string;
+  original: string;
+  modified: string;
+}
+
+interface DiffEvent {
+  type: 'diff:new' | 'diff:chunk' | 'diff:complete' | 'diff:discard';
+  id: string;
+  file?: string;
+  original?: string;
+  modified?: string;
+  chunk?: string;
+  timestamp: number;
+}
+
 let watcher: vscode.FileSystemWatcher | undefined;
 let recipeWatcher: vscode.FileSystemWatcher | undefined;
 let statusBarItem: vscode.StatusBarItem;
 const activeDiffs = new Map<string, PendingChange>();
+
+// ---------------------------------------------------------------------------
+// WebSocket client state
+// ---------------------------------------------------------------------------
+
+let wsClient: WebSocket | undefined;
+let wsReconnectTimer: NodeJS.Timeout | undefined;
+let wsConnected = false;
+/** Active streamed diffs by id — for discard support */
+const streamedDiffs = new Map<string, StreamedDiff>();
+let extensionContext: vscode.ExtensionContext;
+
+// ---------------------------------------------------------------------------
+// Virtual document provider for roland-diff: URIs
+// ---------------------------------------------------------------------------
+
+const SCHEME = 'roland-diff';
+
+class RolandDiffContentProvider implements vscode.TextDocumentContentProvider {
+  private readonly contents = new Map<string, string>();
+  private readonly emitter = new vscode.EventEmitter<vscode.Uri>();
+  readonly onDidChange = this.emitter.event;
+
+  setContent(uri: vscode.Uri, content: string): void {
+    this.contents.set(uri.toString(), content);
+    this.emitter.fire(uri);
+  }
+
+  provideTextDocumentContent(uri: vscode.Uri): string {
+    return this.contents.get(uri.toString()) ?? '';
+  }
+
+  dispose(): void {
+    this.emitter.dispose();
+  }
+}
+
+let diffContentProvider: RolandDiffContentProvider;
+
+function makeVirtualUri(id: string, side: 'original' | 'modified', filename: string): vscode.Uri {
+  const ext = path.extname(filename) || '';
+  return vscode.Uri.parse(`${SCHEME}://${side}/${id}${ext}`);
+}
 
 // ---------------------------------------------------------------------------
 // Preview panel state
@@ -233,11 +297,169 @@ export function showPreview(filePath: string, context: vscode.ExtensionContext) 
   previewPanel.webview.html = getWebviewHtml(previewPanel, content, recipeName, timestamp);
 }
 
+// ---------------------------------------------------------------------------
+// WebSocket client — real-time diff streaming
+// ---------------------------------------------------------------------------
+
+function connectDiffStream(workspaceRoot: string): void {
+  if (wsClient) return; // already connecting or connected
+
+  try {
+    const ws = new WebSocket(`ws://localhost:${DIFF_STREAM_PORT}`);
+    wsClient = ws;
+
+    ws.on('open', () => {
+      wsConnected = true;
+      // Clear any pending reconnect
+      if (wsReconnectTimer) {
+        clearTimeout(wsReconnectTimer);
+        wsReconnectTimer = undefined;
+      }
+    });
+
+    ws.on('message', (raw: WebSocket.RawData) => {
+      try {
+        const event = JSON.parse(raw.toString()) as DiffEvent;
+        handleDiffEvent(event, workspaceRoot);
+      } catch {
+        // Ignore invalid JSON
+      }
+    });
+
+    ws.on('close', () => {
+      wsConnected = false;
+      wsClient = undefined;
+      scheduleReconnect(workspaceRoot);
+    });
+
+    ws.on('error', () => {
+      // Errors are followed by close, so let close handler schedule reconnect
+      wsConnected = false;
+    });
+  } catch {
+    wsClient = undefined;
+    scheduleReconnect(workspaceRoot);
+  }
+}
+
+function scheduleReconnect(workspaceRoot: string): void {
+  if (wsReconnectTimer) return;
+  wsReconnectTimer = setTimeout(() => {
+    wsReconnectTimer = undefined;
+    connectDiffStream(workspaceRoot);
+  }, RECONNECT_INTERVAL_MS);
+}
+
+function disconnectDiffStream(): void {
+  if (wsReconnectTimer) {
+    clearTimeout(wsReconnectTimer);
+    wsReconnectTimer = undefined;
+  }
+  if (wsClient) {
+    wsClient.removeAllListeners();
+    wsClient.terminate();
+    wsClient = undefined;
+  }
+  wsConnected = false;
+}
+
+function handleDiffEvent(event: DiffEvent, workspaceRoot: string): void {
+  switch (event.type) {
+    case 'diff:new':
+      handleDiffNew(event, workspaceRoot);
+      break;
+    case 'diff:complete':
+      refreshStatusBar(path.join(workspaceRoot, PENDING_DIR));
+      break;
+    case 'diff:discard':
+      handleDiffDiscard(event);
+      break;
+    default:
+      break;
+  }
+}
+
+function handleDiffNew(event: DiffEvent, workspaceRoot: string): void {
+  const { id, file, original, modified } = event;
+  if (!file || original === undefined || modified === undefined) return;
+
+  const filename = path.basename(file);
+  const originalUri = makeVirtualUri(id, 'original', filename);
+  const modifiedUri = makeVirtualUri(id, 'modified', filename);
+
+  diffContentProvider.setContent(originalUri, original);
+  diffContentProvider.setContent(modifiedUri, modified);
+
+  const streamedDiff: StreamedDiff = { id, file, original, modified };
+  streamedDiffs.set(id, streamedDiff);
+
+  const relativeFile = path.isAbsolute(file) ? path.relative(workspaceRoot, file) : file;
+  const title = `${relativeFile} — Roland proposed change`;
+
+  vscode.commands.executeCommand('vscode.diff', originalUri, modifiedUri, title);
+
+  vscode.window.showInformationMessage(
+    `Roland proposes changes to ${relativeFile}`,
+    'Apply',
+    'Discard',
+  ).then(choice => {
+    if (choice === 'Apply') applyStreamedChange(streamedDiff, workspaceRoot);
+    else if (choice === 'Discard') discardStreamedChange(id);
+  });
+}
+
+function handleDiffDiscard(event: DiffEvent): void {
+  const { id } = event;
+  streamedDiffs.delete(id);
+  // Close diff tabs for this id by closing matching editors
+  for (const group of vscode.window.tabGroups.all) {
+    for (const tab of group.tabs) {
+      const input = tab.input;
+      if (input instanceof vscode.TabInputTextDiff) {
+        const orig = input.original.toString();
+        const mod = input.modified.toString();
+        if (orig.includes(id) || mod.includes(id)) {
+          vscode.window.tabGroups.close(tab);
+        }
+      }
+    }
+  }
+}
+
+function applyStreamedChange(diff: StreamedDiff, workspaceRoot: string): void {
+  try {
+    const absolutePath = path.isAbsolute(diff.file)
+      ? diff.file
+      : path.join(workspaceRoot, diff.file);
+    fs.writeFileSync(absolutePath, diff.modified, 'utf-8');
+    streamedDiffs.delete(diff.id);
+    vscode.window.showInformationMessage(`Applied changes to ${path.basename(diff.file)}`);
+  } catch (err) {
+    vscode.window.showErrorMessage(`Failed to apply change: ${err}`);
+  }
+}
+
+function discardStreamedChange(id: string): void {
+  streamedDiffs.delete(id);
+  vscode.window.showInformationMessage('Discarded Roland proposed change.');
+}
+
+// ---------------------------------------------------------------------------
+// Activate
+// ---------------------------------------------------------------------------
+
 export function activate(context: vscode.ExtensionContext) {
+  extensionContext = context;
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!workspaceRoot) return;
 
   const pendingDir = path.join(workspaceRoot, PENDING_DIR);
+
+  // Register virtual document provider
+  diffContentProvider = new RolandDiffContentProvider();
+  context.subscriptions.push(
+    vscode.workspace.registerTextDocumentContentProvider(SCHEME, diffContentProvider),
+  );
 
   // Ensure pending-changes dir exists
   fs.mkdirSync(pendingDir, { recursive: true });
@@ -248,13 +470,16 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(statusBarItem);
   refreshStatusBar(pendingDir);
 
-  // Watch for new pending changes
+  // Watch for new pending changes (file-watcher fallback)
   const pattern = new vscode.RelativePattern(workspaceRoot, `${PENDING_DIR}/**`);
   watcher = vscode.workspace.createFileSystemWatcher(pattern);
 
   watcher.onDidCreate(uri => {
     if (uri.fsPath.endsWith('.json')) {
-      onPendingChangeCreated(uri, workspaceRoot);
+      // Only use file-watcher if WebSocket is not connected
+      if (!wsConnected) {
+        onPendingChangeCreated(uri, workspaceRoot);
+      }
     }
   });
 
@@ -303,6 +528,9 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Load any existing pending changes
   loadExistingPending(pendingDir, workspaceRoot);
+
+  // Connect to diff stream WebSocket server (non-blocking, falls back gracefully)
+  connectDiffStream(workspaceRoot);
 }
 
 export function deactivate() {
@@ -310,10 +538,11 @@ export function deactivate() {
   recipeWatcher?.dispose();
   statusBarItem?.dispose();
   previewPanel?.dispose();
+  disconnectDiffStream();
 }
 
 // ---------------------------------------------------------------------------
-// Core logic
+// Core logic (file-watcher path)
 // ---------------------------------------------------------------------------
 
 interface PendingManifest {
@@ -453,7 +682,7 @@ async function showPendingPicker(workspaceRoot: string) {
 }
 
 function refreshStatusBar(pendingDir: string) {
-  const count = activeDiffs.size;
+  const count = activeDiffs.size + streamedDiffs.size;
   if (count === 0) {
     statusBarItem.hide();
   } else {
@@ -502,6 +731,18 @@ function applyCurrentChange(workspaceRoot: string) {
   if (change) {
     applyChange(change, workspaceRoot);
   } else {
+    // Check if the active editor is a streamed diff
+    const editor = vscode.window.activeTextEditor;
+    if (editor && editor.document.uri.scheme === SCHEME) {
+      const uriStr = editor.document.uri.toString();
+      for (const [id, diff] of streamedDiffs) {
+        const modUri = makeVirtualUri(id, 'modified', path.basename(diff.file)).toString();
+        if (uriStr === modUri) {
+          applyStreamedChange(diff, workspaceRoot);
+          return;
+        }
+      }
+    }
     vscode.window.showWarningMessage('No pending Roland change for this file.');
   }
 }
@@ -511,6 +752,19 @@ function discardCurrentChange(workspaceRoot: string) {
   if (change) {
     discardChange(change, workspaceRoot);
   } else {
+    // Check if the active editor is a streamed diff
+    const editor = vscode.window.activeTextEditor;
+    if (editor && editor.document.uri.scheme === SCHEME) {
+      const uriStr = editor.document.uri.toString();
+      for (const [id] of streamedDiffs) {
+        const diff = streamedDiffs.get(id)!;
+        const modUri = makeVirtualUri(id, 'modified', path.basename(diff.file)).toString();
+        if (uriStr === modUri) {
+          discardStreamedChange(id);
+          return;
+        }
+      }
+    }
     vscode.window.showWarningMessage('No pending Roland change for this file.');
   }
 }

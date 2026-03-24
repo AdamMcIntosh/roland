@@ -1,6 +1,6 @@
 /**
  * Query Complexity Classifier
- * 
+ *
  * Analyzes queries to determine complexity and required model tier
  * Uses multiple heuristics:
  * - Token count estimation
@@ -10,8 +10,160 @@
  * - Domain-specific complexity
  */
 
+import https from 'https';
+import { AppConfig } from '../utils/types.js';
+import { logger } from '../utils/logger.js';
+
+// Module-level cache for semantic classification results
+const semanticCache = new Map<string, { result: ComplexityAnalysis; timestamp: number }>();
+
+const VALID_TIERS = new Set(['local', 'simple', 'medium', 'complex']);
+
+const SEMANTIC_SYSTEM_PROMPT = `Classify the coding task complexity. Respond with ONLY one word: local, simple, medium, or complex.
+
+local: trivial fix — typo, rename, add/remove import, fix comma, formatting
+simple: clear single-file task, obvious approach
+medium: multi-file changes, some ambiguity, needs project context
+complex: architecture, security, multi-step reasoning, system design`;
+
+/**
+ * Make a POST request using Node's built-in https module.
+ * Returns the response body as a string, or rejects on error/timeout.
+ */
+function httpsPost(
+  url: string,
+  body: string,
+  headers: Record<string, string>,
+  timeoutMs: number
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const urlObj = new URL(url);
+    const options = {
+      hostname: urlObj.hostname,
+      path: urlObj.pathname + urlObj.search,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        ...headers,
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk: Buffer) => chunks.push(chunk));
+      res.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+      res.on('error', reject);
+    });
+
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error(`Request timed out after ${timeoutMs}ms`));
+    });
+
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+/**
+ * Call OpenRouter with a free model to semantically classify query complexity.
+ * Returns a ComplexityAnalysis if successful, or null on any failure.
+ */
+export async function semanticClassify(
+  query: string,
+  config?: AppConfig
+): Promise<ComplexityAnalysis | null> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return null;
+
+  const classifierCfg = config?.classifier;
+  const enabled = classifierCfg?.semantic_enabled ?? true;
+  if (!enabled) return null;
+
+  const freeModel = classifierCfg?.semantic_model ?? 'qwen/qwen3-coder:free';
+  const timeoutMs = classifierCfg?.semantic_timeout_ms ?? 3000;
+  const cacheTtlMs = classifierCfg?.cache_ttl_ms ?? 300000;
+
+  // Cache lookup — use first 200 chars as key
+  const cacheKey = query.slice(0, 200);
+  const cached = semanticCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < cacheTtlMs) {
+    return cached.result;
+  }
+
+  try {
+    const postData = JSON.stringify({
+      model: freeModel,
+      messages: [
+        { role: 'system', content: SEMANTIC_SYSTEM_PROMPT },
+        { role: 'user', content: query },
+      ],
+      max_tokens: 10,
+      temperature: 0,
+    });
+
+    const responseText = await httpsPost(
+      'https://openrouter.ai/api/v1/chat/completions',
+      postData,
+      {
+        Authorization: `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://github.com/AdamMcIntosh/roland',
+        'X-Title': 'Roland MCP',
+      },
+      timeoutMs
+    );
+
+    const json = JSON.parse(responseText) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+
+    const rawContent = json.choices?.[0]?.message?.content ?? '';
+    const tier = rawContent.toLowerCase().trim().split(/\s/)[0];
+
+    if (!VALID_TIERS.has(tier)) {
+      logger.info(`[Classifier] semantic returned invalid tier "${tier}", falling back to heuristic`);
+      return null;
+    }
+
+    const complexity = tier as 'local' | 'simple' | 'medium' | 'complex';
+    const result: ComplexityAnalysis = {
+      complexity,
+      score: 0, // Semantic classifier doesn't produce a numeric score
+      factors: [{ name: 'Semantic Classification', weight: 100, detected: true }],
+      tokenEstimate: Math.ceil(query.length / 4),
+      suggestedModel: ComplexityClassifier['suggestModel'](complexity, 0),
+    };
+
+    semanticCache.set(cacheKey, { result, timestamp: Date.now() });
+    return result;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.info(`[Classifier] semantic error: ${msg}, falling back to heuristic`);
+    return null;
+  }
+}
+
+/**
+ * Async entry point that tries semantic classification first,
+ * then falls back to the keyword heuristic.
+ */
+export async function classifyWithSemantic(
+  query: string,
+  config?: AppConfig
+): Promise<ComplexityAnalysis> {
+  const semantic = await semanticClassify(query, config);
+  if (semantic) {
+    logger.info(`[Classifier] semantic: ${semantic.complexity}`);
+    return semantic;
+  }
+  const heuristic = ComplexityClassifier.getDetailedAnalysis(query);
+  logger.info(`[Classifier] heuristic fallback: ${heuristic.complexity}`);
+  return heuristic;
+}
+
 export interface ComplexityAnalysis {
-  complexity: 'simple' | 'medium' | 'complex';
+  complexity: 'local' | 'simple' | 'medium' | 'complex';
   score: number; // 0-100 complexity score
   factors: ComplexityFactor[];
   tokenEstimate: number;
@@ -50,6 +202,22 @@ export class ComplexityClassifier {
     'concurrent': 10,
     'asynchronous': 8,
   };
+
+  /**
+   * Trivial task keywords — reduce score toward local tier
+   */
+  private static readonly TRIVIAL_KEYWORDS = [
+    'rename',
+    'typo',
+    'fix import',
+    'add comma',
+    'remove unused',
+    'fix typo',
+    'spelling',
+    'whitespace',
+    'formatting',
+    'lint',
+  ];
 
   /**
    * Multi-step task indicators
@@ -109,8 +277,13 @@ export class ComplexityClassifier {
     factors.push(technicalFactor);
     score += technicalFactor.weight * (technicalFactor.detected ? 1 : 0);
 
+    // Factor 7: Trivial task detection (reduces score)
+    const trivialFactor = this.analyzeTrivialTask(query);
+    factors.push(trivialFactor);
+    score += trivialFactor.weight * (trivialFactor.detected ? 1 : 0); // weight is negative
+
     // Normalize score to 0-100
-    const normalizedScore = Math.min(100, Math.round((score / 100) * 100));
+    const normalizedScore = Math.min(100, Math.max(0, Math.round((score / 100) * 100)));
 
     // Determine complexity level from score
     const complexity = this.scoreToComplexity(normalizedScore);
@@ -299,11 +472,30 @@ export class ComplexityClassifier {
   }
 
   /**
+   * Detect trivial tasks that can be handled by a local model.
+   * Returns a negative weight to push score toward the local tier.
+   */
+  private static analyzeTrivialTask(query: string): ComplexityFactor {
+    const lower = query.toLowerCase().trim();
+    const isTrivialKeyword = this.TRIVIAL_KEYWORDS.some((kw) => lower.includes(kw));
+    const isShort = query.length < 80;
+
+    const detected = isTrivialKeyword && isShort;
+
+    return {
+      name: 'Trivial Task',
+      weight: detected ? -20 : 0,
+      detected,
+    };
+  }
+
+  /**
    * Convert complexity score to level
    */
   private static scoreToComplexity(
     score: number
-  ): 'simple' | 'medium' | 'complex' {
+  ): 'local' | 'simple' | 'medium' | 'complex' {
+    if (score < 15) return 'local';
     if (score < 30) return 'simple';
     if (score < 70) return 'medium';
     return 'complex';
@@ -321,11 +513,14 @@ export class ComplexityClassifier {
    * Suggest best IDE model for query complexity
    */
   private static suggestModel(
-    complexity: 'simple' | 'medium' | 'complex',
+    complexity: 'local' | 'simple' | 'medium' | 'complex',
     score: number
   ): string {
     // Map to IDE model recommendations (Cursor / VS Code compatible)
     const suggestions: Record<string, string[]> = {
+      local: [
+        'codellama:7b',         // Local Ollama model — zero cost
+      ],
       simple: [
         'cursor-small',         // Fast, cheap — typo fixes, renames
         'gpt-4o-mini',          // Good fallback
@@ -352,7 +547,7 @@ export class ComplexityClassifier {
    */
   static getRoutingTier(
     query: string
-  ): 'simple' | 'medium' | 'complex' | 'explain' {
+  ): 'local' | 'simple' | 'medium' | 'complex' | 'explain' {
     const analysis = this.analyzeQuery(query);
     return analysis.complexity;
   }
@@ -370,8 +565,8 @@ export class ComplexityClassifier {
  */
 export function classifyQueryComplexity(
   query: string
-): 'simple' | 'medium' | 'complex' {
+): 'local' | 'simple' | 'medium' | 'complex' {
   const tier = ComplexityClassifier.getRoutingTier(query);
   // Map 'explain' to 'complex' for consistency with routing
-  return tier === 'explain' ? 'complex' : (tier as 'simple' | 'medium' | 'complex');
+  return tier === 'explain' ? 'complex' : (tier as 'local' | 'simple' | 'medium' | 'complex');
 }
