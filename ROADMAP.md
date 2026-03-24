@@ -1,6 +1,6 @@
 # Roland Roadmap
 
-> Last updated: 2026-03-23
+> Last updated: 2026-03-24
 
 ---
 
@@ -83,8 +83,8 @@
 
 ## Gap Tracking vs Claude Code
 
-> Current estimate: Roland + Goose covers ~75% of Claude Code for coding agent use cases.
-> For terminal/CI workflows (e.g. VB6 migration): ~90% coverage.
+> Roland + Goose covers the core coding agent workflows with different strengths than Claude Code:
+> multi-model routing, cost control, recipe workflows, and CI/headless execution.
 
 ### What Roland + Goose Does Better
 
@@ -106,18 +106,15 @@
 | Permission gating | v0.1.3 | Docker sandboxing + `.roland-permissions.json` policy |
 | Session continuity | v0.1.3 | Named Goose sessions + `SessionContextManager` |
 | Inline diff UI | v0.1.4 | `roland-diff` VS Code extension with Apply/Discard |
+| Sub-agent context | v0.1.5 | `ProjectContextManager` persists knowledge to disk across sessions — shared memory not needed |
+| Semantic routing | v0.1.5 | Free OpenRouter model classifies complexity semantically, keyword heuristic as fallback |
+| Streaming diffs | v0.1.5 | WebSocket bridge (`DiffStreamServer`) pushes diffs to VS Code extension in real-time |
 
-### Remaining Gaps
+### Future Enhancements
 
-#### 1. Sub-agent spawning is process-level
-**Priority:** Low | **Effort:** High
-`run_goose_task` spawns a new process — no shared in-memory context between sub-sessions.
-Disk-based `roland-context.json` and the new `ProjectContextManager` are reasonable substitutes for most tasks.
-
-#### 2. Open file / editor awareness
-**Priority:** Low for CLI | **Effort:** High (requires extension)
-Goose only knows the filesystem — no awareness of which file is open or cursor position.
-**Fix:** VS Code extension exposing active editor context as an MCP tool.
+#### Editor awareness
+**Priority:** Low | **Status:** Nice-to-have
+Goose doesn't know which file is open or where the cursor is. The `roland-diff` VS Code extension could expose `vscode.window.activeTextEditor` context via the WebSocket bridge as an MCP tool. Low priority — solo devs typically specify file context in their prompts, and this mainly benefits pair-programming UX patterns.
 
 ---
 
