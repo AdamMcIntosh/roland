@@ -49,6 +49,7 @@ import {
 } from '../utils/migration-context.js';
 import { SessionContextManager } from './session-context.js';
 import { ProjectContextManager } from './project-context.js';
+import { QualityTracker, initializeQualityTracker } from '../orchestrator/quality-tracker.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -173,6 +174,7 @@ export class McpServer {
   private recipeSessionManager: RecipeSessionManager;
   private sessionContextManager: SessionContextManager;
   private projectContextManager: ProjectContextManager;
+  private qualityTracker: QualityTracker;
   private recipesDir: string;
 
   constructor(config: AppConfig) {
@@ -197,6 +199,9 @@ export class McpServer {
     const projectRoot = process.env.ROLAND_PROJECT_ROOT || process.cwd();
     this.projectContextManager = new ProjectContextManager(projectRoot);
     this.sessionContextManager.setProjectContext(this.projectContextManager);
+
+    // Initialize quality tracker (model A/B quality signals, persisted to .roland/)
+    this.qualityTracker = initializeQualityTracker(projectRoot);
 
     // Initialize budget manager with config from config.yaml
     BudgetManager.initialize();
@@ -248,6 +253,7 @@ export class McpServer {
     this.registerRunGooseTask();
     this.registerSessionContext();
     this.registerProjectContext();
+    this.registerQualitySignal();
     this.registerGitTools();
     this.registerAnalyzeScreenshot();
   }
@@ -1171,6 +1177,31 @@ export class McpServer {
           }));
         }
 
+        // Quality analytics
+        const allQuality = this.qualityTracker.getModelQuality() as import('../orchestrator/quality-tracker.js').ModelQuality[];
+        let qualityRecommendation: string | null = null;
+
+        // Find worst model with > 10 signals and best alternative in same tier
+        const worstModel = allQuality
+          .filter(q => q.total_tasks > 10)
+          .sort((a, b) => a.accept_rate - b.accept_rate)[0];
+
+        if (worstModel) {
+          for (const tier of worstModel.worst_task_types) {
+            const recs = this.qualityTracker.getRecommendation(tier);
+            const best = recs[0];
+            if (best && best.model !== worstModel.model && best.score - worstModel.accept_rate > 0.2) {
+              qualityRecommendation = `Consider switching ${tier} tasks from ${worstModel.model} to ${best.model} (accept rate: ${(worstModel.accept_rate * 100).toFixed(0)}% → ${(best.score * 100).toFixed(0)}%)`;
+              break;
+            }
+          }
+        }
+
+        result.quality = {
+          models: allQuality,
+          recommendation: qualityRecommendation,
+        };
+
         return result;
       },
       {
@@ -1797,6 +1828,80 @@ export class McpServer {
           },
         },
         required: ['action'],
+      }
+    );
+  }
+
+  // --------------------------------------------------------------------------
+  // quality_signal — record quality feedback for a model response
+  // --------------------------------------------------------------------------
+  private registerQualitySignal(): void {
+    this.registerTool(
+      'quality_signal',
+      'Record quality feedback for a model response. Call after each agent response with accept/retry/reject/manual_fix to help Roland learn which models work best for your codebase.',
+      async (args: Record<string, unknown>) => {
+        const model = args.model as string;
+        const signal = args.signal as 'accept' | 'retry' | 'reject' | 'manual_fix';
+
+        if (!model) {
+          throw new McpToolError('quality_signal', 'model is required');
+        }
+        if (!signal || !['accept', 'retry', 'reject', 'manual_fix'].includes(signal)) {
+          throw new McpToolError('quality_signal', 'signal must be one of: accept, retry, reject, manual_fix');
+        }
+
+        const provider = (args.provider as string) || 'openrouter';
+        const task_type = (args.task_type as string) || 'unknown';
+        const complexity_tier = (args.complexity_tier as string) || 'unknown';
+        const retry_model = args.retry_model as string | undefined;
+
+        await this.qualityTracker.recordSignal(
+          model,
+          provider,
+          task_type,
+          complexity_tier,
+          signal,
+          retry_model
+        );
+
+        const quality = this.qualityTracker.getModelQuality(model);
+        return {
+          recorded: true,
+          model,
+          signal,
+          quality,
+        };
+      },
+      {
+        type: 'object',
+        properties: {
+          model: {
+            type: 'string',
+            description: 'The model that generated the response',
+          },
+          signal: {
+            type: 'string',
+            enum: ['accept', 'retry', 'reject', 'manual_fix'],
+            description: 'Quality signal for the response',
+          },
+          provider: {
+            type: 'string',
+            description: 'Provider for the model (default: openrouter)',
+          },
+          task_type: {
+            type: 'string',
+            description: 'Complexity tier or task category',
+          },
+          complexity_tier: {
+            type: 'string',
+            description: 'Complexity tier: local, simple, medium, complex',
+          },
+          retry_model: {
+            type: 'string',
+            description: 'If signal is retry, which model was used instead',
+          },
+        },
+        required: ['model', 'signal'],
       }
     );
   }

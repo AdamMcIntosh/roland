@@ -11,6 +11,7 @@ import { getConfig } from '../config/config-loader.js';
 import { ModelSelection, RoutingContext } from '../utils/types.js';
 import { RoutingError } from '../utils/errors.js';
 import { ComplexityClassifier } from './complexity-classifier.js';
+import { getGlobalQualityTracker } from './quality-tracker.js';
 
 // ============================================================================
 // Ollama health check cache (module-level, shared across all ModelRouter calls)
@@ -172,8 +173,32 @@ export class ModelRouter {
       provider,
     }));
 
-    const selected = selections[0];
+    let selected = selections[0];
     const fallbacks = selections.slice(1);
+
+    // Quality adjustment: if selected model has < 50% accept rate for this tier
+    // AND there's an alternative with > 70% AND both have > 10 signals, swap.
+    const qualityTracker = getGlobalQualityTracker();
+    if (qualityTracker && !isLocalTier) {
+      const recommendations = qualityTracker.getRecommendation(complexity);
+      if (recommendations.length > 0) {
+        const selectedQuality = qualityTracker.getModelQuality(selected.model);
+        const sq = Array.isArray(selectedQuality) ? null : selectedQuality;
+        if (sq && sq.total_tasks > 10 && sq.accept_rate < 0.5) {
+          const best = recommendations[0];
+          if (best.model !== selected.model && best.score > 0.7) {
+            // Swap to the better-quality model
+            selected = {
+              model: best.model,
+              tier: selected.tier,
+              costPer1kTokens: this.estimateCostPer1k(best.model),
+              provider,
+              quality_adjusted: true,
+            };
+          }
+        }
+      }
+    }
 
     return { selected, fallbacks };
   }

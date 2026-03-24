@@ -138,6 +138,7 @@ export interface ModelSelection {
   tier: 'local' | 'simple' | 'medium' | 'complex' | 'explain';
   costPer1kTokens: number;
   provider?: 'local' | 'openrouter' | 'cursor';
+  quality_adjusted?: boolean;
 }
 
 export interface RoutingContext {

@@ -263,6 +263,15 @@ function main() {
   } else {
     console.log(`   ⏭️  .roland/project-context.json already exists — skipping`);
   }
+
+  const modelQualityPath = path.join(rolandDir, 'model-quality.json');
+  if (!fs.existsSync(modelQualityPath)) {
+    fs.writeFileSync(modelQualityPath, '[]', 'utf-8');
+    console.log(`   ✅ Created .roland/model-quality.json`);
+  } else {
+    console.log(`   ⏭️  .roland/model-quality.json already exists — skipping`);
+  }
+
   console.log(`   💡 Consider adding .roland/ to your .gitignore`);
 
   console.log(`\n🎉 Roland is ready in ${targetDir}`);
