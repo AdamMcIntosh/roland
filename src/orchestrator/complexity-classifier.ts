@@ -11,7 +11,7 @@
  */
 
 export interface ComplexityAnalysis {
-  complexity: 'simple' | 'medium' | 'complex';
+  complexity: 'local' | 'simple' | 'medium' | 'complex';
   score: number; // 0-100 complexity score
   factors: ComplexityFactor[];
   tokenEstimate: number;
@@ -50,6 +50,22 @@ export class ComplexityClassifier {
     'concurrent': 10,
     'asynchronous': 8,
   };
+
+  /**
+   * Trivial task keywords — reduce score toward local tier
+   */
+  private static readonly TRIVIAL_KEYWORDS = [
+    'rename',
+    'typo',
+    'fix import',
+    'add comma',
+    'remove unused',
+    'fix typo',
+    'spelling',
+    'whitespace',
+    'formatting',
+    'lint',
+  ];
 
   /**
    * Multi-step task indicators
@@ -109,8 +125,13 @@ export class ComplexityClassifier {
     factors.push(technicalFactor);
     score += technicalFactor.weight * (technicalFactor.detected ? 1 : 0);
 
+    // Factor 7: Trivial task detection (reduces score)
+    const trivialFactor = this.analyzeTrivialTask(query);
+    factors.push(trivialFactor);
+    score += trivialFactor.weight * (trivialFactor.detected ? 1 : 0); // weight is negative
+
     // Normalize score to 0-100
-    const normalizedScore = Math.min(100, Math.round((score / 100) * 100));
+    const normalizedScore = Math.min(100, Math.max(0, Math.round((score / 100) * 100)));
 
     // Determine complexity level from score
     const complexity = this.scoreToComplexity(normalizedScore);
@@ -299,11 +320,30 @@ export class ComplexityClassifier {
   }
 
   /**
+   * Detect trivial tasks that can be handled by a local model.
+   * Returns a negative weight to push score toward the local tier.
+   */
+  private static analyzeTrivialTask(query: string): ComplexityFactor {
+    const lower = query.toLowerCase().trim();
+    const isTrivialKeyword = this.TRIVIAL_KEYWORDS.some((kw) => lower.includes(kw));
+    const isShort = query.length < 80;
+
+    const detected = isTrivialKeyword && isShort;
+
+    return {
+      name: 'Trivial Task',
+      weight: detected ? -20 : 0,
+      detected,
+    };
+  }
+
+  /**
    * Convert complexity score to level
    */
   private static scoreToComplexity(
     score: number
-  ): 'simple' | 'medium' | 'complex' {
+  ): 'local' | 'simple' | 'medium' | 'complex' {
+    if (score < 15) return 'local';
     if (score < 30) return 'simple';
     if (score < 70) return 'medium';
     return 'complex';
@@ -321,11 +361,14 @@ export class ComplexityClassifier {
    * Suggest best IDE model for query complexity
    */
   private static suggestModel(
-    complexity: 'simple' | 'medium' | 'complex',
+    complexity: 'local' | 'simple' | 'medium' | 'complex',
     score: number
   ): string {
     // Map to IDE model recommendations (Cursor / VS Code compatible)
     const suggestions: Record<string, string[]> = {
+      local: [
+        'codellama:7b',         // Local Ollama model — zero cost
+      ],
       simple: [
         'cursor-small',         // Fast, cheap — typo fixes, renames
         'gpt-4o-mini',          // Good fallback
@@ -352,7 +395,7 @@ export class ComplexityClassifier {
    */
   static getRoutingTier(
     query: string
-  ): 'simple' | 'medium' | 'complex' | 'explain' {
+  ): 'local' | 'simple' | 'medium' | 'complex' | 'explain' {
     const analysis = this.analyzeQuery(query);
     return analysis.complexity;
   }
@@ -370,8 +413,8 @@ export class ComplexityClassifier {
  */
 export function classifyQueryComplexity(
   query: string
-): 'simple' | 'medium' | 'complex' {
+): 'local' | 'simple' | 'medium' | 'complex' {
   const tier = ComplexityClassifier.getRoutingTier(query);
   // Map 'explain' to 'complex' for consistency with routing
-  return tier === 'explain' ? 'complex' : (tier as 'simple' | 'medium' | 'complex');
+  return tier === 'explain' ? 'complex' : (tier as 'local' | 'simple' | 'medium' | 'complex');
 }

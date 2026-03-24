@@ -12,7 +12,15 @@
 #   Smart triage: complex tasks use Sonnet 4 subagent for code authoring
 #   Total estimate:                        → ~$50/mo at moderate usage
 
+ollama:
+  enabled: false                         # Set to true to enable local model routing
+  base_url: "http://localhost:11434"
+  model: "codellama:7b"
+  fallback_to: "simple"                  # Tier to use when Ollama is unavailable
+
 routing:
+  local:
+    - codellama:7b                       # Local Ollama model — zero cost
   simple:
     - google/gemini-2.5-flash            # Light tasks — fast, cheap
     - google/gemini-2.0-flash-exp:free   # Free fallback

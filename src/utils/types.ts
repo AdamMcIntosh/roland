@@ -7,10 +7,18 @@
 // ============================================================================
 
 export interface RoutingConfig {
+  local: string[];
   simple: string[];
   medium: string[];
   complex: string[];
   explain: string[];
+}
+
+export interface OllamaConfig {
+  enabled: boolean;
+  base_url: string;
+  model: string;
+  fallback_to: string;
 }
 
 export interface SessionDefaults {
@@ -36,6 +44,7 @@ export interface AppConfig {
   routing: RoutingConfig;
   roland: SessionConfig;
   goose?: GooseConfig;
+  ollama?: OllamaConfig;
   configPath?: string;
 }
 
@@ -126,13 +135,14 @@ export interface McpResponse {
 
 export interface ModelSelection {
   model: string;
-  tier: 'simple' | 'medium' | 'complex' | 'explain';
+  tier: 'local' | 'simple' | 'medium' | 'complex' | 'explain';
   costPer1kTokens: number;
+  provider?: 'local' | 'openrouter' | 'cursor';
 }
 
 export interface RoutingContext {
   queryLength: number;
-  complexity: 'simple' | 'medium' | 'complex';
+  complexity: 'local' | 'simple' | 'medium' | 'complex';
   keywords?: string[];
   forceModel?: string;
 }

@@ -21,10 +21,18 @@ import { logger } from '../utils/logger.js';
 // ============================================================================
 
 const RoutingConfigSchema = z.object({
+  local: z.array(z.string()).default(['codellama:7b']),
   simple: z.array(z.string()).min(1),
   medium: z.array(z.string()).min(1),
   complex: z.array(z.string()).min(1),
   explain: z.array(z.string()).min(1),
+});
+
+const OllamaConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  base_url: z.string().default('http://localhost:11434'),
+  model: z.string().default('codellama:7b'),
+  fallback_to: z.string().default('simple'),
 });
 
 const SessionDefaultsSchema = z.object({
@@ -50,6 +58,7 @@ const AppConfigSchema = z.object({
   routing: RoutingConfigSchema,
   roland: SessionConfigSchema,
   goose: GooseConfigSchema.optional(),
+  ollama: OllamaConfigSchema.optional(),
 });
 
 // ============================================================================
@@ -207,7 +216,7 @@ export class ConfigLoader {
   /**
    * Get a specific model from routing configuration
    */
-  static getModel(config: AppConfig, complexity: 'simple' | 'medium' | 'complex' | 'explain'): string {
+  static getModel(config: AppConfig, complexity: 'local' | 'simple' | 'medium' | 'complex' | 'explain'): string {
     const models = config.routing[complexity];
     if (!models || models.length === 0) {
       throw new ConfigError(`No models configured for complexity: ${complexity}`);
@@ -218,7 +227,7 @@ export class ConfigLoader {
   /**
    * Get all available models for a complexity level
    */
-  static getModels(config: AppConfig, complexity: 'simple' | 'medium' | 'complex' | 'explain'): string[] {
+  static getModels(config: AppConfig, complexity: 'local' | 'simple' | 'medium' | 'complex' | 'explain'): string[] {
     const models = config.routing[complexity];
     if (!models) {
       return [];

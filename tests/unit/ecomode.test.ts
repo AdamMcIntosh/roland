@@ -14,9 +14,9 @@ import { AdvancedCostTracker } from '../../src/orchestrator/advanced-cost-tracke
 import { loadConfig } from '../../src/config/config-loader.js';
 
 describe('Ecomode: Complexity Classification', () => {
-  it('should classify a short query as simple', () => {
+  it('should classify a short query as simple or local', () => {
     const result = ComplexityClassifier.analyzeQuery('fix a typo');
-    expect(result.complexity).toBe('simple');
+    expect(['local', 'simple']).toContain(result.complexity);
     expect(result.score).toBeLessThan(30);
   });
 
@@ -34,7 +34,7 @@ describe('Ecomode: Complexity Classification', () => {
     const result = ComplexityClassifier.analyzeQuery(
       'Refactor the user authentication module to use JWTs'
     );
-    expect(['simple', 'medium', 'complex']).toContain(result.complexity);
+    expect(['local', 'simple', 'medium', 'complex']).toContain(result.complexity);
   });
 
   it('should return a detailed analysis with factors', () => {

@@ -48,6 +48,7 @@ import {
   readRcoState,
 } from '../utils/migration-context.js';
 import { SessionContextManager } from './session-context.js';
+import { ProjectContextManager } from './project-context.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -171,6 +172,7 @@ export class McpServer {
   private costTracker: AdvancedCostTracker;
   private recipeSessionManager: RecipeSessionManager;
   private sessionContextManager: SessionContextManager;
+  private projectContextManager: ProjectContextManager;
   private recipesDir: string;
 
   constructor(config: AppConfig) {
@@ -190,6 +192,11 @@ export class McpServer {
 
     // Initialize session context manager (persistent memory for long sessions)
     this.sessionContextManager = new SessionContextManager();
+
+    // Initialize project context manager (cross-session knowledge base)
+    const projectRoot = process.env.ROLAND_PROJECT_ROOT || process.cwd();
+    this.projectContextManager = new ProjectContextManager(projectRoot);
+    this.sessionContextManager.setProjectContext(this.projectContextManager);
 
     // Initialize budget manager with config from config.yaml
     BudgetManager.initialize();
@@ -240,6 +247,7 @@ export class McpServer {
     this.registerUpdateMigrationContext();
     this.registerRunGooseTask();
     this.registerSessionContext();
+    this.registerProjectContext();
     this.registerGitTools();
     this.registerAnalyzeScreenshot();
   }
@@ -251,13 +259,29 @@ export class McpServer {
     this.registerTool(
       'health_check',
       'Check the health status of the Roland MCP server',
-      async () => ({
-        status: 'healthy',
-        version: '2.0.0',
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
-        tools: this.getTools(),
-      }),
+      async () => {
+        const result: Record<string, unknown> = {
+          status: 'healthy',
+          version: '2.0.0',
+          timestamp: new Date().toISOString(),
+          uptime: process.uptime(),
+          tools: this.getTools(),
+        };
+
+        // Include ollama section only when enabled in config
+        if (this.config.ollama?.enabled) {
+          const ollamaCfg = this.config.ollama;
+          const health = await ModelRouter.checkOllamaHealth(ollamaCfg.base_url);
+          result.ollama = {
+            enabled: true,
+            available: health.available,
+            base_url: ollamaCfg.base_url,
+            model: ollamaCfg.model,
+          };
+        }
+
+        return result;
+      },
       { type: 'object', properties: {}, required: [] }
     );
   }
@@ -588,13 +612,37 @@ export class McpServer {
           };
         }
 
-        // Mode suggestion (quick / standard / deep)
+        // Mode suggestion (quick / standard / deep / local)
         const modeMap: Record<string, string> = {
+          local: 'local',
           simple: 'quick',
           medium: 'standard',
           complex: 'deep',
         };
         recommendation.suggested_mode = modeMap[complexity.complexity] || 'standard';
+
+        // --- Local (Ollama) tier handling ---
+        if (complexity.complexity === 'local' && this.config.ollama?.enabled) {
+          const ollamaCfg = this.config.ollama;
+          const ollamaHealth = await ModelRouter.checkOllamaHealth(ollamaCfg.base_url);
+          if (ollamaHealth.available) {
+            recommendation.provider = 'local';
+            recommendation.ollama_model = ollamaCfg.model;
+            recommendation.ollama_base_url = ollamaCfg.base_url;
+            // Return early with local routing info — no openrouter model needed
+            recommendation.instructions = `This is a trivial task. Route to local Ollama model "${ollamaCfg.model}" at ${ollamaCfg.base_url}. $0 cost.`;
+            return recommendation;
+          } else {
+            // Ollama unavailable — fall back to configured tier
+            const fallbackTier = ollamaCfg.fallback_to || 'simple';
+            recommendation.provider = 'openrouter';
+            recommendation.ollama_fallback = true;
+            recommendation.ollama_fallback_reason = 'Ollama unavailable';
+            recommendation.ollama_fallback_tier = fallbackTier;
+            // Override complexity level for downstream model selection
+            (complexity as { complexity: string }).complexity = fallbackTier;
+          }
+        }
 
         // --- Goose dispatch fields ---
         const agentName = topAgent.score > 0 ? topAgent.name : 'executor';
@@ -1608,6 +1656,144 @@ export class McpServer {
           advance_step: {
             type: 'boolean',
             description: 'Increment the step counter (for update, default false)',
+          },
+        },
+        required: ['action'],
+      }
+    );
+  }
+
+  // --------------------------------------------------------------------------
+  // project_context — cross-session knowledge base
+  // --------------------------------------------------------------------------
+  private registerProjectContext(): void {
+    this.registerTool(
+      'project_context',
+      'Persistent cross-session knowledge base. Compounds conventions, patterns, decisions, and error resolutions over time. Entries gain confidence with repeated observation and stale entries are pruned automatically.',
+      async (args: Record<string, unknown>) => {
+        const action = (args.action as string) || 'read';
+        const ctx = this.projectContextManager;
+
+        switch (action) {
+          case 'read': {
+            const type = args.type as 'convention' | 'pattern' | 'decision' | 'error' | undefined;
+            const entries = ctx.query(type);
+            return { action: 'read', type: type || 'all', entries };
+          }
+
+          case 'observe': {
+            const type = args.type as 'convention' | 'pattern' | 'decision' | 'error';
+            if (!type) {
+              throw new McpToolError('project_context', 'type is required for observe action');
+            }
+            const data: Record<string, unknown> = {};
+            if (args.description) data.description = args.description;
+            if (args.category) data.category = args.category;
+            if (args.examples) data.examples = args.examples;
+            if (args.rationale) data.rationale = args.rationale;
+            if (args.error_pattern) data.error_pattern = args.error_pattern;
+            if (args.resolution) data.resolution = args.resolution;
+            if (args.files) data.files = args.files;
+            if (args.name) data.name = args.name;
+            ctx.observe(type, data);
+            await ctx.save();
+            return { action: 'observe', type, message: 'Entry observed and saved.' };
+          }
+
+          case 'format': {
+            return { action: 'format', content: ctx.formatForPrompt() };
+          }
+
+          case 'pin': {
+            const id = args.id as string;
+            if (!id) throw new McpToolError('project_context', 'id is required for pin action');
+            const found = ctx.pin(id);
+            if (found) await ctx.save();
+            return { action: 'pin', id, found };
+          }
+
+          case 'unpin': {
+            const id = args.id as string;
+            if (!id) throw new McpToolError('project_context', 'id is required for unpin action');
+            const found = ctx.unpin(id);
+            if (found) await ctx.save();
+            return { action: 'unpin', id, found };
+          }
+
+          case 'remove': {
+            const id = args.id as string;
+            if (!id) throw new McpToolError('project_context', 'id is required for remove action');
+            const removed = ctx.remove(id);
+            if (removed) await ctx.save();
+            return { action: 'remove', id, removed };
+          }
+
+          case 'prune': {
+            const count = ctx.prune();
+            if (count > 0) await ctx.save();
+            return { action: 'prune', removed: count };
+          }
+
+          case 'reset': {
+            ctx.reset();
+            await ctx.save();
+            return { action: 'reset', message: 'All entries cleared. Project metadata preserved.' };
+          }
+
+          default:
+            throw new McpToolError('project_context', `Unknown action: ${action}. Use: read, observe, format, pin, unpin, remove, prune, reset`);
+        }
+      },
+      {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['read', 'observe', 'format', 'pin', 'unpin', 'remove', 'prune', 'reset'],
+            description: 'Action to perform on the project knowledge base',
+          },
+          type: {
+            type: 'string',
+            enum: ['convention', 'pattern', 'decision', 'error'],
+            description: 'Entry type (required for observe, optional filter for read)',
+          },
+          id: {
+            type: 'string',
+            description: 'Entry ID (required for pin, unpin, remove)',
+          },
+          description: {
+            type: 'string',
+            description: 'Description of the convention, pattern, or decision (for observe)',
+          },
+          category: {
+            type: 'string',
+            description: 'Convention category: naming, file-structure, import-style, test-pattern, etc. (for observe type=convention)',
+          },
+          examples: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Example strings demonstrating the convention (for observe type=convention)',
+          },
+          name: {
+            type: 'string',
+            description: 'Pattern name (for observe type=pattern)',
+          },
+          files: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'File paths where this pattern appears (for observe type=pattern)',
+          },
+          rationale: {
+            type: 'string',
+            description: 'Reasoning behind the decision (for observe type=decision)',
+          },
+          error_pattern: {
+            type: 'string',
+            description: 'What the error looks like (for observe type=error)',
+          },
+          resolution: {
+            type: 'string',
+            description: 'How the error was fixed (for observe type=error)',
           },
         },
         required: ['action'],

@@ -14,6 +14,7 @@ function log(msg: string): void {
 
 /** Default Sonnet model id; Haiku for simple steps */
 export const ECO_MODELS = {
+  local: 'claude-3-haiku-20240307',
   simple: 'claude-3-haiku-20240307',
   medium: 'claude-3-5-sonnet-20241022',
   complex: 'claude-3-5-sonnet-20241022',

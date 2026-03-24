@@ -25,7 +25,7 @@ describe('Integration: Config → Router → Cost Pipeline', () => {
   it('should classify then route a simple query', () => {
     const query = 'rename this variable';
     const analysis = ComplexityClassifier.analyzeQuery(query);
-    expect(analysis.complexity).toBe('simple');
+    expect(['local', 'simple']).toContain(analysis.complexity);
 
     const result = ModelRouter.routeByComplexity(query);
     expect(result.selected.model).toBeDefined();
