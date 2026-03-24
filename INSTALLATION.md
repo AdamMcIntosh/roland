@@ -19,22 +19,45 @@ Setup guide for Roland as an MCP server integrated with VS Code or Cursor.
 - **Node.js**: v18.0.0 or higher
 - **npm**: v9.0.0 or higher
 - **IDE**: Cursor (primary) or VS Code (with GitHub Copilot)
+- **Goose** (optional): [block.github.io/goose](https://block.github.io/goose/) — required for multi-model routing and autonomous recipes
+- **OpenRouter API key** (optional): [openrouter.ai](https://openrouter.ai/) — required for Goose integration
 
 ## Installation Steps
 
-### 1. Clone & Install
+### Option A: One-Command Setup (Recommended)
 
 ```bash
-git clone https://github.com/yourusername/roland.git
+npx roland-setup
+```
+
+This single command will:
+1. Check your environment (Node.js version, Goose)
+2. Prompt for your OpenRouter API key and validate it
+3. Clone Roland into `~/.roland/roland/` (or update if already cloned)
+4. Build Roland (`npm install && npm run build`)
+5. Initialize the current directory with agent configs and MCP settings
+6. Save your API key to `~/.roland/config.yaml`
+
+### Option B: Manual Setup
+
+<details>
+<summary>Click to expand manual setup steps</summary>
+
+#### 1. Clone & Install
+
+```bash
+git clone https://github.com/AdamMcIntosh/roland.git
 cd roland
 npm install
 ```
 
-### 2. Build
+#### 2. Build
 
 ```bash
 npm run build
 ```
+
+</details>
 
 ## Cursor Setup
 
@@ -137,6 +160,8 @@ npm run init -- /path/to/your/project
 | `.github/copilot-instructions.md` | Agent catalog & usage guide |
 | `.goose/config.yaml` | Goose + Roland config with smart routing instructions |
 | `.roland-permissions.json` | Permission policy for Goose sessions |
+| `.roland/project-context.json` | Cross-session knowledge base (conventions, patterns, decisions) |
+| `.roland/model-quality.json` | Model A/B quality tracking data |
 | `roland-context.json` | Structured project context (rules, decisions, test patterns) |
 | `MIGRATION.md` | Human-readable companion to roland-context.json |
 
@@ -185,6 +210,8 @@ Once connected, the Roland MCP server provides:
 | `git_log` | Last N commits (oneline format) |
 | `git_commit` | Stage files and create a commit |
 | `analyze_screenshot` | Capture screen or load image, analyze with vision model |
+| `project_context` | Cross-session knowledge base — observe conventions, patterns, decisions, errors |
+| `quality_signal` | Record model quality feedback (accept/retry/reject) for adaptive routing |
 
 **Goose users get the full tool set.** VS Code/Cursor users get the routing and cost tools. `run_goose_task`, `git_*`, and `analyze_screenshot` are most useful when Roland is paired with Goose as the MCP client.
 
@@ -225,7 +252,7 @@ User prompt
 
 - **Goose**: Install from [block.github.io/goose](https://block.github.io/goose/)
 - **OpenRouter API key**: Sign up at [openrouter.ai](https://openrouter.ai/) and set `OPENROUTER_API_KEY`
-- **Roland**: Built (`npm run build`)
+- **Roland**: Built (`npm run build`) — or use `npx roland-setup` which handles everything
 
 ### 1. Configure Goose
 
@@ -418,9 +445,9 @@ npm run clean          # Remove dist/
 
 ## Next Steps
 
-1. **Init your project**: `npm run init -- /path/to/project` — scaffolds all config files
+1. **Quick setup**: `npx roland-setup` — handles clone, build, API key, and project init in one command
 2. **Set your budget**: Ask the agent to use `manage_budget` with `set_limit`
-3. **Load project context**: Call `load_migration_context` at session start
-4. **Run a recipe**: `npx tsx scripts/run-recipe.ts --recipe BugFix --task "Fix login timeout"`
-5. **Monitor costs**: `get_analytics` — see where tokens are going
+3. **Run a solo recipe**: `npx tsx scripts/run-recipe.ts --recipe QuickShip --task "Add user settings page"`
+4. **Monitor costs**: `get_analytics` — see where tokens and money are going, including model quality data
+5. **Build project knowledge**: Use `project_context` with `observe` to record conventions and patterns — they'll persist across sessions
 6. **Read the guides**: See `docs/guides/goose-user-guide.md` for full usage
