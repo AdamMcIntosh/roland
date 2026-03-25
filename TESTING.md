@@ -250,6 +250,212 @@ Opens WebSocket on port 8080. In another terminal, run `npm run serve-dashboard`
 
 ---
 
+## Daily Driver Smoke Test (Goose + Roland)
+
+End-to-end validation that Roland is ready for everyday use as a Goose coding agent.
+Run these tests in order after a fresh setup or upgrade.
+
+### Prerequisites
+
+- Goose installed and configured (`goose session` starts without errors)
+- Roland listed in `/tools` (~22 tools under the `roland` extension)
+- OpenRouter account with credits (https://openrouter.ai/credits)
+
+---
+
+### Test 1: Verify Tools Connected
+
+```
+/tools
+```
+
+**Pass:** You see ~22 Roland tools including `health_check`, `triage`, `route_model`,
+`preview_changes`, `session_context`, `git_status`, `git_diff`, `git_log`, `git_commit`,
+`manage_budget`, `track_cost`, `get_analytics`, `start_recipe`, `advance_recipe`,
+`list_recipes`, `suggest_mode`, `run_goose_task`, `project_context`,
+`load_migration_context`, `update_migration_context`, `quality_signal`, `analyze_screenshot`.
+
+---
+
+### Test 2: Health Check
+
+```
+Use the health_check tool
+```
+
+**Pass:** Returns `status: healthy` with `tools_available: 22`.
+
+---
+
+### Test 3: Set Budget
+
+```
+Use the manage_budget tool with action "set_limit" and monthly_limit 5.00
+```
+
+**Pass:** Returns new limit of $5.00 with enforcement enabled.
+
+Verify:
+
+```
+Use the manage_budget tool with action "get_status"
+```
+
+**Pass:** Shows $5.00 limit, $0.00 spent, $5.00 remaining.
+
+---
+
+### Test 4: Smart Triage + Model Routing
+
+```
+Create a clean TypeScript React component for a user profile card with dark mode support.
+```
+
+The agent should automatically call `triage` and/or `route_model`. If it doesn't, test directly:
+
+```
+Use the triage tool with query "Create a clean TypeScript React component for a user profile card with dark mode support"
+```
+
+**Pass:** Returns recommended agent (e.g., `executor` or `designer`), complexity tier,
+suggested model, and optional recipe recommendation.
+
+```
+Use the route_model tool with query "Build a React component with dark mode" and budget "moderate"
+```
+
+**Pass:** Returns model recommendation with cost estimate and alternatives.
+
+---
+
+### Test 5: Budget Degradation to Free Models
+
+Set budget to near-zero to trigger free model fallback:
+
+```
+Use the manage_budget tool with action "set_limit" and monthly_limit 0.01
+```
+
+Then route a query:
+
+```
+Use the route_model tool with query "Refactor the authentication module"
+```
+
+**Pass:** Returns a free model (e.g., `qwen/qwen3-coder:free` or
+`nvidia/nemotron-3-super-120b-a12b:free`) instead of a paid model.
+
+Reset budget after:
+
+```
+Use the manage_budget tool with action "set_limit" and monthly_limit 5.00
+```
+
+---
+
+### Test 6: Full Multi-Agent Recipe
+
+List available recipes:
+
+```
+Use the list_recipes tool
+```
+
+**Pass:** Returns 9+ recipes.
+
+In a **separate terminal**, run a recipe end-to-end:
+
+```bash
+goose run --recipe ~/.roland/roland/goose/recipes/roland-plan-exec-rev-ex.yaml --task "Build a simple CLI todo app in TypeScript with JSON file storage"
+```
+
+**Pass:** Recipe completes all steps (Planner → Executor → Reviewer → Explainer)
+and produces working TypeScript code.
+
+---
+
+### Test 7: Session Persistence
+
+Start a **fresh** Goose session in the same folder:
+
+```
+Continue working on the todo app we just built. Add a search feature and update the tests.
+```
+
+**Pass:** Agent finds the existing todo app files and builds on them instead of starting
+from scratch. Uses `session_context` or `project_context` to recall prior work.
+
+---
+
+### Test 8: Cost Tracking + Analytics
+
+```
+Use the get_analytics tool
+```
+
+**Pass:** Shows non-zero usage with breakdowns by model and agent.
+
+```
+Use the manage_budget tool with action "get_status"
+```
+
+**Pass:** Remaining budget reflects the spending recorded during the session.
+
+---
+
+### Test 9: Git Tools
+
+```
+Use the git_status tool
+```
+
+```
+Use the git_log tool with count 5
+```
+
+**Pass:** Both return valid git information for the current project directory.
+
+---
+
+### Test 10: Preview Changes
+
+```
+Use the preview_changes tool with file_path "test-file.txt" and original_content "hello world" and proposed_content "hello roland"
+```
+
+**Pass:** Returns a unified diff showing the change from "world" to "roland".
+
+---
+
+### Quick 5-Minute Check
+
+If you just need fast validation:
+
+1. `goose session`
+2. `/tools` → Roland tools listed
+3. `Use the health_check tool` → `status: healthy`
+4. `Use the manage_budget tool with action "get_status"` → budget info returned
+5. `Use the triage tool with query "fix a bug in the login form"` → triage response
+6. `Use the git_status tool` → git info returned
+
+All 6 pass = ready for daily use.
+
+---
+
+### Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| Roland tools not in `/tools` | Check Goose config has Roland extension, restart session |
+| `health_check` fails | Rebuild: `cd ~/.roland/roland && npm run build` |
+| "Credits exhausted" on every call | Top up at https://openrouter.ai/credits |
+| Budget not degrading to free models | Set budget with `manage_budget` `set_limit` first |
+| Recipe not found | Check path: `ls ~/.roland/roland/goose/recipes/` |
+| Session context empty | Use `session_context` with `action: observe` to record context first |
+| Roland in config but not loading | Use full path to node in Goose config cmd field |
+
+---
+
 ## Cross-Platform Notes
 
 All tests run on Windows, macOS, and Linux. The CI release workflow (`.github/workflows/release.yml`) builds npm packages and plugin zips across all three platforms. The install scripts cover macOS/Linux (`install.sh`) and Windows (`install.ps1`).
