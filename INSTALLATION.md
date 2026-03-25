@@ -26,8 +26,14 @@ Setup guide for Roland as an MCP server integrated with VS Code or Cursor.
 
 ### Option A: One-Command Setup (Recommended)
 
+**Bash** (macOS / Linux / Git Bash on Windows):
 ```bash
 curl -fsSL https://raw.githubusercontent.com/AdamMcIntosh/roland/main/scripts/setup.sh | bash
+```
+
+**PowerShell** (Windows):
+```powershell
+irm https://raw.githubusercontent.com/AdamMcIntosh/roland/main/scripts/setup.ps1 | iex
 ```
 
 This single command will:

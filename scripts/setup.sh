@@ -245,16 +245,16 @@ if [ "$HAVE_GOOSE" = true ]; then
     if grep -q "roland:" "$GOOSE_CONFIG" 2>/dev/null; then
       ok "Goose config already has Roland — skipping"
     else
-      cat >> "$GOOSE_CONFIG" <<GOOSE
-  roland:
-    name: Roland
-    type: stdio
-    cmd: node
-    args:
-      - "${ROLAND_DIST_POSIX}"
-    enabled: true
-    timeout: 300
-GOOSE
+      ROLAND_BLOCK="  roland:\n    name: Roland\n    type: stdio\n    cmd: node\n    args:\n      - \"${ROLAND_DIST_POSIX}\"\n    enabled: true\n    timeout: 300"
+      # Insert inside the extensions block, before GOOSE_PROVIDER line
+      if grep -q "^GOOSE_PROVIDER:" "$GOOSE_CONFIG" 2>/dev/null; then
+        sed -i.bak "/^GOOSE_PROVIDER:/i\\${ROLAND_BLOCK}" "$GOOSE_CONFIG"
+        rm -f "${GOOSE_CONFIG}.bak"
+      elif grep -q "^extensions:" "$GOOSE_CONFIG" 2>/dev/null; then
+        printf '\n%b\n' "$ROLAND_BLOCK" >> "$GOOSE_CONFIG"
+      else
+        printf '\nextensions:\n%b\n' "$ROLAND_BLOCK" >> "$GOOSE_CONFIG"
+      fi
       ok "Added Roland extension to existing Goose config"
     fi
 

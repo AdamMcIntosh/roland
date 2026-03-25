@@ -158,8 +158,14 @@ Run `npm run init -- /path/to/your/project` to set up any project with Roland, o
 
 ### One-Command Setup
 
+**Bash** (macOS / Linux / Git Bash on Windows):
 ```bash
 curl -fsSL https://raw.githubusercontent.com/AdamMcIntosh/roland/main/scripts/setup.sh | bash
+```
+
+**PowerShell** (Windows):
+```powershell
+irm https://raw.githubusercontent.com/AdamMcIntosh/roland/main/scripts/setup.ps1 | iex
 ```
 
 This single command will:
@@ -211,8 +217,11 @@ See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions (includes
 
 ```bash
 # 1. Install Goose: https://block.github.io/goose/
-# 2. Run one-command setup (handles clone + build + init)
+# 2. Run one-command setup (handles clone + build + Goose config + init)
+# Bash:
 curl -fsSL https://raw.githubusercontent.com/AdamMcIntosh/roland/main/scripts/setup.sh | bash
+# PowerShell:
+# irm https://raw.githubusercontent.com/AdamMcIntosh/roland/main/scripts/setup.ps1 | iex
 
 # 3. Start a Goose session
 goose session
