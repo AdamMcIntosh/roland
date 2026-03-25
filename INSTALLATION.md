@@ -27,7 +27,7 @@ Setup guide for Roland as an MCP server integrated with VS Code or Cursor.
 ### Option A: One-Command Setup (Recommended)
 
 ```bash
-npx roland-setup
+curl -fsSL https://raw.githubusercontent.com/AdamMcIntosh/roland/main/scripts/setup.sh | bash
 ```
 
 This single command will:
@@ -252,7 +252,7 @@ User prompt
 
 - **Goose**: Install from [block.github.io/goose](https://block.github.io/goose/)
 - **OpenRouter API key**: Sign up at [openrouter.ai](https://openrouter.ai/) and set `OPENROUTER_API_KEY`
-- **Roland**: Built (`npm run build`) — or use `npx roland-setup` which handles everything
+- **Roland**: Built (`npm run build`) — or use the [one-command setup](#option-a-one-command-setup-recommended) which handles everything
 
 ### 1. Configure Goose
 
@@ -445,7 +445,7 @@ npm run clean          # Remove dist/
 
 ## Next Steps
 
-1. **Quick setup**: `npx roland-setup` — handles clone, build, API key, and project init in one command
+1. **Quick setup**: `curl -fsSL https://raw.githubusercontent.com/AdamMcIntosh/roland/main/scripts/setup.sh | bash` — handles clone, build, API key, and project init in one command
 2. **Set your budget**: Ask the agent to use `manage_budget` with `set_limit`
 3. **Run a solo recipe**: `npx tsx scripts/run-recipe.ts --recipe QuickShip --task "Add user settings page"`
 4. **Monitor costs**: `get_analytics` — see where tokens and money are going, including model quality data

@@ -159,7 +159,7 @@ Run `npm run init -- /path/to/your/project` to set up any project with Roland, o
 ### One-Command Setup
 
 ```bash
-npx roland-setup
+curl -fsSL https://raw.githubusercontent.com/AdamMcIntosh/roland/main/scripts/setup.sh | bash
 ```
 
 This single command will:
@@ -212,7 +212,7 @@ See [INSTALLATION.md](INSTALLATION.md) for detailed setup instructions (includes
 ```bash
 # 1. Install Goose: https://block.github.io/goose/
 # 2. Run one-command setup (handles clone + build + init)
-npx roland-setup
+curl -fsSL https://raw.githubusercontent.com/AdamMcIntosh/roland/main/scripts/setup.sh | bash
 
 # 3. Start a Goose session
 goose session
