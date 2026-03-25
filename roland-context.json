@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "1.0",
+  "project": {
+    "name": "roland",
+    "sourceLanguage": "VB6",
+    "targetLanguage": "C#",
+    "description": "Legacy VB6 to modern C# migration for roland",
+    "createdAt": "2026-03-25T01:55:46.236Z",
+    "lastUpdated": "2026-03-25T01:55:46.236Z"
+  },
+  "rules": [],
+  "decisions": [],
+  "testPatterns": [],
+  "customSections": {}
+}

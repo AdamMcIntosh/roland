@@ -24,7 +24,6 @@ Use the specialized agent files in `.github/agents/` by mentioning them with `@a
 | explore | Codebase navigation | Mapping project structure, finding patterns |
 | analyst | Data & trend analysis | Metrics, trends, quantitative analysis |
 | vision | Technical strategy | Long-term planning, technology evaluation |
-| responsive-design | Responsive design | Cross-device layouts, breakpoints, mobile-first, fluid grids |
 
 Most agents have tiered variants (`-low`, `-medium`, `-high`) for different depth levels.
 
@@ -42,7 +41,6 @@ Recipe chains are multi-agent workflows available as handoff agent chains:
 | DesktopApp | Architect → Designer → Executor → QA → Critic → Writer | Desktop/native app development |
 | MicroservicesArchitecture | Architect → Executor → Critic → Writer | Service decomposition |
 | DocumentationRefactor | Analyst → Architect → Writer → Critic | Codebase-aware doc improvement |
-| CodeReviewCompliance | Researcher → Code-Reviewer → Critic → Writer | Code review & requirements compliance |
 
 To start a recipe, invoke the first agent in the chain (e.g., `@plan-exec-rev-ex-planner`).
 

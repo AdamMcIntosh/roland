@@ -5,6 +5,10 @@ yarn.lock
 pnpm-lock.yaml
 
 .omc
+.roland
+.github
+.goose
+.cursor
 
 # Build output
 dist/
