@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "1.0",
+  "project": {
+    "name": "scripts",
+    "sourceLanguage": "VB6",
+    "targetLanguage": "C#",
+    "description": "Legacy VB6 to modern C# migration for scripts",
+    "createdAt": "2026-03-25T02:04:57.054Z",
+    "lastUpdated": "2026-03-25T02:04:57.054Z"
+  },
+  "rules": [],
+  "decisions": [],
+  "testPatterns": [],
+  "customSections": {}
+}

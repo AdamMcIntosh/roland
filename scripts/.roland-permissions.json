@@ -1,0 +1,17 @@
+{
+  "allow_shell": true,
+  "allow_write": true,
+  "allow_read": true,
+  "deny_commands": [
+    "rm -rf /",
+    "shutdown",
+    "reboot",
+    "format"
+  ],
+  "deny_paths": [
+    ".git/objects",
+    ".env",
+    ".roland-permissions.json"
+  ],
+  "extra_instructions": ""
+}
