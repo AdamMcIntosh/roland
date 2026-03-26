@@ -85,6 +85,20 @@ rco:
   dashboard_port: 8080
   state_file: .rco-state.json
 
+context_gathering:
+  enabled: true
+  max_files: 15                          # Max files to include in context bundle
+  max_bytes: 204800                      # 200KB total cap — fits in 262K-token models
+  llm_model: "qwen/qwen3-coder:free"    # Free model for smart file selection
+  llm_timeout_ms: 5000                   # Falls back to heuristic on timeout
+  exclude_patterns:
+    - "*.lock"
+    - "*.min.js"
+    - "*.min.css"
+    - "dist/**"
+    - "node_modules/**"
+    - "*.map"
+
 diff_stream:
   enabled: true
   port: 8089

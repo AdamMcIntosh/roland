@@ -51,6 +51,8 @@ import {
 import { SessionContextManager } from './session-context.js';
 import { ProjectContextManager } from './project-context.js';
 import { QualityTracker, initializeQualityTracker } from '../orchestrator/quality-tracker.js';
+import { selectRelevantFiles, bundleFileContents, formatBundleAsMarkdown, DEFAULT_CONTEXT_GATHERING_CONFIG } from '../utils/file-gatherer.js';
+import type { FileBundle } from '../utils/file-gatherer.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -254,6 +256,7 @@ export class McpServer {
     this.registerQualitySignal();
     this.registerGitTools();
     this.registerAnalyzeScreenshot();
+    this.registerReadContext();
   }
 
   // --------------------------------------------------------------------------
@@ -679,10 +682,33 @@ export class McpServer {
         recommendation.temperature = 0.7;
 
         // --- Execution strategy: smart triage for complex code ---
-        // Complex tasks: Sonnet 4 subagent writes the code, main session applies files
-        // Simple/medium tasks: main session (Flash) writes and applies directly
+        // Complex tasks: subagent writes the code with full codebase context, main session applies files
+        // Simple/medium tasks: main session writes and applies directly
         const isComplexExecution = complexity.complexity === 'complex' && !budgetDegraded;
         if (isComplexExecution) {
+          // Gather relevant file contents so the subagent gets full codebase context
+          const gatheringConfig = this.config.context_gathering ?? DEFAULT_CONTEXT_GATHERING_CONFIG;
+          let fileBundle: FileBundle | undefined;
+          let fileBundleMarkdown = '';
+          if (gatheringConfig.enabled) {
+            try {
+              const selectedFiles = await selectRelevantFiles(message, gatheringConfig);
+              if (selectedFiles.length > 0) {
+                fileBundle = bundleFileContents(selectedFiles, gatheringConfig.max_bytes);
+                fileBundleMarkdown = formatBundleAsMarkdown(fileBundle);
+              }
+            } catch (err) {
+              logger.warn(`[Triage] File gathering failed: ${(err as Error).message}`);
+            }
+          }
+
+          const contextRule = fileBundle && fileBundle.files.length > 0
+            ? `3. USE PROVIDED CONTEXT: The relevant_files below contain actual file contents from the codebase. `
+              + `Use exact import paths, type names, and function signatures from these files. Do NOT guess or hallucinate APIs. `
+              + `If you need additional files not listed, call the read_context tool with {"files": ["path/to/file.ts"]}.`
+            : `3. USE PROVIDED CONTEXT: Call the read_context tool with {"files": ["path/to/file.ts"]} to read any file `
+              + `from the codebase. Use exact import paths, type names, and function signatures. Do NOT guess or hallucinate APIs.`;
+
           recommendation.execution_strategy = {
             mode: 'subagent_writes_code',
             execution_model: 'minimax/minimax-m2.5',
@@ -692,11 +718,12 @@ export class McpServer {
               + `1. OUTPUT FORMAT: For each file, output "📄 path/to/file.ts:" followed by the COMPLETE file content in a code block. `
               + `Include ALL imports, types, error handling, and edge cases. Code must be ready to write to disk as-is.\n`
               + `2. NO PLACEHOLDERS: Do NOT use "// TODO", "// ...", or "implement here". Write the real implementation.\n`
-              + `3. USE PROVIDED CONTEXT: You will receive actual file contents from the codebase. Use exact import paths, `
-              + `type names, and function signatures from those files. Do NOT guess or hallucinate APIs.\n`
+              + `${contextRule}\n`
               + `4. INCLUDE TESTS: If modifying a module that has a test file, include the updated test file too.\n`
               + `5. ERROR FIXES: If you receive error output, analyze the EXACT error message and stack trace. `
               + `Fix the root cause, not symptoms. Include the complete fixed file, not just a diff.`,
+            relevant_files: fileBundle?.files.map(f => ({ path: f.path, content: f.content })),
+            relevant_files_markdown: fileBundleMarkdown || undefined,
           };
         } else {
           recommendation.execution_strategy = {
@@ -716,7 +743,7 @@ export class McpServer {
         recommendation.instructions = suggestRecipe
           ? `Adopt the "${agentName}" persona. A multi-agent recipe "${topRecipe.name}" is recommended — offer to run it, or proceed as the recommended agent if the user prefers a single pass.`
           : isComplexExecution
-            ? `This is a complex task. Spawn a Sonnet 4 subagent to write the code (see execution_strategy), then apply the output to files yourself.`
+            ? `This is a complex task. Spawn a subagent to write the code (see execution_strategy + relevant_files for full codebase context), then apply the output to files yourself.`
             : `Adopt the "${agentName}" persona for this task. Apply that agent's expertise and thinking style to your response.`;
 
         return recommendation;
@@ -2506,6 +2533,77 @@ export class McpServer {
           model: result.model,
           source: result.capturedNow ? 'screen capture' : result.imagePath,
         };
+      }
+    );
+  }
+
+  // --------------------------------------------------------------------------
+  // read_context — on-demand file reading for subagents during execution
+  // --------------------------------------------------------------------------
+
+  private registerReadContext(): void {
+    this.registerTool(
+      'read_context',
+      'Read file contents from the project codebase. Use this when you need additional files beyond what was provided in relevant_files. Pass an array of file paths to read. Returns file contents ready to use as context for code generation.',
+      async (args: Record<string, unknown>) => {
+        const filePaths = args.files;
+        if (!Array.isArray(filePaths) || filePaths.length === 0) {
+          return { error: 'Provide a "files" array of file paths to read.' };
+        }
+
+        const maxFiles = 20;
+        const maxBytesPerFile = 50000; // ~50KB per file
+        const paths = filePaths
+          .filter((f): f is string => typeof f === 'string')
+          .slice(0, maxFiles);
+
+        const results: Array<{ path: string; content: string; sizeBytes: number }> = [];
+        const errors: Array<{ path: string; error: string }> = [];
+
+        for (const filePath of paths) {
+          try {
+            // Prevent path traversal
+            const resolved = path.resolve(filePath);
+            const cwd = process.cwd();
+            if (!resolved.startsWith(cwd)) {
+              errors.push({ path: filePath, error: 'Path outside project directory' });
+              continue;
+            }
+
+            const content = fs.readFileSync(filePath, 'utf-8');
+            const sizeBytes = Buffer.byteLength(content, 'utf-8');
+
+            if (sizeBytes > maxBytesPerFile) {
+              // Return truncated content for large files
+              const truncated = content.slice(0, maxBytesPerFile);
+              results.push({ path: filePath, content: truncated + '\n// ... [truncated]', sizeBytes });
+            } else {
+              results.push({ path: filePath, content, sizeBytes });
+            }
+          } catch (err) {
+            errors.push({ path: filePath, error: (err as Error).message });
+          }
+        }
+
+        const totalBytes = results.reduce((sum, f) => sum + f.sizeBytes, 0);
+
+        return {
+          files: results,
+          errors: errors.length > 0 ? errors : undefined,
+          total_files: results.length,
+          total_bytes: totalBytes,
+        };
+      },
+      {
+        type: 'object',
+        properties: {
+          files: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Array of file paths to read (relative to project root)',
+          },
+        },
+        required: ['files'],
       }
     );
   }

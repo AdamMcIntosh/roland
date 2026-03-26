@@ -14,6 +14,8 @@
 
 import { logger } from '../utils/logger.js';
 import { AdvancedCostTracker, getGlobalTracker } from '../orchestrator/advanced-cost-tracker.js';
+import type { FileBundle } from '../utils/file-gatherer.js';
+import { formatBundleAsMarkdown } from '../utils/file-gatherer.js';
 
 // ============================================================================
 // Types
@@ -90,6 +92,7 @@ interface ActiveSession {
   stepCosts: SessionCost;
   startTime: number;
   userTask: string;
+  fileBundle?: FileBundle;           // Pre-gathered codebase context for first step
 }
 
 // ============================================================================
@@ -111,7 +114,7 @@ export class RecipeSessionManager {
   // Start a new recipe session
   // --------------------------------------------------------------------------
 
-  startSession(recipe: ParsedRecipe, userTask: string): StepPrompt {
+  startSession(recipe: ParsedRecipe, userTask: string, fileBundle?: FileBundle): StepPrompt {
     // Clean expired sessions
     this.cleanExpiredSessions();
 
@@ -129,6 +132,7 @@ export class RecipeSessionManager {
       },
       startTime: Date.now(),
       userTask,
+      fileBundle,
     };
 
     this.sessions.set(sessionId, session);
@@ -267,6 +271,11 @@ export class RecipeSessionManager {
       // First step: use the user's original task
       const stepInput = stepDef.input || '{{user_task}}';
       userPrompt = this.interpolateVariables(stepInput, session);
+
+      // Append pre-gathered codebase context for the first agent
+      if (session.fileBundle && session.fileBundle.files.length > 0) {
+        userPrompt += '\n\n' + formatBundleAsMarkdown(session.fileBundle);
+      }
     } else {
       // Subsequent steps: combine step input with previous agent's output
       const prevStepDef = session.recipe.steps[session.currentStep - 1];

@@ -4,6 +4,8 @@
  */
 
 import type { AgentYaml } from './types.js';
+import type { FileBundle } from '../utils/file-gatherer.js';
+import { formatBundleAsMarkdown } from '../utils/file-gatherer.js';
 import { ClaudePromptPayloadSchema } from '../schemas.js';
 
 export interface ToolCallingPromptInput {
@@ -11,6 +13,7 @@ export interface ToolCallingPromptInput {
   taskContext: string;
   stepInput?: string;
   stateSummary?: Record<string, unknown>;
+  fileBundle?: FileBundle;
 }
 
 /**
@@ -29,10 +32,14 @@ export function buildClaudeToolCallingPrompt(input: ToolCallingPromptInput): str
 
   const toolsList = (p.tools && p.tools.length > 0) ? p.tools.join(', ') : 'none';
   const stepPart = p.stepInput ? `\nStep input from previous agent:\n${p.stepInput}\n` : '\n';
+  const filePart = input.fileBundle && input.fileBundle.files.length > 0
+    ? `\n${formatBundleAsMarkdown(input.fileBundle)}\n`
+    : '';
   return [
     `As ${p.agentName}, execute this step.`,
     `Task context: ${p.taskContext}`,
     stepPart,
+    filePart,
     `Tools available: ${toolsList}.`,
     `Respond in JSON only: {"output": "<your result text>", "success": true}. Optionally include "dotGraph" for dependency-mapper or graph-visualizer (Visualize dependencies as DOT: [state]).`,
   ].join('\n');

@@ -52,6 +52,15 @@ export interface DiffStreamConfig {
   port: number;
 }
 
+export interface ContextGatheringConfig {
+  enabled: boolean;
+  max_files: number;
+  max_bytes: number;
+  llm_model: string;
+  llm_timeout_ms: number;
+  exclude_patterns: string[];
+}
+
 export interface AppConfig {
   routing: RoutingConfig;
   roland: SessionConfig;
@@ -59,6 +68,7 @@ export interface AppConfig {
   ollama?: OllamaConfig;
   classifier?: ClassifierConfig;
   diff_stream?: DiffStreamConfig;
+  context_gathering?: ContextGatheringConfig;
   configPath?: string;
 }
 

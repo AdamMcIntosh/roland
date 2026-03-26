@@ -73,7 +73,7 @@ async function runAsync(input: unknown): Promise<void> {
     process.exit(1);
   }
 
-  const { agentYaml, state, taskContext, stepInput, tools, workflowSteps } = inputParsed.data;
+  const { agentYaml, state, taskContext, stepInput, tools, workflowSteps, fileBundle } = inputParsed.data;
   const agentName = agentYaml.name ?? 'unknown';
   const model = agentYaml.claude_model ?? 'claude-3-5-sonnet-20241022';
 
@@ -83,6 +83,7 @@ async function runAsync(input: unknown): Promise<void> {
     taskContext,
     stepInput,
     stateSummary: state ? { currentStep: (state as unknown as RcoState).currentStep, loopCount: (state as unknown as RcoState).loopCount } : undefined,
+    fileBundle: fileBundle as import('../utils/file-gatherer.js').FileBundle | undefined,
   });
   log('prompt', prompt.slice(0, 300) + (prompt.length > 300 ? '...' : ''));
 

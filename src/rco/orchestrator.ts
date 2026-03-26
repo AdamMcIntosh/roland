@@ -16,6 +16,8 @@ import type { RcoState, RcoRecipe, AgentYaml, WorkerInput, WorkerOutput } from '
 import { ComplexityClassifier } from '../orchestrator/complexity-classifier.js';
 import { broadcast, startDashboard, waitForCollabFeedback } from './dashboard.js';
 import { ecoOptimizerSuggestModel } from '../skills.js';
+import { selectRelevantFiles, bundleFileContents, DEFAULT_CONTEXT_GATHERING_CONFIG } from '../utils/file-gatherer.js';
+import type { FileBundle } from '../utils/file-gatherer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -267,6 +269,18 @@ export async function runOrchestrator(options: OrchestratorOptions): Promise<Orc
     });
   }
 
+  // Gather relevant file context for the first agent step
+  let fileBundle: FileBundle | undefined;
+  try {
+    const selectedFiles = await selectRelevantFiles(task, DEFAULT_CONTEXT_GATHERING_CONFIG);
+    if (selectedFiles.length > 0) {
+      fileBundle = bundleFileContents(selectedFiles, DEFAULT_CONTEXT_GATHERING_CONFIG.max_bytes);
+      logVerbose(`file-gatherer: bundled ${fileBundle.files.length} files (${(fileBundle.totalBytes / 1024).toFixed(1)}KB)`);
+    }
+  } catch (err) {
+    logVerbose(`file-gatherer failed: ${(err as Error).message}`);
+  }
+
   if (executionMode === 'collab-mode') {
     const dashboardPort = rcoConfig.dashboard_port ?? 8080;
     startDashboard(dashboardPort);
@@ -297,6 +311,7 @@ export async function runOrchestrator(options: OrchestratorOptions): Promise<Orc
         stepInput: undefined,
         tools: agentYaml.tools,
         workflowSteps: steps.map((s) => ({ agent: s.agent, output_to: s.output_to })),
+        fileBundle: fileBundle as WorkerInput['fileBundle'],
       };
       const result = await runWorkerWithRetry(runWorkerFn, workerPath, input, workerTimeoutMs, workerRetries);
       state.outputs[step.agent] = result.output;
@@ -347,6 +362,8 @@ export async function runOrchestrator(options: OrchestratorOptions): Promise<Orc
       stepInput,
       tools: agentYaml.tools,
       workflowSteps: steps.map((s) => ({ agent: s.agent, output_to: s.output_to })),
+      // Only pass file bundle to the first step — subsequent steps get context via stepInput
+      fileBundle: stepIndex === 0 ? fileBundle as WorkerInput['fileBundle'] : undefined,
     };
     const result = await runWorkerWithRetry(runWorkerFn, workerPath, input, workerTimeoutMs, workerRetries);
     state.outputs[step.agent] = result.output;

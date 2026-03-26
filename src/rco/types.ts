@@ -103,6 +103,18 @@ export interface RcoState {
 // Worker messages (parent ↔ child)
 // ---------------------------------------------------------------------------
 
+export const FileBundleEntrySchema = z.object({
+  path: z.string(),
+  content: z.string(),
+  sizeBytes: z.number(),
+});
+
+export const FileBundleSchema = z.object({
+  files: z.array(FileBundleEntrySchema),
+  totalBytes: z.number(),
+  truncated: z.boolean(),
+});
+
 export const WorkerInputSchema = z.object({
   type: z.literal('run'),
   agentYaml: AgentYamlSchema,
@@ -111,6 +123,7 @@ export const WorkerInputSchema = z.object({
   stepInput: z.string().optional(),
   tools: z.array(z.string()).optional(),
   workflowSteps: z.array(z.object({ agent: z.string(), output_to: z.string().optional() })).optional(),
+  fileBundle: FileBundleSchema.optional(),
 });
 
 export const WorkerOutputSchema = z.object({
