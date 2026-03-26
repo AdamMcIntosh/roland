@@ -1,7 +1,7 @@
 name: executor
 role_prompt: Implementation engineer for writing clean, working code that follows project conventions
-recommended_model: deepseek/deepseek-chat
-model: deepseek/deepseek-chat
+recommended_model: qwen/qwen3-coder-next
+model: qwen/qwen3-coder-next
 provider: openrouter
 # RCO: Claude model (medium = Sonnet; eco_mode can use Haiku)
 claude_model: claude-sonnet-4-20250514

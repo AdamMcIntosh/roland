@@ -1,7 +1,7 @@
 name: architect
 role_prompt: Expert system architect for design decisions, component diagrams, and trade-off analysis
-recommended_model: anthropic/claude-sonnet-4
-model: anthropic/claude-sonnet-4
+recommended_model: minimax/minimax-m2.5
+model: minimax/minimax-m2.5
 claude_model: claude-sonnet-4-20250514
 provider: openrouter
 temperature: 0.7

@@ -1,16 +1,15 @@
 # Roland Model Routing Configuration
 #
-# Budget-optimized for ~$85/month on OpenRouter.
-# Strategy: DeepSeek V3 as workhorse, Pro for planning/review, Sonnet 4 for critical only.
+# Hybrid model setup for ~80-95% of Claude Opus quality at 1/10th-1/5th cost.
+# Strategy: Qwen3-Coder-Next as workhorse, MiniMax M2.5 for high-stakes reasoning,
+#           DeepSeek V3.2 for QA/simple tasks, Claude Haiku for dispatch.
 #
 # Estimated monthly cost at moderate usage (~15M tokens):
-#   Critical (claude-sonnet-4):     ~15% → ~$11/mo
-#   High-value (gemini-2.5-pro):    ~15% → ~$11/mo
-#   Workhorse (deepseek-chat V3):   ~10% → ~$1/mo  (text-only subagents)
-#   Light (gemini-2.5-flash):       ~10% → ~$0.50/mo
-#   Main session (gemini-2.5-flash):       → ~$2/mo  (routing + file I/O)
-#   Smart triage: complex tasks use Sonnet 4 subagent for code authoring
-#   Total estimate:                        → ~$50/mo at moderate usage
+#   Critic/Architect (minimax-m2.5):  ~15% → ~$5/mo  (near-Opus reasoning)
+#   Executor/Coder (qwen3-coder-next): ~55% → ~$8/mo  (best coding balance)
+#   QA/Simple (deepseek-v3-0324):     ~20% → ~$2/mo  (light tasks, testing)
+#   Main session (claude-haiku-4.5):        → ~$4/mo  (routing + file I/O)
+#   Total estimate:                         → ~$19/mo at moderate usage
 
 classifier:
   semantic_enabled: true                 # Use free OpenRouter model for classification; falls back to keyword heuristic
@@ -28,20 +27,20 @@ routing:
   local:
     - codellama:7b                       # Local Ollama model — zero cost
   simple:
-    - google/gemini-2.5-flash            # Light tasks — fast, cheap
-    - google/gemini-2.0-flash-exp:free   # Free fallback
+    - deepseek/deepseek-v3-0324          # DeepSeek V3.2 — cheap, capable for light tasks
+    - google/gemini-2.5-flash            # Free fallback
   medium:
-    - deepseek/deepseek-chat             # DeepSeek V3 — best coding per dollar
-    - google/gemini-2.5-flash            # Fallback if DeepSeek is down
+    - qwen/qwen3-coder-next             # Qwen3-Coder-Next — best coding quality/cost balance
+    - deepseek/deepseek-v3-0324          # Fallback
   complex:
-    - anthropic/claude-sonnet-4          # Best reasoning — architecture, security
-    - google/gemini-2.5-pro              # Strong alternative at lower cost
+    - minimax/minimax-m2.5              # MiniMax M2.5 — near-Opus reasoning for architecture/security
+    - qwen/qwen3-coder-next             # Strong coding fallback
   explain:
-    - google/gemini-2.5-flash            # Fast explanations
-    - deepseek/deepseek-chat             # More detailed if needed
+    - deepseek/deepseek-v3-0324          # Fast explanations
+    - qwen/qwen3-coder-next             # More detailed if needed
   prototype:
-    - x-ai/grok-3-mini                  # Fast iteration, scaffolding
-    - deepseek/deepseek-chat             # Fallback
+    - qwen/qwen3-coder-next             # Fast iteration, scaffolding
+    - deepseek/deepseek-v3-0324          # Fallback
 
 roland:
   mcp_defaults:
@@ -64,7 +63,7 @@ goose:
   monthly_budget: 85                              # Monthly budget in USD
   billing_cycle_day: 1                            # Day of month to auto-reset spending
   free_model_coding: qwen/qwen3-coder:free        # Primary free model for coding
-  free_model_reasoning: nvidia/nemotron-3-super-120b-a12b:free  # Primary free for reasoning
+  free_model_reasoning: minimax/minimax-m2.5:free  # Primary free for reasoning (near-Opus quality)
 
 # Roland Code Orchestrator (RCO) — Claude-centric multi-agent orchestration
 rco:

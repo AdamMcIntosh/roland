@@ -65,10 +65,10 @@ import YAML from 'yaml';
  * Used by triage and route_model to return valid OpenRouter slugs.
  */
 const OPENROUTER_MODELS: Record<string, string> = {
-  simple: 'google/gemini-2.5-flash',
-  medium: 'deepseek/deepseek-chat',
-  complex: 'anthropic/claude-sonnet-4',
-  explain: 'google/gemini-2.5-flash',
+  simple: 'deepseek/deepseek-v3-0324',
+  medium: 'qwen/qwen3-coder-next',
+  complex: 'minimax/minimax-m2.5',
+  explain: 'deepseek/deepseek-v3-0324',
 };
 
 /**
@@ -101,37 +101,34 @@ const BUDGET_DEGRADATION_THRESHOLD = 0.8;
 /**
  * Maps agent names to their recommended OpenRouter model.
  *
- * Budget-optimized for ~$85/month (~$52/mo at moderate usage):
- *   - Critical (architect, security):  claude-sonnet-4    (~15% budget, ~$11)
- *   - High-value (planner, critic):    gemini-2.5-pro     (~15% budget, ~$11)
- *   - Workhorse (most agents):         deepseek-chat (V3) (~55% budget, ~$1)
- *   - Light (writer, explore, docs):   gemini-2.5-flash   (~10% budget, ~$0.50)
- *   - Prototyping:                     grok-3-mini        (on-demand)
- *   - Main session:                    gemini-2.5-flash   (~$0.50)
+ * Hybrid setup: 80-95% of Opus quality at 1/10th-1/5th cost (~$19/mo):
+ *   - Critic/Architect (reasoning):    minimax-m2.5       (~15% budget, ~$5)
+ *   - Executor/Coder (workhorse):      qwen3-coder-next   (~55% budget, ~$8)
+ *   - QA/Simple (light tasks):         deepseek-v3-0324   (~20% budget, ~$2)
+ *   - Dispatcher:                      claude-haiku-4.5   (~$4/mo)
  *
- * Fallback: if DeepSeek is down, agents fall back to gemini-2.5-flash.
+ * Fallback: agents fall back to next tier down if primary is unavailable.
  */
 const AGENT_OPENROUTER_MODELS: Record<string, string> = {
-  // Critical — wrong output here is expensive to redo
-  architect: 'anthropic/claude-sonnet-4',
-  'security-reviewer': 'anthropic/claude-sonnet-4',
-  // High-value — thoroughness matters more than speed
-  planner: 'google/gemini-2.5-pro',
-  critic: 'google/gemini-2.5-pro',
-  'code-reviewer': 'google/gemini-2.5-pro',
-  // Workhorse — best coding per dollar
-  executor: 'deepseek/deepseek-chat',
-  researcher: 'deepseek/deepseek-chat',
-  designer: 'deepseek/deepseek-chat',
-  'qa-tester': 'deepseek/deepseek-chat',
-  'build-fixer': 'deepseek/deepseek-chat',
-  'tdd-guide': 'deepseek/deepseek-chat',
-  analyst: 'deepseek/deepseek-chat',
-  scientist: 'deepseek/deepseek-chat',
-  vision: 'deepseek/deepseek-chat',
-  // Light — fast, good enough for docs and navigation
-  writer: 'google/gemini-2.5-flash',
-  explore: 'google/gemini-2.5-flash',
+  // Critic/Architect — MiniMax M2.5 for near-Opus reasoning quality
+  architect: 'minimax/minimax-m2.5',
+  'security-reviewer': 'minimax/minimax-m2.5',
+  planner: 'minimax/minimax-m2.5',
+  critic: 'minimax/minimax-m2.5',
+  'code-reviewer': 'minimax/minimax-m2.5',
+  // Executor/Coder — Qwen3-Coder-Next for best coding quality/cost balance
+  executor: 'qwen/qwen3-coder-next',
+  researcher: 'qwen/qwen3-coder-next',
+  designer: 'qwen/qwen3-coder-next',
+  'build-fixer': 'qwen/qwen3-coder-next',
+  'tdd-guide': 'qwen/qwen3-coder-next',
+  analyst: 'qwen/qwen3-coder-next',
+  scientist: 'qwen/qwen3-coder-next',
+  vision: 'qwen/qwen3-coder-next',
+  // QA/Simple — DeepSeek V3.2 for testing and light tasks
+  'qa-tester': 'deepseek/deepseek-v3-0324',
+  writer: 'deepseek/deepseek-v3-0324',
+  explore: 'deepseek/deepseek-v3-0324',
 };
 
 /**
@@ -688,9 +685,9 @@ export class McpServer {
         if (isComplexExecution) {
           recommendation.execution_strategy = {
             mode: 'subagent_writes_code',
-            execution_model: 'anthropic/claude-sonnet-4',
+            execution_model: 'minimax/minimax-m2.5',
             apply_model: 'main_session',
-            reason: 'Complex task — Sonnet 4 subagent will write the code for higher quality. Main session applies files to disk.',
+            reason: 'Complex task — MiniMax M2.5 subagent will write the code with near-Opus reasoning quality. Main session applies files to disk.',
             subagent_instructions: `You are a senior engineer writing production-ready code. Rules:\n`
               + `1. OUTPUT FORMAT: For each file, output "📄 path/to/file.ts:" followed by the COMPLETE file content in a code block. `
               + `Include ALL imports, types, error handling, and edge cases. Code must be ready to write to disk as-is.\n`

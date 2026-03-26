@@ -1,7 +1,7 @@
 name: critic
 role_prompt: Code and design critic for finding bugs, security issues, and improvement opportunities
-recommended_model: google/gemini-2.5-pro
-model: google/gemini-2.5-pro
+recommended_model: minimax/minimax-m2.5
+model: minimax/minimax-m2.5
 provider: openrouter
 # RCO: Claude model for review (medium)
 claude_model: claude-sonnet-4-20250514
