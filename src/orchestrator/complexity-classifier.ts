@@ -527,14 +527,14 @@ export class ComplexityClassifier {
         'gemini-2.0-flash',     // Fast alternative
       ],
       medium: [
-        'gpt-4o',               // Balanced speed/quality
-        'claude-3.5-sonnet',    // Strong coding model
-        'gemini-1.5-pro',       // Good alternative
+        'deepseek-v3',          // Best cost/quality balance
+        'qwen3-coder-next',     // Strong coding alternative
+        'gemini-2.5-flash',     // Fast fallback
       ],
       complex: [
-        'claude-3.5-sonnet',    // Best for architecture/reasoning
-        'gpt-4o',               // Strong alternative
-        'gemini-1.5-pro',       // Capable fallback
+        'deepseek-v3',          // Strong reasoning at low cost
+        'minimax-m2.5',         // Near-Opus for architecture
+        'qwen3-coder-next',     // Capable coding fallback
       ],
     };
 

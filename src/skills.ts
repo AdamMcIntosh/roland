@@ -12,12 +12,12 @@ function log(msg: string): void {
   if (RCO_VERBOSE) console.error(`[RCO skills] ${msg}`);
 }
 
-/** Default Sonnet model id; Haiku for simple steps */
+/** Default DeepSeek model id; Haiku for simple steps */
 export const ECO_MODELS = {
   local: 'claude-3-haiku-20240307',
   simple: 'claude-3-haiku-20240307',
-  medium: 'claude-3-5-sonnet-20241022',
-  complex: 'claude-3-5-sonnet-20241022',
+  medium: 'deepseek/deepseek-v3-0324',
+  complex: 'deepseek/deepseek-v3-0324',
 } as const;
 
 /**

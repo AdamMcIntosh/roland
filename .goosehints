@@ -24,9 +24,9 @@ Triage returns an `execution_strategy` field that tells you how to handle code:
 
 **`execution_strategy.mode = "subagent_writes_code"` (complex tasks):**
 
-A Sonnet 4 subagent writes the code. You apply it to files.
+A DeepSeek V3 subagent writes the code. You apply it to files.
 
-1. Spawn a subagent on the `execution_strategy.execution_model` (claude-sonnet-4)
+1. Spawn a subagent on the `execution_strategy.execution_model` (deepseek/deepseek-v3-0324)
 2. Pass the user's task + `execution_strategy.subagent_instructions` + any relevant
    file contents from disk (IMPORTANT: read files first and include them as context)
 3. The subagent returns complete file contents with paths
@@ -35,7 +35,7 @@ A Sonnet 4 subagent writes the code. You apply it to files.
 If tests fail or errors occur:
 - Read the FULL error output
 - Read ALL relevant source files from disk
-- Spawn another Sonnet 4 subagent with the error + file contents
+- Spawn another DeepSeek V3 subagent with the error + file contents
 - Apply the fix
 
 CRITICAL: Always include actual file contents when spawning subagents. Do NOT
@@ -44,7 +44,7 @@ summarize or describe files — include the full text. This preserves context.
 **`execution_strategy.mode = "main_session_direct"` (simple/medium tasks):**
 
 You handle it yourself. Write code and edit files directly using the
-`persona_instructions` from triage.
+`persona_instructions` from triage. DeepSeek V3 is the default workhorse model.
 
 ### Step 3: Handle recipes
 
@@ -55,7 +55,7 @@ You handle it yourself. Write code and edit files directly using the
    - **Text-only steps** (plan, review, explain, document):
      Spawn a subagent on the recommended model.
    - **Code-writing steps** (execute, fix, test):
-     Check execution_strategy. If complex → Sonnet 4 subagent writes code,
+     Check execution_strategy. If complex → DeepSeek V3 subagent writes code,
      you apply. If simple → you write directly.
 3. IMPORTANT: Between steps, always read current file state from disk before
    passing context to the next subagent. Don't rely on stale context.
@@ -70,7 +70,7 @@ After each step or subagent completes, call `track_cost` with token usage.
 Subagents cannot edit files — they don't have access to the developer extension.
 Only the main session can read/write files, run terminal commands, and see diffs.
 So file-editing work MUST happen in the main session. Subagents are used for
-text-output steps where a more capable model (Sonnet 4, Gemini Pro) adds value.
+text-output steps where a more capable model (DeepSeek V3, Gemini Pro) adds value.
 
 ## Session Context Tool (CRITICAL for long sessions)
 
@@ -158,10 +158,10 @@ When an error occurs (test failure, build error, runtime crash):
 
 1. Capture the EXACT terminal output — full stack trace, full error message
 2. Read ALL source files referenced in the error (file paths in stack traces)
-3. Pass everything verbatim to the Sonnet 4 subagent
+3. Pass everything verbatim to the DeepSeek V3 subagent
 4. Do NOT summarize, trim, or interpret the error yourself
 
-Let Sonnet 4 do the analysis. Your job is to be a transparent pipe.
+Let DeepSeek V3 do the analysis. Your job is to be a transparent pipe.
 
 Example — WRONG:
   "The test failed because the mock isn't returning the right value"
@@ -215,10 +215,10 @@ Roland is not meant to replace your IDE agent for every task. Use the right tool
 
 **Route through Roland (Goose) for:**
 - Multi-file bugs that need root cause investigation → BugFix recipe
-- Architecture decisions, system design → architect agent (Sonnet 4)
+- Architecture decisions, system design → architect agent (DeepSeek V3)
 - Security audits → security-reviewer + SecurityAudit recipe
 - New features that need planning → PlanExecRevEx recipe
-- Tasks where model selection matters (complex = Sonnet 4, simple = DeepSeek)
+- Tasks where model selection matters (complex = DeepSeek V3, simple = Haiku)
 
 This hybrid approach keeps costs down: ~70% of daily work stays in your IDE (no
 OpenRouter cost), and Roland handles the ~30% that benefits from smart routing
@@ -237,11 +237,11 @@ Do NOT call triage when:
 
 | Tier | Model | Use for |
 |------|-------|---------|
-| Critical | `anthropic/claude-sonnet-4` | Architecture, security |
-| High-value | `google/gemini-2.5-pro` | Planning, code review |
-| Workhorse | `deepseek/deepseek-chat` | Implementation, testing, most work |
+| Workhorse | `deepseek/deepseek-v3-0324` | Default for all tasks — implementation, reviews, architecture |
+| Reasoning | `minimax/minimax-m2.5` | Near-Opus quality for complex reasoning |
+| Coding | `qwen/qwen3-coder-next` | Best coding quality/cost for medium tasks |
 | Light | `google/gemini-2.5-flash` | Docs, exploration, explanations |
-| Main session | `google/gemini-2.5-flash` | You — routing + file edits |
+| Main session | `anthropic/claude-haiku-4.5` | You — routing + file edits |
 
 ## Example Flows
 
@@ -259,27 +259,27 @@ User: "Fix the null check in auth.ts line 42"
 3. Call track_cost with token usage.
 ```
 
-### Complex task (Sonnet 4 writes code, you apply)
+### Complex task (DeepSeek V3 writes code, you apply)
 ```
 User: "Implement a payment service with Stripe webhooks and idempotency"
 
 1. Call triage(message="Implement a payment service with Stripe webhooks...")
    → Returns: execution_strategy.mode="subagent_writes_code",
-     execution_model="anthropic/claude-sonnet-4", complexity=complex
+     execution_model="anthropic/deepseek/deepseek-v3-0324", complexity=complex
 
 2. Read relevant existing files from disk (package.json, existing services, types)
 
-3. Spawn Sonnet 4 subagent with:
+3. Spawn DeepSeek V3 subagent with:
    - execution_strategy.subagent_instructions
    - The user's task
    - Full contents of relevant files
-   → Sonnet 4 returns complete file contents with paths
+   → DeepSeek V3 returns complete file contents with paths
 
 4. Write each file to disk. Run tests.
 
 5. If tests fail:
    - Read full error output + source files
-   - Spawn another Sonnet 4 subagent with error context
+   - Spawn another DeepSeek V3 subagent with error context
    - Apply the fix
 
 6. Call track_cost with token usage.
@@ -296,18 +296,18 @@ User: "Build a REST API for managing tasks with authentication"
 2. Tell user: "This is complex — I recommend the RESTfulAPI recipe."
 
 3. User agrees. Run workflow:
-   a. Spawn architect subagent (claude-sonnet-4): design the API
+   a. Spawn architect subagent (deepseek/deepseek-v3-0324): design the API
       → TEXT OUTPUT — returns the design
 
-   b. Read existing files from disk, then spawn Sonnet 4 executor subagent:
+   b. Read existing files from disk, then spawn DeepSeek V3 executor subagent:
       pass the design + file contents + subagent_instructions
       → Returns complete code with file paths
       → You write files to disk, run tests, fix errors
 
-   c. Read current files from disk, spawn critic subagent (claude-sonnet-4):
+   c. Read current files from disk, spawn critic subagent (deepseek/deepseek-v3-0324):
       → TEXT OUTPUT — returns review with issues
 
-   d. If issues: spawn Sonnet 4 subagent with issues + file contents
+   d. If issues: spawn DeepSeek V3 subagent with issues + file contents
       → Returns fixes → you apply and re-test
 
    e. Spawn writer subagent (gemini-2.5-flash): document the API

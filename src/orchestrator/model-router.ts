@@ -38,8 +38,13 @@ export const MODEL_PRICING: Record<string, { input: number; output: number }> = 
   'claude-3.5-sonnet':   { input: 3.00, output: 15.00 },
   'claude-3-opus':       { input: 15.00, output: 75.00 },
   'gemini-2.0-flash':    { input: 0,    output: 0 },
+  'gemini-2.5-flash':    { input: 0,    output: 0 },
   'gemini-1.5-pro':      { input: 1.25, output: 5.00 },
   'grok-fast':           { input: 0.60, output: 0.60 },
+  // OpenRouter models
+  'deepseek-v3':         { input: 0.30, output: 0.88 },
+  'qwen3-coder-next':    { input: 0.14, output: 0.14 },
+  'minimax-m2.5':        { input: 0.50, output: 0.50 },
   // Generic fallback
   'auto':                { input: 0,    output: 0 },
 };

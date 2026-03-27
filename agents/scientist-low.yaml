@@ -2,7 +2,7 @@ name: scientist-low
 role_prompt: Quick data analyst for summary statistics and simple pattern identification
 recommended_model: deepseek/deepseek-v3-0324
 model: deepseek/deepseek-v3-0324
-claude_model: claude-sonnet-4-20250514
+claude_model: deepseek/deepseek-v3-0324
 provider: openrouter
 temperature: 0.6
 tools:

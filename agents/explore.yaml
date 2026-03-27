@@ -2,7 +2,7 @@ name: explore
 role_prompt: Codebase navigator for mapping project structure, dependencies, and patterns
 recommended_model: deepseek/deepseek-v3-0324
 model: deepseek/deepseek-v3-0324
-claude_model: claude-sonnet-4-20250514
+claude_model: deepseek/deepseek-v3-0324
 provider: openrouter
 temperature: 0.5
 tools:

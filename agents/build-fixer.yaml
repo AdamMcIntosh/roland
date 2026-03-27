@@ -2,7 +2,7 @@ name: build-fixer
 role_prompt: Build engineer for resolving TypeScript errors, compilation failures, and CI/CD issues
 recommended_model: qwen/qwen3-coder-next
 model: qwen/qwen3-coder-next
-claude_model: claude-sonnet-4-20250514
+claude_model: deepseek/deepseek-v3-0324
 provider: openrouter
 temperature: 0.6
 tools:

@@ -6,7 +6,7 @@ subagents:
   - name: Explorer
     provider: openrouter
     model: claude-4-sonnet
-    claude_model: claude-3-5-sonnet-20241022
+    claude_model: deepseek/deepseek-v3-0324
     prompt: |
       You are a feasibility investigation agent. For the spike: {{user_task}}.
 
@@ -25,7 +25,7 @@ subagents:
   - name: Executor
     provider: openrouter
     model: gpt-4o
-    claude_model: claude-3-5-sonnet-20241022
+    claude_model: deepseek/deepseek-v3-0324
     prompt: |
       You are the prototype agent. Use the exploration from @Explorer to build a working spike.
 

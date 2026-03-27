@@ -6,7 +6,7 @@ subagents:
   - name: Planner
     provider: openrouter
     model: claude-4-sonnet
-    claude_model: claude-3-5-sonnet-20241022
+    claude_model: deepseek/deepseek-v3-0324
     prompt: |
       You are a concise planning agent for solo development. For the task: {{user_task}}.
 
@@ -24,7 +24,7 @@ subagents:
   - name: Executor
     provider: openrouter
     model: gpt-4o
-    claude_model: claude-3-5-sonnet-20241022
+    claude_model: deepseek/deepseek-v3-0324
     prompt: |
       You are the implementation agent. Use the plan from @Planner to build the feature.
 
@@ -41,7 +41,7 @@ subagents:
   - name: QA
     provider: openrouter
     model: gemini-2.5-flash
-    claude_model: claude-3-5-sonnet-20241022
+    claude_model: deepseek/deepseek-v3-0324
     prompt: |
       You are the QA and release agent. Verify the work from @Executor and commit if everything passes.
 

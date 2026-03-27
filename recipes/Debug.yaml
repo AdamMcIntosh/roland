@@ -6,7 +6,7 @@ subagents:
   - name: Researcher
     provider: openrouter
     model: claude-4-sonnet
-    claude_model: claude-3-5-sonnet-20241022
+    claude_model: deepseek/deepseek-v3-0324
     prompt: |
       You are a bug investigation agent. For the bug report: {{user_task}}.
 
@@ -25,7 +25,7 @@ subagents:
   - name: Executor
     provider: openrouter
     model: gpt-4o
-    claude_model: claude-3-5-sonnet-20241022
+    claude_model: deepseek/deepseek-v3-0324
     prompt: |
       You are the bug fix implementation agent. Apply the fix identified by @Researcher.
 

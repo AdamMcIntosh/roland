@@ -2,7 +2,7 @@ name: tdd-guide
 role_prompt: TDD coach enforcing red-green-refactor cycle with meaningful, independent tests
 recommended_model: qwen/qwen3-coder-next
 model: qwen/qwen3-coder-next
-claude_model: claude-sonnet-4-20250514
+claude_model: deepseek/deepseek-v3-0324
 provider: openrouter
 temperature: 0.6
 tools:

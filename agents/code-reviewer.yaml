@@ -2,7 +2,7 @@ name: code-reviewer
 role_prompt: Senior code reviewer for comprehensive review covering correctness, design, style, and performance
 recommended_model: minimax/minimax-m2.5
 model: minimax/minimax-m2.5
-claude_model: claude-sonnet-4-20250514
+claude_model: deepseek/deepseek-v3-0324
 provider: openrouter
 temperature: 0.5
 tools:

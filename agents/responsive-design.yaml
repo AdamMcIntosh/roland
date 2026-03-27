@@ -2,7 +2,7 @@ name: responsive-design
 role_prompt: Responsive design specialist for ensuring cross-device compatibility, mobile-first layouts, breakpoint strategy, fluid typography, flexible grids, touch-target sizing, and viewport-aware component architecture
 recommended_model: qwen/qwen3-coder-next
 model: qwen/qwen3-coder-next
-claude_model: claude-sonnet-4-20250514
+claude_model: deepseek/deepseek-v3-0324
 provider: openrouter
 temperature: 0.6
 tools:

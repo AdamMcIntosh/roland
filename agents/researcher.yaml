@@ -2,7 +2,7 @@ name: researcher
 role_prompt: Deep technical researcher for codebase exploration, root cause analysis, and documentation review
 recommended_model: qwen/qwen3-coder-next
 model: qwen/qwen3-coder-next
-claude_model: claude-sonnet-4-20250514
+claude_model: deepseek/deepseek-v3-0324
 provider: openrouter
 temperature: 0.7
 tools:

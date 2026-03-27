@@ -3,7 +3,7 @@ role_prompt: Technical documentation writer. READMEs, API docs, inline comments,
 
 
 provider: openrouter
-claude_model: claude-sonnet-4-20250514
+claude_model: deepseek/deepseek-v3-0324
 temperature: 0.6
 tools:
   - search

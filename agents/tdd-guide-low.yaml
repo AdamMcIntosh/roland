@@ -2,7 +2,7 @@ name: tdd-guide-low
 role_prompt: Simple TDD guide for basic test-first development on single features
 recommended_model: deepseek/deepseek-v3-0324
 model: deepseek/deepseek-v3-0324
-claude_model: claude-sonnet-4-20250514
+claude_model: deepseek/deepseek-v3-0324
 provider: openrouter
 temperature: 0.6
 tools:

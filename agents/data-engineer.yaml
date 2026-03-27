@@ -3,7 +3,7 @@ role_prompt: Data engineering and pipeline agent. Schemas, ETL, queries, and dat
 
 
 provider: openrouter
-claude_model: claude-sonnet-4-20250514
+claude_model: deepseek/deepseek-v3-0324
 temperature: 0.4
 tools:
   - search

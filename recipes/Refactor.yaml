@@ -6,7 +6,7 @@ subagents:
   - name: Analyst
     provider: openrouter
     model: claude-4-sonnet
-    claude_model: claude-3-5-sonnet-20241022
+    claude_model: deepseek/deepseek-v3-0324
     prompt: |
       You are a refactor analysis agent. For the refactor task: {{user_task}}.
 
@@ -25,7 +25,7 @@ subagents:
   - name: Executor
     provider: openrouter
     model: gpt-4o
-    claude_model: claude-3-5-sonnet-20241022
+    claude_model: deepseek/deepseek-v3-0324
     prompt: |
       You are the refactor implementation agent. Execute the refactor plan from @Analyst.
 
@@ -43,7 +43,7 @@ subagents:
   - name: QA
     provider: openrouter
     model: gemini-2.5-flash
-    claude_model: claude-3-5-sonnet-20241022
+    claude_model: deepseek/deepseek-v3-0324
     prompt: |
       You are the refactor verification agent. Confirm that @Executor's refactor is safe to merge.
 

@@ -2,7 +2,7 @@ name: explore-medium
 role_prompt: Deeper codebase explorer for architectural analysis and flow tracing
 recommended_model: deepseek/deepseek-v3-0324
 model: deepseek/deepseek-v3-0324
-claude_model: claude-sonnet-4-20250514
+claude_model: deepseek/deepseek-v3-0324
 provider: openrouter
 temperature: 0.5
 tools:

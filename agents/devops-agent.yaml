@@ -3,7 +3,7 @@ role_prompt: DevOps and deployment specialist. CI/CD pipelines, containerization
 
 
 provider: openrouter
-claude_model: claude-sonnet-4-20250514
+claude_model: deepseek/deepseek-v3-0324
 temperature: 0.5
 tools:
   - search

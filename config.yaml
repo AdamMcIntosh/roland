@@ -68,10 +68,10 @@ goose:
 # Roland Code Orchestrator (RCO) — Claude-centric multi-agent orchestration
 rco:
   claude_models:
-    complex: claude-sonnet-4-20250514
-    medium:  claude-sonnet-4-20250514
+    complex: deepseek/deepseek-v3-0324
+    medium:  deepseek/deepseek-v3-0324
     simple:  claude-haiku-4-5-20251001
-    explain: claude-sonnet-4-20250514
+    explain: deepseek/deepseek-v3-0324
   eco_mode: true
   task_routing:
     - pattern: "plan|architecture|design|break down"
