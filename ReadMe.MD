@@ -15,6 +15,40 @@ With Goose, Roland acts as a smart dispatcher: a cheap model handles routing, ca
 
 ---
 
+## 🧑‍💼 PM Team Mode (Cursor)
+
+Roland can also run as a **PM-first multi-agent team** inside Cursor. You are the
+Lead PM (on Claude Opus 4.7); Roland runs a team of specialized engineers on
+Cursor's Composer 2.5 models. You don't write code — you decompose work,
+delegate it, and **keep the team unblocked**.
+
+> **The mantra:** *I am the PM. Roland runs the team. Keep them unblocked.*
+
+**Setup (global, works in every project):**
+```bash
+bash scripts/install-global.sh    # Windows: pwsh scripts/install-global.ps1
+roland doctor                      # verify
+```
+
+**The loop**, in Cursor chat:
+1. `get_pm_playbook` — adopt the PM posture.
+2. `pm_standup` — read the rendered board (blockers always on top).
+3. `unblock_task` → `review_task` → `assign_task` / `start_team_recipe`.
+4. Each dispatch packet has a **`cursorLaunch`** block — copy-paste steps to spin
+   up the engineer in a new Cursor pane on the right model.
+5. `synthesize_deliverable` when the board is clear.
+
+**Routing** is deterministic and Cursor-native (no OpenRouter): PM →
+`claude-opus-4-7`; reasoning roles (architect, reviewer, critic) →
+`composer-2.5-fast`; execution (executor, qa, docs) → `composer-2.5-standard`.
+Token usage is attributed per engineer/task (figures are usage, not dollars —
+the team runs on your Cursor subscription).
+
+→ **New here? Start with [`ONBOARDING.md`](ONBOARDING.md).**
+→ **Full worked example: [`docs/guides/pm-workflow.md`](docs/guides/pm-workflow.md).**
+
+---
+
 ## Key Features
 
 ### MCP Tools

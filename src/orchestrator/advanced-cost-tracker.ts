@@ -19,6 +19,8 @@ export interface CostRecord {
   cost: number;
   query?: string;
   cached: boolean;
+  /** PM task this usage is attributed to (Phase 3 usage attribution). */
+  taskKey?: string;
 }
 
 export interface CostSummary {
@@ -70,7 +72,7 @@ export class AdvancedCostTracker {
     inputTokens: number,
     outputTokens: number,
     cost: number,
-    options?: { query?: string; cached?: boolean }
+    options?: { query?: string; cached?: boolean; taskKey?: string }
   ): void {
     // Local provider (Ollama) is always $0 regardless of token counts
     const effectiveCost = provider === 'local' ? 0 : cost;
@@ -85,6 +87,7 @@ export class AdvancedCostTracker {
       cost: effectiveCost,
       query: options?.query,
       cached: options?.cached ?? false,
+      taskKey: options?.taskKey,
     };
 
     this.records.push(record);
@@ -203,6 +206,34 @@ export class AdvancedCostTracker {
         percentage: (cost / summary.totalCost) * 100,
       }))
       .sort((a, b) => b.cost - a.cost);
+  }
+
+  /**
+   * Get usage breakdown by PM task (Phase 3). Token-centric — cost is $0 for
+   * Cursor/subscription models, so this sorts by total tokens.
+   */
+  getTaskBreakdown(): Array<{
+    taskKey: string;
+    inputTokens: number;
+    outputTokens: number;
+    requests: number;
+    cost: number;
+  }> {
+    const map = new Map<string, { taskKey: string; inputTokens: number; outputTokens: number; requests: number; cost: number }>();
+    for (const r of this.records) {
+      if (!r.taskKey) continue;
+      const cur =
+        map.get(r.taskKey) ??
+        { taskKey: r.taskKey, inputTokens: 0, outputTokens: 0, requests: 0, cost: 0 };
+      cur.inputTokens += r.inputTokens;
+      cur.outputTokens += r.outputTokens;
+      cur.requests += 1;
+      cur.cost += r.cost;
+      map.set(r.taskKey, cur);
+    }
+    return Array.from(map.values()).sort(
+      (a, b) => b.inputTokens + b.outputTokens - (a.inputTokens + a.outputTokens)
+    );
   }
 
   /**

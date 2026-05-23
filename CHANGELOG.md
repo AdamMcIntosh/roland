@@ -5,6 +5,35 @@ All notable changes to Roland are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — PM Team System (Cursor-native)
+
+A PM-first multi-agent team for Cursor: you are the Lead PM (Claude Opus 4.7),
+Roland runs a team of engineers on Cursor's Composer 2.5 models.
+
+### Added
+
+- **Phase 1 — Coordination substrate.** A keyed, rev-stamped Blackboard
+  (`blackboard_post/read/patch`) and a poll-based Message Bus (`bus_send/poll`),
+  persisted per-project under `.roland/` with fs-locked atomic writes.
+- **Phase 2 — PM control loop.** Task lifecycle state machine
+  (`open→in_progress→blocked⇄in_progress→in_review→done→archived`) and PM tools:
+  `get_pm_playbook`, `get_team_context`, `list_team`, `spawn_task`, `assign_task`,
+  `mark_blocked`, `unblock_task`, `complete_task`, `review_task`,
+  `synthesize_deliverable`. needsAttention always surfaces blockers first.
+- **Phase 3 — Cursor-native routing + recipes.** Deterministic lane routing
+  (PM→`claude-opus-4-7`, reasoning→`composer-2.5-fast`, coding/light→
+  `composer-2.5-standard`); **no OpenRouter** in the PM path. Per-task/engineer
+  Cursor token-usage attribution (`report_usage`, `get_team_usage`). Team recipes
+  (`full-feature-team`, `bugfix-team`, `refactor-team`) via `start_team_recipe`.
+  Optional `pm:` config section.
+- **Phase 4 — Polish & integration.** Rendered Markdown views (`pm_standup`,
+  `format:"markdown"` on `get_team_context`/`get_team_usage`); `cursorLaunch`
+  copy-paste launch instructions on every dispatch packet; PM event timeline
+  (`.roland/pm-events.log`, `get_pm_events`); `roland` CLI subcommands
+  (`serve`, `mcp-config`, `doctor`, `pm-log`); global install scripts
+  (`scripts/install-global.{sh,ps1}`); onboarding + workflow docs.
+- **Legacy untouched:** OpenRouter remains for RCO/triage/route_model/classifier.
+
 ## [0.1.4] - 2026-03-24
 
 ### Added — Inline Diffs & Docker Sandboxing

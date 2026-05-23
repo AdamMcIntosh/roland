@@ -1,0 +1,55 @@
+name: full-feature-team
+description: >
+  Ship a feature end to end: an architect designs it, an executor implements it,
+  then QA and review run in parallel before docs. Use for net-new functionality.
+tasks:
+  - slug: design
+    title: "Design: {{goal}}"
+    assignee: architect
+    description: >
+      Produce a concise technical design for: {{goal}}. Define the interfaces,
+      data shapes, and the key tradeoffs. Post decisions to the Blackboard so the
+      implementer shares your assumptions.
+    acceptanceCriteria: >
+      A design the executor can implement without guessing: interfaces named,
+      edge cases listed, open questions raised as blockers.
+
+  - slug: implement
+    title: "Implement: {{goal}}"
+    assignee: executor
+    dependsOn: [design]
+    description: >
+      Implement {{goal}} per the approved design. Match surrounding code style.
+      Keep changes scoped to this feature.
+    acceptanceCriteria: >
+      Feature works per the design; no out-of-scope changes; builds clean.
+
+  - slug: test
+    title: "Test: {{goal}}"
+    assignee: qa-tester
+    dependsOn: [implement]
+    description: >
+      Write and run tests covering the happy path and the edge cases the design
+      called out for {{goal}}. Report failures as blockers with repro steps.
+    acceptanceCriteria: >
+      Meaningful tests pass; edge cases from the design are covered.
+
+  - slug: review
+    title: "Review: {{goal}}"
+    assignee: code-reviewer
+    dependsOn: [implement]
+    description: >
+      Review the implementation of {{goal}} against the design and the acceptance
+      criteria. Flag correctness, security, and maintainability issues specifically.
+    acceptanceCriteria: >
+      Review complete with concrete, actionable findings (or an explicit LGTM).
+
+  - slug: docs
+    title: "Document: {{goal}}"
+    assignee: writer
+    dependsOn: [test, review]
+    description: >
+      Document {{goal}} for users and maintainers: what it does, how to use it,
+      and any new configuration.
+    acceptanceCriteria: >
+      Docs accurate against the shipped behavior; examples run as written.

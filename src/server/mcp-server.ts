@@ -50,6 +50,10 @@ import {
 } from '../utils/migration-context.js';
 import { SessionContextManager } from './session-context.js';
 import { ProjectContextManager } from './project-context.js';
+import { CoordinationManager, ConcurrencyError } from '../coordination/index.js';
+import { LeadPM } from '../pm/lead-pm.js';
+import { renderTimeline, renderUsage } from '../pm/render.js';
+import type { PMEventAction } from '../pm/event-log.js';
 import { QualityTracker, initializeQualityTracker } from '../orchestrator/quality-tracker.js';
 import { selectRelevantFiles, bundleFileContents, formatBundleAsMarkdown, DEFAULT_CONTEXT_GATHERING_CONFIG } from '../utils/file-gatherer.js';
 import type { FileBundle } from '../utils/file-gatherer.js';
@@ -175,6 +179,8 @@ export class McpServer {
   private sessionContextManager: SessionContextManager;
   private projectContextManager: ProjectContextManager;
   private qualityTracker: QualityTracker;
+  private coordination: CoordinationManager;
+  private leadPm: LeadPM;
   private recipesDir: string;
 
   constructor(config: AppConfig) {
@@ -202,6 +208,27 @@ export class McpServer {
 
     // Initialize quality tracker (model A/B quality signals, persisted to .roland/)
     this.qualityTracker = initializeQualityTracker(projectRoot);
+
+    // Initialize coordination substrate (Blackboard + Message Bus) — the shared
+    // awareness layer the host (Lead PM) and sub-agents communicate through.
+    // State is project-scoped under .roland/ (see coordination/paths.ts).
+    this.coordination = new CoordinationManager();
+
+    // Initialize the PM control loop (Phase 2/3). The host acts as the Lead PM;
+    // these tools let it run the team on top of the coordination substrate.
+    // Routing is Cursor-native (Phase 3): an optional `pm:` config section can
+    // override the three Cursor models and per-engineer lanes.
+    const pmCfg = (config as { pm?: { lead_model?: string; fast_model?: string; standard_model?: string; lane_overrides?: Record<string, 'pm' | 'reasoning' | 'coding' | 'light'> } }).pm;
+    this.leadPm = new LeadPM(this.coordination, {
+      policy: pmCfg
+        ? {
+            pm: pmCfg.lead_model ?? 'claude-opus-4-7',
+            fast: pmCfg.fast_model ?? 'composer-2.5-fast',
+            standard: pmCfg.standard_model ?? 'composer-2.5-standard',
+          }
+        : undefined,
+      laneOverrides: pmCfg?.lane_overrides,
+    });
 
     // Initialize budget manager with config from config.yaml
     BudgetManager.initialize();
@@ -257,6 +284,8 @@ export class McpServer {
     this.registerGitTools();
     this.registerAnalyzeScreenshot();
     this.registerReadContext();
+    this.registerCoordinationTools();
+    this.registerPmTools();
   }
 
   // --------------------------------------------------------------------------
@@ -2625,6 +2654,494 @@ export class McpServer {
   // ==========================================================================
   // Tool Registration Helper
   // ==========================================================================
+
+  // --------------------------------------------------------------------------
+  // Coordination substrate (Phase 1): Blackboard + Message Bus
+  //
+  // The shared-awareness layer. The host acts as the Lead PM and, together with
+  // any sub-agents it spawns, uses these tools to publish facts/tasks/blockers,
+  // read the whole board, and exchange directed or broadcast messages. State is
+  // project-scoped under .roland/ so one global MCP registration works in every
+  // repo.
+  // --------------------------------------------------------------------------
+  private registerCoordinationTools(): void {
+    // blackboard_post — create or update a shared entry
+    this.registerTool(
+      'blackboard_post',
+      'Publish or update a shared entry on the team Blackboard (a fact, decision, task, artifact, blocker, or status). Re-posting the same key updates it and bumps its rev. Pass expectedRev to guard against overwriting a concurrent change.',
+      async (args: Record<string, unknown>) => {
+        try {
+          const entry = this.coordination.blackboard.post({
+            key: args.key as string,
+            type: args.type as never,
+            value: args.value,
+            tags: args.tags as string[] | undefined,
+            author: args.author as string,
+            status: args.status as never,
+            expectedRev: args.expectedRev as number | undefined,
+          });
+          return { ok: true, entry };
+        } catch (err) {
+          if (err instanceof ConcurrencyError) {
+            return { ok: false, conflict: { key: err.key, expected: err.expected, actual: err.actual } };
+          }
+          throw err;
+        }
+      },
+      {
+        type: 'object',
+        properties: {
+          key: { type: 'string', description: 'Stable id for the entry, e.g. "task:auth-refactor". Re-posting updates it.' },
+          type: { type: 'string', enum: ['fact', 'decision', 'task', 'artifact', 'blocker', 'status'], description: 'Kind of entry.' },
+          value: { description: 'Arbitrary JSON payload (string, object, etc.).' },
+          tags: { type: 'array', items: { type: 'string' }, description: 'Optional tags for filtering.' },
+          author: { type: 'string', description: 'Agent id posting this, e.g. "lead-pm" or "executor#3".' },
+          status: { type: 'string', enum: ['open', 'in_progress', 'blocked', 'done', 'archived'], description: 'Optional lifecycle status (most useful for tasks/blockers).' },
+          expectedRev: { type: 'number', description: 'If set and the stored rev differs, the post is rejected with a concurrency error.' },
+        },
+        required: ['key', 'type', 'value', 'author'],
+      }
+    );
+
+    // blackboard_read — query the board
+    this.registerTool(
+      'blackboard_read',
+      'Read entries from the team Blackboard, newest first. All filters are optional; with none, returns the most recent entries. Use this to get shared awareness of tasks, decisions, and blockers across the team.',
+      async (args: Record<string, unknown>) => {
+        const entries = this.coordination.blackboard.read({
+          key: args.key as string | undefined,
+          type: args.type as never,
+          tags: args.tags as string[] | undefined,
+          author: args.author as string | undefined,
+          status: args.status as never,
+          since: args.since as number | undefined,
+          includeArchived: args.includeArchived as boolean | undefined,
+          limit: (args.limit as number | undefined) ?? 50,
+        });
+        return { count: entries.length, entries };
+      },
+      {
+        type: 'object',
+        properties: {
+          key: { type: 'string', description: 'Exact key to fetch.' },
+          type: { type: 'string', enum: ['fact', 'decision', 'task', 'artifact', 'blocker', 'status'] },
+          tags: { type: 'array', items: { type: 'string' }, description: 'Match-any: entry matches if it has at least one of these tags.' },
+          author: { type: 'string' },
+          status: { type: 'string', enum: ['open', 'in_progress', 'blocked', 'done', 'archived'] },
+          since: { type: 'number', description: 'Only entries updated at or after this epoch-ms timestamp.' },
+          includeArchived: { type: 'boolean', description: 'Include archived entries (default false).' },
+          limit: { type: 'number', description: 'Max entries to return (default 50, max 200).' },
+        },
+        required: [],
+      }
+    );
+
+    // blackboard_patch — partial update of an existing entry
+    this.registerTool(
+      'blackboard_patch',
+      'Partially update an existing Blackboard entry (e.g. transition a task status to in_progress/done, or revise its value). Bumps rev. Fails if the key does not exist.',
+      async (args: Record<string, unknown>) => {
+        try {
+          const entry = this.coordination.blackboard.patch({
+            key: args.key as string,
+            author: args.author as string,
+            changes: (args.changes as Record<string, unknown>) ?? {},
+            expectedRev: args.expectedRev as number | undefined,
+          });
+          return { ok: true, entry };
+        } catch (err) {
+          if (err instanceof ConcurrencyError) {
+            return { ok: false, conflict: { key: err.key, expected: err.expected, actual: err.actual } };
+          }
+          throw err;
+        }
+      },
+      {
+        type: 'object',
+        properties: {
+          key: { type: 'string', description: 'Key of the entry to update.' },
+          author: { type: 'string', description: 'Agent id making the change.' },
+          changes: {
+            type: 'object',
+            description: 'Fields to change.',
+            properties: {
+              type: { type: 'string', enum: ['fact', 'decision', 'task', 'artifact', 'blocker', 'status'] },
+              value: { description: 'New JSON payload.' },
+              tags: { type: 'array', items: { type: 'string' } },
+              status: { type: 'string', enum: ['open', 'in_progress', 'blocked', 'done', 'archived'] },
+            },
+          },
+          expectedRev: { type: 'number', description: 'Optional optimistic-concurrency guard.' },
+        },
+        required: ['key', 'author', 'changes'],
+      }
+    );
+
+    // bus_send — send a peer-to-peer or broadcast message
+    this.registerTool(
+      'bus_send',
+      'Send a message on the team Message Bus to a specific agent, or to "*" to broadcast to everyone but the sender. Use this for direct peer-to-peer coordination that does not belong on the shared Blackboard.',
+      async (args: Record<string, unknown>) => {
+        const message = this.coordination.bus.send({
+          from: args.from as string,
+          to: args.to as string,
+          topic: args.topic as string | undefined,
+          body: args.body as string,
+          replyTo: args.replyTo as string | undefined,
+        });
+        return { ok: true, message };
+      },
+      {
+        type: 'object',
+        properties: {
+          from: { type: 'string', description: 'Sender agent id.' },
+          to: { type: 'string', description: 'Recipient agent id, or "*" to broadcast.' },
+          topic: { type: 'string', description: 'Optional topic/channel (default "general").' },
+          body: { type: 'string', description: 'Message content.' },
+          replyTo: { type: 'string', description: 'Optional id of the message this replies to.' },
+        },
+        required: ['from', 'to', 'body'],
+      }
+    );
+
+    // bus_poll — drain a recipient's mailbox
+    this.registerTool(
+      'bus_poll',
+      'Drain undelivered messages addressed to an agent (directly or via broadcast). By default acknowledges them so they are not returned again. Returns messages oldest-first plus a nextSince cursor for the next poll.',
+      async (args: Record<string, unknown>) => {
+        const messages = this.coordination.bus.poll({
+          recipient: args.recipient as string,
+          since: args.since as number | undefined,
+          topic: args.topic as string | undefined,
+          ack: args.ack as boolean | undefined,
+          limit: args.limit as number | undefined,
+        });
+        const nextSince = messages.length > 0 ? messages[messages.length - 1].ts + 1 : (args.since as number | undefined);
+        return { count: messages.length, messages, nextSince };
+      },
+      {
+        type: 'object',
+        properties: {
+          recipient: { type: 'string', description: 'Agent id whose mailbox to drain.' },
+          since: { type: 'number', description: 'Only messages at or after this epoch-ms timestamp.' },
+          topic: { type: 'string', description: 'Restrict to a single topic.' },
+          ack: { type: 'boolean', description: 'Mark returned messages delivered to this recipient (default true). Set false to peek.' },
+          limit: { type: 'number', description: 'Max messages to return (1-200).' },
+        },
+        required: ['recipient'],
+      }
+    );
+  }
+
+  // --------------------------------------------------------------------------
+  // PM control loop (Phase 2): the Lead PM's team-management surface.
+  //
+  // The host acts as the Lead PM (Opus 4.7). These tools let it decompose work,
+  // assign engineers, monitor and clear blockers, review submissions, and
+  // synthesize the result — all on top of the Phase 1 Blackboard + Message Bus.
+  // The lifecycle is enforced server-side so the board can't reach a bad state.
+  // --------------------------------------------------------------------------
+  private registerPmTools(): void {
+    // get_pm_playbook — adopt the Engineering-Manager posture
+    this.registerTool(
+      'get_pm_playbook',
+      'Fetch the Lead PM playbook (the Engineering-Manager system prompt). Call this once at the start of a session so you operate as the PM: keep the team unblocked, decompose and delegate, review against acceptance criteria.',
+      async () => this.leadPm.getPlaybook(),
+      { type: 'object', properties: {}, required: [] }
+    );
+
+    // pm_standup — the rendered, daily-driver heartbeat (Phase 4)
+    this.registerTool(
+      'pm_standup',
+      'The recommended top-of-turn call. Returns a rendered Markdown standup (board, blockers-first triage with the exact unblock calls, usage, and your next 3 actions) plus the structured context. Read the markdown, then act — unblock before starting new work.',
+      async () => this.leadPm.getStandup(),
+      { type: 'object', properties: {}, required: [] }
+    );
+
+    // get_team_context — THE HEARTBEAT (structured; pass format:"markdown" for a rendered standup)
+    this.registerTool(
+      'get_team_context',
+      'The PM heartbeat. Returns the full team digest: status counts, the blockers/reviews/stalled/ready items that need your attention (blockers first), your inbox, recent decisions, and concrete suggested next actions. Pass format:"markdown" for a rendered standup. Act on needsAttention top-down — unblock before starting new work.',
+      async (args: Record<string, unknown>) => {
+        if (args.format === 'markdown') return this.leadPm.getStandup();
+        return this.leadPm.getTeamContext();
+      },
+      {
+        type: 'object',
+        properties: {
+          format: { type: 'string', enum: ['json', 'markdown'], description: 'Output format. "markdown" returns a rendered standup; default is structured JSON.' },
+        },
+        required: [],
+      }
+    );
+
+    // list_team — the roster of engineers
+    this.registerTool(
+      'list_team',
+      'List the available engineer personas you can assign tasks to, with each one\'s specialty and recommended model.',
+      async () => ({ engineers: this.leadPm.listTeam() }),
+      { type: 'object', properties: {}, required: [] }
+    );
+
+    // spawn_task — register a decomposed task
+    this.registerTool(
+      'spawn_task',
+      'Register a decomposed unit of work as a task on the board (status: open). Returns the task plus a dispatch packet (engineer persona, recommended model, assembled brief, context files) you use to launch the engineer in your IDE.',
+      async (args: Record<string, unknown>) => {
+        return this.leadPm.spawnTask({
+          slug: args.slug as string,
+          title: args.title as string,
+          description: args.description as string,
+          assignee: args.assignee as string | undefined,
+          dependsOn: args.dependsOn as string[] | undefined,
+          priority: args.priority as never,
+          acceptanceCriteria: args.acceptanceCriteria as string | undefined,
+        });
+      },
+      {
+        type: 'object',
+        properties: {
+          slug: { type: 'string', description: 'Short stable id for the task, e.g. "login-ui". Becomes key "task:login-ui".' },
+          title: { type: 'string', description: 'Human-readable title.' },
+          description: { type: 'string', description: 'What the engineer must accomplish.' },
+          assignee: { type: 'string', description: 'Optional engineer persona to suggest. If omitted, Roland recommends one.' },
+          dependsOn: { type: 'array', items: { type: 'string' }, description: 'Task keys that must be done before this can start.' },
+          priority: { type: 'string', enum: ['low', 'normal', 'high'] },
+          acceptanceCriteria: { type: 'string', description: 'Concrete bar the work is reviewed against.' },
+        },
+        required: ['slug', 'title', 'description'],
+      }
+    );
+
+    // assign_task — assign to an engineer and notify
+    this.registerTool(
+      'assign_task',
+      'Assign a task to an engineer (open/in_progress → in_progress), notify them on the bus, and return a fresh dispatch packet to launch them.',
+      async (args: Record<string, unknown>) => {
+        return this.leadPm.assignTask({
+          taskKey: args.taskKey as string,
+          assignee: args.assignee as string,
+        });
+      },
+      {
+        type: 'object',
+        properties: {
+          taskKey: { type: 'string', description: 'Key of the task, e.g. "task:login-ui".' },
+          assignee: { type: 'string', description: 'Engineer persona id (see list_team).' },
+        },
+        required: ['taskKey', 'assignee'],
+      }
+    );
+
+    // mark_blocked — raise a blocker (engineer or PM)
+    this.registerTool(
+      'mark_blocked',
+      'Flag a task as blocked (in_progress → blocked), recording exactly what is needed and notifying the PM. Engineers call this the moment they are stuck.',
+      async (args: Record<string, unknown>) => {
+        return this.leadPm.markBlocked({
+          taskKey: args.taskKey as string,
+          need: args.need as string,
+          raisedBy: args.raisedBy as string,
+          slug: args.slug as string | undefined,
+        });
+      },
+      {
+        type: 'object',
+        properties: {
+          taskKey: { type: 'string', description: 'Key of the blocked task.' },
+          need: { type: 'string', description: 'Precisely what is needed to proceed (a decision, file, constraint, access).' },
+          raisedBy: { type: 'string', description: 'Agent id raising the blocker (the engineer, or "lead-pm").' },
+          slug: { type: 'string', description: 'Optional human-readable blocker id.' },
+        },
+        required: ['taskKey', 'need', 'raisedBy'],
+      }
+    );
+
+    // unblock_task — PM resolves a blocker
+    this.registerTool(
+      'unblock_task',
+      'Resolve a blocker with a concrete decision. Records the decision on the board, archives the blocker, returns the task to in_progress once no blockers remain, and notifies the assignee. This is your highest-priority action.',
+      async (args: Record<string, unknown>) => {
+        return this.leadPm.unblockTask({
+          taskKey: args.taskKey as string,
+          blockerKey: args.blockerKey as string,
+          resolution: args.resolution as string,
+        });
+      },
+      {
+        type: 'object',
+        properties: {
+          taskKey: { type: 'string', description: 'Key of the blocked task.' },
+          blockerKey: { type: 'string', description: 'Key of the blocker to resolve (from get_team_context).' },
+          resolution: { type: 'string', description: 'Your concrete decision/answer that unblocks the engineer.' },
+        },
+        required: ['taskKey', 'blockerKey', 'resolution'],
+      }
+    );
+
+    // complete_task — engineer submits work for review
+    this.registerTool(
+      'complete_task',
+      'Submit completed work: attaches an artifact and moves the task to in_review, notifying the PM. Engineers call this when done. Optionally pass model + input_tokens/output_tokens to attribute Cursor usage in the same call (no need to also call report_usage).',
+      async (args: Record<string, unknown>) => {
+        return this.leadPm.completeTask({
+          taskKey: args.taskKey as string,
+          summary: args.summary as string,
+          content: args.content as string | undefined,
+          author: args.author as string,
+          slug: args.slug as string | undefined,
+          model: args.model as string | undefined,
+          inputTokens: args.input_tokens as number | undefined,
+          outputTokens: args.output_tokens as number | undefined,
+        });
+      },
+      {
+        type: 'object',
+        properties: {
+          taskKey: { type: 'string', description: 'Key of the task being completed.' },
+          summary: { type: 'string', description: 'One-line summary of what was delivered.' },
+          content: { type: 'string', description: 'Optional artifact body (diff, doc, output).' },
+          author: { type: 'string', description: 'Engineer id submitting the work.' },
+          slug: { type: 'string', description: 'Optional human-readable artifact id.' },
+          model: { type: 'string', description: 'Optional Cursor model used (e.g. "composer-2.5-standard") — enables usage attribution.' },
+          input_tokens: { type: 'number', description: 'Optional Cursor input tokens used for this task.' },
+          output_tokens: { type: 'number', description: 'Optional Cursor output tokens used for this task.' },
+        },
+        required: ['taskKey', 'summary', 'author'],
+      }
+    );
+
+    // review_task — PM accepts or rejects
+    this.registerTool(
+      'review_task',
+      'Review submitted work against its acceptance criteria. accept → done; reject → back to in_progress with your notes, and the engineer is notified to rework.',
+      async (args: Record<string, unknown>) => {
+        return this.leadPm.reviewTask({
+          taskKey: args.taskKey as string,
+          decision: args.decision as 'accept' | 'reject',
+          notes: args.notes as string | undefined,
+        });
+      },
+      {
+        type: 'object',
+        properties: {
+          taskKey: { type: 'string', description: 'Key of the task in review.' },
+          decision: { type: 'string', enum: ['accept', 'reject'], description: 'Accept the work or send it back.' },
+          notes: { type: 'string', description: 'On reject: the specific gap to fix.' },
+        },
+        required: ['taskKey', 'decision'],
+      }
+    );
+
+    // synthesize_deliverable — final rollup
+    this.registerTool(
+      'synthesize_deliverable',
+      'Roll up all completed tasks and their artifacts into a single deliverable summary for the human PM. Call this when nothing is open/in_progress/blocked/in_review.',
+      async () => this.leadPm.synthesizeDeliverable(),
+      { type: 'object', properties: {}, required: [] }
+    );
+
+    // list_team_recipes — the pre-decomposed team templates
+    this.registerTool(
+      'list_team_recipes',
+      'List the bundled team recipes (e.g. full-feature-team, bugfix-team, refactor-team) — pre-decomposed task graphs you can drop onto the board in one call with start_team_recipe.',
+      async () => ({ recipes: this.leadPm.listTeamRecipes() }),
+      { type: 'object', properties: {}, required: [] }
+    );
+
+    // start_team_recipe — instantiate a whole task graph for a goal
+    this.registerTool(
+      'start_team_recipe',
+      'Instantiate a team recipe for a goal: seeds the entire task graph on the board (namespaced + dependency-linked) and returns dispatch packets for the tasks ready to start now. Use this to kick off a standard workflow without decomposing by hand.',
+      async (args: Record<string, unknown>) => {
+        return this.leadPm.startTeamRecipe({
+          recipe: args.recipe as string,
+          goal: args.goal as string,
+          namespace: args.namespace as string | undefined,
+        });
+      },
+      {
+        type: 'object',
+        properties: {
+          recipe: { type: 'string', description: 'Recipe name (see list_team_recipes), e.g. "full-feature-team".' },
+          goal: { type: 'string', description: 'The goal to instantiate the recipe for; substituted into task titles/descriptions.' },
+          namespace: { type: 'string', description: 'Optional slug prefix for the task keys. Defaults to a goal-derived unique prefix.' },
+        },
+        required: ['recipe', 'goal'],
+      }
+    );
+
+    // report_usage — attribute Cursor token usage to a task/engineer
+    this.registerTool(
+      'report_usage',
+      'Attribute Cursor token usage to a task and engineer. Records usage for visibility (cost is $0 — Cursor billing is by subscription) and rolls it onto the task. Engineers can instead pass these fields directly to complete_task.',
+      async (args: Record<string, unknown>) => {
+        return this.leadPm.recordUsage({
+          taskKey: args.taskKey as string,
+          engineer: args.engineer as string,
+          model: args.model as string,
+          inputTokens: args.input_tokens as number,
+          outputTokens: args.output_tokens as number,
+        });
+      },
+      {
+        type: 'object',
+        properties: {
+          taskKey: { type: 'string', description: 'Key of the task the usage belongs to.' },
+          engineer: { type: 'string', description: 'Engineer persona id that did the work.' },
+          model: { type: 'string', description: 'Cursor model used, e.g. "composer-2.5-standard".' },
+          input_tokens: { type: 'number', description: 'Input tokens consumed.' },
+          output_tokens: { type: 'number', description: 'Output tokens produced.' },
+        },
+        required: ['taskKey', 'engineer', 'model', 'input_tokens', 'output_tokens'],
+      }
+    );
+
+    // get_team_usage — Cursor usage dashboard (pass format:"markdown" for a rendered view)
+    this.registerTool(
+      'get_team_usage',
+      'Cursor usage attribution across the team: token/request totals broken down by engineer, model, and task. Figures are usage, not dollars (the PM team runs on the Cursor subscription). Pass format:"markdown" for a rendered view.',
+      async (args: Record<string, unknown>) => {
+        const usage = this.leadPm.getTeamUsage();
+        if (args.format === 'markdown') return { markdown: renderUsage(usage), usage };
+        return usage;
+      },
+      {
+        type: 'object',
+        properties: {
+          format: { type: 'string', enum: ['json', 'markdown'], description: 'Output format. "markdown" returns a rendered table; default is structured JSON.' },
+        },
+        required: [],
+      }
+    );
+
+    // get_pm_events — the audit timeline (Phase 4 observability)
+    this.registerTool(
+      'get_pm_events',
+      'The PM event timeline: a reverse-chronological audit trail of lifecycle actions (spawn/assign/block/unblock/complete/review/usage/recipe-start) from .roland/pm-events.log. Use this to answer "what happened on this feature?". Pass format:"markdown" for a rendered timeline.',
+      async (args: Record<string, unknown>) => {
+        const events = this.leadPm.getPmEvents(
+          (args.limit as number | undefined) ?? 50,
+          {
+            action: args.action as PMEventAction | undefined,
+            taskKey: args.taskKey as string | undefined,
+          }
+        );
+        if (args.format === 'markdown') return { markdown: renderTimeline(events), events };
+        return { events };
+      },
+      {
+        type: 'object',
+        properties: {
+          limit: { type: 'number', description: 'Max events to return (newest first). Default 50.' },
+          action: { type: 'string', enum: ['spawn', 'assign', 'block', 'unblock', 'complete', 'review', 'usage', 'recipe-start'], description: 'Optional filter by action.' },
+          taskKey: { type: 'string', description: 'Optional filter to a single task key.' },
+          format: { type: 'string', enum: ['json', 'markdown'], description: '"markdown" returns a rendered timeline; default is structured JSON.' },
+        },
+        required: [],
+      }
+    );
+  }
 
   registerTool(
     name: string,

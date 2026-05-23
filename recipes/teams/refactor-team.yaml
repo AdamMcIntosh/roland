@@ -1,0 +1,54 @@
+name: refactor-team
+description: >
+  Refactor safely without changing behavior: map the current state, plan the
+  change, execute it, then review and prove behavior is unchanged. Use for
+  structural cleanups and migrations.
+tasks:
+  - slug: map
+    title: "Map current state: {{goal}}"
+    assignee: architect
+    description: >
+      Map what {{goal}} touches today: the modules, call sites, and existing test
+      coverage. Identify risk areas and behavior that must be preserved.
+    acceptanceCriteria: >
+      An accurate map of affected code and a list of behaviors that must not change.
+
+  - slug: plan
+    title: "Plan the refactor: {{goal}}"
+    assignee: architect
+    dependsOn: [map]
+    description: >
+      Plan {{goal}} as a sequence of small, safe steps. Call out anything that
+      needs a decision from the PM as a blocker.
+    acceptanceCriteria: >
+      A step-by-step plan that preserves behavior; risky steps flagged.
+
+  - slug: refactor
+    title: "Execute refactor: {{goal}}"
+    assignee: executor
+    dependsOn: [plan]
+    description: >
+      Execute the planned refactor for {{goal}}. Change structure, not behavior.
+      Keep each step coherent.
+    acceptanceCriteria: >
+      Refactor applied per plan; public behavior unchanged; builds clean.
+
+  - slug: review
+    title: "Review: {{goal}}"
+    assignee: code-reviewer
+    dependsOn: [refactor]
+    description: >
+      Review the refactor of {{goal}}: confirm behavior is preserved and the new
+      structure is genuinely better. Flag any behavioral drift.
+    acceptanceCriteria: >
+      Review confirms no behavioral change and a real structural improvement.
+
+  - slug: verify
+    title: "Verify behavior unchanged: {{goal}}"
+    assignee: qa-tester
+    dependsOn: [refactor]
+    description: >
+      Run the existing test suite plus any characterization tests to prove {{goal}}
+      did not change behavior.
+    acceptanceCriteria: >
+      Full suite green; no behavioral regressions observed.

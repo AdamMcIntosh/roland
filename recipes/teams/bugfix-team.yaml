@@ -1,0 +1,44 @@
+name: bugfix-team
+description: >
+  Diagnose and fix a defect with confidence: reproduce, find root cause, fix,
+  then verify the fix and guard against regression. Use for reported bugs.
+tasks:
+  - slug: reproduce
+    title: "Reproduce: {{goal}}"
+    assignee: qa-tester
+    description: >
+      Reliably reproduce: {{goal}}. Capture exact steps, expected vs actual, and
+      the environment. Post the repro to the Blackboard.
+    acceptanceCriteria: >
+      A deterministic repro the team can run; if it can't be reproduced, raise a
+      blocker with what you tried.
+
+  - slug: diagnose
+    title: "Root-cause: {{goal}}"
+    assignee: architect
+    dependsOn: [reproduce]
+    description: >
+      Trace the defect to its root cause using the repro. Identify the offending
+      code path and why it fails. Recommend the fix approach.
+    acceptanceCriteria: >
+      Root cause named at a specific location with a justified fix approach.
+
+  - slug: fix
+    title: "Fix: {{goal}}"
+    assignee: executor
+    dependsOn: [diagnose]
+    description: >
+      Apply the smallest correct fix for the root cause of {{goal}}. Avoid
+      unrelated changes.
+    acceptanceCriteria: >
+      Repro no longer fails; fix is minimal and targets the root cause.
+
+  - slug: verify
+    title: "Verify & regression-guard: {{goal}}"
+    assignee: qa-tester
+    dependsOn: [fix]
+    description: >
+      Confirm the fix resolves {{goal}} and add a regression test that fails
+      without the fix and passes with it.
+    acceptanceCriteria: >
+      Regression test added and green; original repro passes; no new failures.
