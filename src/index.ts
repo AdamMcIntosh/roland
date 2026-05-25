@@ -155,8 +155,15 @@ async function main(): Promise<void> {
         await runTeamCli(['team', ...rest]);
         break;
       }
+      case 'status': {
+        // Live TUI observer — watches .roland/run-state.json from a separate terminal.
+        const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const { TuiRenderer } = await import('./dashboard/tui.js');
+        await TuiRenderer.watch(stateDir);
+        break;
+      }
       default:
-        console.error(`Unknown command: ${cmd}\nUsage: roland [serve|mcp-config|doctor|pm-log|team]`);
+        console.error(`Unknown command: ${cmd}\nUsage: roland [serve|mcp-config|doctor|pm-log|team|status]`);
         process.exit(1);
     }
   } catch (error) {

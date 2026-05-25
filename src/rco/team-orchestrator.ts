@@ -76,6 +76,12 @@ export interface TeamOrchestratorOptions {
   onTaskStart?: (taskId: string, agent: string, title: string) => void;
   onTaskComplete?: (taskId: string, agent: string, output: string, hadBlocker: boolean) => void;
   onWaveComplete?: (waveNumber: number, decision: ReviewDecision) => void;
+  /** Fired just before the PM agent reviews a completed wave. */
+  onWaveReview?: (waveNumber: number) => void;
+  /** Fired when the PM spawns additional tasks during an adjust decision. */
+  onTasksSpawned?: (tasks: TeamTask[]) => void;
+  /** Fired just before the Lead PM begins the final synthesis. */
+  onSynthesizing?: () => void;
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -194,6 +200,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   const {
     goal, stateDir = '.roland', agentsDir: agentsDirOverride,
     onPlanReady, onWaveStart, onTaskStart, onTaskComplete, onWaveComplete,
+    onWaveReview, onTasksSpawned, onSynthesizing,
   } = opts;
 
   // ── Coordination layer ────────────────────────────────────────────────────
@@ -356,6 +363,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
       } else {
         console.error(`[Team] Wave ${waveNumber} done — asking PM to review...`);
       }
+      onWaveReview?.(waveNumber);
 
       const reviewText = await callCursorAgent(
         'Lead-PM',
@@ -384,11 +392,13 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
       } else {
         console.error(`[Team] PM adjusting${decision.pmNotes ? ': ' + decision.pmNotes.slice(0, 100) : ''}`);
 
-        for (const task of decision.newTasks ?? []) {
+        const spawnedTasks = decision.newTasks ?? [];
+        for (const task of spawnedTasks) {
           console.error(`[Team]   + spawn ${task.id} → ${task.agent} ("${task.title}")`);
           remaining.push(task);
           blackboard.post({ type: 'task', title: task.title, content: task.description, status: 'pending', author: 'Lead-PM', assignee: task.agent, priority: task.priority as 'critical' | 'high' | 'medium' | 'low', tags: ['spawned', task.id], relatedIds: [] });
         }
+        if (spawnedTasks.length > 0) onTasksSpawned?.(spawnedTasks);
 
         for (const u of decision.unblocks ?? []) {
           console.error(`[Team]   ↑ unblock ${u.forAgent}: "${u.message.slice(0, 80)}"`);
@@ -410,6 +420,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
 
   // ── Phase 3: Lead PM synthesis ────────────────────────────────────────────
   console.error('[Team] Phase 3: Lead PM synthesis...');
+  onSynthesizing?.();
 
   const synthesis = await callCursorAgent(
     'Lead-PM',

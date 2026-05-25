@@ -16,9 +16,12 @@
  */
 
 import { fileURLToPath } from 'url';
+import path from 'path';
 import { runTeam } from './team-orchestrator.js';
 import type { TeamTask } from './team-orchestrator.js';
 import type { ReviewDecision } from './pm-prompts.js';
+import { RunStateWriter } from './run-state.js';
+import { TuiRenderer } from '../dashboard/tui.js';
 
 // ── Terminal helpers ──────────────────────────────────────────────────────────
 
@@ -57,6 +60,7 @@ export interface TeamCliArgs {
   stateDir: string;
   quiet: boolean;
   stream: boolean;
+  noTui: boolean;
   agentsDir?: string;
 }
 
@@ -68,6 +72,7 @@ export function parseTeamArgs(argv: string[]): TeamCliArgs {
   let stateDir = '.roland';
   let quiet = false;
   let stream = false;
+  let noTui = false;
   let agentsDir: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
@@ -77,16 +82,17 @@ export function parseTeamArgs(argv: string[]): TeamCliArgs {
     if (a === '--agents-dir' && args[i + 1])            { agentsDir = args[++i]; continue; }
     if (a === '--quiet' || a === '-q')                   { quiet = true; continue; }
     if (a === '--stream' || a === '-s')                  { stream = true; continue; }
+    if (a === '--no-tui')                                { noTui = true; continue; }
     if (!a.startsWith('-') && !goal)                     { goal = a; continue; }
   }
 
-  return { goal, stateDir, quiet, stream, agentsDir };
+  return { goal, stateDir, quiet, stream, noTui, agentsDir };
 }
 
 // ── Main CLI logic (exported so index.ts can delegate without re-running main) ─
 
 export async function runTeamCli(argv: string[]): Promise<void> {
-  const { goal, stateDir, quiet, stream, agentsDir } = parseTeamArgs(argv);
+  const { goal, stateDir, quiet, stream, noTui, agentsDir } = parseTeamArgs(argv);
 
   if (!goal) {
     err(c.bold('Roland — PM Team Mode'));
@@ -96,11 +102,13 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     err('    roland team "..." --state-dir .roland');
     err('    roland team "..." --stream');
     err('    roland team "..." --quiet');
+    err('    roland team "..." --no-tui');
     err('');
     err('  ' + c.bold('Flags'));
     err('    --state-dir <dir>   Blackboard + message persistence  ' + c.dim('(default: .roland)'));
     err('    --stream            Print truncated task output as each agent completes');
     err('    --quiet             Suppress all progress; only print synthesis to stdout');
+    err('    --no-tui            Use scrolling log instead of live dashboard');
     err('');
     process.exit(1);
   }
@@ -108,6 +116,70 @@ export async function runTeamCli(argv: string[]): Promise<void> {
   // ── Quiet mode — no UI, just run and emit synthesis ────────────────────────
   if (quiet) {
     const result = await runTeam({ goal, stateDir, agentsDir });
+    console.log(result.synthesis);
+    return;
+  }
+
+  // ── TUI mode — live dashboard (default when stdout is a TTY) ───────────────
+  const useTui = !noTui && Boolean((process.stdout as NodeJS.WriteStream).isTTY);
+  if (useTui) {
+    const runState = new RunStateWriter(stateDir, goal);
+    const stateFilePath = path.join(stateDir, 'run-state.json');
+    const tui = new TuiRenderer(stateFilePath);
+    tui.start();
+    tui.update(runState.get());
+
+    let result;
+    try {
+      result = await runTeam({
+        goal,
+        stateDir,
+        agentsDir,
+        onPlanReady: (tasks) => {
+          runState.planReady(tasks);
+          tui.update(runState.get());
+        },
+        onWaveStart: (waveNumber, tasks) => {
+          runState.waveStart(waveNumber, tasks.map((t) => t.id));
+          tui.update(runState.get());
+        },
+        onTaskStart: (id) => {
+          runState.taskStart(id);
+          tui.update(runState.get());
+        },
+        onTaskComplete: (id, _agent, output, hadBlocker) => {
+          runState.taskComplete(id, output, hadBlocker);
+          tui.update(runState.get());
+        },
+        onWaveReview: () => {
+          runState.waveReviewing();
+          tui.update(runState.get());
+        },
+        onWaveComplete: (_waveNumber, decision) => {
+          runState.waveComplete(decision.pmNotes);
+          tui.update(runState.get());
+        },
+        onTasksSpawned: (tasks) => {
+          runState.addTasks(tasks);
+          tui.update(runState.get());
+        },
+        onSynthesizing: () => {
+          runState.synthesizing();
+          tui.update(runState.get());
+        },
+      });
+    } catch (e) {
+      runState.error(e instanceof Error ? e.message : String(e));
+      tui.update(runState.get());
+      await new Promise((r) => setTimeout(r, 1500));
+      tui.stop();
+      throw e;
+    }
+
+    runState.done();
+    tui.update(runState.get());
+    await new Promise((r) => setTimeout(r, 1200)); // show "Complete" state briefly
+    tui.stop();
     console.log(result.synthesis);
     return;
   }
