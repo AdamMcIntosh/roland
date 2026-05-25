@@ -23,7 +23,7 @@ agents:
   - architect
   - designer
   - executor
-  - qa-tester
+  - test-executor
   - critic
   - writer
 
@@ -98,7 +98,7 @@ steps:
 
   - name: Testing
     description: Test the desktop application
-    agent: qa-tester
+    agent: test-executor
     input: |
       Implementation: {{implementation}}
       Architecture: {{architecture}}

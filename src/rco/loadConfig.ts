@@ -4,12 +4,46 @@
 
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
 import { RcoConfigSchema, RcoRecipeSchema, AgentYamlSchema, type RcoConfig, type RcoRecipe, type AgentYaml } from './types.js';
 
 const DEFAULT_AGENTS_DIR = 'agents';
 const DEFAULT_RECIPES_DIR = 'recipes';
 const RCO_RECIPES_SUBDIR = 'rco';
+
+/**
+ * Regex matching agent name suffixes used for cost-tier variants.
+ * e.g. "executor-low", "architect-high", "designer-medium"
+ */
+const VARIANT_SUFFIX_RE = /-(low|medium|high)$/i;
+
+/**
+ * Canonical agents-directory resolver — single source of truth.
+ *
+ * Resolution order:
+ *   1. `override` (e.g. from CLI --agents-dir flag)
+ *   2. `installDir/agents`  — dist/agents when compiled, src/agents in dev
+ *   3. `rootDir/agents`     — project root agents/ (e.g. when running from dist/server/)
+ *   4. `cwd/agents`         — last resort
+ *
+ * Pass `referenceUrl = import.meta.url` from any call site to anchor resolution
+ * to that file's install directory rather than loadConfig's own location.
+ */
+export function resolveAgentsDir(referenceUrl?: string, override?: string): string {
+  if (override) return override;
+  try {
+    const ref = referenceUrl ?? import.meta.url;
+    const refDir = path.dirname(fileURLToPath(ref));
+    const installDir = path.resolve(refDir, '..'); // dist/rco → dist  (or dist/server → dist, dist/pm → dist)
+    const rootDir = path.resolve(installDir, '..'); // dist → project root
+    const distAgents = path.join(installDir, 'agents');
+    if (fs.existsSync(distAgents)) return distAgents;
+    const srcAgents = path.join(rootDir, 'agents');
+    if (fs.existsSync(srcAgents)) return srcAgents;
+  } catch { /* fall through to cwd fallback */ }
+  return path.join(process.cwd(), 'agents');
+}
 
 export function loadRcoConfig(configPath: string = 'config.yaml'): RcoConfig {
   const content = fs.readFileSync(configPath, 'utf-8');
@@ -30,15 +64,25 @@ export function loadAgentYaml(filePath: string): AgentYaml {
   return parsed.data;
 }
 
-export function loadAllAgents(agentsDir: string = DEFAULT_AGENTS_DIR): Map<string, AgentYaml> {
+export interface LoadAllAgentsOptions {
+  /**
+   * When true, skips agents whose names end in -low, -medium, or -high.
+   * Use for the PM team roster so the Lead PM only sees primary personas.
+   */
+  excludeVariants?: boolean;
+}
+
+export function loadAllAgents(agentsDir: string = DEFAULT_AGENTS_DIR, opts: LoadAllAgentsOptions = {}): Map<string, AgentYaml> {
   const map = new Map<string, AgentYaml>();
   const dir = path.isAbsolute(agentsDir) ? agentsDir : path.join(process.cwd(), agentsDir);
   if (!fs.existsSync(dir)) return map;
   const files = fs.readdirSync(dir).filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'));
   for (const f of files) {
+    const baseName = path.basename(f, path.extname(f));
+    if (opts.excludeVariants && VARIANT_SUFFIX_RE.test(baseName)) continue;
     try {
       const agent = loadAgentYaml(path.join(dir, f));
-      const name = (agent.name ?? path.basename(f, path.extname(f))).toLowerCase();
+      const name = (agent.name ?? baseName).toLowerCase();
       map.set(name, agent);
     } catch (e) {
       console.error(`[RCO] Skip agent ${f}:`, e);
@@ -64,17 +108,3 @@ export function loadRecipe(recipeName: string, recipesDir: string = DEFAULT_RECI
   return parsed.data;
 }
 
-/** Dynamic agent selection: match task string against config task_routing patterns. */
-export function getPreferredAgentsForTask(task: string, rcoConfig: { task_routing?: Array<{ pattern: string; agents: string[] }> }): string[] {
-  const routing = rcoConfig.task_routing ?? [];
-  const taskLower = task.toLowerCase();
-  for (const { pattern, agents } of routing) {
-    try {
-      const re = new RegExp(pattern, 'i');
-      if (re.test(taskLower)) return agents;
-    } catch {
-      if (taskLower.includes(pattern.toLowerCase())) return agents;
-    }
-  }
-  return [];
-}

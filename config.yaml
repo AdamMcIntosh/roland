@@ -93,7 +93,7 @@ rco:
     - pattern: "implement|build|code|fix"
       agents: [executor, executor-high]
     - pattern: "review|audit|security|test"
-      agents: [critic, code-reviewer, qa-tester]
+      agents: [critic, code-reviewer, test-author, test-executor]
     - pattern: "explain|document|readme"
       agents: [writer, explainer]
   dashboard_port: 8080

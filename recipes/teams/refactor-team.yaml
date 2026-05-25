@@ -1,7 +1,9 @@
 name: refactor-team
 description: >
-  Refactor safely without changing behavior: map the current state, plan the
-  change, execute it, then review and prove behavior is unchanged. Use for
+  Refactor safely without changing behavior: an architect maps the current state
+  and plans the change, an executor applies it, a code-reviewer checks the structure,
+  a test-author writes characterization tests for the refactored code, and a
+  test-executor runs the full suite to prove behavior is unchanged. Use for
   structural cleanups and migrations.
 tasks:
   - slug: map
@@ -21,7 +23,7 @@ tasks:
       Plan {{goal}} as a sequence of small, safe steps. Call out anything that
       needs a decision from the PM as a blocker.
     acceptanceCriteria: >
-      A step-by-step plan that preserves behavior; risky steps flagged.
+      A step-by-step plan that preserves behavior; risky steps flagged explicitly.
 
   - slug: refactor
     title: "Execute refactor: {{goal}}"
@@ -29,7 +31,7 @@ tasks:
     dependsOn: [plan]
     description: >
       Execute the planned refactor for {{goal}}. Change structure, not behavior.
-      Keep each step coherent.
+      Keep each step coherent and the build green throughout.
     acceptanceCriteria: >
       Refactor applied per plan; public behavior unchanged; builds clean.
 
@@ -43,12 +45,28 @@ tasks:
     acceptanceCriteria: >
       Review confirms no behavioral change and a real structural improvement.
 
-  - slug: verify
-    title: "Verify behavior unchanged: {{goal}}"
-    assignee: qa-tester
+  - slug: write-characterization
+    title: "Write characterization tests: {{goal}}"
+    assignee: test-author
     dependsOn: [refactor]
     description: >
-      Run the existing test suite plus any characterization tests to prove {{goal}}
-      did not change behavior.
+      Write characterization tests that pin the observable behavior of {{goal}}
+      before and after the refactor. Focus on the boundary behaviors the architect's
+      map identified as must-preserve. Supplement existing tests where coverage gaps
+      exist; do not duplicate what is already covered.
     acceptanceCriteria: >
-      Full suite green; no behavioral regressions observed.
+      Characterization tests written targeting identified behavior boundaries;
+      tests are runnable without manual setup.
+
+  - slug: run-suite
+    title: "Run full suite: {{goal}}"
+    assignee: test-executor
+    dependsOn: [write-characterization]
+    description: >
+      Run the complete test suite including the new characterization tests. Confirm
+      all existing tests still pass (no behavioral regressions) and all new tests
+      are green. Report exact counts, coverage delta vs pre-refactor baseline if
+      available, and any failures as blockers.
+    acceptanceCriteria: >
+      Full suite green including characterization tests; no regressions; coverage
+      unchanged or improved.

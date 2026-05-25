@@ -148,8 +148,15 @@ async function main(): Promise<void> {
         pmLog(limit);
         break;
       }
+      case 'team': {
+        // Delegate to the team CLI — import is safe because team-cli.ts guards
+        // its main() with a fileURLToPath(import.meta.url) === process.argv[1] check.
+        const { runTeamCli } = await import('./rco/team-cli.js');
+        await runTeamCli(['team', ...rest]);
+        break;
+      }
       default:
-        console.error(`Unknown command: ${cmd}\nUsage: roland [serve|mcp-config|doctor|pm-log]`);
+        console.error(`Unknown command: ${cmd}\nUsage: roland [serve|mcp-config|doctor|pm-log|team]`);
         process.exit(1);
     }
   } catch (error) {

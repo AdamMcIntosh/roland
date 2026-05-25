@@ -1,27 +1,31 @@
 name: bugfix-team
 description: >
-  Diagnose and fix a defect with confidence: reproduce, find root cause, fix,
-  then verify the fix and guard against regression. Use for reported bugs.
+  Diagnose and fix a defect with confidence: a test-executor reproduces the bug,
+  an architect finds the root cause, an executor applies the fix, a test-author
+  writes the regression test, and a test-executor verifies everything is green.
+  Use for reported bugs.
 tasks:
   - slug: reproduce
     title: "Reproduce: {{goal}}"
-    assignee: qa-tester
+    assignee: test-executor
     description: >
-      Reliably reproduce: {{goal}}. Capture exact steps, expected vs actual, and
-      the environment. Post the repro to the Blackboard.
+      Reliably reproduce: {{goal}}. Run the code, capture exact steps, expected vs
+      actual output, and the environment. Post the repro to the Blackboard with the
+      exact command needed to trigger the defect. If it cannot be reproduced, raise
+      a blocker immediately with what you tried.
     acceptanceCriteria: >
-      A deterministic repro the team can run; if it can't be reproduced, raise a
-      blocker with what you tried.
+      A deterministic repro the team can run in one command; if unreproducible,
+      a blocker with all attempted approaches documented.
 
   - slug: diagnose
     title: "Root-cause: {{goal}}"
     assignee: architect
     dependsOn: [reproduce]
     description: >
-      Trace the defect to its root cause using the repro. Identify the offending
-      code path and why it fails. Recommend the fix approach.
+      Trace the defect to its root cause using the repro from the Blackboard. Identify
+      the offending code path and why it fails. Recommend the exact fix approach.
     acceptanceCriteria: >
-      Root cause named at a specific location with a justified fix approach.
+      Root cause named at a specific file and line with a justified fix approach.
 
   - slug: fix
     title: "Fix: {{goal}}"
@@ -29,16 +33,30 @@ tasks:
     dependsOn: [diagnose]
     description: >
       Apply the smallest correct fix for the root cause of {{goal}}. Avoid
-      unrelated changes.
+      unrelated changes. The fix should make the repro from the Blackboard pass.
     acceptanceCriteria: >
-      Repro no longer fails; fix is minimal and targets the root cause.
+      Repro no longer fails; fix is minimal and targets the root cause; builds clean.
 
-  - slug: verify
-    title: "Verify & regression-guard: {{goal}}"
-    assignee: qa-tester
+  - slug: write-regression
+    title: "Write regression test: {{goal}}"
+    assignee: test-author
     dependsOn: [fix]
     description: >
-      Confirm the fix resolves {{goal}} and add a regression test that fails
-      without the fix and passes with it.
+      Write a regression test that fails on the unfixed code and passes with the fix
+      applied. The test should directly encode the repro from the Blackboard. Also
+      check whether the existing suite covers the affected code path adequately; if
+      not, add a small number of targeted tests.
     acceptanceCriteria: >
-      Regression test added and green; original repro passes; no new failures.
+      Regression test written and clearly named; test fails without the fix;
+      no test requires manual changes to run.
+
+  - slug: run-regression
+    title: "Verify fix & run regression: {{goal}}"
+    assignee: test-executor
+    dependsOn: [write-regression]
+    description: >
+      Run the full test suite including the new regression test. Confirm the original
+      repro passes, the regression test is green, and no existing tests have regressed.
+      Report exact counts and any failures as blockers.
+    acceptanceCriteria: >
+      Full suite green; regression test passes; original repro resolved; no new failures.

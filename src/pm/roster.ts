@@ -12,6 +12,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import YAML from 'yaml';
+import { resolveAgentsDir as resolveAgentsDirShared } from '../rco/loadConfig.js';
 import { ComplexityClassifier } from '../orchestrator/complexity-classifier.js';
 import { laneForEngineer, type Lane } from './model-policy.js';
 
@@ -135,19 +136,8 @@ export class Roster {
     return map;
   }
 
-  /** Mirror of McpServer.resolveRecipesDir, for agents/. */
+  /** Delegates to the shared resolveAgentsDir in loadConfig.ts. */
   static resolveAgentsDir(): string {
-    try {
-      const thisFile = fileURLToPath(import.meta.url);
-      const installDir = path.resolve(path.dirname(thisFile), '..'); // dist/ or src/
-      const rootDir = path.resolve(installDir, '..'); // project root
-      const distAgents = path.join(installDir, 'agents');
-      if (fs.existsSync(distAgents)) return distAgents;
-      const srcAgents = path.join(rootDir, 'agents');
-      if (fs.existsSync(srcAgents)) return srcAgents;
-    } catch {
-      // fall through
-    }
-    return path.join(process.cwd(), 'agents');
+    return resolveAgentsDirShared(import.meta.url);
   }
 }

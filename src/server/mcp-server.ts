@@ -56,6 +56,7 @@ import { renderTimeline, renderUsage } from '../pm/render.js';
 import type { PMEventAction } from '../pm/event-log.js';
 import { QualityTracker, initializeQualityTracker } from '../orchestrator/quality-tracker.js';
 import { selectRelevantFiles, bundleFileContents, formatBundleAsMarkdown, DEFAULT_CONTEXT_GATHERING_CONFIG } from '../utils/file-gatherer.js';
+import { resolveAgentsDir as resolveAgentsDirShared } from '../rco/loadConfig.js';
 import type { FileBundle } from '../utils/file-gatherer.js';
 import fs from 'fs';
 import path from 'path';
@@ -132,7 +133,8 @@ const AGENT_OPENROUTER_MODELS: Record<string, string> = {
   scientist: 'qwen/qwen3-coder-next',
   vision: 'qwen/qwen3-coder-next',
   // QA/Simple — DeepSeek V3.2 for testing and light tasks
-  'qa-tester': 'deepseek/deepseek-v3-0324',
+  'test-author':   'deepseek/deepseek-v3-0324',
+  'test-executor': 'deepseek/deepseek-v3-0324',
   writer: 'deepseek/deepseek-v3-0324',
   explore: 'deepseek/deepseek-v3-0324',
 };
@@ -158,7 +160,7 @@ function getBudgetDegradedModel(agentName?: string): string | null {
       return FREE_MODELS.reasoning;
     }
     // Coding agents get the coding free model
-    if (['executor', 'build-fixer', 'qa-tester', 'tdd-guide', 'designer'].includes(agentName)) {
+    if (['executor', 'build-fixer', 'test-executor', 'tdd-guide', 'designer'].includes(agentName)) {
       return FREE_MODELS.coding;
     }
   }
@@ -383,9 +385,15 @@ export class McpServer {
       tier: 'medium',
     },
     {
-      name: 'qa-tester',
-      role: 'Write and run tests, edge cases, coverage analysis',
-      triggers: ['test', 'testing', 'unit test', 'integration test', 'e2e', 'coverage', 'edge case', 'spec', 'jest', 'vitest', 'pytest', 'assert'],
+      name: 'test-author',
+      role: 'Design and write tests: unit, integration, E2E, edge cases, coverage analysis',
+      triggers: ['write tests', 'test design', 'unit test', 'integration test', 'e2e', 'spec', 'jest', 'vitest', 'pytest', 'coverage', 'edge case'],
+      tier: 'medium',
+    },
+    {
+      name: 'test-executor',
+      role: 'Run test suites, report results, reproduce bugs, verify fixes',
+      triggers: ['run tests', 'test run', 'assert', 'reproduce', 'verify fix', 'regression', 'test suite', 'green'],
       tier: 'medium',
     },
     {
@@ -505,7 +513,7 @@ export class McpServer {
       fileKey: 'BugFix',
       description: 'Systematic bug resolution: triage → research → architect → fix → test → review → document',
       triggers: ['bug', 'fix', 'broken', 'not working', 'error', 'crash', 'fails', 'issue', 'defect', 'regression'],
-      agents: ['analyst', 'researcher', 'architect', 'executor', 'qa-tester', 'critic', 'writer'],
+      agents: ['analyst', 'researcher', 'architect', 'executor', 'test-author', 'test-executor', 'critic', 'writer'],
     },
     {
       name: 'SecurityAudit',
@@ -547,7 +555,7 @@ export class McpServer {
       fileKey: 'DesktopApp',
       description: 'Desktop app: architect → design → implement → test → review → package',
       triggers: ['desktop', 'electron', 'tauri', 'native app', 'gui', 'desktop app', 'cross-platform', 'maui', 'installable', 'offline app'],
-      agents: ['architect', 'designer', 'executor', 'qa-tester', 'critic', 'writer'],
+      agents: ['architect', 'designer', 'executor', 'test-executor', 'critic', 'writer'],
     },
     {
       name: 'VB6Migration',
@@ -821,22 +829,10 @@ export class McpServer {
   // --------------------------------------------------------------------------
 
   /**
-   * Resolve the agents directory relative to this file's location.
+   * Resolve the agents directory. Delegates to the shared implementation in loadConfig.ts.
    */
   private static resolveAgentsDir(): string {
-    try {
-      const thisFile = fileURLToPath(import.meta.url);
-      const serverDir = path.dirname(thisFile);
-      const installDir = path.resolve(serverDir, '..');
-      const rootDir = path.resolve(installDir, '..');
-
-      const distAgents = path.join(installDir, 'agents');
-      if (fs.existsSync(distAgents)) return distAgents;
-
-      const srcAgents = path.join(rootDir, 'agents');
-      if (fs.existsSync(srcAgents)) return srcAgents;
-    } catch { /* fallback */ }
-    return path.join(process.cwd(), 'agents');
+    return resolveAgentsDirShared(import.meta.url);
   }
 
   /**
@@ -888,10 +884,10 @@ export class McpServer {
         let recommendedModel = analysis.suggestedModel;
         if (budgetHint === 'minimal' && analysis.complexity !== 'simple') {
           // Force cheapest model even for complex queries
-          recommendedModel = 'cursor-small';
+          recommendedModel = 'claude-haiku-4-5';
         } else if (budgetHint === 'unlimited' && analysis.complexity === 'simple') {
           // Allow upgrading simple queries for higher quality
-          recommendedModel = 'claude-3.5-sonnet';
+          recommendedModel = 'claude-sonnet-4-6';
         }
 
         // Build alternatives list
