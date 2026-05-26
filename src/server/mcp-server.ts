@@ -288,6 +288,7 @@ export class McpServer {
     this.registerReadContext();
     this.registerCoordinationTools();
     this.registerPmTools();
+    this.registerChatTools();
   }
 
   // --------------------------------------------------------------------------
@@ -3135,6 +3136,218 @@ export class McpServer {
           format: { type: 'string', enum: ['json', 'markdown'], description: '"markdown" returns a rendered timeline; default is structured JSON.' },
         },
         required: [],
+      }
+    );
+  }
+
+  // --------------------------------------------------------------------------
+  // Cursor chat tools — roland_hello, roland_run_team
+  //
+  // These two tools power the @roland Cursor chat experience:
+  //   roland_hello     — welcome banner + project state on first invocation
+  //   roland_run_team  — launch a background PM team run from chat
+  // --------------------------------------------------------------------------
+  private registerChatTools(): void {
+    // ── roland_hello ──────────────────────────────────────────────────────────
+    this.registerTool(
+      'roland_hello',
+      'Get a welcome message with Roland\'s capabilities and current project state. Call this at the start of a Cursor chat session when @roland is first mentioned in conversation.',
+      async (args: Record<string, unknown>) => {
+        const projectRoot = process.env['ROLAND_PROJECT_ROOT']?.trim() || process.cwd();
+        const stateDir = typeof args.state_dir === 'string' && args.state_dir
+          ? args.state_dir
+          : path.join(projectRoot, '.roland');
+
+        // ── Memory summary ───────────────────────────────────────────────────
+        let memoryStatus = 'No project memory yet — builds automatically after each run.';
+        let memoryBulletCount = 0;
+        try {
+          const mem = fs.readFileSync(path.join(stateDir, 'memory.md'), 'utf-8');
+          memoryBulletCount = mem.split('\n').filter(l => l.trim().startsWith('- ')).length;
+          if (memoryBulletCount > 0) {
+            memoryStatus = `${memoryBulletCount} knowledge entries (Architecture Decisions · Coding Standards · Past Mistakes · Preferences).`;
+          }
+        } catch { /* no memory yet */ }
+
+        // ── Board summary ────────────────────────────────────────────────────
+        let boardStatus = 'No active tasks.';
+        let blockerCount = 0;
+        try {
+          const bb = JSON.parse(fs.readFileSync(path.join(stateDir, 'blackboard.json'), 'utf-8'));
+          const tasks = Object.entries(bb).filter(([k]) => k.startsWith('task:'));
+          if (tasks.length > 0) {
+            const counts: Record<string, number> = {};
+            for (const [, v] of tasks) {
+              const s = (v as Record<string, unknown>).status as string ?? 'unknown';
+              counts[s] = (counts[s] ?? 0) + 1;
+            }
+            boardStatus = Object.entries(counts).map(([s, n]) => `${n} ${s}`).join(' · ');
+            blockerCount = counts['blocked'] ?? 0;
+          }
+        } catch { /* no board yet */ }
+
+        // ── Background run status ────────────────────────────────────────────
+        let bgStatus = '';
+        try {
+          const pidRec = JSON.parse(fs.readFileSync(path.join(stateDir, 'supervisor.pid'), 'utf-8'));
+          const alive = (() => { try { process.kill(pidRec.pid, 0); return true; } catch { return false; } })();
+          if (alive) {
+            bgStatus = `\n- 🔄 **Background run active** (PID ${pidRec.pid}): "${(pidRec.goal ?? '').slice(0, 60)}"`;
+          }
+        } catch { /* no bg run */ }
+
+        const blockerWarning = blockerCount > 0
+          ? `\n> ⚠️ **${blockerCount} blocker${blockerCount !== 1 ? 's' : ''} need your attention** — call \`pm_standup()\` to see them.\n`
+          : '';
+
+        const greeting = `# 👋 Roland is ready
+
+${blockerWarning}
+## What I can do
+
+| Mode | Use when | How |
+|------|----------|-----|
+| **Direct in chat** | Small tasks · 1–3 file edits · Quick bugs | I edit files here in Cursor |
+| **PM Team run** | Features · Refactors · Tests · Security audits | \`roland_run_team({ goal })\` |
+| **Background mode** | Long-running goals while you keep working | \`roland team "goal" --background\` in terminal |
+
+## Current project state
+${bgStatus}
+- 📚 **Memory:** ${memoryStatus}
+- 📋 **Board:** ${boardStatus}
+
+## Quick examples
+
+\`\`\`
+# Small task — I handle it directly:
+@roland why is the login endpoint returning 401 intermittently?
+
+# Complex goal — I'll spin up the full team:
+@roland add complete OAuth2 support with GitHub and Google providers
+
+# Check team status:
+@roland what's the current status?
+
+# Launch a recipe workflow:
+start_team_recipe({ recipe: "bugfix-team", goal: "fix the memory leak in the WebSocket handler" })
+\`\`\`
+
+## Terminal commands
+
+\`\`\`bash
+roland "goal"              # full team run
+roland bg-status           # background run health
+roland status              # live TUI observer
+roland doctor              # verify install
+npm run serve-dashboard    # usage dashboard → http://127.0.0.1:8081
+\`\`\`
+
+What would you like to work on?`;
+
+        return {
+          greeting,
+          project_state: {
+            memory_entries: memoryBulletCount,
+            board: boardStatus,
+            blockers: blockerCount,
+            state_dir: stateDir,
+          },
+          quick_start: blockerCount > 0
+            ? 'Call pm_standup() first — there are open blockers to resolve.'
+            : 'Describe your goal and I\'ll triage it, or call pm_standup() to check the board.',
+        };
+      },
+      {
+        type: 'object',
+        properties: {
+          state_dir: {
+            type: 'string',
+            description: 'Path to .roland state directory (default: .roland/ in project root)',
+          },
+        },
+        required: [],
+      }
+    );
+
+    // ── roland_run_team ───────────────────────────────────────────────────────
+    this.registerTool(
+      'roland_run_team',
+      'Launch a PM team run for a complex goal directly from Cursor chat. The Lead PM (Opus) decomposes the goal into parallel tasks, dispatches specialist agents, and runs until synthesis. Spawns in the background and returns immediately. Track progress with pm_standup() or get_team_context().',
+      async (args: Record<string, unknown>) => {
+        const goal = args.goal as string;
+        if (!goal || typeof goal !== 'string' || !goal.trim()) {
+          throw new McpToolError('roland_run_team', '"goal" is required — describe what you want the team to build or fix');
+        }
+
+        const projectRoot = process.env['ROLAND_PROJECT_ROOT']?.trim() || process.cwd();
+        const stateDir = typeof args.state_dir === 'string' && args.state_dir
+          ? args.state_dir
+          : path.join(projectRoot, '.roland');
+
+        // Locate the roland CLI entry point (dist/index.js from dist/server/)
+        let entryPoint: string;
+        try {
+          const thisFile = fileURLToPath(import.meta.url);
+          entryPoint = path.resolve(path.dirname(thisFile), '..', 'index.js');
+          if (!fs.existsSync(entryPoint)) throw new Error('not found');
+        } catch {
+          entryPoint = path.join(process.cwd(), 'dist', 'index.js');
+        }
+
+        // Prepare log file
+        const logDir = path.join(stateDir, 'logs');
+        fs.mkdirSync(logDir, { recursive: true });
+        const ts = Date.now();
+        const logFile = path.join(logDir, `chat-${ts}.log`);
+        const logFd = fs.openSync(logFile, 'a');
+
+        // Spawn detached — unref so the MCP server doesn't wait for it
+        const { spawn } = await import('child_process');
+        const child = spawn(
+          process.execPath,
+          [entryPoint, 'team', goal.trim(), '--background'],
+          {
+            cwd: projectRoot,
+            detached: true,
+            stdio: ['ignore', logFd, logFd],
+            env: { ...process.env },
+          }
+        );
+        child.unref();
+        fs.closeSync(logFd);
+
+        const pid = child.pid ?? 0;
+        const truncatedGoal = goal.trim().slice(0, 100) + (goal.trim().length > 100 ? '…' : '');
+
+        return {
+          started: true,
+          goal: truncatedGoal,
+          pid,
+          log_file: logFile,
+          state_dir: stateDir,
+          message: `✅ PM team started (PID ${pid}):\n"${truncatedGoal}"`,
+          next_steps: [
+            'Call pm_standup() in ~30 seconds to see the task plan once Wave 1 begins',
+            'Call get_team_context() for the full structured board state',
+            'Run `roland bg-status` in your terminal to check background job health',
+            `Logs: ${logFile}`,
+          ],
+          tip: 'The Lead PM is decomposing your goal now. Wave 1 kicks off in ~30 s — call pm_standup() to see the plan and any early blockers.',
+        };
+      },
+      {
+        type: 'object',
+        properties: {
+          goal: {
+            type: 'string',
+            description: 'The engineering goal for the PM team. Be specific: include scope, constraints, and what "done" looks like. Examples: "add JWT refresh token rotation — 15-min access, 7-day refresh, stored in Redis" or "fix the N+1 query in GET /users — use eager loading for the roles relation".',
+          },
+          state_dir: {
+            type: 'string',
+            description: 'Path to .roland state directory (default: .roland/ in project root). Omit to use the project default.',
+          },
+        },
+        required: ['goal'],
       }
     );
   }
