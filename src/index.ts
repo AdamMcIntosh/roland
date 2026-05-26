@@ -24,6 +24,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { McpServer } from './server/mcp-server.js';
 import { loadConfig } from './config/config-loader.js';
 import { logger } from './utils/logger.js';
@@ -79,7 +80,7 @@ function doctor(): void {
   const add = (ok: boolean, label: string, hint?: string) => checks.push({ ok, label, hint });
 
   // dist build present (this file is running, so the dir it lives in exists)
-  const here = path.dirname(new URL(import.meta.url).pathname);
+  const here = path.dirname(fileURLToPath(import.meta.url));
   add(fs.existsSync(here), `Build present (${here})`);
 
   // agents/

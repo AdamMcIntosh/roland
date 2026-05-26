@@ -17,6 +17,7 @@
 
 import { fileURLToPath } from 'url';
 import path from 'path';
+import fs from 'fs';
 import { runTeam } from './team-orchestrator.js';
 import type { TeamTask } from './team-orchestrator.js';
 import type { ReviewDecision } from './pm-prompts.js';
@@ -54,6 +55,26 @@ function rule(ch = '─', indent = 2): string {
 
 const err = (s = '') => process.stderr.write(s + '\n');
 
+// ── State helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Delete blackboard.json and messages.json from stateDir.
+ * Preserves memory.md — project memory is intentionally cross-run.
+ */
+function cleanState(stateDir: string): void {
+  const targets = ['blackboard.json', 'messages.json'];
+  const removed: string[] = [];
+  for (const name of targets) {
+    const p = path.join(stateDir, name);
+    if (fs.existsSync(p)) { fs.rmSync(p); removed.push(name); }
+  }
+  if (removed.length > 0) {
+    err(`  ${c.yellow('🧹')} Cleaned stale state: ${removed.join(', ')} ${c.dim('(memory.md preserved)')}`);
+  } else {
+    err(`  ${c.dim('🧹 --clean: nothing to remove in ' + stateDir)}`);
+  }
+}
+
 // ── Arg parsing ───────────────────────────────────────────────────────────────
 
 export interface TeamCliArgs {
@@ -63,6 +84,7 @@ export interface TeamCliArgs {
   stream: boolean;
   noTui: boolean;
   notify: boolean;
+  clean: boolean;
   webhookUrl?: string;
   agentsDir?: string;
 }
@@ -77,6 +99,7 @@ export function parseTeamArgs(argv: string[]): TeamCliArgs {
   let stream = false;
   let noTui = false;
   let notify = false;
+  let clean = false;
   let webhookUrl: string | undefined;
   let agentsDir: string | undefined;
 
@@ -89,17 +112,18 @@ export function parseTeamArgs(argv: string[]): TeamCliArgs {
     if (a === '--stream' || a === '-s')                  { stream = true; continue; }
     if (a === '--no-tui')                                { noTui = true; continue; }
     if (a === '--notify' || a === '-n')                  { notify = true; continue; }
+    if (a === '--clean' || a === '-c')                   { clean = true; continue; }
     if (a === '--webhook' && args[i + 1])                { webhookUrl = args[++i]; notify = true; continue; }
     if (!a.startsWith('-') && !goal)                     { goal = a; continue; }
   }
 
-  return { goal, stateDir, quiet, stream, noTui, notify, webhookUrl, agentsDir };
+  return { goal, stateDir, quiet, stream, noTui, notify, clean, webhookUrl, agentsDir };
 }
 
 // ── Main CLI logic (exported so index.ts can delegate without re-running main) ─
 
 export async function runTeamCli(argv: string[]): Promise<void> {
-  const { goal, stateDir, quiet, stream, noTui, notify, webhookUrl, agentsDir } = parseTeamArgs(argv);
+  const { goal, stateDir, quiet, stream, noTui, notify, clean, webhookUrl, agentsDir } = parseTeamArgs(argv);
 
   if (!goal) {
     err(c.bold('Roland — PM Team Mode'));
@@ -112,6 +136,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     err('    roland team "..." --no-tui');
     err('    roland team "..." --notify');
     err('    roland team "..." --webhook https://ntfy.sh/my-topic');
+    err('    roland team "..." --clean');
     err('');
     err('  ' + c.bold('Flags'));
     err('    --state-dir <dir>       Blackboard + message persistence  ' + c.dim('(default: .roland)'));
@@ -120,6 +145,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     err('    --no-tui                Use scrolling log instead of live dashboard');
     err('    --notify                Send desktop notification on complete/error');
     err('    --webhook <url>         POST to URL on complete/error (ntfy.sh, Slack, Discord…)');
+    err('    --clean, -c             Delete stale blackboard + messages before starting  ' + c.dim('(preserves memory.md)'));
     err('');
     process.exit(1);
   }
@@ -132,6 +158,9 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     onError:    notify || Boolean(webhookUrl),
     onBlocker:  false,
   });
+
+  // ── Clean stale state if requested ──────────────────────────────────────────
+  if (clean) cleanState(stateDir);
 
   // ── Quiet mode — no UI, just run and emit synthesis ────────────────────────
   if (quiet) {
@@ -208,6 +237,25 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     await new Promise((r) => setTimeout(r, 1200)); // show "Complete" state briefly
     tui.stop();
     await notifier.notify({ event: 'complete', goal, summary: 'Run complete', tasksCompleted: Object.keys(result.taskResults).length, wavesRun: result.wavesRun, blockersEncountered: result.blockersEncountered });
+
+    // ── "What would you like to do next?" prompt (TUI mode) ─────────────────
+    const tuiBlockers = result.blockersEncountered;
+    err('');
+    err('  ' + c.bold('💡  Run complete. What would you like to do next?'));
+    err('');
+    err(`  ${c.cyan('npm run dev')}                        Start (or restart) the dev server`);
+    err(`  ${c.cyan('npm test')}                           Run the full test suite`);
+    err(`  ${c.cyan('git add -A && git commit -m "..."')}  Commit all changes`);
+    err(`  ${c.cyan('Ctrl+C')}                             Stop any background dev server`);
+    if (tuiBlockers > 0) {
+      err('');
+      err(`  ${c.red('⚠️  ' + tuiBlockers + ' blocker' + (tuiBlockers !== 1 ? 's' : '') + ' need attention — see 🔴 Release Blockers in the synthesis below.')}`);
+    }
+    err('');
+    err(`  ${c.dim('Ask Roland to refine:')}  roland team "Fix the failing tests"  ${c.dim('or')}  roland team "Add X"`);
+    err(`  ${c.dim('Full next-step detail in')} ${c.bold('## Next Steps')} ${c.dim('at the bottom of the synthesis ↓')}`);
+    err('');
+
     console.log(result.synthesis);
     return;
   }
@@ -354,6 +402,22 @@ export async function runTeamCli(argv: string[]): Promise<void> {
   err(`  ${c.dim('Blackboard:')}  ${stateDir}/blackboard.json`);
   err(`  ${c.dim('Messages:')}    ${stateDir}/messages.json`);
   err('  ' + '═'.repeat(COLS - 2));
+  err('');
+
+  // ── "What would you like to do next?" prompt ────────────────────────────────
+  err('  ' + c.bold('💡  Run complete. What would you like to do next?'));
+  err('');
+  err(`  ${c.cyan('npm run dev')}                        Start (or restart) the dev server`);
+  err(`  ${c.cyan('npm test')}                           Run the full test suite`);
+  err(`  ${c.cyan('git add -A && git commit -m "..."')}  Commit all changes`);
+  err(`  ${c.cyan('Ctrl+C')}                             Stop any background dev server`);
+  if (blockers > 0) {
+    err('');
+    err(`  ${c.red('⚠️  ' + blockers + ' blocker' + (blockers !== 1 ? 's' : '') + ' need attention — see 🔴 Release Blockers in the synthesis below.')}`);
+  }
+  err('');
+  err(`  ${c.dim('Ask Roland to refine:')}  roland team "Fix the failing tests"  ${c.dim('or')}  roland team "Add X"`);
+  err(`  ${c.dim('Full next-step detail in')} ${c.bold('## Next Steps')} ${c.dim('at the bottom of the synthesis ↓')}`);
   err('');
 
   // Notify on completion

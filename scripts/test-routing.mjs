@@ -1,29 +1,32 @@
 import { toCursorModelId } from '../dist/rco/model-routing.js';
 
+// Cost-optimised routing strategy (2026-05):
+//   Lead PM only  → grok-4.3     (orchestration brain)
+//   All engineers → composer-2.5 (reasoning + execution + light lanes unified)
 const cases = [
-  // QA split (primary routing check)
-  ['test-author',       ''],   // should → claude-sonnet-4-6  (reasoning: 'author')
-  ['test-executor',     ''],   // should → composer-2.5       (execution default)
-  // Reasoning lane
-  ['architect',         ''],   // should → claude-sonnet-4-6
-  ['code-reviewer',     ''],   // should → claude-sonnet-4-6  (reasoning: 'review')
-  ['security-reviewer', ''],   // should → claude-sonnet-4-6  (reasoning: 'security')
+  // QA split
+  ['test-author',       ''],   // should → composer-2.5  (engineer: 'author' heuristic)
+  ['test-executor',     ''],   // should → composer-2.5  (execution default)
+  // Reasoning-named roles — still composer-2.5 under new strategy
+  ['architect',         ''],   // should → composer-2.5
+  ['code-reviewer',     ''],   // should → composer-2.5  (reasoning: 'review')
+  ['security-reviewer', ''],   // should → composer-2.5  (reasoning: 'security')
   // Execution lane
   ['executor',          ''],   // should → composer-2.5
   ['executor-high',     ''],   // should → composer-2.5
   // PM lane
-  ['Lead-PM',           ''],   // should → claude-opus-4-7
+  ['Lead-PM',           ''],   // should → grok-4.3
 ];
 
 const EXPECTED = {
-  'test-author':       'claude-sonnet-4-6',
+  'test-author':       'composer-2.5',
   'test-executor':     'composer-2.5',
-  'architect':         'claude-sonnet-4-6',
-  'code-reviewer':     'claude-sonnet-4-6',
-  'security-reviewer': 'claude-sonnet-4-6',
+  'architect':         'composer-2.5',
+  'code-reviewer':     'composer-2.5',
+  'security-reviewer': 'composer-2.5',
   'executor':          'composer-2.5',
   'executor-high':     'composer-2.5',
-  'Lead-PM':           'claude-opus-4-7',
+  'Lead-PM':           'grok-4.3',
 };
 
 let passed = 0, failed = 0;

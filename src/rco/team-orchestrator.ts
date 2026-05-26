@@ -4,7 +4,7 @@
  * Execution flow:
  *
  *   Phase 1 — Lead PM planning
- *     The Lead PM (Opus 4.7) reads the goal + Blackboard + roster and
+ *     The Lead PM (Grok 4.3) reads the goal + Blackboard + roster and
  *     returns a structured task plan.
  *
  *   Phase 2 — Iterated wave execution (the PM control loop)
@@ -219,6 +219,13 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   const roster: AgentYaml[] = Array.from(rosterMap.values());
   console.error(`[Team] Roster: ${roster.length} agents from ${agentsDir}`);
 
+  // ── Model config banner ───────────────────────────────────────────────────
+  console.error('[Team] ─────────────────────────────────────────────────────');
+  console.error('[Team] Model config:');
+  console.error('[Team]   Lead PM     → grok-4.3     (orchestration + planning)');
+  console.error('[Team]   All engineers → composer-2.5 (reasoning, execution, tests, docs)');
+  console.error('[Team] ─────────────────────────────────────────────────────');
+
   // ── Shared execution state ─────────────────────────────────────────────────
   const taskResults: Record<string, TeamTaskResult> = {};
   const completedIds = new Set<string>();
@@ -256,6 +263,14 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
 
     const modelId = toCursorModelId(agentYaml.claude_model ?? '', task.agent);
     console.error(`[Team]   → ${task.agent} (${modelId}): "${task.title}"`);
+
+    // Diagnostic: log the first 400 chars of the task description for test-author
+    // so we can verify the ESM reminder is actually reaching the agent.
+    if (agentKey === 'test-author') {
+      const descPreview = task.description.slice(0, 400).replace(/\n/g, ' ↵ ');
+      console.error(`[Team]   📋 [test-author] description[:400]: ${descPreview}`);
+    }
+
     onTaskStart?.(task.id, task.agent, task.title);
 
     const output = await callCursorAgent(task.agent, modelId, workerPrompt);
@@ -315,7 +330,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
 
   const planText = await callCursorAgent(
     'Lead-PM',
-    'claude-opus-4-7',
+    'grok-4.3',
     buildLeadPMPlanningPrompt({ goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined, projectMemory: memorySnapshot || undefined }),
   );
 
@@ -371,7 +386,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
 
       const reviewText = await callCursorAgent(
         'Lead-PM',
-        'claude-opus-4-7',
+        'grok-4.3',
         buildLeadPMReviewPrompt({
           goal,
           waveNumber,
@@ -428,7 +443,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
 
   const synthesis = await callCursorAgent(
     'Lead-PM',
-    'claude-opus-4-7',
+    'grok-4.3',
     buildLeadPMSynthesisPrompt({ goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined, taskResults }),
   );
   console.error('[Team] Synthesis complete');

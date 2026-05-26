@@ -5,34 +5,69 @@ All notable changes to Roland are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — PM Team System (Cursor-native)
+## [1.0.0] — 2026-05-26 — PM Team System (Production Release)
 
-A PM-first multi-agent team for Cursor: you are the Lead PM (Claude Opus 4.7),
-Roland runs a team of engineers on Cursor's Composer 2.5 models.
+First production-stable release of the Cursor-native PM Team System. A Lead PM
+(`grok-4.3`) decomposes goals into parallel tasks, dispatches a team of engineers
+(`composer-2.5`), reviews wave outputs, and delivers an executive synthesis — all
+from `roland team "..."`.
 
-### Added
+### Added — Core PM Team System (Phases 1–4)
 
-- **Phase 1 — Coordination substrate.** A keyed, rev-stamped Blackboard
-  (`blackboard_post/read/patch`) and a poll-based Message Bus (`bus_send/poll`),
-  persisted per-project under `.roland/` with fs-locked atomic writes.
-- **Phase 2 — PM control loop.** Task lifecycle state machine
-  (`open→in_progress→blocked⇄in_progress→in_review→done→archived`) and PM tools:
-  `get_pm_playbook`, `get_team_context`, `list_team`, `spawn_task`, `assign_task`,
-  `mark_blocked`, `unblock_task`, `complete_task`, `review_task`,
-  `synthesize_deliverable`. needsAttention always surfaces blockers first.
-- **Phase 3 — Cursor-native routing + recipes.** Deterministic lane routing
-  (PM→`claude-opus-4-7`, reasoning→`composer-2.5-fast`, coding/light→
-  `composer-2.5-standard`); **no OpenRouter** in the PM path. Per-task/engineer
-  Cursor token-usage attribution (`report_usage`, `get_team_usage`). Team recipes
-  (`full-feature-team`, `bugfix-team`, `refactor-team`) via `start_team_recipe`.
-  Optional `pm:` config section.
-- **Phase 4 — Polish & integration.** Rendered Markdown views (`pm_standup`,
-  `format:"markdown"` on `get_team_context`/`get_team_usage`); `cursorLaunch`
-  copy-paste launch instructions on every dispatch packet; PM event timeline
-  (`.roland/pm-events.log`, `get_pm_events`); `roland` CLI subcommands
-  (`serve`, `mcp-config`, `doctor`, `pm-log`); global install scripts
-  (`scripts/install-global.{sh,ps1}`); onboarding + workflow docs.
-- **Legacy untouched:** OpenRouter remains for RCO/triage/route_model/classifier.
+- **Coordination substrate** — keyed, rev-stamped Blackboard (`blackboard.json`)
+  and Message Bus (`messages.json`), persisted under `.roland/` with atomic writes.
+- **PM control loop** — Phase 1 (plan) → Wave execution → Phase 2 (review/adjust)
+  → Phase 3 (synthesis). PM reviews every wave and can continue, adjust, or unblock.
+- **Cursor-native model routing** — Lead PM → `grok-4.3`, all engineers →
+  `composer-2.5`. Single source of truth in `toCursorModelId()`.
+- **Team recipes** — `full-feature-team`, `bugfix-team`, `refactor-team` in
+  `recipes/teams/`.
+- **`roland team "goal"` CLI** — `--stream`, `--no-tui`, `--quiet`, `--state-dir`,
+  `--notify`, `--webhook`, `--clean` flags.
+- **`roland "goal"` shortcut** — alias for `roland team`.
+- **`--clean` flag** — wipes `blackboard.json` + `messages.json`, preserves
+  `memory.md`, before each run. Prevents stale state from poisoning synthesis.
+- **Live Terminal Dashboard** — TUI progress display; `roland status` observer.
+- **Persistent Project Memory** — `.roland/memory.md` injected into every planning
+  prompt, updated after every synthesis. Accumulates decisions, patterns, and
+  things to avoid across runs.
+- **Completion Notifications** — desktop, webhook (ntfy.sh / Slack / Discord),
+  and stderr. Configurable via `--notify`, `--webhook`, `ROLAND_NOTIFY`.
+- **Watch Mode** — `roland watch` fires a team run on every git commit or file
+  change.
+- **GitHub PR Mode** — `roland pr <number>` reviews and optionally fixes a PR via
+  the `gh` CLI.
+- **PM event timeline** — `.roland/pm-events.log` + `roland pm-log`.
+- **"What would you like to do next?" footer** — actionable next steps printed
+  after every run.
+- **`## Next Steps` synthesis section** — structured 6-item block in every PM
+  synthesis output.
+
+### Added — Quality & Reliability Hardening
+
+- **Strict model routing enforcement** — PM-name heuristic checked first;
+  Anthropic model IDs (`claude-sonnet-*`, `claude-opus-*`) removed from
+  `VALID_CURSOR_MODELS` so they never bypass routing; startup banner confirms
+  model assignments.
+- **Test-author ESM rules** — verbatim ESM header injected by PM planner into
+  every `test-author` task; `vi.isolateModules` added to FORBIDDEN list; NEVER
+  INVENT Vitest APIs rule with explicit allowlist.
+- **Stateful isolation rule** — PM planner + test-author persona both require
+  fresh instances of rate limiters, stores, and servers per `describe`/`beforeEach`.
+- **Executor implementation constraints** — `req.destroy()` prohibition and
+  mandatory `jti = crypto.randomUUID()` injected into every executor task
+  description and added to the project Memory Extract `Avoid` list.
+- **Test-sync rule** — PM planner requires that any implementation change also
+  updates or removes affected test assertions in the same task or an explicit
+  follow-up before `test-executor` runs.
+
+### Fixed
+
+- **`roland doctor` Windows path bug** — `fileURLToPath(import.meta.url)` replaces
+  `.pathname`, which returned a leading `/C:/…` slash on Windows.
+- **Model routing passthrough bug** — Anthropic model strings no longer in
+  `VALID_CURSOR_MODELS`, closing the bypass that allowed `claude-sonnet-4-6` to
+  reach the Cursor SDK verbatim.
 
 ## [0.1.4] - 2026-03-24
 
@@ -75,23 +110,6 @@ Roland runs a team of engineers on Cursor's Composer 2.5 models.
 - **`ROLAND_PROJECT_ROOT` env var** — fixes cwd footgun in Goose sub-sessions
 - **`.goose/config.yaml` template** — scaffolded by `roland init` with Developer extension + smart routing instructions
 - **`VB6Migration` recipe** — 5-agent workflow: ContextLoader → Planner → Executor → Reviewer → Explainer with loop/retry
-
-## [Unreleased]
-
-### Added
-- **Responsive-design agent** — cross-device compatibility, mobile-first layouts, breakpoint strategy, fluid typography, flexible grids (standard + low tier)
-- **CodeReviewCompliance recipe** — 4-agent workflow: Researcher → Code-Reviewer → Critic → Writer for code review against requirements
-- **DesktopApp recipe** — 6-agent workflow for cross-platform desktop apps (Electron, Tauri, .NET MAUI)
-- **RCO Phase 4: Beta release** — packaging (npm), install scripts (sh + ps1), CI/CD release workflow, telemetry (Sentry opt-in), sync stub, ROADMAP
-- **RCO Phase 3: Feature expansion** — adaptive-swarm mode, collab-mode, 12 new agents, eco-optimizer, graph-visualizer, dashboard analytics/CSV/dark mode/hotkeys, benchmarks
-- **RCO Phase 2: Session persistence & validation** — Zod schemas, session persistence (notepad prompts + local JSON fallback), dynamic Cursor rules from agent outputs
-- **RCO Phase 1: Validation** — expanded Vitest suite, QA scenarios, Puppeteer mock, timeouts/retries, profiling
-- **RCO MVP** — YAML-driven orchestrator with child_process.fork, 5 execution modes, WebSocket dashboard, Cursor export, CLI
-
-### Fixed
-- Logger output switched from `console.log` to `console.error` for MCP-compliant stderr output
-- Test suite: fixed API mismatches (selectModel → routeByComplexity, reset → clear), 1-based step_number, agent name casing, fork race conditions
-- `resolveWorkerPath` improved with multiple dist fallbacks
 
 ## [2.0.0] - 2026-02-12
 
@@ -137,6 +155,8 @@ Initial production release with 10 phases complete: MCP server, agent system, 5 
 - **Minor** (1.X.0): New features, backward compatible
 - **Patch** (1.0.X): Bug fixes, minor improvements
 
-[2.0.0]: https://github.com/AdamMcIntosh/roland/releases/tag/v2.0.0
 [1.0.0]: https://github.com/AdamMcIntosh/roland/releases/tag/v1.0.0
-[Unreleased]: https://github.com/AdamMcIntosh/roland/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/AdamMcIntosh/roland/releases/tag/v2.0.0
+[0.1.4]: https://github.com/AdamMcIntosh/roland/releases/tag/v0.1.4
+[0.1.3]: https://github.com/AdamMcIntosh/roland/releases/tag/v0.1.3
+[0.1.2]: https://github.com/AdamMcIntosh/roland/releases/tag/v0.1.2

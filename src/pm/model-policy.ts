@@ -4,10 +4,14 @@
  * The PM team runs entirely on Cursor's native models — there is no OpenRouter
  * here. Routing is deterministic and lane-based:
  *
- *   pm        → claude-opus-4-7     (the Lead PM; your Cursor Ultra subscription)
- *   reasoning → composer-2.5-fast   (interactive / time-sensitive: architect, reviewer, critic…)
- *   coding    → composer-2.5-standard (background execution — the cost-efficient default)
- *   light     → composer-2.5-standard (docs, tests, research — also standard)
+ *   pm        → grok-4.3      (Lead PM only — orchestration + planning)
+ *   reasoning → composer-2.5  (architect, reviewer, critic, planner, security…)
+ *   coding    → composer-2.5  (executor, builder — cost-efficient default)
+ *   light     → composer-2.5  (docs, tests, research — also standard)
+ *
+ * Cost strategy: Grok 4.3 for the one orchestration agent; composer-2.5 for
+ * every engineer regardless of lane. This minimises token cost while keeping
+ * strong reasoning for PM-level decisions.
  *
  * This module is intentionally self-contained: it imports none of the legacy
  * OpenRouter constants and shares nothing with the RCO/triage routing path.
@@ -29,9 +33,9 @@ export interface ModelPolicy {
 }
 
 export const DEFAULT_MODEL_POLICY: ModelPolicy = {
-  pm: 'claude-opus-4-7',
-  fast: 'composer-2.5-fast',
-  standard: 'composer-2.5-standard',
+  pm: 'grok-4.3',
+  fast: 'composer-2.5',
+  standard: 'composer-2.5',
 };
 
 /** Map a lane to its Cursor model id + variant under a given policy. */

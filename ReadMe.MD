@@ -117,6 +117,7 @@ roland team "goal" --quiet              # synthesis only, piped to stdout
 roland team "goal" --notify             # desktop notification on complete/error
 roland team "goal" --webhook <url>      # POST to ntfy.sh, Slack, Discord, or any URL
 roland team "goal" --state-dir <dir>    # custom persistence dir (default: .roland)
+roland team "goal" --clean              # wipe blackboard + messages before running (keep memory.md)
 ```
 
 ### `roland watch` — continuous mode
@@ -206,7 +207,7 @@ Roland reads `memory.md` at the start of every run and updates it after synthesi
 You type a goal
       │
       ▼
-Lead PM  (Claude Opus 4.7)
+Lead PM  (grok-4.3)
   ├─ reads .roland/memory.md   ← decisions from prior runs
   ├─ reads .roland/blackboard  ← current project state
   └─ decomposes into tasks
