@@ -22,6 +22,7 @@ import type { TeamTask } from './team-orchestrator.js';
 import type { ReviewDecision } from './pm-prompts.js';
 import { RunStateWriter } from './run-state.js';
 import { TuiRenderer } from '../dashboard/tui.js';
+import { Notifier } from './notifier.js';
 
 // ── Terminal helpers ──────────────────────────────────────────────────────────
 
@@ -61,6 +62,8 @@ export interface TeamCliArgs {
   quiet: boolean;
   stream: boolean;
   noTui: boolean;
+  notify: boolean;
+  webhookUrl?: string;
   agentsDir?: string;
 }
 
@@ -73,6 +76,8 @@ export function parseTeamArgs(argv: string[]): TeamCliArgs {
   let quiet = false;
   let stream = false;
   let noTui = false;
+  let notify = false;
+  let webhookUrl: string | undefined;
   let agentsDir: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
@@ -83,16 +88,18 @@ export function parseTeamArgs(argv: string[]): TeamCliArgs {
     if (a === '--quiet' || a === '-q')                   { quiet = true; continue; }
     if (a === '--stream' || a === '-s')                  { stream = true; continue; }
     if (a === '--no-tui')                                { noTui = true; continue; }
+    if (a === '--notify' || a === '-n')                  { notify = true; continue; }
+    if (a === '--webhook' && args[i + 1])                { webhookUrl = args[++i]; notify = true; continue; }
     if (!a.startsWith('-') && !goal)                     { goal = a; continue; }
   }
 
-  return { goal, stateDir, quiet, stream, noTui, agentsDir };
+  return { goal, stateDir, quiet, stream, noTui, notify, webhookUrl, agentsDir };
 }
 
 // ── Main CLI logic (exported so index.ts can delegate without re-running main) ─
 
 export async function runTeamCli(argv: string[]): Promise<void> {
-  const { goal, stateDir, quiet, stream, noTui, agentsDir } = parseTeamArgs(argv);
+  const { goal, stateDir, quiet, stream, noTui, notify, webhookUrl, agentsDir } = parseTeamArgs(argv);
 
   if (!goal) {
     err(c.bold('Roland — PM Team Mode'));
@@ -103,20 +110,39 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     err('    roland team "..." --stream');
     err('    roland team "..." --quiet');
     err('    roland team "..." --no-tui');
+    err('    roland team "..." --notify');
+    err('    roland team "..." --webhook https://ntfy.sh/my-topic');
     err('');
     err('  ' + c.bold('Flags'));
-    err('    --state-dir <dir>   Blackboard + message persistence  ' + c.dim('(default: .roland)'));
-    err('    --stream            Print truncated task output as each agent completes');
-    err('    --quiet             Suppress all progress; only print synthesis to stdout');
-    err('    --no-tui            Use scrolling log instead of live dashboard');
+    err('    --state-dir <dir>       Blackboard + message persistence  ' + c.dim('(default: .roland)'));
+    err('    --stream                Print truncated task output as each agent completes');
+    err('    --quiet                 Suppress all progress; only print synthesis to stdout');
+    err('    --no-tui                Use scrolling log instead of live dashboard');
+    err('    --notify                Send desktop notification on complete/error');
+    err('    --webhook <url>         POST to URL on complete/error (ntfy.sh, Slack, Discord…)');
     err('');
     process.exit(1);
   }
 
+  // ── Notifier (shared across all modes) ─────────────────────────────────────
+  const notifier = new Notifier({
+    desktop:    notify,
+    webhookUrl: webhookUrl,
+    onComplete: notify || Boolean(webhookUrl),
+    onError:    notify || Boolean(webhookUrl),
+    onBlocker:  false,
+  });
+
   // ── Quiet mode — no UI, just run and emit synthesis ────────────────────────
   if (quiet) {
-    const result = await runTeam({ goal, stateDir, agentsDir });
-    console.log(result.synthesis);
+    try {
+      const result = await runTeam({ goal, stateDir, agentsDir });
+      console.log(result.synthesis);
+      await notifier.notify({ event: 'complete', goal, summary: 'Run complete', tasksCompleted: Object.keys(result.taskResults).length, wavesRun: result.wavesRun, blockersEncountered: result.blockersEncountered });
+    } catch (e) {
+      await notifier.notify({ event: 'error', goal, summary: String(e), errorMessage: e instanceof Error ? e.message : String(e) });
+      throw e;
+    }
     return;
   }
 
@@ -173,6 +199,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
       tui.update(runState.get());
       await new Promise((r) => setTimeout(r, 1500));
       tui.stop();
+      await notifier.notify({ event: 'error', goal, summary: String(e), errorMessage: e instanceof Error ? e.message : String(e) });
       throw e;
     }
 
@@ -180,6 +207,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     tui.update(runState.get());
     await new Promise((r) => setTimeout(r, 1200)); // show "Complete" state briefly
     tui.stop();
+    await notifier.notify({ event: 'complete', goal, summary: 'Run complete', tasksCompleted: Object.keys(result.taskResults).length, wavesRun: result.wavesRun, blockersEncountered: result.blockersEncountered });
     console.log(result.synthesis);
     return;
   }
@@ -327,6 +355,9 @@ export async function runTeamCli(argv: string[]): Promise<void> {
   err(`  ${c.dim('Messages:')}    ${stateDir}/messages.json`);
   err('  ' + '═'.repeat(COLS - 2));
   err('');
+
+  // Notify on completion
+  await notifier.notify({ event: 'complete', goal, summary: 'Run complete', tasksCompleted: total, wavesRun: result.wavesRun, blockersEncountered: blockers });
 
   // Synthesis to stdout — pipeable, separable from progress stderr
   console.log(result.synthesis);
