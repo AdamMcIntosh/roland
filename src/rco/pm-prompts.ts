@@ -25,6 +25,8 @@ export interface PlanningContext {
   blackboardSnapshot: string;
   roster: AgentYaml[];
   inboxMessages?: string;
+  /** Capped snapshot of .roland/memory.md from prior runs (injected when present). */
+  projectMemory?: string;
 }
 
 export interface SynthesisContext extends PlanningContext {
@@ -72,7 +74,7 @@ ${ctx.goal}
 
 ---
 
-## Current Blackboard State
+${ctx.projectMemory ? `## Project Memory\n\nThis project has been worked on before. Key context from prior runs:\n\n${ctx.projectMemory}\n\n---\n\n` : ''}## Current Blackboard State
 
 ${capBlackboard(ctx.blackboardSnapshot)}
 
@@ -233,6 +235,34 @@ Concrete artifacts organized by engineer — file paths, API contracts, test cou
 ## Key Decisions Made
 
 Architectural, design, and process decisions the team reached, with brief rationale. Only include decisions that future engineers need to know.
+
+---
+
+## Memory Extract
+
+After completing the sections above, write this final section so Roland can remember what matters for next time.
+Keep it tight — 5–10 bullets max across three categories:
+
+**Decisions:** Key architectural or design choices made this run (tech stack additions, patterns adopted, APIs chosen).
+
+**Patterns:** File/naming/testing conventions established or followed — anything a new engineer needs to know to fit in.
+
+**Avoid:** Specific pitfalls, wrong approaches that were tried, or constraints the PM must not violate on future runs.
+
+Example format:
+\`\`\`
+**Decisions:**
+- Uses Fastify (not Express) — chosen for plugin ecosystem and TypeScript support
+- Zod validates all request/response boundaries
+
+**Patterns:**
+- Routes live in src/routes/{domain}.ts; controllers in src/controllers/{domain}.ts
+- Integration tests use vitest + real DB (no mocks for DB layer)
+
+**Avoid:**
+- Don't add raw SQL — ORM only (Drizzle)
+- Don't use \`any\` in TypeScript — strict mode is enforced
+\`\`\`
 `;
 }
 

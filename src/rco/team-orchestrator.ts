@@ -36,6 +36,7 @@ import { toCursorModelId } from './model-routing.js';
 import { parseWorkerSignals } from './worker-signals.js';
 import type { AgentYaml } from './types.js';
 import { AGENT_TIMEOUT_MS, AGENT_MAX_RETRIES, RETRY_BASE_DELAY, BLACKBOARD_RESULT_MAX_CHARS } from './constants.js';
+import { ProjectMemory } from './project-memory.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -207,6 +208,9 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   console.error('[Team] Initializing coordination layer...');
   const blackboard = new Blackboard(stateDir);
   const bus = new MessageBus(stateDir);
+  const memory = new ProjectMemory(stateDir);
+  const memorySnapshot = memory.snapshot();
+  if (memorySnapshot) console.error('[Team] Project memory loaded — injecting into planning prompt');
 
   blackboard.post({ type: 'task', title: 'TEAM GOAL', content: goal, status: 'in_progress', author: 'system', priority: 'critical', tags: ['goal'], relatedIds: [] });
 
@@ -312,7 +316,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   const planText = await callCursorAgent(
     'Lead-PM',
     'claude-opus-4-7',
-    buildLeadPMPlanningPrompt({ goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined }),
+    buildLeadPMPlanningPrompt({ goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined, projectMemory: memorySnapshot || undefined }),
   );
 
   const rawPlan = extractJsonBlock(planText);
@@ -428,6 +432,15 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     buildLeadPMSynthesisPrompt({ goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined, taskResults }),
   );
   console.error('[Team] Synthesis complete');
+
+  // ── Persist memory extract ────────────────────────────────────────────────
+  const runId = Date.now().toString(36);
+  const appended = memory.extractAndAppend(synthesis, goal, runId);
+  if (appended) {
+    console.error('[Team] Project memory updated — .roland/memory.md');
+  } else {
+    console.error('[Team] No Memory Extract found in synthesis — memory unchanged');
+  }
 
   const goalEntry = blackboard.read({ type: 'task', status: 'in_progress' }).find((e) => e.tags.includes('goal'));
   if (goalEntry) blackboard.patch(goalEntry.id, { status: 'done' });
