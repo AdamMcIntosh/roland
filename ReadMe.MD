@@ -100,6 +100,7 @@ roland status
 | `roland status` | Live TUI observer (run from a second terminal) |
 | `roland doctor` | Diagnose install, agents, recipes, permissions |
 | `roland pm-log` | Print the PM event timeline for the current project |
+| `npm run serve-dashboard` | Web dashboard — live status, usage & cost history (http://127.0.0.1:8081) |
 | `roland mcp-config` | Print / merge the Cursor MCP config entry |
 | `roland serve` | Start the MCP server (default with no subcommand) |
 | `roland --help` | Full flag reference |
@@ -155,6 +156,56 @@ roland pr 42 --notify
 
 ---
 
+## 📊 Usage Dashboard
+
+A browser-based dashboard that serves as Roland's central hub — showing live job status during a run and historical usage, cost, and agent breakdown across all runs.
+
+```bash
+# From your project directory:
+npm run serve-dashboard
+# → http://127.0.0.1:8081
+```
+
+The dashboard auto-refreshes: live run status every 5 s, usage history every 30 s. It's useful at any time — not just during active runs.
+
+### What it shows
+
+| Section | Contents |
+|---------|----------|
+| **Overview cards** | Total runs · Est. cost · Tokens used · Active jobs — all filterable by Today / Week / Month / All Time |
+| **Live Status** | Current job goal, wave progress, per-task status (pending / running / done / blocked) with elapsed times |
+| **Recent Runs** | Last 10 runs — status icon, duration, cost, click to expand task list |
+| **Usage Trends** | Tokens + cost over time (line chart) and model distribution (doughnut) |
+| **Agent Breakdown** | Sortable table: every agent's token count, cost estimate, call count, and avg duration |
+
+### Pointing it at your project
+
+`npm run serve-dashboard` reads `.roland/` in the current directory. For a project in a different location:
+
+```bash
+node scripts/serve-dashboard.js --state-dir /path/to/project/.roland
+node scripts/serve-dashboard.js --state-dir /path/to/project/.roland --port 8082
+```
+
+### Backfilling existing projects
+
+Usage data is recorded automatically from the next `roland team` run onward. To create a synthetic entry from a previous run's `run-state.json`:
+
+```bash
+node scripts/backfill-usage.mjs --state-dir /path/to/project/.roland
+```
+
+### Demo data (trying it out without a real run)
+
+```bash
+node scripts/seed-usage-demo.mjs          # seeds 12 realistic demo runs into .roland/
+npm run serve-dashboard                   # open http://127.0.0.1:8081
+```
+
+> **Note:** Token counts and costs are **estimates** (input chars ÷ 4 ≈ tokens). Actual charges depend on your Cursor API tier and are not exposed by the SDK.
+
+---
+
 ## ⚙️ Configuration
 
 ### Environment variables
@@ -194,8 +245,9 @@ All state is stored in `.roland/` inside your project:
 |------|----------|
 | `memory.md` | Cross-run knowledge — tech stack, patterns, things to avoid |
 | `blackboard.json` | Shared task context — results, blockers, inter-agent messages |
-| `run-state.json` | Live run state (read by `roland status`) |
+| `run-state.json` | Live run state (read by `roland status` and the web dashboard) |
 | `messages.json` | Agent-to-agent message bus |
+| `usage-history.json` | Per-run token and cost estimates — grows automatically with every run |
 
 Roland reads `memory.md` at the start of every run and updates it after synthesis. The more you use Roland on a project, the better it knows it.
 

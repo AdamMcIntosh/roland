@@ -43,6 +43,7 @@ src/
     model-routing.ts    ← toCursorModelId(model, agentName) — routes to Opus/Sonnet/Composer
     blackboard.ts       ← Shared persistent state (.roland/blackboard.json)
     message-bus.ts      ← Point-to-point agent messaging (.roland/messages.json)
+    usage-tracker.ts    ← Per-run token estimation + cost recording (.roland/usage-history.json)
     types.ts            ← Core interfaces (TeamTask, AgentYaml, …)
   server/
     mcp-server.ts       ← MCP tool definitions + agent/recipe catalogue
@@ -75,6 +76,7 @@ roland team "..." --state-dir /tmp  # use alternate state directory
 **State files** (written to `.roland/` by default):
 - `blackboard.json` — shared key/value store agents read and write
 - `messages.json` — point-to-point message queue between agents
+- `usage-history.json` — per-run token/cost estimates appended by `usage-tracker.ts` after every run
 
 ---
 
@@ -242,6 +244,44 @@ Both smoke tests exit 1 on any failure. Run them after touching `model-routing.t
 
 ---
 
+## Web Dashboard
+
+Two files serve the browser-based usage dashboard:
+
+| File | Role |
+|------|------|
+| `scripts/serve-dashboard.js` | HTTP server (port 8081). Serves static files from `dashboard-ui/` and three JSON API endpoints |
+| `dashboard-ui/index.html` | Single-page app — polling-only, no WebSocket dependency |
+
+**API endpoints** (all read from `--state-dir`, default `.roland/`):
+
+| Endpoint | Source file | Returns |
+|----------|-------------|---------|
+| `GET /api/usage` | `usage-history.json` | `RunUsageRecord[]` — full history |
+| `GET /api/usage/summary` | `usage-history.json` | Aggregate totals (runs, tokens, cost, lastRunAt) |
+| `GET /api/run-state` | `run-state.json` | `RunState \| null` — live job progress |
+
+**Usage tracker** (`src/rco/usage-tracker.ts`):
+
+- Called at the end of every `runTeam()` in `team-orchestrator.ts`
+- Estimates tokens as `chars / 4` and cost from per-model rate table (`MODEL_PRICING`)
+- Appends one `RunUsageRecord` to `.roland/usage-history.json` (creates the file on first run)
+- Rate table lives at the top of `usage-tracker.ts` — update it if you have better pricing data
+
+**Serving the dashboard against a specific project:**
+
+```bash
+node scripts/serve-dashboard.js --state-dir /path/to/project/.roland --port 8082
+```
+
+**Backfilling from an existing run-state** (for projects that ran before the tracker was added):
+
+```bash
+node scripts/backfill-usage.mjs --state-dir /path/to/project/.roland
+```
+
+---
+
 ## Common Pitfalls
 
 1. **Editing YAML agent files but not rebuilding** — `dist/agents/` is stale; run `npm run build`
@@ -269,3 +309,8 @@ Both smoke tests exit 1 on any failure. Run them after touching `model-routing.t
 | Team recipes | `recipes/teams/*.yaml` |
 | Routing smoke test | `scripts/test-routing.mjs` |
 | Signal smoke test | `scripts/test-signals.mjs` |
+| Usage tracker | `src/rco/usage-tracker.ts` |
+| Web dashboard HTML | `dashboard-ui/index.html` |
+| Dashboard HTTP server | `scripts/serve-dashboard.js` |
+| Usage demo seeder | `scripts/seed-usage-demo.mjs` |
+| Run backfill tool | `scripts/backfill-usage.mjs` |

@@ -37,6 +37,8 @@ import { parseWorkerSignals } from './worker-signals.js';
 import type { AgentYaml } from './types.js';
 import { AGENT_TIMEOUT_MS, AGENT_MAX_RETRIES, RETRY_BASE_DELAY, BLACKBOARD_RESULT_MAX_CHARS } from './constants.js';
 import { ProjectMemory } from './project-memory.js';
+import { buildTaskUsage, buildRunUsage, saveRunUsage } from './usage-tracker.js';
+import type { TaskUsageRecord } from './usage-tracker.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -204,6 +206,11 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     onWaveReview, onTasksSpawned, onSynthesizing,
   } = opts;
 
+  // ── Usage tracking ────────────────────────────────────────────────────────
+  const runId    = Date.now().toString(36);
+  const runStart = Date.now();
+  const allTaskUsage: TaskUsageRecord[] = [];
+
   // ── Coordination layer ────────────────────────────────────────────────────
   console.error('[Team] Initializing coordination layer...');
   const blackboard = new Blackboard(stateDir);
@@ -272,8 +279,9 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     }
 
     onTaskStart?.(task.id, task.agent, task.title);
-
+    const taskCallStart = Date.now();
     const output = await callCursorAgent(task.agent, modelId, workerPrompt);
+    allTaskUsage.push(buildTaskUsage(task.id, task.title, task.agent, modelId, workerPrompt.length, output.length, Date.now() - taskCallStart));
 
     // ── Parse worker signals ───────────────────────────────────────────────
     const signals = parseWorkerSignals(output);
@@ -328,11 +336,10 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   // ── Phase 1: Lead PM planning ─────────────────────────────────────────────
   console.error('[Team] Phase 1: Lead PM planning...');
 
-  const planText = await callCursorAgent(
-    'Lead-PM',
-    'grok-4.3',
-    buildLeadPMPlanningPrompt({ goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined, projectMemory: memorySnapshot || undefined }),
-  );
+  const planningPrompt = buildLeadPMPlanningPrompt({ goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined, projectMemory: memorySnapshot || undefined });
+  const pmPlanStart = Date.now();
+  const planText = await callCursorAgent('Lead-PM', 'grok-4.3', planningPrompt);
+  allTaskUsage.push(buildTaskUsage('pm-planning', 'Lead PM: Planning', 'Lead-PM', 'grok-4.3', planningPrompt.length, planText.length, Date.now() - pmPlanStart));
 
   const rawPlan = extractJsonBlock(planText);
   const plan: TeamPlan = isTeamPlan(rawPlan) ? rawPlan : fallbackPlan(goal);
@@ -384,20 +391,19 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
       }
       onWaveReview?.(waveNumber);
 
-      const reviewText = await callCursorAgent(
-        'Lead-PM',
-        'grok-4.3',
-        buildLeadPMReviewPrompt({
-          goal,
-          waveNumber,
-          waveResults,
-          remainingTasks: remaining,
-          blackboardSnapshot: blackboard.snapshot(),
-          roster,
-          inboxMessages: bus.inboxSummary('Lead-PM') || undefined,
-          detectedBlockers: detectedBlockers.length > 0 ? detectedBlockers : undefined,
-        }),
-      );
+      const reviewPrompt = buildLeadPMReviewPrompt({
+        goal,
+        waveNumber,
+        waveResults,
+        remainingTasks: remaining,
+        blackboardSnapshot: blackboard.snapshot(),
+        roster,
+        inboxMessages: bus.inboxSummary('Lead-PM') || undefined,
+        detectedBlockers: detectedBlockers.length > 0 ? detectedBlockers : undefined,
+      });
+      const pmReviewStart = Date.now();
+      const reviewText = await callCursorAgent('Lead-PM', 'grok-4.3', reviewPrompt);
+      allTaskUsage.push(buildTaskUsage(`pm-review-${waveNumber}`, `Lead PM: Wave ${waveNumber} Review`, 'Lead-PM', 'grok-4.3', reviewPrompt.length, reviewText.length, Date.now() - pmReviewStart));
 
       const rawDecision = extractJsonBlock(reviewText);
       const decision: ReviewDecision = isReviewDecision(rawDecision)
@@ -441,21 +447,33 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   console.error('[Team] Phase 3: Lead PM synthesis...');
   onSynthesizing?.();
 
-  const synthesis = await callCursorAgent(
-    'Lead-PM',
-    'grok-4.3',
-    buildLeadPMSynthesisPrompt({ goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined, taskResults }),
-  );
+  const synthesisPrompt = buildLeadPMSynthesisPrompt({ goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined, taskResults });
+  const pmSynthStart = Date.now();
+  const synthesis = await callCursorAgent('Lead-PM', 'grok-4.3', synthesisPrompt);
+  allTaskUsage.push(buildTaskUsage('pm-synthesis', 'Lead PM: Synthesis', 'Lead-PM', 'grok-4.3', synthesisPrompt.length, synthesis.length, Date.now() - pmSynthStart));
   console.error('[Team] Synthesis complete');
 
   // ── Persist memory extract ────────────────────────────────────────────────
-  const runId = Date.now().toString(36);
   const appended = memory.extractAndAppend(synthesis, goal, runId);
   if (appended) {
     console.error('[Team] Project memory updated — .roland/memory.md');
   } else {
     console.error('[Team] No Memory Extract found in synthesis — memory unchanged');
   }
+
+  // ── Save usage record ─────────────────────────────────────────────────────
+  const runUsage = buildRunUsage({
+    runId, runStart, runEnd: Date.now(),
+    goal, wavesRun: waveNumber, blockersEncountered: totalBlockers,
+    tasks: allTaskUsage,
+  });
+  saveRunUsage(stateDir, runUsage);
+  console.error(
+    `[Team] Usage: ~${runUsage.totalTokens.toLocaleString()} est. tokens` +
+    ` | ~$${runUsage.totalCostUsd.toFixed(4)} est. cost` +
+    ` | ${runUsage.tasks.length} agent call(s)` +
+    ` | saved to ${stateDir}/usage-history.json`,
+  );
 
   const goalEntry = blackboard.read({ type: 'task', status: 'in_progress' }).find((e) => e.tags.includes('goal'));
   if (goalEntry) blackboard.patch(goalEntry.id, { status: 'done' });
