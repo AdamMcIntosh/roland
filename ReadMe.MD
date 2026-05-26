@@ -1,17 +1,288 @@
 # Roland
 
-> AI agent orchestration as an MCP server — multi-agent recipes, cost visibility, and IDE-native personas.
+> PM-first AI engineering team — type a goal, watch a team of agents build it.
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)]()
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)]()
-[![MCP](https://img.shields.io/badge/MCP-1.0.4-purple.svg)]()
 
-Roland is an MCP (Model Context Protocol) server that gives your AI agent superpowers: multi-agent recipe workflows, auto-pilot triage, session cost tracking, budget management, and 32 specialized agent personas. Works with VS Code (Copilot), Cursor, and [Goose](https://block.github.io/goose/) (Block's open-source AI agent with OpenRouter).
-
-With Goose, Roland acts as a smart dispatcher: a cheap model handles routing, calls Roland's `triage` tool to analyze complexity, then spawns subagents on the recommended OpenRouter model with the right persona instructions. IDEs and Goose control which model runs — Roland focuses on what they can't do: orchestrating multi-step workflows across specialized agents, tracking what you're spending, and triaging every prompt to the right persona.
+Roland runs a **Lead PM (Claude Opus)** that decomposes your goal into parallel tasks and dispatches them to a team of **specialist engineers** (architect, executor, test-author, code-reviewer…). Each wave of work is reviewed before the next begins. The result lands in your terminal as an executive-ready synthesis.
 
 **Version**: 2.0.0
+
+---
+
+## Daily Usage
+
+```bash
+# Run a team on any goal — live dashboard, project memory, notifications
+roland "add rate limiting to the Fastify API"
+
+# Watch git — auto-run on every commit, notify on phone
+roland watch --webhook https://ntfy.sh/my-alerts
+
+# Review (and fix) a GitHub PR
+roland pr 42 --fix --notify
+
+# Always get notified (add to shell profile)
+export ROLAND_NOTIFY=1
+```
+
+---
+
+## Commands
+
+| Command | What it does |
+|---------|--------------|
+| `roland "goal"` | Run a PM team on a goal _(shortcut for `roland team`)_ |
+| `roland team "goal"` | Same — with full flag control |
+| `roland watch` | Auto-run on git commits or file changes |
+| `roland pr [number]` | Review / fix a GitHub PR via `gh` CLI |
+| `roland status` | Live TUI observer from a second terminal |
+| `roland doctor` | Diagnose install, agents, recipes, permissions |
+| `roland pm-log` | Print the PM event timeline |
+| `roland mcp-config` | Print / merge the Cursor MCP config entry |
+| `roland serve` | Start the MCP server (default when no subcommand) |
+| `roland --help` | Full flag reference |
+
+### Core flags _(team / watch / pr)_
+
+| Flag | Description |
+|------|-------------|
+| `--notify`, `-n` | Desktop notification on complete/error |
+| `--webhook <url>` | POST to ntfy.sh, Slack, Discord, or any URL |
+| `--state-dir <dir>` | Persistence dir — Blackboard, memory, run state _(default: `.roland`)_ |
+| `--quiet`, `-q` | Suppress progress; only print synthesis to stdout |
+| `--no-tui` | Scrolling log instead of live dashboard |
+
+### `roland team`
+
+```bash
+roland team "Build a REST API for bookstore inventory"
+roland team "..." --stream          # print agent output snippets as tasks complete
+roland team "..." --no-tui          # scrolling log (CI-friendly)
+roland team "..." --quiet           # synthesis only (pipeable)
+roland team "..." --notify --webhook https://ntfy.sh/alerts
+```
+
+### `roland watch`
+
+```bash
+roland watch                                    # git commits → commit message as goal
+roland watch --task "run full review"           # fixed goal on every commit
+roland watch --pattern "src/**/*.ts"            # file changes instead of git
+roland watch --interval 30                      # poll every 30s (default: 60)
+roland watch --once                             # run once on first change, exit
+roland watch --notify --webhook https://ntfy.sh/alerts
+```
+
+### `roland pr`
+
+```bash
+roland pr 42                                    # review PR #42
+roland pr                                       # auto-detect from current branch
+roland pr 42 --fix                              # review + commit + push fixes
+roland pr 42 --fix --branch fix/pr-42           # fixes on a named branch
+roland pr 42 --notify
+```
+
+---
+
+## How it works
+
+```
+You type a goal
+      ↓
+Lead PM (Claude Opus 4.7)
+  • reads project memory from prior runs
+  • reads Blackboard (shared state)
+  • decomposes into parallel tasks
+      ↓
+Wave 1 — parallel execution
+  executor        → implements the feature
+  architect       → reviews design
+  test-author     → writes tests
+      ↓
+PM reviews wave — continue or adjust (spawn / unblock / re-scope)
+      ↓
+Wave 2 — test-executor, code-reviewer, doc-writer…
+      ↓
+PM synthesises → executive-ready deliverable printed to stdout
+  + .roland/memory.md updated with decisions / patterns / avoid list
+  + notification fired (desktop / webhook)
+```
+
+**Persistence** (all in `.roland/`):
+
+| File | Contents |
+|------|----------|
+| `blackboard.json` | Shared task context — results, blockers, messages |
+| `memory.md` | Cross-run knowledge — tech stack, patterns, things to avoid |
+| `run-state.json` | Live state for `roland status` observer |
+| `messages.json` | Agent-to-agent message bus |
+
+---
+
+## Install & Build
+
+```bash
+git clone https://github.com/AdamMcIntosh/roland.git
+cd roland
+npm install
+npm run build
+npm link          # makes `roland` available globally
+```
+
+**Verify:**
+```bash
+roland doctor
+```
+
+**Required env:**
+```bash
+export CURSOR_API_KEY=<your-key>   # required for agent execution
+export ROLAND_NOTIFY=1             # optional: enable notifications globally
+```
+
+---
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CURSOR_API_KEY` | _(required)_ | API key for agent execution |
+| `ROLAND_NOTIFY` | `0` | Set to `1` to enable notifications for all commands |
+| `ROLAND_AGENT_TIMEOUT_MS` | `1500000` (25 min) | Per-agent hard timeout |
+| `ROLAND_AGENT_RETRIES` | `2` | Max retries before synthetic BLOCKER |
+
+---
+
+## Roland API
+
+Minimal Fastify HTTP server — read-only JSON endpoints plus optional Stripe payments and OAuth2 login.
+
+### Prerequisites
+
+- **Node.js 20 LTS** (minimum **18.0.0** per `package.json` `engines`)
+
+### Install
+
+```bash
+npm install
+```
+
+### Development
+
+```bash
+npm run api:dev
+```
+
+Hot-reloads `src/server.ts` (tsx watch). Pretty logging when `NODE_ENV` is not `production`.
+
+### Build
+
+```bash
+npm run build
+```
+
+Compiles TypeScript to `dist/` (includes `dist/server.js`).
+
+### Start
+
+```bash
+npm run api:start
+```
+
+Runs `node dist/server.js`. Build first.
+
+> **Note:** `npm run api:dev` and `npm run api:start` serve the HTTP API. Roland's top-level `dev` and `start` scripts target the MCP/RCO CLI.
+
+### Test
+
+```bash
+npm test
+```
+
+Runs the Vitest suite (includes `tests/routes/`). For route tests only: `npm run api:test`.
+
+### Environment variables
+
+| Variable | Default   | Description                          |
+|----------|-----------|--------------------------------------|
+| `PORT`   | `3000`    | HTTP listen port                     |
+| `HOST`   | `0.0.0.0` | Bind address                         |
+
+Stripe payment integration adds `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, and `STRIPE_API_VERSION` — see [Stripe Payments Guide](docs/guides/stripe-payments.md) for setup, env vars, and the payment API.
+
+OAuth2 login adds `SESSION_SECRET`, `APP_BASE_URL`, and provider credentials — see [OAuth2 Login Guide](docs/guides/oauth2.md) (summary below).
+
+### Try it
+
+Start the server (`npm run build && npm run api:start`), then:
+
+```bash
+curl -s http://localhost:3000/hello
+# {"message":"Hello, World!"}
+
+curl -s "http://localhost:3000/hello?name=Alice"
+# {"message":"Hello, Alice!"}
+
+curl -s http://localhost:3000/health
+# {"status":"ok","uptime":12.345,"timestamp":"2026-05-25T12:00:00.000Z"}
+```
+
+`uptime` (seconds) and `timestamp` (ISO 8601) vary at runtime; `status` is always `"ok"`.
+
+---
+
+## OAuth2 Login
+
+Sign in with **Google** or **GitHub** using Authorization Code flow + PKCE. Sessions are encrypted server-side cookies (`@fastify/secure-session`); OAuth access tokens are never returned to clients.
+
+Auth routes register when `SESSION_SECRET` and `APP_BASE_URL` are set (same pattern as Stripe). The default `src/server.ts` entry point also requires Stripe env vars — copy the full [`.env.example`](.env.example).
+
+### Quick start
+
+```bash
+cp .env.example .env
+# Generate SESSION_SECRET:
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# Set GOOGLE_* / GITHUB_* credentials (see guide for provider console URLs)
+npm run api:dev
+```
+
+Open `http://localhost:3000/auth/login/google` (or `/auth/login/github`) in a browser. After login you are redirected to `/` (or your `?returnTo=` path).
+
+### Auth endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/auth/login/:provider` | Start OAuth (`google` or `github`); optional `?returnTo=/path` |
+| `GET` | `/auth/callback/:provider` | Provider callback (browser redirect only) |
+| `GET` | `/auth/me` | Current user JSON (requires session cookie) |
+| `POST` | `/auth/logout` | Destroy session (`204 No Content`) |
+
+### curl examples
+
+Save session cookies after browser login to `cookies.txt`, then:
+
+```bash
+curl -s -b cookies.txt http://localhost:3000/auth/me
+# {"id":"…","email":"you@example.com","emailVerified":true,"displayName":"…","avatarUrl":"…","providers":["google"],"createdAt":"…"}
+
+curl -s -X POST -b cookies.txt http://localhost:3000/auth/logout -w "\nHTTP %{http_code}\n"
+# HTTP 204
+```
+
+Without a session, `/auth/me` returns `401` with `{"error":"Unauthorized","message":"Authentication required","code":"unauthenticated"}`.
+
+### Further reading
+
+| Doc | Contents |
+|-----|----------|
+| [OAuth2 Login Guide](docs/guides/oauth2.md) | Setup, provider registration, local dev walkthrough, tests, security, troubleshooting |
+| [OAuth2 Operational Runbook](docs/guides/oauth2-runbook.md) | Env matrix, secret rotation, CI fixtures, deploy checklist |
+| [`.env.example`](.env.example) | All auth-related variables with placeholders |
 
 ---
 
@@ -79,7 +350,8 @@ YAML-defined agents in `./agents/`, exported as IDE-native config files:
 | designer | UI/UX design |
 | planner | Task breakdown & planning |
 | critic | Code review & validation |
-| qa-tester | Quality assurance & testing |
+| test-author | Test strategy & authoring |
+| test-executor | Test execution & triage |
 | writer | Documentation & technical writing |
 | analyst | Data & trend analysis |
 | vision | Technical strategy & long-term planning |
@@ -88,7 +360,6 @@ YAML-defined agents in `./agents/`, exported as IDE-native config files:
 | build-fixer | Build error resolution |
 | code-reviewer | Comprehensive code review |
 | tdd-guide | Test-driven development guidance |
-| explore | Codebase navigation & mapping |
 
 Most agents have tiered variants (`-low`, `-medium`, `-high`) for different depth levels.
 
@@ -104,7 +375,7 @@ Multi-agent workflow templates in `./recipes/`:
 | **WebAppFullStack** | Architect → Designer → Executor → Critic → Writer | Full-stack development |
 | **MicroservicesArchitecture** | Architect → Executor → Critic → Writer | Service decomposition |
 | **DocumentationRefactor** | Analyst → Architect → Writer → Critic | Codebase-aware doc improvement |
-| **DesktopApp** | Architect → Designer → Executor → QA → Critic → Writer | Desktop/native app development |
+| **DesktopApp** | Architect → Designer → Executor → test-author → test-executor → Critic → Writer | Desktop/native app development |
 | **CodeReviewCompliance** | Researcher → Code-Reviewer → Critic → Writer | Code review & requirements compliance |
 
 ### Auto-Pilot Mode
@@ -299,10 +570,6 @@ npm run test:rco                          # RCO unit + integration tests only
 npm run test:run                          # Full test suite
 ```
 
-**Optional Puppeteer-based Claude simulation** (headless browser mock): set `RCO_USE_PUPPETEER=1` before running RCO so the agent worker loads a local HTML mock page instead of an inline mock. Requires `puppeteer` installed.
-
-**Verbose profiling:** Orchestrator uses `console.time`/`timeEnd` when `RCO_VERBOSE` is not `0` or `false`. Worker timeout and retries are configurable via orchestrator options (default 60s timeout, 2 retries).
-
 #### RCO YAML guide
 
 - **Agents** (`agents/*.yaml`): Each file defines `name`, optional `role_prompt`, `claude_model` (e.g. `claude-3-5-sonnet-20241022`), `tools` (e.g. `search`, `code`, `dependency-mapper`). RCO uses the same 32 agent YAMLs as the rest of Roland; set `claude_model` for RCO to target that Claude model.
@@ -372,6 +639,7 @@ The benchmark runs three sample tasks (e.g. "Build todo app", "CLI tool", "Bug f
 
 | Doc | Contents |
 |-----|----------|
+| [CLAUDE.md](CLAUDE.md) | Developer guide — architecture, model routing, agent conventions, pitfalls |
 | [INSTALLATION.md](INSTALLATION.md) | Setup, IDE configuration, project portability |
 | [Goose User Guide](docs/guides/goose-user-guide.md) | Goose setup, model tiers, budget management, recipes |
 | [Roland vs Claude Code](docs/guides/comparison-claude-code.md) | Honest quality comparison, enterprise workflow, cost analysis |
@@ -381,9 +649,9 @@ The benchmark runs three sample tasks (e.g. "Build todo app", "CLI tool", "Bug f
 | [ROADMAP.md](ROADMAP.md) | v0.1 checklist, v0.2 sprints, v1.0 vision |
 | [docs/guides/budget-guide.md](docs/guides/budget-guide.md) | Cost management & spending limits |
 | [docs/guides/cache-guide.md](docs/guides/cache-guide.md) | Caching strategies |
-| [docs/blog-post.md](docs/blog-post.md) | "RCO: The Modular Alternative for Claude Code" |
-| [docs/beta-testers.md](docs/beta-testers.md) | Beta program — how to join & give feedback |
-| [docs/development-history.md](docs/development-history.md) | Internal: MVP through Phase 4 evolution |
+| [Stripe Payments Guide](docs/guides/stripe-payments.md) | Stripe setup, env vars, Checkout Sessions flow, payment API, webhooks, testing |
+| [OAuth2 Login Guide](docs/guides/oauth2.md) | Google/GitHub login, sessions, endpoints, local dev, security, troubleshooting |
+| [OAuth2 Operational Runbook](docs/guides/oauth2-runbook.md) | Env matrix, provider callbacks, secret rotation, CI, deploy checklist |
 
 ---
 
@@ -397,18 +665,16 @@ npm run export-configs  # Regenerate IDE configs for this repo
 npm run rco -- --recipe PlanExecRevEx --task "..."  # RCO orchestrator (after build)
 npm run rco:dev -- --recipe PlanExecRevEx --task "..."  # RCO without building (tsx)
 npm run qa              # RCO QA: one scenario (todo-app), mock workers
-npm run qa:all           # RCO QA: all scenarios; timings vs baseline benchmarks
-npm test                 # Run tests (watch)
-npm run test:run         # Run tests once
-npm run test:rco         # RCO tests only (orchestrator, loadConfig, stateLock, tools)
+npm run qa:all          # RCO QA: all scenarios; timings vs baseline benchmarks
+npm test                # Run tests (watch)
+npm run test:run        # Run tests once
+npm run test:rco        # RCO tests only (orchestrator, loadConfig, stateLock, tools)
 npm run serve-dashboard # Serve dashboard-ui on port 8081
 npm run benchmark       # RCO benchmark: sample tasks vs simulated baseline
-npm run lint             # Lint check
-npm run clean            # Remove dist/
-npm start                # Start MCP server directly
+npm run lint            # Lint check
+npm run clean           # Remove dist/
+npm start               # Start MCP server directly
 ```
-
-**RCO benchmark report:** Run `npm run qa:all` and use the printed timings (and diff vs baseline) as a benchmark report. For real recipe runs, use `npm run rco` and check stderr for `console.time` output when `RCO_VERBOSE` is set.
 
 ---
 

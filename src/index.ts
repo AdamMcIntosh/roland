@@ -1,15 +1,24 @@
 #!/usr/bin/env node
 /**
- * Roland MCP Server Entry Point + CLI.
+ * Roland CLI entry point.
  *
- * Subcommands (Phase 4):
- *   roland serve        Start the stdio MCP server (default if no subcommand).
- *   roland mcp-config    Print the ~/.cursor/mcp.json entry. --write merges it in.
- *   roland doctor        Diagnose the install (binary, assets, Cursor config, .roland write).
- *   roland pm-log        Print the PM event timeline for the current project.
+ * Primary commands:
+ *   roland "goal"       Run a PM team on a goal (shortcut for `roland team`)
+ *   roland team         PM-first parallel agent execution with live TUI
+ *   roland watch        Monitor git commits / file changes; auto-run on change
+ *   roland pr [number]  Review (and optionally fix) a GitHub PR via `gh`
+ *   roland status       Live TUI observer for a running job
  *
- * Only `serve` speaks the JSON-RPC protocol on stdout; the CLI subcommands print
- * human output and exit, so they are free to use stdout/console.
+ * Utility commands:
+ *   roland serve        Start the stdio MCP server (default when no subcommand)
+ *   roland mcp-config   Print / merge the ~/.cursor/mcp.json entry
+ *   roland doctor       Diagnose the install
+ *   roland pm-log       Print the PM event timeline for the current project
+ *
+ * Global environment:
+ *   ROLAND_NOTIFY=1     Enable desktop/webhook notifications for all commands
+ *   CURSOR_API_KEY      Required for agent execution
+ *   ROLAND_AGENT_TIMEOUT_MS  Override agent timeout (default: 25 min)
  */
 
 import fs from 'fs';
@@ -128,8 +137,107 @@ function pmLog(limit: number): void {
   console.log(renderTimeline(events).replace(/^## /gm, '# '));
 }
 
+// ── Help ──────────────────────────────────────────────────────────────────────
+
+function printHelp(): void {
+  const b = (s: string) => `\x1b[1m${s}\x1b[0m`;
+  const d = (s: string) => `\x1b[2m${s}\x1b[0m`;
+  const cy = (s: string) => `\x1b[36m${s}\x1b[0m`;
+  const ln = (s = '') => console.error(s);
+
+  ln();
+  ln('  ' + b('🚀  Roland') + '  — PM-first AI Engineering Team');
+  ln();
+  ln('  ' + b('USAGE'));
+  ln(`    ${cy('roland')} ${b('"goal"')}                      Run a PM team on a goal ${d('(shortcut)')}`);
+  ln(`    ${cy('roland')} ${b('team')} "goal"               Run a PM team with live dashboard`);
+  ln(`    ${cy('roland')} ${b('watch')}                      Watch git commits, auto-run on change`);
+  ln(`    ${cy('roland')} ${b('pr')} [number]               Review (and optionally fix) a GitHub PR`);
+  ln(`    ${cy('roland')} ${b('status')}                     Live dashboard for a running job`);
+  ln();
+  ln('  ' + b('OPTIONS') + '  ' + d('(team / watch / pr)'));
+  ln(`    ${b('--notify')}, -n               Desktop notification on complete`);
+  ln(`    ${b('--webhook')} <url>            POST to URL on complete ${d('(ntfy.sh, Slack, Discord…)')}`);
+  ln(`    ${b('--state-dir')} <dir>          Persistence directory  ${d('(default: .roland)')}`);
+  ln(`    ${b('--quiet')}, -q               Suppress progress; only print synthesis to stdout`);
+  ln(`    ${b('--no-tui')}                  Scrolling log instead of live dashboard`);
+  ln();
+  ln('  ' + b('TEAM FLAGS'));
+  ln(`    ${b('--stream')}, -s              Print task output snippets as each agent completes`);
+  ln();
+  ln('  ' + b('WATCH FLAGS'));
+  ln(`    ${b('--task')} "description"       Fixed goal instead of commit message`);
+  ln(`    ${b('--pattern')} "src/**/*.ts"   Watch file changes instead of git commits`);
+  ln(`    ${b('--interval')} <sec>           Poll interval  ${d('(default: 60)')}`);
+  ln(`    ${b('--once')}                    Run once on first change, then exit`);
+  ln();
+  ln('  ' + b('PR FLAGS'));
+  ln(`    ${b('--fix')}                     Review + commit + push fixes`);
+  ln(`    ${b('--branch')} <name>            Create a named branch for fixes`);
+  ln();
+  ln('  ' + b('UTILITY COMMANDS'));
+  ln(`    ${cy('roland')} doctor              Diagnose your Roland install`);
+  ln(`    ${cy('roland')} pm-log              Print the PM event timeline`);
+  ln(`    ${cy('roland')} mcp-config          Print Cursor MCP config entry`);
+  ln(`    ${cy('roland')} serve               Start the MCP server (Cursor / VS Code)`);
+  ln();
+  ln('  ' + b('ENVIRONMENT'));
+  ln(`    ${b('ROLAND_NOTIFY=1')}            Enable notifications for all commands`);
+  ln(`    ${b('CURSOR_API_KEY')}             Required for agent execution`);
+  ln(`    ${b('ROLAND_AGENT_TIMEOUT_MS')}    Agent timeout  ${d('(default: 25 min)')}`);
+  ln(`    ${b('ROLAND_AGENT_RETRIES')}       Max retries per agent  ${d('(default: 2)')}`);
+  ln();
+  ln('  ' + b('EXAMPLES'));
+  ln(`    ${d('# Run a team session')}`);
+  ln(`    roland "add rate limiting to the Express API"`);
+  ln();
+  ln(`    ${d('# Watch git and notify on phone via ntfy')}`);
+  ln(`    roland watch --webhook https://ntfy.sh/my-alerts`);
+  ln();
+  ln(`    ${d('# Review a PR and push fixes')}`);
+  ln(`    roland pr 42 --fix --notify`);
+  ln();
+  ln(`    ${d('# Always notify (set once in shell profile)')}`);
+  ln(`    export ROLAND_NOTIFY=1`);
+  ln();
+}
+
+// ── Known subcommands (used for bare-goal shortcut detection) ─────────────────
+
+const KNOWN_CMDS = new Set([
+  'serve', 'mcp-config', 'doctor', 'pm-log',
+  'team', 'status', 'watch', 'pr',
+  '--help', '-h', '--version',
+]);
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+
 async function main(): Promise<void> {
-  const [cmd, ...rest] = process.argv.slice(2);
+  const argv = process.argv.slice(2);
+
+  // --help / -h (check before any parsing)
+  if (argv.includes('--help') || argv.includes('-h') || argv.length === 0 && process.stdin.isTTY) {
+    // Only show help for -h/--help; no-arg case still starts the MCP server.
+    if (argv.includes('--help') || argv.includes('-h')) {
+      printHelp();
+      process.exit(0);
+    }
+  }
+
+  let [cmd, ...rest] = argv;
+
+  // `roland "goal"` shortcut: bare non-flag string that isn't a known subcommand
+  if (cmd && !cmd.startsWith('-') && !KNOWN_CMDS.has(cmd)) {
+    rest = [cmd, ...rest];
+    cmd = 'team';
+  }
+
+  // Global --notify: inject into team/watch/pr when ROLAND_NOTIFY env var is set
+  const globalNotify = process.env.ROLAND_NOTIFY === '1' || process.env.ROLAND_NOTIFY === 'true';
+  if (globalNotify && ['team', 'watch', 'pr'].includes(cmd) && !rest.includes('--notify') && !rest.includes('-n')) {
+    rest = ['--notify', ...rest];
+  }
+
   try {
     switch (cmd) {
       case undefined:
@@ -149,33 +257,28 @@ async function main(): Promise<void> {
         break;
       }
       case 'team': {
-        // Delegate to the team CLI — import is safe because team-cli.ts guards
-        // its main() with a fileURLToPath(import.meta.url) === process.argv[1] check.
         const { runTeamCli } = await import('./rco/team-cli.js');
         await runTeamCli(['team', ...rest]);
         break;
       }
       case 'status': {
-        // Live TUI observer — watches .roland/run-state.json from a separate terminal.
         const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
         const { TuiRenderer } = await import('./dashboard/tui.js');
         await TuiRenderer.watch(stateDir);
         break;
       }
       case 'watch': {
-        // Watch mode — monitors git commits or file patterns and auto-runs the PM team.
         const { runWatchCli } = await import('./rco/watch-cli.js');
         await runWatchCli(['watch', ...rest]);
         break;
       }
       case 'pr': {
-        // PR mode — fetches a GitHub PR via `gh` and runs a review/fix team.
         const { runPrCli } = await import('./rco/pr-cli.js');
         await runPrCli(['pr', ...rest]);
         break;
       }
       default:
-        console.error(`Unknown command: ${cmd}\nUsage: roland [serve|mcp-config|doctor|pm-log|team|status|watch|pr]`);
+        console.error(`Unknown command: ${cmd}. Run \`roland --help\` for usage.`);
         process.exit(1);
     }
   } catch (error) {
