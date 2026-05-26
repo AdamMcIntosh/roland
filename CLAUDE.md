@@ -18,6 +18,7 @@ npm test                # Vitest unit tests
 npm run test:run        # Vitest, no watch
 node scripts/test-routing.mjs   # smoke-test model routing (8 cases)
 node scripts/test-signals.mjs   # smoke-test worker signal parsing (8 cases)
+node scripts/test-mcp-tools.mjs # smoke-test MCP server tools (8 cases)
 ```
 
 **After any change to `src/`:**
@@ -230,10 +231,11 @@ npm test                            # Vitest watch
 npm run test:run                    # Vitest, single pass
 node scripts/test-routing.mjs       # model routing smoke test (8 cases, 8/8 must pass)
 node scripts/test-signals.mjs       # signal parser smoke test (8 cases, 8/8 must pass)
+node scripts/test-mcp-tools.mjs     # MCP server smoke test  (8 cases, 8/8 must pass)
 ```
 
-Both smoke tests exit 1 on any failure. Run them after touching `model-routing.ts` or
-`worker-signals.ts`.
+All three smoke tests exit 1 on any failure. Run them after touching `model-routing.ts`,
+`worker-signals.ts`, or `mcp-server.ts`.
 
 ---
 
@@ -434,6 +436,7 @@ roland abort                          # stop after current wave completes
 | Team recipes | `recipes/teams/*.yaml` |
 | Routing smoke test | `scripts/test-routing.mjs` |
 | Signal smoke test | `scripts/test-signals.mjs` |
+| MCP tools smoke test | `scripts/test-mcp-tools.mjs` |
 | Usage tracker | `src/rco/usage-tracker.ts` |
 | Web dashboard HTML | `dashboard-ui/index.html` |
 | Dashboard HTTP server | `scripts/serve-dashboard.js` |

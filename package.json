@@ -30,7 +30,8 @@
     "rco": "node dist/rco/cli.js",
     "rco:dev": "npx tsx src/rco/cli.ts",
     "serve-dashboard": "node scripts/serve-dashboard.js",
-    "benchmark": "npx tsx src/benchmark.ts"
+    "benchmark": "npx tsx src/benchmark.ts",
+    "test:mcp": "node scripts/test-mcp-tools.mjs"
   },
   "keywords": [
     "agent-orchestration",
