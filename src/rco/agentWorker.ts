@@ -1,18 +1,23 @@
 #!/usr/bin/env node
 /**
- * RCO Agent Worker — child process that "executes" an agent via Claude tool-calling prompts.
- * Generates prompts like "As [agent-name], execute step: [input]. Tools: [yaml-tools]. Respond in JSON: {output: '...'}".
- * Parses responses with JSON.parse / parseClaudeResponseText. Puppeteer for dev automation (mock page).
- * Production: manual Claude interface.
+ * RCO Agent Worker — child process that executes an agent step.
+ *
+ * Execution priority:
+ *   1. CURSOR_API_KEY set → real @cursor/sdk Agent (production path)
+ *   2. otherwise          → inline mock string (tests / CI)
+ *
+ * Generates a structured prompt via buildClaudeToolCallingPrompt, sends it to
+ * the chosen backend, and returns a WorkerOutput JSON envelope.
  */
 
 import path from 'path';
 import fs from 'fs';
-import { fileURLToPath, pathToFileURL } from 'url';
+import { fileURLToPath } from 'url';
 import { WorkerInputSchema, WorkerOutputSchema, type RcoState, type WorkerOutput } from './types.js';
 import { runTool } from './tools.js';
 import { buildClaudeToolCallingPrompt } from './prompts.js';
 import { parseClaudeResponseText } from '../schemas.js';
+import { toCursorModelId } from './model-routing.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -32,33 +37,33 @@ function sendResult(result: WorkerOutput): void {
   }
 }
 
-/** Resolve path to Claude mock HTML (dist/rco/fixtures or src/rco/fixtures). */
-function resolveMockPagePath(): string {
-  const candidates = [
-    path.join(__dirname, 'fixtures', 'claude-mock-page.html'),
-    path.join(__dirname, '..', '..', 'dist', 'rco', 'fixtures', 'claude-mock-page.html'),
-    path.join(__dirname, '..', '..', 'src', 'rco', 'fixtures', 'claude-mock-page.html'),
-  ];
-  for (const p of candidates) {
-    if (fs.existsSync(p)) return p;
-  }
-  return candidates[0];
-}
 
-/** Puppeteer-based Claude simulation: open local mock page and read response. */
-async function getResponseViaPuppeteer(prompt: string, agentName: string, model: string): Promise<string> {
-  const mockPath = resolveMockPagePath();
-  const { default: puppeteer } = await import('puppeteer');
-  const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
-  try {
-    const page = await browser.newPage();
-    const fileUrl = pathToFileURL(mockPath).href + `?prompt=${encodeURIComponent(prompt.slice(0, 500))}&agent=${encodeURIComponent(agentName)}&model=${encodeURIComponent(model)}`;
-    await page.goto(fileUrl, { waitUntil: 'networkidle0', timeout: 10000 });
-    const response = (await page.evaluate('typeof window !== "undefined" && window.__rco_mock_response ? window.__rco_mock_response : ""')) as string;
-    return response || `[Puppeteer ${model} response for ${agentName}]\nProcessed task context.`;
-  } finally {
-    await browser.close();
+/**
+ * Production path: create a real @cursor/sdk Agent, send the prompt, and
+ * return the result wrapped in the JSON envelope the rest of the worker expects.
+ */
+async function getResponseViaCursorSDK(prompt: string, agentName: string, model: string): Promise<string> {
+  const apiKey = process.env.CURSOR_API_KEY;
+  if (!apiKey) throw new Error('CURSOR_API_KEY is not set');
+
+  // Dynamic import keeps the mock paths working without the SDK installed.
+  const { Agent } = await import('@cursor/sdk') as typeof import('@cursor/sdk');
+
+  const agent = await Agent.create({
+    apiKey,
+    model: { id: toCursorModelId(model, agentName) },
+    name: agentName,
+    local: { cwd: process.cwd() },
+  });
+
+  const run = await agent.send(prompt);
+  const runResult = await run.wait();
+
+  if (runResult.status === 'error' || runResult.status === 'cancelled') {
+    throw new Error(`Cursor agent "${agentName}" ${runResult.status}: ${runResult.result ?? 'no detail'}`);
   }
+
+  return JSON.stringify({ output: runResult.result ?? '', success: true });
 }
 
 async function runAsync(input: unknown): Promise<void> {
@@ -88,16 +93,19 @@ async function runAsync(input: unknown): Promise<void> {
   log('prompt', prompt.slice(0, 300) + (prompt.length > 300 ? '...' : ''));
 
   let rawResponse: string;
-  if (process.env.RCO_USE_PUPPETEER === '1' || process.env.RCO_USE_PUPPETEER === 'true') {
+  if (process.env.CURSOR_API_KEY) {
+    // Production: real Cursor SDK agent
     try {
-      rawResponse = await getResponseViaPuppeteer(prompt, agentName, model);
-      log('puppeteer', 'Got response from Claude mock page');
+      rawResponse = await getResponseViaCursorSDK(prompt, agentName, model);
+      log('cursor-sdk', `Agent "${agentName}" completed`);
     } catch (err) {
-      const fallback = JSON.stringify({ output: `[Mock ${model} response for ${agentName}] Processed task context.`, success: true });
-      log('puppeteer', `Fallback to inline mock: ${(err as Error).message}`);
-      rawResponse = fallback;
+      log('cursor-sdk', `Failed: ${(err as Error).message}`);
+      sendResult({ type: 'result', success: false, output: '', error: (err as Error).message });
+      setImmediate(() => process.exit(1));
+      return;
     }
   } else {
+    // CI / unit tests: inline mock
     rawResponse = JSON.stringify({ output: `[Mock ${model} response for ${agentName}] Processed task context. Output: structured result for next step.`, success: true });
   }
   log('response', rawResponse.slice(0, 200) + (rawResponse.length > 200 ? '...' : ''));

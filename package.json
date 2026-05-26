@@ -1,6 +1,6 @@
 {
   "name": "roland",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Roland Code Orchestrator (RCO) — modular Claude-native orchestration, agents, and workflows",
   "main": "dist/index.js",
   "type": "module",
@@ -45,15 +45,16 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@cursor/sdk": "^1.0.13",
     "@modelcontextprotocol/sdk": "^1.0.4",
     "@sentry/node": "^8.0.0",
     "chart.js": "^4.4.6",
+    "hotkeys-js": "^3.13.0",
     "js-yaml": "^4.1.0",
+    "papaparse": "^5.4.1",
     "ws": "^8.18.0",
     "yaml": "^2.6.1",
-    "zod": "^3.24.1",
-    "hotkeys-js": "^3.13.0",
-    "papaparse": "^5.4.1"
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
@@ -62,15 +63,21 @@
     "@types/ws": "^8.5.10",
     "@typescript-eslint/eslint-plugin": "^8.20.0",
     "@typescript-eslint/parser": "^8.20.0",
+    "archiver": "^7.0.0",
+    "esbuild": "^0.28.0",
     "eslint": "^9.18.0",
     "prettier": "^3.4.2",
     "puppeteer": "^23.0.0",
-    "archiver": "^7.0.0",
-    "esbuild": "^0.24.0",
     "rimraf": "^6.0.1",
     "sinon": "^17.0.0",
     "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "vitest": "^4.1.7"
+  },
+  "overrides": {
+    "tar": "^7.5.15",
+    "node-gyp": "^12.3.0",
+    "@tootallnate/once": "^3.0.1",
+    "undici": "^6.26.0"
   },
   "engines": {
     "node": ">=18.0.0"

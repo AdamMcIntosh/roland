@@ -1,0 +1,73 @@
+name: full-feature-team
+description: >
+  Ship a feature end to end: an architect designs it, an executor implements it,
+  then a test-author writes the test suite and a test-executor runs it — in sequence
+  so test code is always based on the real implementation. Code review runs in
+  parallel with test authorship. Docs close the loop once tests are green and review
+  is complete. Use for net-new functionality.
+tasks:
+  - slug: design
+    title: "Design: {{goal}}"
+    assignee: architect
+    description: >
+      Produce a concise technical design for: {{goal}}. Define the interfaces,
+      data shapes, and the key tradeoffs. Post decisions to the Blackboard so the
+      implementer shares your assumptions.
+    acceptanceCriteria: >
+      A design the executor can implement without guessing: interfaces named,
+      edge cases listed, open questions raised as blockers.
+
+  - slug: implement
+    title: "Implement: {{goal}}"
+    assignee: executor
+    dependsOn: [design]
+    description: >
+      Implement {{goal}} per the approved design. Match surrounding code style.
+      Keep changes scoped to this feature.
+    acceptanceCriteria: >
+      Feature works per the design; no out-of-scope changes; builds clean.
+
+  - slug: write-tests
+    title: "Write tests: {{goal}}"
+    assignee: test-author
+    dependsOn: [implement]
+    description: >
+      Write the full test suite for {{goal}}: unit tests for business logic,
+      integration tests for the HTTP/service layer, and at least one E2E happy-path
+      test. Cover every edge case the design called out. Produce clean, immediately
+      runnable test code — test-executor will run it as-is without modification.
+    acceptanceCriteria: >
+      Complete test code covering happy path and all design edge cases; tests are
+      deterministic and require no manual changes to run.
+
+  - slug: run-tests
+    title: "Run tests: {{goal}}"
+    assignee: test-executor
+    dependsOn: [write-tests]
+    description: >
+      Run the full test suite for {{goal}}. Report exact counts (passed/failed/skipped),
+      coverage numbers, and the command used. Flag any failure or setup blocker
+      immediately with the exact error output and repro command.
+    acceptanceCriteria: >
+      Full suite green with coverage above project thresholds; failures reported as
+      blockers with exact commands and error output.
+
+  - slug: review
+    title: "Review: {{goal}}"
+    assignee: code-reviewer
+    dependsOn: [implement]
+    description: >
+      Review the implementation of {{goal}} against the design and the acceptance
+      criteria. Flag correctness, security, and maintainability issues specifically.
+    acceptanceCriteria: >
+      Review complete with concrete, actionable findings (or an explicit LGTM).
+
+  - slug: docs
+    title: "Document: {{goal}}"
+    assignee: writer
+    dependsOn: [run-tests, review]
+    description: >
+      Document {{goal}} for users and maintainers: what it does, how to use it,
+      and any new configuration. Base docs on the verified, green implementation.
+    acceptanceCriteria: >
+      Docs accurate against the shipped behavior; examples run as written.

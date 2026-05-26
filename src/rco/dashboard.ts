@@ -102,41 +102,11 @@ export function startDashboard(port: number = 8080): WebSocketServer {
   return wss;
 }
 
+/** @internal Test-only — not called in production. Stops the dashboard WebSocket server. */
 export function stopDashboard(): void {
   if (wss) {
     wss.close();
     wss = null;
   }
   clients.clear();
-}
-
-/**
- * Broadcast dependency graph (nodes/edges) for dashboard Chart.js visualization.
- * Call from orchestrator when state or workflow steps are available.
- */
-export function broadcastGraph(
-  workflowSteps: Array<{ agent: string; output_to?: string }>,
-  sessionId?: string
-): void {
-  const nodes = workflowSteps.map((s) => ({ id: s.agent.replace(/\s+/g, '_'), label: s.agent }));
-  const seen = new Set(nodes.map((n) => n.id));
-  const edges: Array<{ from: string; to: string }> = [];
-  for (const step of workflowSteps) {
-    const from = step.agent.replace(/\s+/g, '_');
-    if (step.output_to) {
-      const to = step.output_to.replace(/\s+/g, '_');
-      if (!seen.has(to)) {
-        nodes.push({ id: to, label: step.output_to });
-        seen.add(to);
-      }
-      edges.push({ from, to });
-    }
-  }
-  broadcast({
-    type: 'graph',
-    sessionId,
-    nodes,
-    edges,
-    timestamp: Date.now(),
-  });
 }

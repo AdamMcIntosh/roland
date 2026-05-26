@@ -90,21 +90,45 @@ export const PluginRunRecipeArgsSchema = z.object({
 export type PluginRunRecipeArgs = z.infer<typeof PluginRunRecipeArgsSchema>;
 
 /**
- * Parse agent response text for JSON block { "output": "..." }.
- * Falls back to full text as output if no valid JSON.
+ * Parse an agent response into a ClaudeResponseOutput.
+ *
+ * Priority:
+ *  1. Prose response (primary path for real Cursor agents) — the full text
+ *     becomes `output`. A ```dot ... ``` code block is extracted as `dotGraph`.
+ *  2. JSON envelope { "output": "..." } — backward-compat with the mock paths
+ *     and any agent that explicitly wraps its reply. Accepted inside a
+ *     ```json ... ``` fence or bare in the text.
+ *
+ * This means real Cursor agents can write natural markdown and the orchestrator
+ * will capture it correctly without any special formatting required.
  */
 export function parseClaudeResponseText(raw: string): ClaudeResponseOutput {
   const trimmed = raw.trim();
-  // Try to extract JSON object (allow markdown code block)
-  const jsonMatch = trimmed.match(/\{[\s\S]*"output"[\s\S]*\}/);
-  if (jsonMatch) {
+
+  // ── Extract DOT graph from prose (```dot ... ``` block) ──────────────────
+  let dotGraph: string | undefined;
+  const dotMatch = trimmed.match(/```dot\s*([\s\S]*?)```/i);
+  if (dotMatch) {
+    dotGraph = dotMatch[1].trim();
+  }
+
+  // ── JSON envelope (backward compat: mock path + explicit JSON replies) ───
+  // Accept both ```json { ... } ``` and a bare { "output": ... } object.
+  const jsonFenced = trimmed.match(/```json\s*(\{[\s\S]*?"output"[\s\S]*?\})\s*```/i);
+  const jsonBare   = trimmed.match(/\{[\s\S]*?"output"[\s\S]*?\}/);
+  const jsonSource = jsonFenced?.[1] ?? jsonBare?.[0];
+  if (jsonSource) {
     try {
-      const parsed = JSON.parse(jsonMatch[0]) as unknown;
+      const parsed = JSON.parse(jsonSource) as unknown;
       const result = ClaudeResponseOutputSchema.safeParse(parsed);
-      if (result.success) return result.data;
+      if (result.success) {
+        return { ...result.data, dotGraph: result.data.dotGraph ?? dotGraph };
+      }
     } catch {
-      // fall through to full text
+      // fall through to prose
     }
   }
-  return { output: trimmed, success: true };
+
+  // ── Prose response (real Cursor agents) ──────────────────────────────────
+  return { output: trimmed, success: true, dotGraph };
 }

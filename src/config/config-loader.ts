@@ -66,6 +66,16 @@ const DiffStreamConfigSchema = z.object({
   port: z.number().min(1024).max(65535).default(8089),
 });
 
+// PM team (Phase 3) — Cursor-native model routing. Independent of OpenRouter.
+const PmConfigSchema = z.object({
+  lead_model: z.string().default('claude-opus-4-7'),
+  fast_model: z.string().default('composer-2.5-fast'),
+  standard_model: z.string().default('composer-2.5-standard'),
+  lane_overrides: z
+    .record(z.enum(['pm', 'reasoning', 'coding', 'light']))
+    .default({}),
+});
+
 const AppConfigSchema = z.object({
   routing: RoutingConfigSchema,
   roland: SessionConfigSchema,
@@ -73,6 +83,7 @@ const AppConfigSchema = z.object({
   ollama: OllamaConfigSchema.optional(),
   classifier: ClassifierConfigSchema.optional(),
   diff_stream: DiffStreamConfigSchema.optional(),
+  pm: PmConfigSchema.optional(),
 });
 
 // ============================================================================

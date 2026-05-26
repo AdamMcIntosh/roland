@@ -11,6 +11,21 @@
 #   Main session (claude-haiku-4.5):        → ~$4/mo  (routing + file I/O)
 #   Total estimate:                         → ~$19/mo at moderate usage
 
+# PM team (Phase 3) — Cursor-native model routing. The PM team does NOT use
+# OpenRouter; it runs on your Cursor subscription. Routing is lane-based:
+#   Lead PM   → lead_model      (grok-4.3: orchestration + planning only)
+#   reasoning → fast_model      (composer-2.5: architect, reviewer, critic…)
+#   coding    → standard_model  (composer-2.5: executor — cost-efficient default)
+#   light     → standard_model  (composer-2.5: docs, tests, research)
+# Cost strategy: Grok 4.3 for the PM brain; composer-2.5 for every engineer.
+# This section is optional; the defaults below are used if it is omitted.
+pm:
+  lead_model: "grok-4.3"                # The Lead PM (Grok 4.3 — cost-optimised orchestration)
+  fast_model: "composer-2.5"            # Interactive / time-sensitive engineers
+  standard_model: "composer-2.5"        # Background / execution engineers
+  # Override the lane for specific engineers (else inferred from the persona name):
+  lane_overrides: {}                     # e.g. { designer: reasoning }
+
 classifier:
   semantic_enabled: true                 # Use free OpenRouter model for classification; falls back to keyword heuristic
   semantic_model: "qwen/qwen3-coder:free"  # Free model with 262K context
@@ -79,7 +94,7 @@ rco:
     - pattern: "implement|build|code|fix"
       agents: [executor, executor-high]
     - pattern: "review|audit|security|test"
-      agents: [critic, code-reviewer, qa-tester]
+      agents: [critic, code-reviewer, test-author, test-executor]
     - pattern: "explain|document|readme"
       agents: [writer, explainer]
   dashboard_port: 8080

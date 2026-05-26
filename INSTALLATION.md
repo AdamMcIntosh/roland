@@ -65,6 +65,28 @@ npm run build
 
 </details>
 
+## PM Team Mode (Cursor) — one-command global setup
+
+To run Roland as a **PM-first engineering team** (you are the PM on Opus 4.7,
+engineers on Composer 2.5), use the dedicated installer — it builds, installs the
+`roland` binary globally, and merges the MCP entry into `~/.cursor/mcp.json`:
+
+```bash
+bash scripts/install-global.sh      # Windows: pwsh scripts/install-global.ps1
+roland doctor                        # verify: binary, personas, recipes, Cursor entry, .roland write
+```
+
+Restart Cursor, then in any project's chat call `get_pm_playbook` and
+`pm_standup`. See **[`ONBOARDING.md`](ONBOARDING.md)** and
+**[`docs/guides/pm-workflow.md`](docs/guides/pm-workflow.md)**.
+
+**Optional `pm:` config** (in `config.yaml`) overrides the Cursor models and
+per-engineer lanes — defaults are `claude-opus-4-7` / `composer-2.5-fast` /
+`composer-2.5-standard`. No OpenRouter key is needed for the PM team; it runs on
+your Cursor subscription.
+
+Prefer to wire it by hand instead? Use the manual options below.
+
 ## Cursor Setup
 
 ### Option A: Global Config (Recommended — configure once, works in every project)
