@@ -143,7 +143,7 @@
 
     /* Active job header */
     .active-job-header { margin-bottom: .75rem; }
-    .active-goal { font-size: .9rem; font-weight: 600; margin-bottom: .5rem; line-height: 1.4; }
+    .active-goal { font-size: 1rem; font-weight: 700; margin-bottom: .5rem; line-height: 1.4; }
     .active-meta {
       display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
       font-size: .75rem; color: var(--muted);
@@ -283,6 +283,29 @@
     @media (max-width: 700px) {
       .run-meta { display: none; }
     }
+
+    /* ── Cost card color tiers ──────────────────────────────────────────────── */
+    .card-value.cost-green  { color: var(--emerald); }
+    .card-value.cost-yellow { color: var(--amber); }
+    .card-value.cost-red    { color: var(--red); }
+
+    /* ── Live-active section box glow ───────────────────────────────────────── */
+    .section-box.live-active {
+      border-color: rgba(16,185,129,.45);
+      box-shadow: 0 0 0 2px rgba(16,185,129,.08), 0 0 18px rgba(16,185,129,.07);
+    }
+
+    /* ── Idle state — last run sub-line ─────────────────────────────────────── */
+    .idle-last { font-size: .72rem; color: var(--muted); margin-top: .2rem; }
+
+    /* ── Export CSV button ───────────────────────────────────────────────────── */
+    .btn-export {
+      padding: .22rem .6rem; background: transparent;
+      border: 1px solid var(--border); border-radius: 6px;
+      color: var(--muted); font-size: .72rem; transition: all .15s;
+      flex-shrink: 0;
+    }
+    .btn-export:hover { border-color: var(--indigo); color: var(--fg); }
   </style>
 </head>
 <body>
@@ -334,14 +357,14 @@
           <div class="card-sub" id="card-active-sub"></div>
         </div>
         <div class="card-estimate">
-          ⚠️ Tokens and costs are estimates (chars ÷ 4). Actual charges depend on your Cursor API tier.
+          ⚠️ Estimates only (chars ÷ 4 ≈ tokens). Actual Cursor billing may differ.
         </div>
       </div>
     </section>
 
     <!-- ── Live Status ────────────────────────────────────────────────────────── -->
     <section class="section">
-      <div class="section-box">
+      <div class="section-box" id="live-section-box">
         <div class="section-header"><h2>Live Status</h2></div>
         <div class="live-section" id="live-section">
           <!-- populated by renderLiveStatus() -->
@@ -375,7 +398,10 @@
     <!-- ── Agent & Model Breakdown ───────────────────────────────────────────── -->
     <section class="section">
       <div class="section-box">
-        <div class="section-header"><h2>Agent &amp; Model Breakdown</h2></div>
+        <div class="section-header" style="display:flex;align-items:center;justify-content:space-between;padding-right:.65rem">
+          <h2 style="margin:0">Agent &amp; Model Breakdown</h2>
+          <button class="btn-export" id="btn-export-csv" title="Download current view as CSV">⬇ Export CSV</button>
+        </div>
         <div class="table-scroll">
           <table class="usage-table" id="agent-table">
             <thead>
@@ -563,10 +589,13 @@
     document.getElementById('card-runs-sub').textContent =
       period !== 'all' ? 'Period: ' + periodRuns : '';
 
-    // Cost
+    // Cost (color-coded: green < $5, yellow $5–$20, red > $20)
     const periodCost = filtered.reduce((s, r) => s + (r.totalCostUsd || 0), 0);
     const allCost    = allTime.reduce((s, r) => s + (r.totalCostUsd || 0), 0);
-    document.getElementById('card-cost').textContent    = formatCost(periodCost);
+    const costEl = document.getElementById('card-cost');
+    costEl.textContent = formatCost(periodCost);
+    costEl.className   = 'card-value'
+      + (periodCost === 0 ? '' : periodCost < 5 ? ' cost-green' : periodCost < 20 ? ' cost-yellow' : ' cost-red');
     document.getElementById('card-cost-sub').textContent =
       period !== 'all' ? 'All time: ' + formatCost(allCost) : '';
 
@@ -610,20 +639,39 @@
     return Math.floor(ms / 60_000) + 'm ' + Math.round((ms % 60_000) / 1_000) + 's';
   }
 
+  function timeAgo(ts) {
+    if (!ts) return '';
+    const secs = Math.floor((Date.now() - ts) / 1000);
+    if (secs < 60)        return secs + 's ago';
+    if (secs < 3_600)     return Math.floor(secs / 60) + 'm ago';
+    if (secs < 86_400)    return Math.floor(secs / 3_600) + 'h ago';
+    if (secs < 7 * 86_400) return Math.floor(secs / 86_400) + 'd ago';
+    return formatDate(ts) + ' at ' + formatTime(ts);
+  }
+
   function renderLiveStatus() {
-    const el = document.getElementById('live-section');
+    const el  = document.getElementById('live-section');
+    const box = document.getElementById('live-section-box');
 
     if (!isRunActive(runState)) {
+      box.classList.remove('live-active');
       // Idle state — find last run from usage history
       const lastRun = usageData.length
         ? [...usageData].sort((a, b) => b.timestamp - a.timestamp)[0]
         : null;
-      const lastInfo = lastRun
-        ? ' · Last run: ' + formatDate(lastRun.timestamp) + ' at ' + formatTime(lastRun.timestamp)
+      const lastLine = lastRun
+        ? '<div class="idle-last">Last run: ' + escHtml(timeAgo(lastRun.timestamp))
+            + ' — ' + escHtml(lastRun.goal.slice(0, 55) + (lastRun.goal.length > 55 ? '…' : '')) + '</div>'
         : '';
-      el.innerHTML = '<div class="idle-state">○ No active run' + escHtml(lastInfo) + '</div>';
+      el.innerHTML =
+        '<div class="idle-state">' +
+          '<span style="font-size:1rem">○</span>' +
+          '<div><div>No active run</div>' + lastLine + '</div>' +
+        '</div>';
       return;
     }
+
+    box.classList.add('live-active');
 
     const rs = runState;
     const pct = rs.totalTasks > 0 ? Math.round((rs.completedTasks / rs.totalTasks) * 100) : 0;
@@ -1055,6 +1103,54 @@
   const prefersDark = !(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
   document.body.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
   document.getElementById('btn-theme').textContent = prefersDark ? '☀️' : '🌙';
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Export CSV
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  document.getElementById('btn-export-csv').addEventListener('click', () => {
+    const filtered = filterRuns(usageData, period);
+
+    // Rebuild agent aggregation (same logic as renderAgentTable)
+    const agentMap = {};
+    for (const run of filtered) {
+      for (const task of (run.tasks || [])) {
+        if (!agentMap[task.agent]) {
+          agentMap[task.agent] = {
+            agent: task.agent, model: task.model,
+            tokens: 0, cost: 0, calls: 0, totalDuration: 0,
+          };
+        }
+        const r = agentMap[task.agent];
+        r.tokens += (task.estimatedInputTokens || 0) + (task.estimatedOutputTokens || 0);
+        r.cost   += task.estimatedCostUsd || 0;
+        r.calls  += 1;
+        r.totalDuration += task.durationMs || 0;
+      }
+    }
+
+    const rows = Object.values(agentMap)
+      .sort((a, b) => b.tokens - a.tokens)
+      .map(r => ({
+        'Agent':             r.agent,
+        'Model':             r.model,
+        'Tokens (est.)':     r.tokens,
+        'Est. Cost (USD)':   r.cost.toFixed(4),
+        'Calls':             r.calls,
+        'Avg Duration (ms)': r.calls ? Math.round(r.totalDuration / r.calls) : 0,
+      }));
+
+    if (rows.length === 0) { alert('No data in the current period.'); return; }
+
+    const csv  = Papa.unparse(rows);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = 'roland-agents-' + period + '-' + new Date().toISOString().slice(0, 10) + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
 
   // ── Hotkey ─────────────────────────────────────────────────────────────────
   hotkeys('d', () => toggleTheme());

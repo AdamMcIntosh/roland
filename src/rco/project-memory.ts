@@ -1,16 +1,18 @@
 /**
- * ProjectMemory — persistent cross-run knowledge for the Roland PM team.
+ * ProjectMemory — structured persistent cross-run knowledge for the Roland PM team.
  *
  * Written to .roland/memory.md after each run's synthesis phase.
- * Read at the start of each run and injected into the Lead PM planning prompt
- * so the team knows the project's established patterns, tech stack, and decisions.
+ * Read at the start of each run and injected into the Lead PM planning prompt.
  *
- * Format: append-only Markdown with timestamped entries. Humans can edit it too.
+ * Format: four persistent sections (Architecture Decisions, Coding Standards,
+ * Past Mistakes, Preferences), each containing bullet points that accumulate
+ * across runs. New bullets are merged in; duplicates are silently skipped.
  *
  * Lifecycle:
- *   1. runTeam reads the snapshot (capped) → injected into planning prompt
- *   2. Synthesis prompt instructs the PM to write a "## Memory Extract" section
- *   3. After synthesis, orchestrator calls memory.extractAndAppend(synthesis, goal, runId)
+ *   1. runTeam reads the snapshot → injected into Lead PM planning prompt
+ *   2. Synthesis prompt asks PM to write a "## Memory Extract" section
+ *   3. Orchestrator calls memory.extractAndAppend(synthesis, goal, runId)
+ *   4. extractAndAppend parses the four-section format and merges new bullets
  */
 
 import fs from 'fs';
@@ -18,19 +20,158 @@ import path from 'path';
 
 export const MEMORY_FILE = 'memory.md';
 
-/** Max chars of memory injected into the planning prompt. */
-export const MEMORY_PROMPT_MAX_CHARS = 2_000;
+/** Max chars injected into any PM prompt. */
+export const MEMORY_PROMPT_MAX_CHARS = 3_000;
 
-/** Max entries kept in the memory file before oldest are pruned. */
-const MAX_ENTRIES = 20;
+/** Max bullets kept per section before oldest are pruned. */
+const MAX_BULLETS_PER_SECTION = 20;
 
-// ── Entry parsing ─────────────────────────────────────────────────────────────
+/** The four structured sections in memory.md. */
+export const MEMORY_SECTIONS = [
+  'Architecture Decisions',
+  'Coding Standards',
+  'Past Mistakes',
+  'Preferences',
+] as const;
 
-export interface MemoryEntry {
-  date: string;    // ISO date string
-  goal: string;
-  runId: string;
-  content: string; // raw markdown block (decisions / patterns / avoid)
+export type MemorySection = (typeof MEMORY_SECTIONS)[number];
+
+/** Maps aliases used in Memory Extract blocks → canonical section names. */
+const SECTION_ALIASES: Record<string, MemorySection> = {
+  'architecture decisions': 'Architecture Decisions',
+  'architecture':           'Architecture Decisions',
+  'decisions':              'Architecture Decisions',
+  'decision':               'Architecture Decisions',
+  'coding standards':       'Coding Standards',
+  'standards':              'Coding Standards',
+  'patterns':               'Coding Standards',
+  'pattern':                'Coding Standards',
+  'past mistakes':          'Past Mistakes',
+  'mistakes':               'Past Mistakes',
+  'avoid':                  'Past Mistakes',
+  'pitfalls':               'Past Mistakes',
+  'preferences':            'Preferences',
+  'preference':             'Preferences',
+  'user preferences':       'Preferences',
+};
+
+type SectionMap = Record<MemorySection, string[]>;
+
+// ── Serialisation ─────────────────────────────────────────────────────────────
+
+const FILE_HEADER = '# Roland Project Memory\n\n_Updated automatically after each run. Edit manually at any time._\n';
+
+function emptySections(): SectionMap {
+  return {
+    'Architecture Decisions': [],
+    'Coding Standards':       [],
+    'Past Mistakes':          [],
+    'Preferences':            [],
+  };
+}
+
+function serializeSections(sections: SectionMap, runInfo?: string): string {
+  let out = FILE_HEADER + '\n';
+  for (const section of MEMORY_SECTIONS) {
+    const bullets = sections[section];
+    out += `## ${section}\n\n`;
+    if (bullets.length > 0) {
+      out += bullets.map((b) => `- ${b}`).join('\n') + '\n';
+    } else {
+      out += '_No entries yet._\n';
+    }
+    out += '\n';
+  }
+  if (runInfo) {
+    out += `---\n\n_Last updated: ${runInfo}_\n`;
+  }
+  return out;
+}
+
+/** Parse the four sections out of an existing memory.md file. */
+function parseSections(raw: string): SectionMap {
+  const result = emptySections();
+  for (const section of MEMORY_SECTIONS) {
+    // Match "## Section Name" … up to next "##" heading or end of file
+    const escaped = section.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`##\\s+${escaped}\\s*\\n([\\s\\S]*?)(?=\\n##|$)`, 'i');
+    const m = raw.match(re);
+    if (!m) continue;
+    result[section] = m[1]
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.startsWith('-') || l.startsWith('*'))
+      .map((l) => l.replace(/^[-*]\s+/, '').trim())
+      .filter((l) => l.length > 5);
+  }
+  return result;
+}
+
+/** Canonicalise a raw section name from a Memory Extract block. */
+function canonicalSection(raw: string): MemorySection | null {
+  const key = raw.toLowerCase().trim();
+  if (SECTION_ALIASES[key]) return SECTION_ALIASES[key];
+  // Partial match fallback
+  for (const [alias, canonical] of Object.entries(SECTION_ALIASES)) {
+    if (key.includes(alias) || alias.includes(key)) return canonical;
+  }
+  return null;
+}
+
+/**
+ * Parse the "## Memory Extract" block from synthesis output into a SectionMap.
+ * Handles both the new four-section format and the legacy Decisions/Patterns/Avoid format.
+ */
+export function parseMemoryExtract(synthesis: string): SectionMap | null {
+  const match = synthesis.match(/##\s+Memory Extract\s*\n([\s\S]*?)(?=\n##\s|\s*$)/i);
+  if (!match) return null;
+
+  const extractContent = match[1];
+  const result = emptySections();
+
+  // Parse **Section Name:** bullet blocks
+  const blockRe = /\*\*([^:*\n]+):\*\*\s*\n([\s\S]*?)(?=\*\*[^:*\n]+:\*\*|$)/g;
+  let m: RegExpExecArray | null;
+  let totalBullets = 0;
+
+  while ((m = blockRe.exec(extractContent)) !== null) {
+    const rawSection = m[1].trim();
+    const rawContent = m[2];
+    const canonical  = canonicalSection(rawSection);
+    if (!canonical) continue;
+
+    const bullets = rawContent
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.startsWith('-') || l.startsWith('*'))
+      .map((l) => l.replace(/^[-*]\s+/, '').trim())
+      .filter((l) => l.length > 5);
+
+    result[canonical].push(...bullets);
+    totalBullets += bullets.length;
+  }
+
+  return totalBullets > 0 ? result : null;
+}
+
+/** Merge incoming bullets into existing sections, deduplicating by prefix match. */
+function mergeSections(existing: SectionMap, incoming: SectionMap): SectionMap {
+  const result = emptySections();
+  for (const section of MEMORY_SECTIONS) {
+    const current  = existing[section] ?? [];
+    const newItems = incoming[section] ?? [];
+
+    const merged = [...current];
+    for (const bullet of newItems) {
+      const key = bullet.toLowerCase().slice(0, 50);
+      const isDup = current.some((e) => e.toLowerCase().slice(0, 50) === key);
+      if (!isDup && bullet.length > 5) merged.push(bullet);
+    }
+
+    // Prune to most recent MAX_BULLETS_PER_SECTION
+    result[section] = merged.slice(-MAX_BULLETS_PER_SECTION);
+  }
+  return result;
 }
 
 // ── ProjectMemory class ───────────────────────────────────────────────────────
@@ -58,89 +199,85 @@ export class ProjectMemory {
     }
   }
 
-  /** True if the memory file exists and has at least one entry. */
+  /** True if the memory file exists and has content. */
   hasMemory(): boolean {
     try {
-      const raw = fs.readFileSync(this.filePath, 'utf-8').trim();
-      return raw.length > 0;
+      return fs.readFileSync(this.filePath, 'utf-8').trim().length > 0;
     } catch {
       return false;
     }
   }
 
   /**
-   * Parse the "## Memory Extract" section from a synthesis string and append
-   * it to the memory file. Gracefully handles synthesis with no extract section.
+   * Parse the "## Memory Extract" section from a synthesis string, merge the
+   * new bullets into the existing four-section memory file, and write the result.
    *
-   * Returns true if an entry was appended.
+   * Returns true if at least one new bullet was written.
    */
   extractAndAppend(synthesis: string, goal: string, runId: string): boolean {
-    const extract = parseMemoryExtract(synthesis);
-    if (!extract) return false;
+    const incoming = parseMemoryExtract(synthesis);
+    if (!incoming) return false;
 
-    const date = new Date().toISOString().slice(0, 10);
-    const header = `## ${date} — ${runId}\n\n**Goal:** ${goal.slice(0, 120)}`;
-    const entry = `${header}\n\n${extract.trim()}`;
+    // Load and parse existing sections
+    let existing = emptySections();
+    try {
+      const raw = fs.readFileSync(this.filePath, 'utf-8');
+      existing = parseSections(raw);
+    } catch {
+      // No file yet — start fresh.
+    }
 
-    this.append(entry);
+    const merged = mergeSections(existing, incoming);
+
+    // Count new bullets added
+    let added = 0;
+    for (const s of MEMORY_SECTIONS) {
+      added += Math.max(0, merged[s].length - (existing[s]?.length ?? 0));
+    }
+    if (added === 0) return false;
+
+    const runInfo = `${new Date().toISOString().slice(0, 10)} · run ${runId} · ${goal.slice(0, 60)}`;
+    const newContent = serializeSections(merged, runInfo);
+
+    try {
+      fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
+      fs.writeFileSync(this.filePath, newContent, 'utf-8');
+    } catch (err) {
+      console.error('[Memory] Failed to write memory file:', (err as Error).message);
+      return false;
+    }
+
     return true;
   }
 
   /**
-   * Manually append a pre-formatted Markdown block.
-   * Prunes oldest entries if MAX_ENTRIES is exceeded.
+   * Manually append a bullet to a specific section.
+   * Useful for `roland note "..."` or programmatic seeding.
    */
-  append(block: string): void {
+  addBullet(section: MemorySection, bullet: string): void {
+    let existing = emptySections();
     try {
-      fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
+      existing = parseSections(fs.readFileSync(this.filePath, 'utf-8'));
+    } catch { /* new file */ }
 
-      let existing = '';
-      try {
-        existing = fs.readFileSync(this.filePath, 'utf-8');
-      } catch {
-        // New file — add header.
-        existing = '# Roland Project Memory\n\n_Updated automatically after each run. You can also edit this file manually._\n\n---\n';
+    const key = bullet.toLowerCase().slice(0, 50);
+    if (!existing[section].some((e) => e.toLowerCase().slice(0, 50) === key)) {
+      existing[section].push(bullet);
+      if (existing[section].length > MAX_BULLETS_PER_SECTION) {
+        existing[section] = existing[section].slice(-MAX_BULLETS_PER_SECTION);
       }
+    }
 
-      // Prune: keep only the last MAX_ENTRIES-1 entries to make room for the new one.
-      const pruned = pruneEntries(existing, MAX_ENTRIES - 1);
+    fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
+    fs.writeFileSync(this.filePath, serializeSections(existing), 'utf-8');
+  }
 
-      const newContent = pruned.trimEnd() + '\n\n---\n\n' + block + '\n';
-      fs.writeFileSync(this.filePath, newContent, 'utf-8');
-    } catch (err) {
-      console.error('[Memory] Failed to append entry:', (err as Error).message);
+  /** Return a structured summary grouped by section for the PM planning prompt. */
+  structuredSnapshot(): string {
+    try {
+      return fs.readFileSync(this.filePath, 'utf-8').trim();
+    } catch {
+      return '';
     }
   }
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/**
- * Extract the content of the "## Memory Extract" section from the synthesis output.
- * Returns null if the section is absent or empty.
- */
-export function parseMemoryExtract(synthesis: string): string | null {
-  // Match ## Memory Extract ... up to the next ## heading or end of string
-  const match = synthesis.match(/##\s+Memory Extract\s*\n([\s\S]*?)(?=\n##\s|\s*$)/i);
-  if (!match) return null;
-  const content = match[1].trim();
-  return content.length >= 20 ? content : null; // ignore trivially short extracts
-}
-
-/**
- * Keep only the most recent `limit` dated entries (separated by --- dividers).
- * Always preserves the file header (content before the first ---).
- */
-function pruneEntries(content: string, limit: number): string {
-  const divider = '\n\n---\n\n';
-  const parts = content.split('---');
-  if (parts.length <= 2) return content; // header + 0 or 1 entries — nothing to prune
-
-  const header = parts[0];
-  const entries = parts.slice(1).map((p) => p.trim()).filter((p) => p.startsWith('##'));
-
-  if (entries.length <= limit) return content;
-
-  const kept = entries.slice(entries.length - limit);
-  return header + divider + kept.join(divider) + '\n';
 }

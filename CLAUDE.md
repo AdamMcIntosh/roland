@@ -33,10 +33,10 @@ only take effect after `npm run build` (or use `rco:dev` / `rco:team:dev` for it
 
 ```
 src/
-  index.ts              ← MCP server entry + CLI dispatcher (serve | mcp-config | doctor | pm-log | team)
+  index.ts              ← MCP server entry + CLI dispatcher (serve | mcp-config | doctor | pm-log | team | pause | resume | unblock | inject | replan | abort | bg-status | bg-logs | bg-stop)
   rco/
     team-cli.ts         ← `roland team "<goal>"` — renders progress, delegates to team-orchestrator
-    team-orchestrator.ts← PM control loop: plan → waves → review → synthesis
+    team-orchestrator.ts← PM control loop: plan → waves → review → synthesis; polls HITL queue
     pm-prompts.ts       ← All three Lead PM prompts (planning, review, synthesis)
     prompts.ts          ← Worker agent prompt builder
     worker-signals.ts   ← Parses BLOCKER / MESSAGE signals from agent prose
@@ -44,6 +44,10 @@ src/
     blackboard.ts       ← Shared persistent state (.roland/blackboard.json)
     message-bus.ts      ← Point-to-point agent messaging (.roland/messages.json)
     usage-tracker.ts    ← Per-run token estimation + cost recording (.roland/usage-history.json)
+    project-memory.ts   ← Structured 4-section memory (.roland/memory.md) — merge on each run
+    hitl.ts             ← Human-in-the-Loop queue (.roland/hitl.json + hitl-state.json)
+    supervisor.ts       ← Background / detached mode — PID file, log rotation, auto-restart
+    notifier.ts         ← Contextual push notifications (desktop, webhook, stderr)
     types.ts            ← Core interfaces (TeamTask, AgentYaml, …)
   server/
     mcp-server.ts       ← MCP tool definitions + agent/recipe catalogue
@@ -282,6 +286,127 @@ node scripts/backfill-usage.mjs --state-dir /path/to/project/.roland
 
 ---
 
+## Structured Project Memory
+
+`src/rco/project-memory.ts` manages `.roland/memory.md` as a **four-section structured document**:
+
+| Section | Purpose |
+|---------|---------|
+| `Architecture Decisions` | Tech stack choices, patterns adopted — don't contradict |
+| `Coding Standards` | File layout, naming, testing conventions |
+| `Past Mistakes` | Concrete "never do X" bullets with root causes |
+| `Preferences` | Explicit user/team preferences |
+
+**How memory flows:**
+1. `runTeam()` calls `memory.snapshot()` → injected into Lead PM planning prompt
+2. Synthesis prompt asks PM to write a `## Memory Extract` block with the four sections
+3. After synthesis, `memory.extractAndAppend(synthesis, goal, runId)` merges new bullets in
+4. New bullets are deduplicated (first 50 chars) before writing
+
+**Memory Extract format** (the PM must use this exactly):
+```
+**Architecture Decisions:**
+- bullet
+
+**Coding Standards:**
+- bullet
+
+**Past Mistakes:**
+- bullet
+
+**Preferences:**
+- bullet
+```
+
+The parser maps aliases: `Decisions` → Architecture Decisions, `Patterns` → Coding Standards, `Avoid` → Past Mistakes.
+
+**Adding a bullet manually:**
+```typescript
+memory.addBullet('Past Mistakes', 'Never call req.destroy() before sending HTTP response');
+```
+
+---
+
+## Background / Supervisor Mode
+
+`src/rco/supervisor.ts` — detached process management.
+
+```bash
+roland team "goal" --background   # spawn detached, return immediately
+roland bg-status                   # is it still running? (reads .roland/supervisor.pid)
+roland bg-logs                     # tail last 50 lines of .roland/logs/bg-<ts>.log
+roland bg-logs --lines 100         # tail more lines
+roland bg-stop                     # SIGTERM → SIGKILL (3 s grace)
+```
+
+**How it works:**
+1. `--background` calls `spawnBackground(goal, argv, stateDir)` in `supervisor.ts`
+2. A new `node dist/rco/supervisor.js --background-worker "<goal>" [args]` is spawned detached
+3. Parent writes `.roland/supervisor.pid` (JSON: `{pid, goal, startedAt, logFile, restarts}`)
+4. Parent calls `child.unref()` and exits
+5. Supervisor process runs `runTeamCli(['--quiet', '--no-tui', ...])` with auto-restart loop
+6. On crash, retries up to 3 times with exponential back-off (30 s × attempt number)
+7. On success or final failure, removes the PID file and exits
+
+**Log files:** `.roland/logs/bg-<timestamp>.log` — stdout + stderr of the background run.
+
+---
+
+## Human-in-the-Loop Controls
+
+`src/rco/hitl.ts` — inter-process command queue.
+
+**Sending commands** (from any terminal while a run is active):
+```bash
+roland pause                          # pause before next wave starts
+roland resume                         # resume after pause
+roland unblock task-3 "use REST"      # send guidance to a blocked agent
+roland inject "prioritise security"   # post a PM directive to the Blackboard
+roland replan                         # ask PM to re-evaluate remaining tasks
+roland abort                          # stop after current wave completes
+```
+
+**State files:**
+- `.roland/hitl.json` — append-only command queue (array); CLI writes, orchestrator drains
+- `.roland/hitl-state.json` — pause/resume state (`{paused, pausedAt, updatedAt}`)
+
+**Orchestrator side:**
+- `HitlQueue` is created in `team-cli.ts` and passed as `hitlQueue` to `runTeam()`
+- `processHitl()` closure inside `runTeam()` is called at the **start of each wave**
+- On `pause`: blocks in a 2 s poll loop until `resume` or `abort` (max 30 min, then auto-abort)
+- On `unblock`: sends a message via the message bus to the named task/agent
+- On `inject`: posts a `decision` entry to the Blackboard (PM sees it on next review)
+- On `replan`: posts a critical `decision` entry asking PM to re-evaluate
+- On `abort`: returns `true` from `processHitl()` → orchestrator breaks out of wave loop
+- `hitlQueue.cleanup()` is called at the end of every run (success or error)
+
+---
+
+## Advanced Contextual Notifications
+
+`src/rco/notifier.ts` — five event types with rich context.
+
+| Event | When | Default |
+|-------|------|---------|
+| `complete` | Run finished | ✅ on (--notify) |
+| `error` | Fatal crash | ✅ on (--notify) |
+| `blocker` | Agent raised BLOCKER | ✅ on (--notify) |
+| `wave-complete` | Wave done, PM reviewing | off (opt-in) |
+| `hitl-pause` | Run paused by human | always |
+
+**Notification bodies are contextual:**
+- Complete: `"goal" · 7 tasks · 3 waves · 4m 23s` (+ blocker count if > 0)
+- Blocker: `"goal" · Wave 2 · Blocked on: Cannot find 'users' table…`
+- Error: `"goal"\nError: CURSOR_API_KEY not set`
+- HITL pause: `"goal"\nPaused by human operator\nSend 'roland resume' to continue.`
+
+**Wiring in team-cli.ts:**
+- `onBlocker: true` is set whenever `--notify` or `--webhook` is active
+- `onBlockerDetected` callback fires `notifier.notify({ event: 'blocker', blockerAgent, blockerDescription, waveNumber })`
+- All `notify` calls now include `durationMs` for complete events
+
+---
+
 ## Common Pitfalls
 
 1. **Editing YAML agent files but not rebuilding** — `dist/agents/` is stale; run `npm run build`
@@ -314,3 +439,7 @@ node scripts/backfill-usage.mjs --state-dir /path/to/project/.roland
 | Dashboard HTTP server | `scripts/serve-dashboard.js` |
 | Usage demo seeder | `scripts/seed-usage-demo.mjs` |
 | Run backfill tool | `scripts/backfill-usage.mjs` |
+| Structured project memory | `src/rco/project-memory.ts` |
+| HITL command queue | `src/rco/hitl.ts` |
+| Background supervisor | `src/rco/supervisor.ts` |
+| Contextual notifier | `src/rco/notifier.ts` |

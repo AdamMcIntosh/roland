@@ -176,6 +176,20 @@ function printHelp(): void {
   ln(`    ${b('--fix')}                     Review + commit + push fixes`);
   ln(`    ${b('--branch')} <name>            Create a named branch for fixes`);
   ln();
+  ln('  ' + b('BACKGROUND MODE'));
+  ln(`    ${cy('roland')} team "goal" ${b('--background')}   Run detached; returns immediately`);
+  ln(`    ${cy('roland')} ${b('bg-status')}                  Show if a background run is active`);
+  ln(`    ${cy('roland')} ${b('bg-logs')}                    Tail the most recent background log`);
+  ln(`    ${cy('roland')} ${b('bg-stop')}                    Kill the background run`);
+  ln();
+  ln('  ' + b('HUMAN-IN-THE-LOOP') + '  ' + d('(while a run is active)'));
+  ln(`    ${cy('roland')} ${b('pause')}                      Pause before the next wave`);
+  ln(`    ${cy('roland')} ${b('resume')}                     Resume a paused run`);
+  ln(`    ${cy('roland')} ${b('unblock')} <task-id> [msg]    Send guidance to a blocked agent`);
+  ln(`    ${cy('roland')} ${b('inject')} "directive"         Post a directive to the Lead PM`);
+  ln(`    ${cy('roland')} ${b('replan')}                     Ask PM to re-evaluate the plan`);
+  ln(`    ${cy('roland')} ${b('abort')}                      Stop the run after current wave`);
+  ln();
   ln('  ' + b('UTILITY COMMANDS'));
   ln(`    ${cy('roland')} doctor              Diagnose your Roland install`);
   ln(`    ${cy('roland')} pm-log              Print the PM event timeline`);
@@ -208,6 +222,10 @@ function printHelp(): void {
 const KNOWN_CMDS = new Set([
   'serve', 'mcp-config', 'doctor', 'pm-log',
   'team', 'status', 'watch', 'pr',
+  // HITL controls
+  'pause', 'resume', 'unblock', 'inject', 'replan', 'abort',
+  // Background supervisor
+  'bg-status', 'bg-logs', 'bg-stop',
   '--help', '-h', '--version',
 ]);
 
@@ -278,6 +296,93 @@ async function main(): Promise<void> {
         await runPrCli(['pr', ...rest]);
         break;
       }
+
+      // ── HITL controls ───────────────────────────────────────────────────────
+      case 'pause': {
+        const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const { writeHitlCommand } = await import('./rco/hitl.js');
+        writeHitlCommand(stateDir, { cmd: 'pause' });
+        console.error('⏸  Pause sent — run will pause before the next wave starts.');
+        console.error('   Resume with: roland resume');
+        break;
+      }
+      case 'resume': {
+        const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const { writeHitlCommand } = await import('./rco/hitl.js');
+        writeHitlCommand(stateDir, { cmd: 'resume' });
+        console.error('▶  Resume sent — run will continue shortly.');
+        break;
+      }
+      case 'unblock': {
+        // roland unblock <task-id> [message...] [--state-dir X]
+        const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const sdIdx    = rest.indexOf('--state-dir');
+        const filtered = sdIdx >= 0 ? [...rest.slice(0, sdIdx), ...rest.slice(sdIdx + 2)] : rest;
+        const taskId   = filtered[0];
+        const message  = filtered.slice(1).join(' ') || undefined;
+        if (!taskId) {
+          console.error('Usage: roland unblock <task-id> [message]');
+          process.exit(1);
+        }
+        const { writeHitlCommand } = await import('./rco/hitl.js');
+        writeHitlCommand(stateDir, { cmd: 'unblock', taskId, message });
+        console.error(`↑  Unblock sent for task: ${taskId}${message ? ` — "${message}"` : ''}`);
+        break;
+      }
+      case 'inject': {
+        // roland inject "directive text" [--state-dir X]
+        const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const sdIdx    = rest.indexOf('--state-dir');
+        const filtered = sdIdx >= 0 ? [...rest.slice(0, sdIdx), ...rest.slice(sdIdx + 2)] : rest;
+        const text     = filtered.join(' ').replace(/^['"]|['"]$/g, '');
+        if (!text) {
+          console.error('Usage: roland inject "directive text for the PM"');
+          process.exit(1);
+        }
+        const { writeHitlCommand } = await import('./rco/hitl.js');
+        writeHitlCommand(stateDir, { cmd: 'inject', text });
+        console.error(`💉 Injected: "${text.slice(0, 80)}"`);
+        console.error('   The Lead PM will see this directive on the next wave review.');
+        break;
+      }
+      case 'replan': {
+        const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const { writeHitlCommand } = await import('./rco/hitl.js');
+        writeHitlCommand(stateDir, { cmd: 'replan' });
+        console.error('🔄 Replan requested — Lead PM will re-evaluate remaining tasks on the next wave review.');
+        break;
+      }
+      case 'abort': {
+        const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const { writeHitlCommand } = await import('./rco/hitl.js');
+        writeHitlCommand(stateDir, { cmd: 'abort' });
+        console.error('🛑 Abort sent — run will stop after the current wave completes.');
+        console.error('   For an immediate kill, use: roland bg-stop');
+        break;
+      }
+
+      // ── Background supervisor ───────────────────────────────────────────────
+      case 'bg-status': {
+        const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const { bgStatus } = await import('./rco/supervisor.js');
+        bgStatus(stateDir);
+        break;
+      }
+      case 'bg-logs': {
+        const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const linesIdx = rest.indexOf('--lines');
+        const lines    = linesIdx >= 0 ? Number(rest[linesIdx + 1]) || 50 : 50;
+        const { bgLogs } = await import('./rco/supervisor.js');
+        bgLogs(stateDir, lines);
+        break;
+      }
+      case 'bg-stop': {
+        const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const { bgStop } = await import('./rco/supervisor.js');
+        bgStop(stateDir);
+        break;
+      }
+
       default:
         console.error(`Unknown command: ${cmd}. Run \`roland --help\` for usage.`);
         process.exit(1);

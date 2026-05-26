@@ -76,7 +76,7 @@ ${ctx.goal}
 
 ---
 
-${ctx.projectMemory ? `## Project Memory\n\nThis project has been worked on before. Key context from prior runs:\n\n${ctx.projectMemory}\n\n---\n\n` : ''}## Current Blackboard State
+${ctx.projectMemory ? `## Project Memory\n\nThis project has been worked on before. The memory is organised into four sections — consult each one before planning:\n\n### Architecture Decisions\nEstablished tech choices and design patterns — don't contradict these without explicit justification.\n\n### Coding Standards\nFile layout, naming conventions, testing conventions — your engineers must follow these.\n\n### Past Mistakes\nThings that went wrong in previous runs — actively prevent each one in your task descriptions.\n\n### Preferences\nUser/team preferences — honour these when making trade-offs.\n\n${ctx.projectMemory}\n\n---\n\n` : ''}## Current Blackboard State
 
 ${capBlackboard(ctx.blackboardSnapshot)}
 
@@ -255,30 +255,41 @@ Architectural, design, and process decisions the team reached, with brief ration
 
 ## Memory Extract
 
-After completing the sections above, write this final section so Roland can remember what matters for next time.
-Keep it tight — 5–10 bullets max across three categories:
+After completing the sections above, write this final section so Roland can update its long-term project memory.
+Use **exactly** the four section headers below — this is machine-parsed. Keep it tight: 2–5 bullets per section, only what is new or changed this run. Omit a section entirely if you have nothing new for it.
 
-**Decisions:** Key architectural or design choices made this run (tech stack additions, patterns adopted, APIs chosen).
+**Architecture Decisions:**
+- Key architectural or tech-stack choices made this run (new frameworks, APIs, patterns adopted).
+- Only include decisions that will matter to future engineers working on this project.
 
-**Patterns:** File/naming/testing conventions established or followed — anything a new engineer needs to know to fit in.
+**Coding Standards:**
+- File layout, naming conventions, testing conventions that were established or confirmed this run.
+- Anything a new engineer must know to stay consistent with the codebase.
 
-**Avoid:** Specific pitfalls, wrong approaches that were tried, or constraints the PM must not violate on future runs.
+**Past Mistakes:**
+- Specific pitfalls encountered or prevented this run — concrete, actionable "never do X" bullets.
+- Include root cause where helpful so future engineers understand why.
 
-Example format:
+**Preferences:**
+- User or team preferences surfaced this run (tooling choices, style preferences, workflow preferences).
+- Only include if they differ from obvious defaults or were explicitly stated.
+
+Example format (use this structure exactly):
 \`\`\`
-**Decisions:**
+**Architecture Decisions:**
 - Uses Fastify (not Express) — chosen for plugin ecosystem and TypeScript support
-- Zod validates all request/response boundaries
+- Zod validates all request/response boundaries; no manual type coercion
 
-**Patterns:**
-- Routes live in src/routes/{domain}.ts; controllers in src/controllers/{domain}.ts
-- Integration tests use vitest + real DB (no mocks for DB layer)
+**Coding Standards:**
+- Routes in src/routes/{domain}.ts; controllers in src/controllers/{domain}.ts
+- Integration tests use vitest + real DB; no mocking of the DB layer
 
-**Avoid:**
-- Don't add raw SQL — ORM only (Drizzle)
-- Don't use \`any\` in TypeScript — strict mode is enforced
+**Past Mistakes:**
 - Never call req.destroy() before sending the HTTP response — send the error JSON first, then drain
-- Always include a unique jti claim (crypto.randomUUID()) in every JWT — omitting it makes rotation produce identical tokens
+- Always include a unique jti claim (crypto.randomUUID()) in every JWT access token
+
+**Preferences:**
+- TypeScript strict mode — never use \`any\`; use unknown + type guards instead
 \`\`\`
 
 ---

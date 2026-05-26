@@ -39,6 +39,7 @@ import { AGENT_TIMEOUT_MS, AGENT_MAX_RETRIES, RETRY_BASE_DELAY, BLACKBOARD_RESUL
 import { ProjectMemory } from './project-memory.js';
 import { buildTaskUsage, buildRunUsage, saveRunUsage } from './usage-tracker.js';
 import type { TaskUsageRecord } from './usage-tracker.js';
+import { HitlQueue } from './hitl.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -85,6 +86,17 @@ export interface TeamOrchestratorOptions {
   onTasksSpawned?: (tasks: TeamTask[]) => void;
   /** Fired just before the Lead PM begins the final synthesis. */
   onSynthesizing?: () => void;
+  /**
+   * Fired when an agent signals a BLOCKER.
+   * Receives: taskId, agent name, blocker description, current wave number.
+   * Use this to fire contextual notifications from the calling code.
+   */
+  onBlockerDetected?: (taskId: string, agent: string, description: string, waveNumber: number) => void;
+  /**
+   * HITL command queue. When provided, the orchestrator polls it at the start
+   * of each wave and acts on pause / resume / unblock / inject / replan / abort.
+   */
+  hitlQueue?: HitlQueue;
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -204,6 +216,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     goal, stateDir = '.roland', agentsDir: agentsDirOverride,
     onPlanReady, onWaveStart, onTaskStart, onTaskComplete, onWaveComplete,
     onWaveReview, onTasksSpawned, onSynthesizing,
+    onBlockerDetected, hitlQueue,
   } = opts;
 
   // ── Usage tracking ────────────────────────────────────────────────────────
@@ -236,7 +249,65 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   // ── Shared execution state ─────────────────────────────────────────────────
   const taskResults: Record<string, TeamTaskResult> = {};
   const completedIds = new Set<string>();
-  let totalBlockers = 0;
+  let totalBlockers    = 0;
+  let currentWaveNumber = 0; // tracks active wave for onBlockerDetected calls
+
+  // ── HITL processor ────────────────────────────────────────────────────────
+  // Called at the start of each wave. Returns true if the run should be aborted.
+  async function processHitl(): Promise<boolean> {
+    if (!hitlQueue) return false;
+
+    // If paused, block here until resumed or timed out
+    if (hitlQueue.isPaused()) {
+      const shouldAbort = await hitlQueue.waitForResume();
+      if (shouldAbort) return true;
+    }
+
+    const cmds = hitlQueue.drainAll();
+    for (const cmd of cmds) {
+      switch (cmd.cmd) {
+        case 'pause':
+          hitlQueue.setPaused(true);
+          if (await hitlQueue.waitForResume()) return true;
+          break;
+        case 'unblock': {
+          const target = cmd.taskId ?? '';
+          const msg    = cmd.message ?? 'Unblocked by human operator';
+          if (target) {
+            bus.send('human', target, 'Human Unblock', msg);
+            console.error(`[HITL] ↑ Unblocked ${target}: "${msg.slice(0, 80)}"`);
+          }
+          break;
+        }
+        case 'inject':
+          if (cmd.text) {
+            blackboard.post({
+              type: 'decision', title: 'Human Directive',
+              content: cmd.text, status: 'pending',
+              author: 'human', priority: 'high',
+              tags: ['hitl', 'human-directive'], relatedIds: [],
+            });
+            console.error(`[HITL] 💉 Injected: "${cmd.text.slice(0, 80)}"`);
+          }
+          break;
+        case 'replan':
+          blackboard.post({
+            type: 'decision', title: 'Replan Requested',
+            content: 'Human operator requested a replan. Re-evaluate all remaining tasks and adjust the plan as needed.',
+            status: 'pending', author: 'human', priority: 'critical',
+            tags: ['hitl', 'replan'], relatedIds: [],
+          });
+          console.error('[HITL] 🔄 Replan request posted — PM will see it on next wave review');
+          break;
+        case 'abort':
+          console.error('[HITL] 🛑 Abort received — stopping after current wave');
+          return true;
+        default:
+          break;
+      }
+    }
+    return false;
+  }
 
   // ── executeTask closure ────────────────────────────────────────────────────
   async function executeTask(task: TeamTask): Promise<WaveResult> {
@@ -301,6 +372,8 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
           tags: ['blocker', task.id],
           relatedIds: [],
         });
+        // Fire blocker notification callback (wired to Notifier in team-cli.ts)
+        onBlockerDetected?.(task.id, task.agent, blocker.description, currentWaveNumber);
       }
     }
 
@@ -358,6 +431,13 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
 
   while (remaining.length > 0) {
     waveNumber++;
+    currentWaveNumber = waveNumber;
+
+    // ── HITL check ────────────────────────────────────────────────────────
+    if (await processHitl()) {
+      console.error(`[Team] HITL abort — stopping after wave ${waveNumber - 1}`);
+      break;
+    }
 
     const ready = remaining.filter((t) => t.dependsOn.every((d) => completedIds.has(d)));
     if (ready.length === 0) {
