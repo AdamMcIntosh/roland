@@ -162,8 +162,20 @@ async function main(): Promise<void> {
         await TuiRenderer.watch(stateDir);
         break;
       }
+      case 'watch': {
+        // Watch mode — monitors git commits or file patterns and auto-runs the PM team.
+        const { runWatchCli } = await import('./rco/watch-cli.js');
+        await runWatchCli(['watch', ...rest]);
+        break;
+      }
+      case 'pr': {
+        // PR mode — fetches a GitHub PR via `gh` and runs a review/fix team.
+        const { runPrCli } = await import('./rco/pr-cli.js');
+        await runPrCli(['pr', ...rest]);
+        break;
+      }
       default:
-        console.error(`Unknown command: ${cmd}\nUsage: roland [serve|mcp-config|doctor|pm-log|team|status]`);
+        console.error(`Unknown command: ${cmd}\nUsage: roland [serve|mcp-config|doctor|pm-log|team|status|watch|pr]`);
         process.exit(1);
     }
   } catch (error) {
