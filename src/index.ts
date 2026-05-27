@@ -162,6 +162,7 @@ function printHelp(): void {
   ln(`    ${b('--state-dir')} <dir>          Persistence directory  ${d('(default: .roland)')}`);
   ln(`    ${b('--quiet')}, -q               Suppress progress; only print synthesis to stdout`);
   ln(`    ${b('--no-tui')}                  Scrolling log instead of live dashboard`);
+  ln(`    ${b('--simple-tui')}, --no-fancy  Simple ASCII output for mobile SSH / limited terminals`);
   ln();
   ln('  ' + b('TEAM FLAGS'));
   ln(`    ${b('--stream')}, -s              Print task output snippets as each agent completes`);
@@ -198,6 +199,7 @@ function printHelp(): void {
   ln();
   ln('  ' + b('ENVIRONMENT'));
   ln(`    ${b('ROLAND_NOTIFY=1')}            Enable notifications for all commands`);
+  ln(`    ${b('ROLAND_SIMPLE_TUI=1')}        Simple ASCII output  ${d('(mobile SSH, Termius, limited terminals)')}`);
   ln(`    ${b('CURSOR_API_KEY')}             Required for agent execution`);
   ln(`    ${b('ROLAND_AGENT_TIMEOUT_MS')}    Agent timeout  ${d('(default: 25 min)')}`);
   ln(`    ${b('ROLAND_AGENT_RETRIES')}       Max retries per agent  ${d('(default: 2)')}`);
@@ -281,9 +283,15 @@ async function main(): Promise<void> {
         break;
       }
       case 'status': {
-        const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
-        const { TuiRenderer } = await import('./dashboard/tui.js');
-        await TuiRenderer.watch(stateDir);
+        const stateDir    = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const simpleFlag  = rest.includes('--simple-tui') || rest.includes('--no-fancy');
+        const { isSimpleTui, SimpleTuiRenderer } = await import('./dashboard/simple-tui.js');
+        if (simpleFlag || isSimpleTui()) {
+          await SimpleTuiRenderer.watch(stateDir);
+        } else {
+          const { TuiRenderer } = await import('./dashboard/tui.js');
+          await TuiRenderer.watch(stateDir);
+        }
         break;
       }
       case 'watch': {

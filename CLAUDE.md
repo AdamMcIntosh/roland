@@ -247,6 +247,7 @@ All three smoke tests exit 1 on any failure. Run them after touching `model-rout
 | `ROLAND_AGENT_RETRIES` | `2` | Retries before synthetic BLOCKER return |
 | `ROLAND_STATE_DIR` | `.roland` | Blackboard + message-bus directory |
 | `ROLAND_QUIET` | unset | Suppress wave progress output |
+| `ROLAND_SIMPLE_TUI` | unset | Set to `1` for ASCII-only output (mobile SSH / Termius) |
 
 ---
 
@@ -431,6 +432,8 @@ roland abort                          # stop after current wave completes
 | Model routing | `src/rco/model-routing.ts` |
 | Signal parsing | `src/rco/worker-signals.ts` |
 | MCP tool definitions | `src/server/mcp-server.ts` |
+| TUI renderer (fancy) | `src/dashboard/tui.ts` |
+| TUI renderer (simple / SSH) | `src/dashboard/simple-tui.ts` |
 | Lane policy | `src/pm/model-policy.ts` |
 | Agent personas | `agents/*.yaml` |
 | Team recipes | `recipes/teams/*.yaml` |

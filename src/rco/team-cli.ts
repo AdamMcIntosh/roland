@@ -23,6 +23,7 @@ import type { TeamTask } from './team-orchestrator.js';
 import type { ReviewDecision } from './pm-prompts.js';
 import { RunStateWriter } from './run-state.js';
 import { TuiRenderer } from '../dashboard/tui.js';
+import { SimpleTuiRenderer, isSimpleTui } from '../dashboard/simple-tui.js';
 import { Notifier } from './notifier.js';
 import { HitlQueue } from './hitl.js';
 import { spawnBackground } from './supervisor.js';
@@ -85,6 +86,7 @@ export interface TeamCliArgs {
   quiet: boolean;
   stream: boolean;
   noTui: boolean;
+  simpleTui: boolean;
   notify: boolean;
   clean: boolean;
   background: boolean;
@@ -101,6 +103,7 @@ export function parseTeamArgs(argv: string[]): TeamCliArgs {
   let quiet = false;
   let stream = false;
   let noTui = false;
+  let simpleTui = process.env.ROLAND_SIMPLE_TUI === '1'; // env var opt-in
   let notify = false;
   let clean = false;
   let background = false;
@@ -115,6 +118,7 @@ export function parseTeamArgs(argv: string[]): TeamCliArgs {
     if (a === '--quiet' || a === '-q')                   { quiet = true; continue; }
     if (a === '--stream' || a === '-s')                  { stream = true; continue; }
     if (a === '--no-tui')                                { noTui = true; continue; }
+    if (a === '--simple-tui' || a === '--no-fancy')      { simpleTui = true; continue; }
     if (a === '--notify' || a === '-n')                  { notify = true; continue; }
     if (a === '--clean' || a === '-c')                   { clean = true; continue; }
     if (a === '--background' || a === '--detach' || a === '-b') { background = true; continue; }
@@ -122,13 +126,13 @@ export function parseTeamArgs(argv: string[]): TeamCliArgs {
     if (!a.startsWith('-') && !goal)                     { goal = a; continue; }
   }
 
-  return { goal, stateDir, quiet, stream, noTui, notify, clean, background, webhookUrl, agentsDir };
+  return { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, webhookUrl, agentsDir };
 }
 
 // ── Main CLI logic (exported so index.ts can delegate without re-running main) ─
 
 export async function runTeamCli(argv: string[]): Promise<void> {
-  const { goal, stateDir, quiet, stream, noTui, notify, clean, background, webhookUrl, agentsDir } = parseTeamArgs(argv);
+  const { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, webhookUrl, agentsDir } = parseTeamArgs(argv);
 
   if (!goal) {
     err(c.bold('Roland — PM Team Mode'));
@@ -211,12 +215,14 @@ export async function runTeamCli(argv: string[]): Promise<void> {
   }
 
   // ── TUI mode — live dashboard (default when stdout is a TTY) ───────────────
+  // Auto-detect limited terminals (mobile SSH, dumb, narrow) even without a flag.
   const useTui = !noTui && Boolean((process.stdout as NodeJS.WriteStream).isTTY);
   if (useTui) {
     const runStart = Date.now();
     const runState = new RunStateWriter(stateDir, goal);
     const stateFilePath = path.join(stateDir, 'run-state.json');
-    const tui = new TuiRenderer(stateFilePath);
+    const useSimpleTui = simpleTui || isSimpleTui();
+    const tui = useSimpleTui ? new SimpleTuiRenderer(stateFilePath) : new TuiRenderer(stateFilePath);
     tui.start();
     tui.update(runState.get());
 

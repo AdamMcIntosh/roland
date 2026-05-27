@@ -153,6 +153,7 @@ roland pr 42 --notify
 | `--state-dir <dir>` | Persistence directory (default: `.roland`) |
 | `--quiet`, `-q` | Suppress progress; print synthesis to stdout only |
 | `--no-tui` | Scrolling log instead of the live dashboard |
+| `--simple-tui`, `--no-fancy` | ASCII-only scrolling output (mobile SSH, Termius, limited terminals) |
 
 ---
 
