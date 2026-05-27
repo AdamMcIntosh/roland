@@ -251,12 +251,14 @@ export class SimpleTuiRenderer {
     // ── Wave header ────────────────────────────────────────────────────────────
     if (state.currentWave > 0 && !this.printedWaves.has(state.currentWave)) {
       this.printedWaves.add(state.currentWave);
-      const bar    = progressBar(state.completedTasks, state.totalTasks, 16);
-      const w      = Math.min(C, 60);
+      // Clamp display values — completed can never visually exceed total.
+      const safeDone = Math.min(state.completedTasks, Math.max(state.totalTasks, 0));
+      const bar      = progressBar(safeDone, state.totalTasks, 16);
+      const w        = Math.min(C, 60);
       process.stderr.write('\n' + '-'.repeat(w) + '\n');
       process.stderr.write(
         c.bold(`Wave ${state.currentWave}`) + '  ' + bar + '  ' +
-        c.dim(`${state.completedTasks}/${state.totalTasks} done`) + '\n',
+        c.dim(`${safeDone}/${state.totalTasks} done`) + '\n',
       );
       process.stderr.write('-'.repeat(w) + '\n');
     }
@@ -327,13 +329,14 @@ export class SimpleTuiRenderer {
         process.stderr.write(`\n  ${c.cyan('[~]')} ${c.dim('Lead PM synthesizing final deliverable...')}\n`);
 
       } else if (curStatus === 'done') {
-        const bar        = progressBar(state.completedTasks, state.totalTasks, 20);
+        const safeDone   = Math.min(state.completedTasks, Math.max(state.totalTasks, 0));
+        const bar        = progressBar(safeDone, state.totalTasks, 20);
         const elapsedStr = elapsed(now - state.startedAt);
         const w          = Math.min(C, 60);
         process.stderr.write('\n' + '='.repeat(w) + '\n');
         process.stderr.write(
           c.green('[OK]') + '  ' + bar + '  ' +
-          `${state.completedTasks}/${state.totalTasks} tasks  ` +
+          `${safeDone}/${state.totalTasks} tasks  ` +
           c.dim(elapsedStr) + '\n',
         );
         process.stderr.write('='.repeat(w) + '\n\n');

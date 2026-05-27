@@ -268,13 +268,19 @@ export class TuiRenderer {
     lines.push(div);
 
     // ── Wave + progress bar ───────────────────────────────────────────────────
-    const barWidth = 16;
-    const bar = progressBar(state.completedTasks, state.totalTasks, barWidth);
+    // Clamp safeDone so completed never visually exceeds total (defense-in-depth;
+    // RunStateWriter now derives counts from the task array, but guard anyway).
+    const barWidth  = 16;
+    const safeDone  = Math.min(state.completedTasks, Math.max(state.totalTasks, 0));
+    const bar       = progressBar(safeDone, state.totalTasks, barWidth);
     const waveLabel = state.currentWave > 0
       ? b(`Wave ${state.currentWave}`) + d('  ·  ')
       : '';
-    const pct = state.totalTasks > 0 ? ` ${Math.round((state.completedTasks / state.totalTasks) * 100)}%` : '';
-    const countLabel = d(`  ${state.completedTasks} / ${state.totalTasks} tasks${pct}`);
+    const safePct   = state.totalTasks > 0
+      ? Math.min(Math.round((safeDone / state.totalTasks) * 100), 100)
+      : 0;
+    const pctLabel  = state.totalTasks > 0 ? ` ${safePct}%` : '';
+    const countLabel = d(`  ${safeDone} / ${state.totalTasks} tasks${pctLabel}`);
     const barRow = ` ${waveLabel}[${bar}]${countLabel}`;
     lines.push(row(barRow));
     lines.push(div);

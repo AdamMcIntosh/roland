@@ -1238,8 +1238,12 @@
     }
 
     box.classList.add('live-active');
-    const rs  = runState;
-    const pct = rs.totalTasks > 0 ? Math.round((rs.completedTasks / rs.totalTasks) * 100) : 0;
+    const rs       = runState;
+    // Clamp so completed never visually exceeds total (defense-in-depth).
+    const safeDone = Math.min(rs.completedTasks, Math.max(rs.totalTasks, 0));
+    const pct      = rs.totalTasks > 0
+      ? Math.min(Math.round((safeDone / rs.totalTasks) * 100), 100)
+      : 0;
 
     let bannerHtml = '';
     if (['planning','reviewing','synthesizing'].includes(rs.status)) {
@@ -1273,7 +1277,7 @@
         '<div class="active-meta">' +
           statusPillHtml(rs.status) +
           '<span>Wave ' + rs.currentWave + '</span>' +
-          '<span>' + rs.completedTasks + ' / ' + rs.totalTasks + ' tasks</span>' +
+          '<span>' + safeDone + ' / ' + rs.totalTasks + ' tasks</span>' +
           (rs.startedAt ? '<span>' + elapsedSince(rs.startedAt) + ' elapsed</span>' : '') +
         '</div>' +
       '</div>' +
@@ -1791,10 +1795,11 @@
     const isPaused = rs.hitlPaused;
     const isAbort  = rs.hitlAbortPending;
     const goal     = rs.goal || '';
+    const safeDone = Math.min(rs.completedTasks, Math.max(rs.totalTasks, 0));
 
     let html = '<div class="hitl-active-content">';
     html += '<div class="hitl-active-goal">' + escHtml(goal.slice(0,90)) + (goal.length>90?'…':'') + '</div>';
-    html += '<div class="hitl-active-meta">' + statusPillHtml(rs.status||'running') + '<span style="font-size:.73rem;color:var(--muted)">Wave ' + rs.currentWave + ' · ' + rs.completedTasks + '/' + rs.totalTasks + ' tasks</span></div>';
+    html += '<div class="hitl-active-meta">' + statusPillHtml(rs.status||'running') + '<span style="font-size:.73rem;color:var(--muted)">Wave ' + rs.currentWave + ' · ' + safeDone + '/' + rs.totalTasks + ' tasks</span></div>';
     html += '<div class="hitl-panel-buttons">';
 
     if (isAbort) {
