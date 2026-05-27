@@ -187,9 +187,12 @@ function printHelp(): void {
   ln();
   ln('  ' + b('BACKGROUND MODE'));
   ln(`    ${cy('roland')} team "goal" ${b('--background')}   Run detached; returns immediately`);
-  ln(`    ${cy('roland')} ${b('bg-status')}                  Show if a background run is active`);
+  ln(`    ${cy('roland')} ${b('run')}  "goal" ${b('--detach')}     Alias for team --background`);
+  ln(`    ${cy('roland')} ${b('bg-status')}                  Show running job: wave, phase, task progress`);
+  ln(`    ${cy('roland')} ${b('bg-status')} --json            Machine-readable status (for scripting)`);
   ln(`    ${cy('roland')} ${b('bg-logs')}                    Tail the most recent background log`);
-  ln(`    ${cy('roland')} ${b('bg-stop')}                    Kill the background run`);
+  ln(`    ${cy('roland')} ${b('bg-logs')} --follow           Stream the log live  ${d('(Ctrl+C to stop)')}`);
+  ln(`    ${cy('roland')} ${b('bg-stop')}                    Gracefully stop (abort → SIGTERM → SIGKILL)`);
   ln();
   ln('  ' + b('HUMAN-IN-THE-LOOP') + '  ' + d('(while a run is active)'));
   ln(`    ${cy('roland')} ${b('pause')}                      Pause before the next wave`);
@@ -231,7 +234,7 @@ function printHelp(): void {
 
 const KNOWN_CMDS = new Set([
   'serve', 'mcp-config', 'doctor', 'pm-log',
-  'team', 'status', 'watch', 'pr',
+  'team', 'run', 'status', 'watch', 'pr',
   // HITL controls
   'pause', 'resume', 'unblock', 'inject', 'replan', 'abort',
   // Background supervisor
@@ -286,6 +289,13 @@ async function main(): Promise<void> {
         break;
       }
       case 'team': {
+        const { runTeamCli } = await import('./rco/team-cli.js');
+        await runTeamCli(['team', ...rest]);
+        break;
+      }
+      case 'run': {
+        // 'roland run "goal"' is an alias for 'roland team "goal"'.
+        // '--detach' is accepted alongside '--background' by runTeamCli.
         const { runTeamCli } = await import('./rco/team-cli.js');
         await runTeamCli(['team', ...rest]);
         break;
@@ -380,16 +390,22 @@ async function main(): Promise<void> {
       // ── Background supervisor ───────────────────────────────────────────────
       case 'bg-status': {
         const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const jsonMode = rest.includes('--json');
         const { bgStatus } = await import('./rco/supervisor.js');
-        bgStatus(stateDir);
+        bgStatus(stateDir, jsonMode);
         break;
       }
       case 'bg-logs': {
         const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const follow   = rest.includes('--follow') || rest.includes('-f');
         const linesIdx = rest.indexOf('--lines');
         const lines    = linesIdx >= 0 ? Number(rest[linesIdx + 1]) || 50 : 50;
-        const { bgLogs } = await import('./rco/supervisor.js');
-        bgLogs(stateDir, lines);
+        const { bgLogs, bgLogsFollow } = await import('./rco/supervisor.js');
+        if (follow) {
+          bgLogsFollow(stateDir);
+        } else {
+          bgLogs(stateDir, lines);
+        }
         break;
       }
       case 'bg-stop': {
