@@ -352,6 +352,7 @@ This auto-connects Roland for every team member who opens the project in Cursor 
 |----------|---------|-------------|
 | `CURSOR_API_KEY` | _(required)_ | API key for agent execution |
 | `ROLAND_NOTIFY` | `0` | Set to `1` to enable notifications for all commands |
+| `ROLAND_SIMPLE_TUI` | `0` | Set to `1` for ASCII-only output — mobile SSH, Termius, limited terminals |
 | `ROLAND_AGENT_TIMEOUT_MS` | `1500000` (25 min) | Per-agent hard timeout |
 | `ROLAND_AGENT_RETRIES` | `2` | Max retries before a synthetic BLOCKER is raised |
 
@@ -454,6 +455,17 @@ After a few runs, Roland knows your stack, naming conventions, and past decision
 The live dashboard only works in interactive terminals.
 ```bash
 roland team "run the full review suite" --no-tui --quiet >> review.md
+```
+
+**On mobile SSH or Termius? Use simple mode.**
+The fancy TUI uses alternate-screen buffer codes that some SSH clients mishandle, producing garbage like `^[[A[[A`. Simple mode scrolls cleanly on any terminal.
+```bash
+# Set once in your shell profile (applies to every command):
+export ROLAND_SIMPLE_TUI=1
+
+# Or per-run:
+roland team "goal" --simple-tui
+roland status --simple-tui
 ```
 
 **Pair `roland watch` with `--once` for pre-push hooks.**

@@ -77,6 +77,7 @@ roland status
 | Get a desktop notification | `--notify` |
 | Get a phone notification (ntfy.sh) | `--webhook https://ntfy.sh/your-topic` |
 | Use in CI / pipe output | `--no-tui --quiet` |
+| Use on mobile SSH / Termius | `--simple-tui` |
 | See agent output as it streams | `--stream` |
 | Watch file changes instead of git | `--pattern "src/**/*.ts"` |
 | Run watch once and exit | `--once` |
@@ -91,9 +92,11 @@ roland status
 # ~/.zshrc  or  ~/.bashrc  or  PowerShell $PROFILE
 export CURSOR_API_KEY=your_key_here
 export ROLAND_NOTIFY=1          # desktop notification on every run
+export ROLAND_SIMPLE_TUI=1      # add this if you SSH from a phone or use Termius
 ```
 
-With `ROLAND_NOTIFY=1` set, you never need `--notify` again.
+With `ROLAND_NOTIFY=1` set, you never need `--notify` again.  
+With `ROLAND_SIMPLE_TUI=1` set, the TUI auto-degrades to clean ASCII output everywhere.
 
 ---
 
@@ -164,6 +167,16 @@ rm .roland/memory.md
 │  (PM plans, agents run)     │  │  (live TUI: wave progress, │
 │                             │  │   task status, blockers)   │
 └─────────────────────────────┘  └────────────────────────────┘
+```
+
+**On mobile SSH or Termius?** Use `--simple-tui` (or set `ROLAND_SIMPLE_TUI=1` in your profile) to avoid garbled output from alternate-screen buffer codes:
+
+```bash
+# Terminal 1 (Termius / SSH)
+roland "build the feature" --simple-tui
+
+# Terminal 2 (Termius / SSH)
+roland status --simple-tui
 ```
 
 For a richer view, open the **web dashboard** instead of (or alongside) `roland status`:
@@ -277,6 +290,22 @@ roland --help                   # flag reference
 roland pm-log                   # PM reasoning timeline
 cat .roland/memory.md           # what Roland knows about this project
 ```
+
+**Garbled output / `^[[A[[A[[A` on SSH or Termius?**
+
+The fancy TUI uses alternate-screen buffer codes that some SSH clients mishandle.
+Switch to simple mode — it scrolls cleanly on any terminal:
+```bash
+# Per-run:
+roland team "goal" --simple-tui
+roland status --simple-tui
+
+# Permanent (add to ~/.zshrc / ~/.bashrc / PowerShell $PROFILE):
+export ROLAND_SIMPLE_TUI=1
+```
+Roland also auto-detects SSH sessions without declared truecolor support and
+falls back to simple mode automatically. If auto-detection doesn't fire, set
+`ROLAND_SIMPLE_TUI=1` explicitly.
 
 **Agents not found?**
 ```bash
