@@ -32,6 +32,7 @@ export const MEMORY_SECTIONS = [
   'Coding Standards',
   'Past Mistakes',
   'Preferences',
+  'Project Gotchas',
 ] as const;
 
 export type MemorySection = (typeof MEMORY_SECTIONS)[number];
@@ -53,7 +54,35 @@ const SECTION_ALIASES: Record<string, MemorySection> = {
   'preferences':            'Preferences',
   'preference':             'Preferences',
   'user preferences':       'Preferences',
+  'project gotchas':        'Project Gotchas',
+  'gotchas':                'Project Gotchas',
+  'gotcha':                 'Project Gotchas',
+  'quirks':                 'Project Gotchas',
+  'environment quirks':     'Project Gotchas',
+  'environment':            'Project Gotchas',
 };
+
+// ── Smart recall helpers ──────────────────────────────────────────────────────
+
+const STOP_WORDS = new Set([
+  'this', 'that', 'with', 'from', 'have', 'will', 'been', 'when', 'where',
+  'what', 'which', 'they', 'them', 'their', 'then', 'than', 'into', 'each',
+  'also', 'some', 'more', 'most', 'other', 'just', 'should', 'would', 'could',
+  'must', 'need', 'used', 'uses', 'make', 'made', 'only', 'very', 'like',
+  'such', 'about', 'after', 'before', 'these', 'those', 'always', 'never', 'every',
+]);
+
+function tokenize(text: string): Set<string> {
+  return new Set(
+    text.toLowerCase().split(/\W+/).filter((w) => w.length > 3 && !STOP_WORDS.has(w)),
+  );
+}
+
+function scoreRelevance(bullet: string, goalTokens: Set<string>): number {
+  const bt = tokenize(bullet);
+  if (bt.size === 0) return 0;
+  return [...bt].filter((w) => goalTokens.has(w)).length / bt.size;
+}
 
 type SectionMap = Record<MemorySection, string[]>;
 
@@ -67,6 +96,7 @@ function emptySections(): SectionMap {
     'Coding Standards':       [],
     'Past Mistakes':          [],
     'Preferences':            [],
+    'Project Gotchas':        [],
   };
 }
 
@@ -199,6 +229,97 @@ export class ProjectMemory {
     }
   }
 
+  /**
+   * Returns the parsed SectionMap for the current memory file.
+   * Returns empty sections if the file does not exist.
+   */
+  parsedSections(): SectionMap {
+    try {
+      return parseSections(fs.readFileSync(this.filePath, 'utf-8'));
+    } catch {
+      return emptySections();
+    }
+  }
+
+  /**
+   * Merge an incoming SectionMap into the existing memory file and write it.
+   * Deduplicates by first-60-char prefix. Returns count of new bullets added.
+   */
+  mergeAndWrite(incoming: SectionMap, goal: string, runId: string): number {
+    let existing = emptySections();
+    try {
+      existing = parseSections(fs.readFileSync(this.filePath, 'utf-8'));
+    } catch { /* new file */ }
+
+    const merged = mergeSections(existing, incoming);
+
+    let added = 0;
+    for (const s of MEMORY_SECTIONS) {
+      added += Math.max(0, merged[s].length - (existing[s]?.length ?? 0));
+    }
+    if (added === 0) return 0;
+
+    const runInfo = `${new Date().toISOString().slice(0, 10)} · run ${runId} · ${goal.slice(0, 60)}`;
+    const newContent = serializeSections(merged, runInfo);
+
+    try {
+      fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
+      fs.writeFileSync(this.filePath, newContent, 'utf-8');
+    } catch (e) {
+      console.error('[Memory] Failed to write memory file:', (e as Error).message);
+      return 0;
+    }
+    return added;
+  }
+
+  /**
+   * Returns a relevance-scored subset of the memory file.
+   * Bullets are ranked by keyword overlap with the given goal, plus a small
+   * recency bonus (later position = more recent). At most 4 bullets per section.
+   * Total output is capped at maxChars.
+   *
+   * Used in the Lead PM planning prompt instead of the full snapshot so that
+   * the most relevant prior learnings surface first.
+   */
+  smartSnapshot(goal: string, maxChars = MEMORY_PROMPT_MAX_CHARS): string {
+    if (!this.hasMemory()) return '';
+
+    let raw = '';
+    try { raw = fs.readFileSync(this.filePath, 'utf-8'); } catch { return ''; }
+
+    const sections = parseSections(raw);
+    const goalTokens = tokenize(goal);
+    const MAX_PER_SECTION = 4;
+
+    const lines: string[] = ['# Roland Project Memory (Smart Recall)\n'];
+
+    for (const section of MEMORY_SECTIONS) {
+      const bullets = sections[section];
+      if (bullets.length === 0) continue;
+
+      // Score: relevance + small positional recency bonus
+      const scored = bullets
+        .map((bullet, idx) => ({
+          bullet,
+          score: scoreRelevance(bullet, goalTokens) + (idx / Math.max(bullets.length, 1)) * 0.1,
+        }))
+        .sort((a, b) => b.score - a.score);
+
+      const top       = scored.slice(0, MAX_PER_SECTION).map((s) => s.bullet);
+      const remaining = bullets.length - top.length;
+      const note      = remaining > 0 ? ` _(+${remaining} more in .roland/memory.md)_` : '';
+
+      lines.push(`## ${section}${note}\n`);
+      for (const b of top) lines.push(`- ${b}`);
+      lines.push('');
+    }
+
+    const result = lines.join('\n');
+    return result.length > maxChars
+      ? result.slice(0, maxChars) + '\n…(older entries omitted)'
+      : result;
+  }
+
   /** True if the memory file exists and has content. */
   hasMemory(): boolean {
     try {
@@ -217,37 +338,7 @@ export class ProjectMemory {
   extractAndAppend(synthesis: string, goal: string, runId: string): boolean {
     const incoming = parseMemoryExtract(synthesis);
     if (!incoming) return false;
-
-    // Load and parse existing sections
-    let existing = emptySections();
-    try {
-      const raw = fs.readFileSync(this.filePath, 'utf-8');
-      existing = parseSections(raw);
-    } catch {
-      // No file yet — start fresh.
-    }
-
-    const merged = mergeSections(existing, incoming);
-
-    // Count new bullets added
-    let added = 0;
-    for (const s of MEMORY_SECTIONS) {
-      added += Math.max(0, merged[s].length - (existing[s]?.length ?? 0));
-    }
-    if (added === 0) return false;
-
-    const runInfo = `${new Date().toISOString().slice(0, 10)} · run ${runId} · ${goal.slice(0, 60)}`;
-    const newContent = serializeSections(merged, runInfo);
-
-    try {
-      fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-      fs.writeFileSync(this.filePath, newContent, 'utf-8');
-    } catch (err) {
-      console.error('[Memory] Failed to write memory file:', (err as Error).message);
-      return false;
-    }
-
-    return true;
+    return this.mergeAndWrite(incoming, goal, runId) > 0;
   }
 
   /**

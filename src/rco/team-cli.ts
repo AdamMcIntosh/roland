@@ -90,6 +90,7 @@ export interface TeamCliArgs {
   notify: boolean;
   clean: boolean;
   background: boolean;
+  noImprove: boolean;
   webhookUrl?: string;
   agentsDir?: string;
 }
@@ -107,6 +108,7 @@ export function parseTeamArgs(argv: string[]): TeamCliArgs {
   let notify = false;
   let clean = false;
   let background = false;
+  let noImprove  = false;
   let webhookUrl: string | undefined;
   let agentsDir: string | undefined;
 
@@ -122,17 +124,18 @@ export function parseTeamArgs(argv: string[]): TeamCliArgs {
     if (a === '--notify' || a === '-n')                  { notify = true; continue; }
     if (a === '--clean' || a === '-c')                   { clean = true; continue; }
     if (a === '--background' || a === '--detach' || a === '-b') { background = true; continue; }
+    if (a === '--no-improve')                               { noImprove = true; continue; }
     if (a === '--webhook' && args[i + 1])                { webhookUrl = args[++i]; notify = true; continue; }
     if (!a.startsWith('-') && !goal)                     { goal = a; continue; }
   }
 
-  return { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, webhookUrl, agentsDir };
+  return { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, webhookUrl, agentsDir };
 }
 
 // ── Main CLI logic (exported so index.ts can delegate without re-running main) ─
 
 export async function runTeamCli(argv: string[]): Promise<void> {
-  const { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, webhookUrl, agentsDir } = parseTeamArgs(argv);
+  const { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, webhookUrl, agentsDir } = parseTeamArgs(argv);
 
   if (!goal) {
     err(c.bold('Roland — PM Team Mode'));
@@ -157,6 +160,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     err('    --webhook <url>         POST to URL on complete/error (ntfy.sh, Slack, Discord…)');
     err('    --clean, -c             Delete stale blackboard + messages before starting  ' + c.dim('(preserves memory.md)'));
     err('    --background, --detach  Spawn detached; logs to .roland/logs/  ' + c.dim('(roland bg-status to check)'));
+    err('    --no-improve            Skip the self-improvement retrospective phase');
     err('');
     process.exit(1);
   }
@@ -190,6 +194,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     try {
       const result = await runTeam({
         goal, stateDir, agentsDir, hitlQueue,
+        noImprove, interactive: false,
         onBlockerDetected: (taskId, agent, description, waveNumber) => {
           void notifier.notify({
             event: 'blocker', goal,
@@ -233,6 +238,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
         stateDir,
         agentsDir,
         hitlQueue,
+        noImprove, interactive: false,
         onBlockerDetected: (taskId, agent, description, waveNumber) => {
           void notifier.notify({
             event: 'blocker', goal,
@@ -339,6 +345,8 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     stateDir,
     agentsDir,
     hitlQueue,
+    noImprove,
+    interactive: Boolean((process.stderr as NodeJS.WriteStream).isTTY) && !noImprove,
     onBlockerDetected: (taskId, agent, description, waveNumber) => {
       void notifier.notify({
         event: 'blocker', goal,

@@ -37,6 +37,12 @@ import { parseWorkerSignals } from './worker-signals.js';
 import type { AgentYaml } from './types.js';
 import { AGENT_TIMEOUT_MS, AGENT_MAX_RETRIES, RETRY_BASE_DELAY, BLACKBOARD_RESULT_MAX_CHARS } from './constants.js';
 import { ProjectMemory } from './project-memory.js';
+import {
+  buildRetrospectivePrompt,
+  parseRetrospectiveOutput,
+  showMemoryProposal,
+  applyRetroUpdate,
+} from './self-improvement.js';
 import { loadProjectKnowledge, appendDecisions } from './project-knowledge.js';
 import { buildTaskUsage, buildRunUsage, saveRunUsage } from './usage-tracker.js';
 import type { TaskUsageRecord } from './usage-tracker.js';
@@ -98,6 +104,18 @@ export interface TeamOrchestratorOptions {
    * of each wave and acts on pause / resume / unblock / inject / replan / abort.
    */
   hitlQueue?: HitlQueue;
+  /**
+   * Skip the self-improvement retrospective phase entirely.
+   * Pass true for CI runs, benchmarks, or short one-off tasks.
+   * Default: false.
+   */
+  noImprove?: boolean;
+  /**
+   * When true, the retrospective shows an interactive approval prompt (TTY only).
+   * When false, new memory bullets are auto-accepted without user interaction.
+   * Default: false (auto-accept).
+   */
+  interactive?: boolean;
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -218,6 +236,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     onPlanReady, onWaveStart, onTaskStart, onTaskComplete, onWaveComplete,
     onWaveReview, onTasksSpawned, onSynthesizing,
     onBlockerDetected, hitlQueue,
+    noImprove = false, interactive = false,
   } = opts;
 
   // ── Usage tracking ────────────────────────────────────────────────────────
@@ -230,8 +249,8 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   const blackboard = new Blackboard(stateDir);
   const bus = new MessageBus(stateDir);
   const memory = new ProjectMemory(stateDir);
-  const memorySnapshot = memory.snapshot();
-  if (memorySnapshot) console.error('[Team] Project memory loaded — injecting into planning prompt');
+  const memorySnapshot = memory.smartSnapshot(goal);
+  if (memorySnapshot) console.error('[Team] Project memory loaded — smart recall injecting into planning prompt');
 
   const knowledge = loadProjectKnowledge(process.cwd());
   if (knowledge.files.length > 0) {
@@ -551,6 +570,47 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   const decisionsAdded = appendDecisions(synthesis, goal, runId, process.cwd());
   if (decisionsAdded > 0) {
     console.error(`[Team] DECISIONS.md updated — ${decisionsAdded} new decision(s) appended`);
+  }
+
+  // ── Phase 4: Self-improvement retrospective ───────────────────────────────
+  if (!noImprove) {
+    console.error('[Team] Phase 4: Self-improvement retrospective...');
+
+    const taskSummary = Object.entries(taskResults)
+      .map(([id, r]) => `- ${id} [${r.agent}]: "${r.taskTitle}"${r.hadBlocker ? ' ⚠️ blocker' : ' ✓'}`)
+      .join('\n');
+
+    const retroPrompt  = buildRetrospectivePrompt(goal, synthesis, taskSummary, memory.structuredSnapshot());
+    const pmModel      = toCursorModelId('', 'lead-pm');
+    const retroStart   = Date.now();
+    const retroText    = await callCursorAgent('Lead-PM', pmModel, retroPrompt);
+    allTaskUsage.push(buildTaskUsage(
+      'pm-retrospective', 'Lead PM: Retrospective', 'Lead-PM', pmModel,
+      retroPrompt.length, retroText.length, Date.now() - retroStart,
+    ));
+
+    const retroMap = parseRetrospectiveOutput(retroText);
+    if (retroMap) {
+      const existingSections = memory.parsedSections();
+      const decision = await showMemoryProposal(retroMap, existingSections, {
+        quiet:          !interactive,
+        isTTY:          Boolean((process.stderr as NodeJS.WriteStream).isTTY),
+        timeoutSeconds: 15,
+      });
+
+      if (decision === 'accepted') {
+        const added = applyRetroUpdate(retroMap, stateDir, goal, runId);
+        if (added > 0) {
+          console.error(`[Team] Memory improved — ${added} new bullet(s) written to .roland/memory.md`);
+        } else {
+          console.error('[Team] Retrospective produced no new bullets — memory unchanged');
+        }
+      } else {
+        console.error('[Team] Memory update skipped by user');
+      }
+    } else {
+      console.error('[Team] Retrospective: nothing new to document this run');
+    }
   }
 
   // ── Save usage record ─────────────────────────────────────────────────────

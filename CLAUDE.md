@@ -330,6 +330,47 @@ memory.addBullet('Past Mistakes', 'Never call req.destroy() before sending HTTP 
 
 ---
 
+## Self-Improvement Loop
+
+`src/rco/self-improvement.ts` — post-run retrospective, memory proposal UI, and write-back.
+
+### How it works
+
+After every synthesis, **Phase 4** runs:
+1. **Retrospective LLM call** — Lead PM answers 5 structured questions about the run (what went well, root causes of blockers, wrong assumptions, gotchas, new standards)
+2. **Parse output** — `parseRetrospectiveOutput()` extracts bullets from `## Retrospective Memory Update` block
+3. **Diff against existing memory** — only bullets not already in `.roland/memory.md` are shown
+4. **Interactive proposal** (non-TUI mode with TTY) — shows a colour diff, auto-accepts after 15s
+5. **Write** — `applyRetroUpdate()` calls `memory.mergeAndWrite()` and logs count added
+
+### Memory sections (5 total)
+
+| Section | Purpose |
+|---------|---------|
+| `Architecture Decisions` | Tech choices and design patterns — don't contradict |
+| `Coding Standards` | Layout, naming, testing conventions |
+| `Past Mistakes` | "Never do X" bullets with root cause |
+| `Preferences` | User/team preferences |
+| `Project Gotchas` | **NEW** — environment quirks, API edge cases, tooling surprises |
+
+### Disabling
+
+```bash
+roland team "goal" --no-improve    # skip retrospective entirely
+```
+
+Set `noImprove: true` in `TeamOrchestratorOptions` for programmatic use.
+
+### Smart Recall (planning phase)
+
+Instead of dumping the full memory file, `memory.smartSnapshot(goal)` is used:
+- Tokenizes the run goal and each bullet
+- Scores by keyword overlap + small recency bonus (later position = more recent write)
+- Returns top 4 bullets per section, with a note for hidden entries
+- Total capped at `MEMORY_PROMPT_MAX_CHARS` (3,000 chars)
+
+---
+
 ## Project Knowledge System
 
 `src/rco/project-knowledge.ts` — automatic project documentation discovery and injection.
@@ -491,6 +532,7 @@ roland abort                          # stop after current wave completes
 | Run backfill tool | `scripts/backfill-usage.mjs` |
 | Structured project memory | `src/rco/project-memory.ts` |
 | Project knowledge system  | `src/rco/project-knowledge.ts` |
+| Self-improvement loop     | `src/rco/self-improvement.ts` |
 | HITL command queue | `src/rco/hitl.ts` |
 | Background supervisor | `src/rco/supervisor.ts` |
 | Contextual notifier | `src/rco/notifier.ts` |
