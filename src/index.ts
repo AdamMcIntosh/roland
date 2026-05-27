@@ -157,7 +157,11 @@ function printHelp(): void {
   ln();
   ln('  ' + b('🚀  Roland') + '  — PM-first AI Engineering Team');
   ln();
-  ln('  ' + b('USAGE'));
+  ln('  ' + b('CHAT MODE') + '  ' + d('(default — just run: roland)'));
+  ln(`    ${cy('roland')}                            Start interactive chat  ${d('(type goals naturally, /help inside)')}`);
+  ln(`    ${cy('roland')} ${b('chat')}                        Same as above  ${d('(explicit)')}`);
+  ln();
+  ln('  ' + b('DIRECT COMMANDS'));
   ln(`    ${cy('roland')} ${b('"goal"')}                      Run a PM team on a goal ${d('(shortcut)')}`);
   ln(`    ${cy('roland')} ${b('team')} "goal"               Run a PM team with live dashboard`);
   ln(`    ${cy('roland')} ${b('watch')}                      Watch git commits, auto-run on change`);
@@ -235,7 +239,7 @@ function printHelp(): void {
 
 const KNOWN_CMDS = new Set([
   'serve', 'mcp-config', 'doctor', 'pm-log',
-  'team', 'run', 'goal', 'start', 'status', 'watch', 'pr',
+  'team', 'run', 'goal', 'start', 'status', 'watch', 'pr', 'chat',
   // HITL controls
   'pause', 'resume', 'unblock', 'inject', 'replan', 'abort', 'hitl-status',
   // Background supervisor
@@ -264,10 +268,11 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  // Bare `roland` in an interactive terminal → show help (friendlier than starting the MCP server).
+  // Bare `roland` in an interactive terminal → start chat mode (like Claude Code).
   // When stdin is piped (Cursor / VS Code spawns `roland serve` or bare `roland`), fall through to serve().
   if (argv.length === 0 && (process.stdin as NodeJS.ReadStream).isTTY) {
-    printHelp();
+    const { startChat } = await import('./rco/chat-interface.js');
+    await startChat();
     process.exit(0);
   }
 
@@ -301,6 +306,17 @@ async function main(): Promise<void> {
         const idx = rest.indexOf('--limit');
         const limit = idx >= 0 ? Number(rest[idx + 1]) || 50 : 50;
         pmLog(limit);
+        break;
+      }
+      case 'chat': {
+        const { startChat } = await import('./rco/chat-interface.js');
+        await startChat({
+          stateDir:  rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland',
+          notify:    rest.includes('--notify') || rest.includes('-n'),
+          stream:    rest.includes('--stream') || rest.includes('-s'),
+          noImprove: rest.includes('--no-improve'),
+          webhookUrl: rest.find((_, i) => rest[i - 1] === '--webhook'),
+        });
         break;
       }
       case 'team': {
