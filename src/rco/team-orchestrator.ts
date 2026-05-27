@@ -38,7 +38,7 @@ import type { AgentYaml } from './types.js';
 import {
   AGENT_TIMEOUT_MS, AGENT_MAX_RETRIES,
   NETWORK_RETRY_DELAYS, GENERIC_RETRY_DELAYS, NETWORK_ERROR_PATTERNS,
-  MAX_CONCURRENT_AGENTS,
+  MAX_CONCURRENT_AGENTS, CIRCUIT_BREAKER_THRESHOLD,
   BLACKBOARD_RESULT_MAX_CHARS,
 } from './constants.js';
 import { ProjectMemory } from './project-memory.js';
@@ -188,6 +188,63 @@ async function runConcurrent<T>(
   return results;
 }
 
+// ── Jitter helper ─────────────────────────────────────────────────────────────
+
+/**
+ * Apply ±factor random jitter to a delay to de-synchronise concurrent retries
+ * and prevent all failing agents from hammering the API at the same instant
+ * (thundering-herd suppression).
+ *
+ * Example: withJitter(10_000, 0.3) → uniform random in [7_000, 13_000].
+ * Floor at 100 ms prevents accidental near-zero delays.
+ */
+function withJitter(delayMs: number, factor = 0.3): number {
+  const delta = Math.round(delayMs * factor * (Math.random() * 2 - 1));
+  return Math.max(100, delayMs + delta);
+}
+
+// ── Wave circuit breaker ──────────────────────────────────────────────────────
+
+/**
+ * Per-wave circuit breaker.
+ *
+ * Tracks terminal network errors produced by agents in the current wave.
+ * When the count reaches CIRCUIT_BREAKER_THRESHOLD the breaker opens and
+ * subsequent tasks fast-fail immediately (synthetic BLOCKER, no retry loop)
+ * rather than spending 5 × retry cycles waiting for a downed API.
+ *
+ * After the wave completes with an open breaker, the orchestrator pauses the
+ * run via the HITL queue so the user can restore connectivity, then resume.
+ *
+ * Call reset() at the start of each new wave to clear state.
+ */
+class WaveCircuitBreaker {
+  private _errorCount = 0;
+  private _failedAgents: string[] = [];
+  isOpen = false;
+
+  recordNetworkError(agentName: string): void {
+    this._errorCount++;
+    this._failedAgents.push(agentName);
+    if (!this.isOpen && this._errorCount >= CIRCUIT_BREAKER_THRESHOLD) {
+      this.isOpen = true;
+      console.error(
+        `[Team]   ⚡ Circuit breaker opened — ${this._errorCount} network error${this._errorCount !== 1 ? 's' : ''} ` +
+        `(threshold: ${CIRCUIT_BREAKER_THRESHOLD}). Queued tasks will fast-fail.`,
+      );
+    }
+  }
+
+  get errorCount(): number { return this._errorCount; }
+  get failedAgents(): readonly string[] { return this._failedAgents; }
+
+  reset(): void {
+    this._errorCount = 0;
+    this._failedAgents = [];
+    this.isOpen = false;
+  }
+}
+
 // ── Cursor SDK helper ─────────────────────────────────────────────────────────
 // Timeout / retry constants live in constants.ts. On final failure, callCursorAgent
 // returns a synthetic BLOCKER string so the PM can handle it in the next wave review
@@ -251,18 +308,40 @@ async function callCursorAgentOnce(agentName: string, modelId: string, prompt: s
 }
 
 /**
- * Resilient wrapper: retries transient failures with separate back-off tables.
+ * Resilient wrapper: retries transient failures with separate back-off tables
+ * and ±30% jitter to de-synchronise concurrent retries.
  *
  * Network / connection errors (ECONNRESET, ConnectError, UND_ERR_SOCKET…) use
- * NETWORK_RETRY_DELAYS (2 s → 5 s → 10 s → 20 s → 30 s). All other errors
- * use GENERIC_RETRY_DELAYS (5 s → 10 s → 20 s → 30 s → 45 s).
+ * NETWORK_RETRY_DELAYS (2 s → 5 s → 10 s → 20 s → 30 s) + jitter.
+ * All other errors use GENERIC_RETRY_DELAYS (5 s → 10 s → 20 s → 30 s → 45 s) + jitter.
  * Both tables have 5 entries → 5 total attempts when AGENT_MAX_RETRIES = 4.
  *
- * On final failure, returns a synthetic BLOCKER so the PM can handle it in the
- * next wave review rather than crashing the orchestration. Network-error BLOCKERs
- * include a resume hint so the user knows partial progress is already saved.
+ * Circuit breaker: if the wave-level WaveCircuitBreaker is already open when
+ * this is called, the call returns a synthetic fast-fail BLOCKER immediately
+ * without attempting any SDK calls, cutting hang time during widespread outages.
+ *
+ * On final failure, records the error in the circuit breaker (network errors only)
+ * and returns a synthetic BLOCKER so the PM can handle it in the next wave review.
  */
-async function callCursorAgent(agentName: string, modelId: string, prompt: string): Promise<string> {
+async function callCursorAgent(
+  agentName: string,
+  modelId: string,
+  prompt: string,
+  circuitBreaker?: WaveCircuitBreaker,
+): Promise<string> {
+  // Fast-fail if the circuit is already open — skip all retry attempts
+  if (circuitBreaker?.isOpen) {
+    console.error(`[Team]   ⚡ ${agentName} — circuit open, task fast-failed (API connectivity issue)`);
+    return [
+      '## 🚨 BLOCKER',
+      `**Description:** Agent "${agentName}" skipped — circuit breaker active (repeated network errors this wave).`,
+      'Partial progress from earlier tasks has been saved to the project blackboard.',
+      'Use `roland resume` (CLI) or `/resume` (chat) to continue once connectivity is restored.',
+      '**Needs from:** lead-pm',
+      '**Impact:** Task skipped due to API connection failure wave. PM will retry after resume.',
+    ].join('\n');
+  }
+
   let lastErr: Error = new Error('unknown');
   const maxAttempts = AGENT_MAX_RETRIES + 1;
 
@@ -276,18 +355,19 @@ async function callCursorAgent(agentName: string, modelId: string, prompt: strin
 
       const netError = isNetworkError(lastErr);
       const delayTable = netError ? NETWORK_RETRY_DELAYS : GENERIC_RETRY_DELAYS;
-      const delay = delayTable[attempt - 1] ?? delayTable[delayTable.length - 1];
+      const baseDelay = delayTable[attempt - 1] ?? delayTable[delayTable.length - 1];
+      const delay = withJitter(baseDelay);   // ±30% random jitter
 
       if (netError) {
         console.error(
           `[Team]   🌐 ${agentName} — Cursor API temporarily unavailable` +
-          ` (${lastErr.message.slice(0, 80).trim()}), retrying in ${delay / 1000}s…` +
+          ` (${lastErr.message.slice(0, 80).trim()}), retrying in ${(delay / 1000).toFixed(1)}s…` +
           ` (attempt ${attempt}/${maxAttempts})`,
         );
       } else {
         console.error(
           `[Team]   ⚠️  ${agentName} attempt ${attempt} failed: ${lastErr.message.slice(0, 100)}` +
-          ` — retrying in ${delay / 1000}s`,
+          ` — retrying in ${(delay / 1000).toFixed(1)}s`,
         );
       }
 
@@ -304,6 +384,11 @@ async function callCursorAgent(agentName: string, modelId: string, prompt: strin
     (netError ? ' (connection error)' : '') +
     `: ${errSummary}`,
   );
+
+  // Record in the wave circuit breaker — may open the circuit for queued tasks
+  if (netError) {
+    circuitBreaker?.recordNetworkError(agentName);
+  }
 
   const lines = [
     '## 🚨 BLOCKER',
@@ -370,6 +455,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   const completedIds = new Set<string>();
   let totalBlockers    = 0;
   let currentWaveNumber = 0; // tracks active wave for onBlockerDetected calls
+  const waveCircuit    = new WaveCircuitBreaker(); // reused across waves; reset per-wave
 
   // ── HITL processor ────────────────────────────────────────────────────────
   // Called at the start of each wave. Returns true if the run should be aborted.
@@ -483,7 +569,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
 
     onTaskStart?.(task.id, task.agent, task.title);
     const taskCallStart = Date.now();
-    const output = await callCursorAgent(task.agent, modelId, workerPrompt);
+    const output = await callCursorAgent(task.agent, modelId, workerPrompt, waveCircuit);
     allTaskUsage.push(buildTaskUsage(task.id, task.title, task.agent, modelId, workerPrompt.length, output.length, Date.now() - taskCallStart));
 
     // ── Parse worker signals ───────────────────────────────────────────────
@@ -591,6 +677,9 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     console.error(`[Team] Wave ${waveNumber}: ${ready.length} task(s) in parallel — ${ready.map((t) => t.id).join(', ')}`);
     onWaveStart?.(waveNumber, ready);
 
+    // Reset circuit breaker for this wave (clears error count and open flag)
+    waveCircuit.reset();
+
     // Execute wave with concurrency cap (MAX_CONCURRENT_AGENTS) to avoid
     // overwhelming the Cursor API with too many simultaneous socket connections.
     if (ready.length > MAX_CONCURRENT_AGENTS) {
@@ -600,6 +689,68 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
       ready.map((task) => () => executeTask(task)),
       MAX_CONCURRENT_AGENTS,
     );
+
+    // ── Circuit breaker check ─────────────────────────────────────────────
+    // If CIRCUIT_BREAKER_THRESHOLD network errors occurred this wave, pause the
+    // run so the user can restore connectivity before the PM review proceeds.
+    if (waveCircuit.isOpen) {
+      const succeeded = waveResults.filter((r) => !r.hasBlocker);
+      const blocked   = waveResults.filter((r) => r.hasBlocker);
+
+      console.error('');
+      console.error('[Team] ⚡ ══════════════════════════════════════════════════════════');
+      console.error(`[Team] ⚡  CIRCUIT BREAKER — ${waveCircuit.errorCount} network error${waveCircuit.errorCount !== 1 ? 's' : ''} in wave ${waveNumber}`);
+      console.error('[Team] ⚡  Cursor API connectivity appears degraded.');
+      console.error('[Team] ⚡');
+      if (succeeded.length > 0) {
+        console.error(`[Team] ⚡  ✓ Saved (${succeeded.length}): ${succeeded.map((r) => r.taskId).join(', ')}`);
+      }
+      if (blocked.length > 0) {
+        console.error(`[Team] ⚡  ✗ Blocked (${blocked.length}): ${blocked.map((r) => r.taskId).join(', ')} — PM will retry after resume`);
+      }
+      console.error('[Team] ⚡');
+      console.error('[Team] ⚡  Run paused. Once connectivity is restored:');
+      console.error('[Team] ⚡    roland resume      (from another terminal)');
+      console.error('[Team] ⚡    /resume            (in chat)');
+      console.error('[Team] ⚡');
+      console.error('[Team] ⚡  Completed task results are saved to the blackboard.');
+      console.error('[Team] ⚡  The PM will retry or re-scope blocked tasks after resume.');
+      console.error('[Team] ⚡ ══════════════════════════════════════════════════════════');
+      console.error('');
+
+      // Record partial progress on blackboard for PM visibility
+      blackboard.post({
+        type: 'decision',
+        title: `Circuit Breaker: Wave ${waveNumber} — ${waveCircuit.errorCount} Network Error${waveCircuit.errorCount !== 1 ? 's' : ''}`,
+        content: [
+          `Wave ${waveNumber} hit ${waveCircuit.errorCount} network error${waveCircuit.errorCount !== 1 ? 's' : ''} (ECONNRESET / ConnectError). Run paused for connectivity recovery.`,
+          succeeded.length > 0
+            ? `Completed and saved: ${succeeded.map((r) => `${r.taskId} (${r.agent})`).join(', ')}`
+            : 'No tasks completed cleanly this wave.',
+          blocked.length > 0
+            ? `Need PM retry after resume: ${blocked.map((r) => `${r.taskId} (${r.agent})`).join(', ')}`
+            : '',
+          'Resume with: roland resume',
+        ].filter(Boolean).join('\n'),
+        status: 'pending',
+        author: 'system',
+        priority: 'critical',
+        tags: ['circuit-breaker', 'network-error', `wave-${waveNumber}`],
+        relatedIds: [],
+      });
+
+      // Pause via HITL — orchestrator blocks at start of next wave
+      if (hitlQueue) {
+        hitlQueue.setPaused(true);
+        onHitlPause?.(true);
+      } else {
+        // No HITL queue — log clearly so the user knows to restart
+        console.error('[Team] ⚡  NOTE: HITL queue not available — run will continue but may hit more errors.');
+        console.error('[Team] ⚡  Consider restarting with: roland team "..." after restoring connectivity.');
+      }
+
+      waveCircuit.reset();
+    }
 
     // ── PM Review ─────────────────────────────────────────────────────────
     if (remaining.length > 0) {

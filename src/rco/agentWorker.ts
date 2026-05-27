@@ -54,6 +54,15 @@ const WORKER_NETWORK_DELAYS = [2_000, 5_000, 10_000, 20_000, 30_000];
 // Generic: 5s → 10s → 20s → 30s → 45s
 const WORKER_GENERIC_DELAYS = [5_000, 10_000, 20_000, 30_000, 45_000];
 
+/**
+ * Apply ±30% random jitter to a delay (mirrors withJitter in team-orchestrator.ts).
+ * Prevents all concurrent worker retries from hammering the API simultaneously.
+ */
+function withWorkerJitter(delayMs: number, factor = 0.3): number {
+  const delta = Math.round(delayMs * factor * (Math.random() * 2 - 1));
+  return Math.max(100, delayMs + delta);
+}
+
 function isWorkerNetworkError(err: Error): boolean {
   const msg = err.message.toLowerCase();
   return WORKER_NETWORK_PATTERNS.some((p) => msg.includes(p.toLowerCase()));
@@ -108,13 +117,14 @@ async function getResponseViaCursorSDKWithRetry(prompt: string, agentName: strin
 
       const netError = isWorkerNetworkError(lastErr);
       const delayTable = netError ? WORKER_NETWORK_DELAYS : WORKER_GENERIC_DELAYS;
-      const delay = delayTable[attempt - 1] ?? delayTable[delayTable.length - 1];
+      const baseDelay = delayTable[attempt - 1] ?? delayTable[delayTable.length - 1];
+      const delay = withWorkerJitter(baseDelay);   // ±30% random jitter
 
       log(
         'cursor-sdk',
         netError
-          ? `Cursor API temporarily unavailable (${lastErr.message.slice(0, 80).trim()}) — retrying in ${delay / 1000}s (attempt ${attempt}/${maxAttempts})`
-          : `Attempt ${attempt} failed: ${lastErr.message.slice(0, 80)} — retrying in ${delay / 1000}s`,
+          ? `Cursor API temporarily unavailable (${lastErr.message.slice(0, 80).trim()}) — retrying in ${(delay / 1000).toFixed(1)}s (attempt ${attempt}/${maxAttempts})`
+          : `Attempt ${attempt} failed: ${lastErr.message.slice(0, 80)} — retrying in ${(delay / 1000).toFixed(1)}s`,
       );
 
       await new Promise((r) => setTimeout(r, delay));

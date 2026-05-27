@@ -20,6 +20,7 @@ import {
   NETWORK_ERROR_PATTERNS,
   AGENT_MAX_RETRIES,
   MAX_CONCURRENT_AGENTS,
+  CIRCUIT_BREAKER_THRESHOLD,
 } from '../dist/rco/constants.js';
 
 let passed = 0;
@@ -68,10 +69,12 @@ assert('Attempt 4 → 30 s',       GENERIC_RETRY_DELAYS[3] === 30_000,  `got ${G
 assert('Attempt 5 → 45 s',       GENERIC_RETRY_DELAYS[4] === 45_000,  `got ${GENERIC_RETRY_DELAYS[4]}`);
 assert('Network attempt 1 faster than generic', NETWORK_RETRY_DELAYS[0] < GENERIC_RETRY_DELAYS[0]);
 
-// ── Test 3: MAX_CONCURRENT_AGENTS ────────────────────────────────────────────
-console.log('\n\x1b[1mTest 3: MAX_CONCURRENT_AGENTS default\x1b[0m');
-assert('Default = 6',            MAX_CONCURRENT_AGENTS === 6,         `got ${MAX_CONCURRENT_AGENTS}`);
-assert('Reasonable range',       MAX_CONCURRENT_AGENTS >= 1 && MAX_CONCURRENT_AGENTS <= 32);
+// ── Test 3: MAX_CONCURRENT_AGENTS + CIRCUIT_BREAKER_THRESHOLD ────────────────
+console.log('\n\x1b[1mTest 3: MAX_CONCURRENT_AGENTS and CIRCUIT_BREAKER_THRESHOLD defaults\x1b[0m');
+assert('Default MAX_CONCURRENT = 4',      MAX_CONCURRENT_AGENTS === 4,          `got ${MAX_CONCURRENT_AGENTS}`);
+assert('Concurrent reasonable range',     MAX_CONCURRENT_AGENTS >= 1 && MAX_CONCURRENT_AGENTS <= 32);
+assert('CIRCUIT_BREAKER_THRESHOLD = 3',   CIRCUIT_BREAKER_THRESHOLD === 3,      `got ${CIRCUIT_BREAKER_THRESHOLD}`);
+assert('Circuit threshold reasonable',    CIRCUIT_BREAKER_THRESHOLD >= 1 && CIRCUIT_BREAKER_THRESHOLD <= 20);
 
 // ── Test 4: isNetworkError classification ────────────────────────────────────
 console.log('\n\x1b[1mTest 4: isNetworkError() classification\x1b[0m');
@@ -225,6 +228,33 @@ async function runConcurrent(factories, limit) {
     1,
   );
   assert('limit=1 runs sequentially', JSON.stringify(order) === '[1,2,3]', JSON.stringify(order));
+}
+
+// ── Test 9: withJitter helper ─────────────────────────────────────────────────
+console.log('\n\x1b[1mTest 9: withJitter() — ±30% bounds and de-synchronisation\x1b[0m');
+
+// Inline implementation mirrors withJitter() in team-orchestrator.ts
+function withJitter(delayMs, factor = 0.3) {
+  const delta = Math.round(delayMs * factor * (Math.random() * 2 - 1));
+  return Math.max(100, delayMs + delta);
+}
+
+{
+  const BASE = 10_000;
+  const samples = Array.from({ length: 200 }, () => withJitter(BASE));
+  const sMin = Math.min(...samples);
+  const sMax = Math.max(...samples);
+  const lower = BASE * 0.7;   // 7 000
+  const upper = BASE * 1.3;   // 13 000
+
+  assert(`All 200 samples ≥ BASE*(1-0.3)=${lower}`,  sMin >= lower - 1, `min=${sMin}`);
+  assert(`All 200 samples ≤ BASE*(1+0.3)=${upper}`,  sMax <= upper + 1, `max=${sMax}`);
+  assert('Jitter produces variation (≥2 distinct values in 200 samples)',
+    new Set(samples).size > 1, `distinct=${new Set(samples).size}`);
+  const v2000 = withJitter(2_000);
+  assert('withJitter(2000) in [1400, 2600]', v2000 >= 1400 && v2000 <= 2600, `got ${v2000}`);
+  assert('withJitter floor: tiny base ≥ 100ms', withJitter(50) >= 100, `got ${withJitter(50)}`);
+  assert('withJitter(0) → exactly 100ms (floor)', withJitter(0) === 100, `got ${withJitter(0)}`);
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────

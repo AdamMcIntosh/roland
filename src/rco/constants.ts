@@ -60,14 +60,27 @@ export const GENERIC_RETRY_DELAYS: readonly number[] = [5_000, 10_000, 20_000, 3
 /**
  * Maximum number of agent calls allowed to run concurrently across all waves.
  *
- * Large parallel waves (e.g. 10+ tasks) overwhelm the Cursor API and cause
- * connection resets. Throttling to 6 slots means tasks queue behind a
- * semaphore rather than all opening sockets at once.
+ * Conservative default of 4 prevents thundering-herd ECONNRESET spikes.
+ * Lowering further helps on unstable connections; raising helps on fast,
+ * reliable connections with many tasks in a wave.
  *
- * Override: ROLAND_MAX_CONCURRENT=4   (aggressive throttle, slow machines)
- *           ROLAND_MAX_CONCURRENT=12  (higher throughput, fast/stable connections)
+ * Override: ROLAND_MAX_CONCURRENT=2   (very conservative, unreliable network)
+ *           ROLAND_MAX_CONCURRENT=8   (higher throughput, stable connections)
  */
-export const MAX_CONCURRENT_AGENTS = Number(process.env.ROLAND_MAX_CONCURRENT) || 6;
+export const MAX_CONCURRENT_AGENTS = Number(process.env.ROLAND_MAX_CONCURRENT) || 4;
+
+/**
+ * Number of terminal network errors in a single wave before the circuit
+ * breaker opens, pausing the run and prompting the user to restore connectivity.
+ *
+ * When the breaker is open, tasks still queued in the wave are fast-failed
+ * with a synthetic BLOCKER rather than cycling through all 5 retry attempts —
+ * this cuts hang time when the Cursor API is genuinely down.
+ *
+ * Override: ROLAND_CIRCUIT_BREAKER=1  (pause on first network error)
+ *           ROLAND_CIRCUIT_BREAKER=5  (tolerate more before pausing)
+ */
+export const CIRCUIT_BREAKER_THRESHOLD = Number(process.env.ROLAND_CIRCUIT_BREAKER) || 3;
 
 /**
  * Substrings that identify a transient network / connection error.
