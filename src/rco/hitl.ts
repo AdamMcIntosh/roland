@@ -37,10 +37,12 @@ export interface HitlCommand {
   timestamp: number;
 }
 
-interface HitlState {
-  paused:    boolean;
-  pausedAt?: number;
-  updatedAt: number;
+export interface HitlState {
+  paused:         boolean;
+  pausedAt?:      number;
+  abortPending?:  boolean;  // NEW — set by CLI when abort is pushed
+  pendingCount?:  number;   // NEW — count of commands in the queue
+  updatedAt:      number;
 }
 
 // ── HitlQueue ─────────────────────────────────────────────────────────────────
@@ -61,6 +63,7 @@ export class HitlQueue {
     const queue = this.readQueue();
     queue.push({ ...cmd, timestamp: Date.now() });
     this.writeQueue(queue);
+    this._updateObserverState(cmd.cmd);
   }
 
   // ── Orchestrator side (read) ─────────────────────────────────────────────
@@ -68,8 +71,21 @@ export class HitlQueue {
   /** Drain and return all pending commands, clearing the file. */
   drainAll(): HitlCommand[] {
     const queue = this.readQueue();
-    if (queue.length > 0) this.writeQueue([]);
+    if (queue.length > 0) {
+      this.writeQueue([]);
+      // Clear pendingCount; the queue is now empty so no abort can be pending.
+      this._updateObserverState();
+    }
     return queue;
+  }
+
+  /** Read the current HITL observer state (paused / abortPending / pendingCount). */
+  readState(): HitlState {
+    try {
+      return JSON.parse(fs.readFileSync(this.stateFile, 'utf-8')) as HitlState;
+    } catch {
+      return { paused: false, updatedAt: 0 };
+    }
   }
 
   /** True if the run is currently paused. */
@@ -144,6 +160,29 @@ export class HitlQueue {
     fs.mkdirSync(path.dirname(this.cmdFile), { recursive: true });
     fs.writeFileSync(this.cmdFile, JSON.stringify(queue, null, 2), 'utf-8');
   }
+
+  /**
+   * Refresh the observer-facing state file (hitl-state.json) with the current
+   * queue length and abort-pending flag, preserving paused/pausedAt. Called from
+   * push() (after enqueue) and drainAll() (after clear) so external observers
+   * (`roland status`, `roland bg-status`) see pending commands immediately.
+   */
+  private _updateObserverState(cmd?: HitlCommandType): void {
+    const queue = this.readQueue();
+    let existing: HitlState = { paused: false, updatedAt: 0 };
+    try {
+      existing = JSON.parse(fs.readFileSync(this.stateFile, 'utf-8')) as HitlState;
+    } catch { /* no existing state — fine */ }
+    const hasAbortQueued = queue.some((c) => c.cmd === 'abort');
+    const next: HitlState = {
+      ...existing,
+      abortPending: hasAbortQueued || (cmd === 'abort'),
+      pendingCount: queue.length,
+      updatedAt: Date.now(),
+    };
+    fs.mkdirSync(path.dirname(this.stateFile), { recursive: true });
+    fs.writeFileSync(this.stateFile, JSON.stringify(next, null, 2), 'utf-8');
+  }
 }
 
 // ── CLI helpers (used by index.ts command handlers) ───────────────────────────
@@ -177,6 +216,28 @@ export function printHitlStatus(stateDir: string): void {
   process.stderr.write(`HITL state:\n`);
   process.stderr.write(`  Paused:  ${paused}${pausedAt ? ` (since ${new Date(pausedAt).toLocaleTimeString()})` : ''}\n`);
   process.stderr.write(`  Pending commands: ${queueLen}\n`);
+}
+
+/** Returns true if a run is currently active (not done or error). */
+export function isRunActive(stateDir: string): boolean {
+  try {
+    const raw = fs.readFileSync(path.join(stateDir, 'run-state.json'), 'utf-8');
+    const st  = JSON.parse(raw) as { status: string };
+    return st.status !== 'done' && st.status !== 'error';
+  } catch {
+    return false;
+  }
+}
+
+/** Returns the goal of the current/last run, or null. */
+export function readRunGoal(stateDir: string): string | null {
+  try {
+    const raw = fs.readFileSync(path.join(stateDir, 'run-state.json'), 'utf-8');
+    const st  = JSON.parse(raw) as { goal?: string };
+    return st.goal ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // ── Utility ───────────────────────────────────────────────────────────────────

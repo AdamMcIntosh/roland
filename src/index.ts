@@ -201,6 +201,7 @@ function printHelp(): void {
   ln(`    ${cy('roland')} ${b('inject')} "directive"         Post a directive to the Lead PM`);
   ln(`    ${cy('roland')} ${b('replan')}                     Ask PM to re-evaluate the plan`);
   ln(`    ${cy('roland')} ${b('abort')}                      Stop the run after current wave`);
+  ln(`    ${cy('roland')} ${b('hitl-status')}                Show HITL queue state and pause status`);
   ln();
   ln('  ' + b('UTILITY COMMANDS'));
   ln(`    ${cy('roland')} doctor              Diagnose your Roland install`);
@@ -236,7 +237,7 @@ const KNOWN_CMDS = new Set([
   'serve', 'mcp-config', 'doctor', 'pm-log',
   'team', 'run', 'status', 'watch', 'pr',
   // HITL controls
-  'pause', 'resume', 'unblock', 'inject', 'replan', 'abort',
+  'pause', 'resume', 'unblock', 'inject', 'replan', 'abort', 'hitl-status',
   // Background supervisor
   'bg-status', 'bg-logs', 'bg-stop',
   '--help', '-h', '--version',
@@ -326,17 +327,31 @@ async function main(): Promise<void> {
       // ── HITL controls ───────────────────────────────────────────────────────
       case 'pause': {
         const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
-        const { writeHitlCommand } = await import('./rco/hitl.js');
+        const { writeHitlCommand, isRunActive, readRunGoal } = await import('./rco/hitl.js');
+        const active = isRunActive(stateDir);
+        const goal   = readRunGoal(stateDir);
+        if (!active) {
+          console.error(`⚠️  No active run in ${stateDir}${goal ? ` (last goal: "${goal.slice(0, 60)}")` : ''}`);
+          console.error('   Start a run with: roland team "your goal"');
+        }
         writeHitlCommand(stateDir, { cmd: 'pause' });
-        console.error('⏸  Pause sent — run will pause before the next wave starts.');
+        const goalHint = goal ? ` \x1b[2m("${goal.slice(0, 50)}")\x1b[0m` : '';
+        console.error(`⏸  Pause sent${goalHint}`);
+        console.error('   Run will pause before the next wave starts.');
         console.error('   Resume with: roland resume');
         break;
       }
       case 'resume': {
         const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
-        const { writeHitlCommand } = await import('./rco/hitl.js');
+        const { writeHitlCommand, isRunActive, readRunGoal } = await import('./rco/hitl.js');
+        const active = isRunActive(stateDir);
+        const goal   = readRunGoal(stateDir);
+        if (!active) {
+          console.error(`⚠️  No active run in ${stateDir}${goal ? ` (last goal: "${goal.slice(0, 60)}")` : ''}`);
+        }
         writeHitlCommand(stateDir, { cmd: 'resume' });
-        console.error('▶  Resume sent — run will continue shortly.');
+        const goalHint = goal ? ` \x1b[2m("${goal.slice(0, 50)}")\x1b[0m` : '';
+        console.error(`▶  Resume sent${goalHint} — run will continue shortly.`);
         break;
       }
       case 'unblock': {
@@ -350,9 +365,15 @@ async function main(): Promise<void> {
           console.error('Usage: roland unblock <task-id> [message]');
           process.exit(1);
         }
-        const { writeHitlCommand } = await import('./rco/hitl.js');
+        const { writeHitlCommand, isRunActive, readRunGoal } = await import('./rco/hitl.js');
+        const active = isRunActive(stateDir);
+        const goal   = readRunGoal(stateDir);
+        if (!active) {
+          console.error(`⚠️  No active run in ${stateDir}${goal ? ` (last goal: "${goal.slice(0, 60)}")` : ''}`);
+        }
         writeHitlCommand(stateDir, { cmd: 'unblock', taskId, message });
-        console.error(`↑  Unblock sent for task: ${taskId}${message ? ` — "${message}"` : ''}`);
+        console.error(`↑  Unblock sent to ${taskId}${message ? `: "${message}"` : ''}`);
+        console.error('   The agent for this task will see the guidance in its inbox.');
         break;
       }
       case 'inject': {
@@ -365,25 +386,73 @@ async function main(): Promise<void> {
           console.error('Usage: roland inject "directive text for the PM"');
           process.exit(1);
         }
-        const { writeHitlCommand } = await import('./rco/hitl.js');
+        const { writeHitlCommand, isRunActive, readRunGoal } = await import('./rco/hitl.js');
+        const active = isRunActive(stateDir);
+        const goal   = readRunGoal(stateDir);
+        if (!active) {
+          console.error(`⚠️  No active run in ${stateDir}${goal ? ` (last goal: "${goal.slice(0, 60)}")` : ''}`);
+        }
         writeHitlCommand(stateDir, { cmd: 'inject', text });
-        console.error(`💉 Injected: "${text.slice(0, 80)}"`);
+        console.error(`💉 Injected to Lead PM: "${text.slice(0, 80)}"`);
         console.error('   The Lead PM will see this directive on the next wave review.');
         break;
       }
       case 'replan': {
         const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
-        const { writeHitlCommand } = await import('./rco/hitl.js');
+        const { writeHitlCommand, isRunActive, readRunGoal } = await import('./rco/hitl.js');
+        const active = isRunActive(stateDir);
+        const goal   = readRunGoal(stateDir);
+        if (!active) {
+          console.error(`⚠️  No active run in ${stateDir}${goal ? ` (last goal: "${goal.slice(0, 60)}")` : ''}`);
+        }
         writeHitlCommand(stateDir, { cmd: 'replan' });
-        console.error('🔄 Replan requested — Lead PM will re-evaluate remaining tasks on the next wave review.');
+        console.error('🔄 Replan requested — PM will re-evaluate the plan on next review.');
         break;
       }
       case 'abort': {
         const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
-        const { writeHitlCommand } = await import('./rco/hitl.js');
+        const { writeHitlCommand, isRunActive, readRunGoal } = await import('./rco/hitl.js');
+        const active = isRunActive(stateDir);
+        const goal   = readRunGoal(stateDir);
+        if (!active) {
+          console.error(`⚠️  No active run in ${stateDir}${goal ? ` (last goal: "${goal.slice(0, 60)}")` : ''}`);
+        }
         writeHitlCommand(stateDir, { cmd: 'abort' });
-        console.error('🛑 Abort sent — run will stop after the current wave completes.');
-        console.error('   For an immediate kill, use: roland bg-stop');
+        console.error('🛑 Abort sent — run will stop after the current wave finishes.');
+        console.error('   For immediate stop: roland bg-stop');
+        break;
+      }
+      case 'hitl-status': {
+        const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const { isRunActive, readRunGoal, HitlQueue } = await import('./rco/hitl.js');
+        const active = isRunActive(stateDir);
+        const goal   = readRunGoal(stateDir);
+        const q = new HitlQueue(stateDir);
+        const hitlState = q.readState();
+        const queueLen  = hitlState.pendingCount ?? 0;
+
+        const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
+        const dim  = (s: string) => `\x1b[2m${s}\x1b[0m`;
+        const cy   = (s: string) => `\x1b[36m${s}\x1b[0m`;
+        const y    = (s: string) => `\x1b[33m${s}\x1b[0m`;
+        const g    = (s: string) => `\x1b[32m${s}\x1b[0m`;
+
+        console.error('');
+        console.error(`  ${bold('HITL Status')}  ${dim('(Human-in-the-Loop Controls)')}`);
+        console.error('');
+        console.error(`  Run active:    ${active ? g('yes') : dim('no')}${goal ? dim(` — "${goal.slice(0, 60)}"`) : ''}`);
+        console.error(`  Paused:        ${hitlState.paused ? y('yes ⏸') : dim('no')}`);
+        console.error(`  Abort pending: ${hitlState.abortPending ? y('yes ⚠️') : dim('no')}`);
+        console.error(`  Queue length:  ${queueLen > 0 ? y(String(queueLen)) : dim('0')}`);
+        console.error('');
+        if (active && !hitlState.paused) {
+          console.error(`  ${cy('roland pause')}             Pause before next wave`);
+          console.error(`  ${cy('roland abort')}             Stop after current wave`);
+          console.error(`  ${cy('roland inject "..."')}      Send directive to Lead PM`);
+        } else if (hitlState.paused) {
+          console.error(`  ${cy('roland resume')}            Resume the paused run`);
+        }
+        console.error('');
         break;
       }
 

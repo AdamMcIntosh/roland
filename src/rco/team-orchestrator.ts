@@ -104,6 +104,10 @@ export interface TeamOrchestratorOptions {
    * of each wave and acts on pause / resume / unblock / inject / replan / abort.
    */
   hitlQueue?: HitlQueue;
+  /** Fired when the run is paused (paused=true) or resumed (paused=false). */
+  onHitlPause?: (paused: boolean) => void;
+  /** Fired when an abort command is queued — run will stop after current wave. */
+  onAbortPending?: () => void;
   /**
    * Skip the self-improvement retrospective phase entirely.
    * Pass true for CI runs, benchmarks, or short one-off tasks.
@@ -236,6 +240,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     onPlanReady, onWaveStart, onTaskStart, onTaskComplete, onWaveComplete,
     onWaveReview, onTasksSpawned, onSynthesizing,
     onBlockerDetected, hitlQueue,
+    onHitlPause, onAbortPending,
     noImprove = false, interactive = false,
   } = opts;
 
@@ -284,7 +289,9 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
 
     // If paused, block here until resumed or timed out
     if (hitlQueue.isPaused()) {
+      onHitlPause?.(true);
       const shouldAbort = await hitlQueue.waitForResume();
+      onHitlPause?.(false);
       if (shouldAbort) return true;
     }
 
@@ -293,14 +300,24 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
       switch (cmd.cmd) {
         case 'pause':
           hitlQueue.setPaused(true);
-          if (await hitlQueue.waitForResume()) return true;
+          onHitlPause?.(true);
+          if (await hitlQueue.waitForResume()) {
+            onHitlPause?.(false);
+            return true;
+          }
+          onHitlPause?.(false);
           break;
         case 'unblock': {
           const target = cmd.taskId ?? '';
           const msg    = cmd.message ?? 'Unblocked by human operator';
           if (target) {
-            bus.send('human', target, 'Human Unblock', msg);
-            console.error(`[HITL] ↑ Unblocked ${target}: "${msg.slice(0, 80)}"`);
+            // Fix: look up agent name from task ID so the message is delivered
+            // to the agent's inbox (workers read bus.inboxSummary(task.agent)).
+            const allKnownTasks = [...plan.tasks, ...remaining];
+            const taskDef     = allKnownTasks.find((t) => t.id === target);
+            const agentTarget = taskDef?.agent ?? target;
+            bus.send('human', agentTarget, 'Human Unblock', msg);
+            console.error(`[HITL] ↑ Unblocked ${target} → ${agentTarget}: "${msg.slice(0, 80)}"`);
           }
           break;
         }
@@ -326,6 +343,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
           break;
         case 'abort':
           console.error('[HITL] 🛑 Abort received — stopping after current wave');
+          onAbortPending?.();
           return true;
         default:
           break;

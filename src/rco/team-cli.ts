@@ -188,13 +188,24 @@ export async function runTeamCli(argv: string[]): Promise<void> {
   // ── Clean stale state if requested ──────────────────────────────────────────
   if (clean) cleanState(stateDir);
 
-  // ── Quiet mode — no UI, just run and emit synthesis ────────────────────────
+  // ── Quiet mode — no UI, but still write run-state.json for external monitors ─
   if (quiet) {
     const runStart = Date.now();
+    const runState = new RunStateWriter(stateDir, goal);
     try {
       const result = await runTeam({
         goal, stateDir, agentsDir, hitlQueue,
         noImprove, interactive: false,
+        onPlanReady:    (tasks)         => { runState.planReady(tasks); },
+        onWaveStart:    (w, tasks)      => { runState.waveStart(w, tasks.map((t) => t.id)); },
+        onTaskStart:    (id)            => { runState.taskStart(id); },
+        onTaskComplete: (id, _a, out, bl) => { runState.taskComplete(id, out, bl); },
+        onWaveReview:   ()              => { runState.waveReviewing(); },
+        onWaveComplete: (_w, d)         => { runState.waveComplete(d.pmNotes); },
+        onTasksSpawned: (tasks)         => { runState.addTasks(tasks); },
+        onSynthesizing: ()              => { runState.synthesizing(); },
+        onHitlPause:    (p)             => { runState.setHitlPaused(p); },
+        onAbortPending: ()              => { runState.setAbortPending(); },
         onBlockerDetected: (taskId, agent, description, waveNumber) => {
           void notifier.notify({
             event: 'blocker', goal,
@@ -203,6 +214,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
           });
         },
       });
+      runState.done();
       console.log(result.synthesis);
       await notifier.notify({
         event: 'complete', goal, summary: 'Run complete',
@@ -211,6 +223,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
         durationMs: Date.now() - runStart,
       });
     } catch (e) {
+      runState.error(e instanceof Error ? e.message : String(e));
       await notifier.notify({ event: 'error', goal, summary: String(e), errorMessage: e instanceof Error ? e.message : String(e) });
       throw e;
     } finally {
@@ -278,6 +291,14 @@ export async function runTeamCli(argv: string[]): Promise<void> {
           runState.synthesizing();
           tui.update(runState.get());
         },
+        onHitlPause: (paused) => {
+          runState.setHitlPaused(paused);
+          tui.update(runState.get());
+        },
+        onAbortPending: () => {
+          runState.setAbortPending();
+          tui.update(runState.get());
+        },
       });
     } catch (e) {
       runState.error(e instanceof Error ? e.message : String(e));
@@ -324,6 +345,9 @@ export async function runTeamCli(argv: string[]): Promise<void> {
   }
 
   // ── Progress state ─────────────────────────────────────────────────────────
+  // Scroll mode also writes run-state.json so external observers (roland status,
+  // bg-status) can monitor progress and HITL pause/abort state without a TUI.
+  const runState = new RunStateWriter(stateDir, goal);
   let scheduledTotal = 0;   // initial plan count; grows as PM spawns tasks
   let completedTotal = 0;
 
@@ -357,6 +381,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
 
     // ── Plan ready ───────────────────────────────────────────────────────────
     onPlanReady: (tasks: TeamTask[]) => {
+      runState.planReady(tasks);
       scheduledTotal = tasks.length;
       err(`  ${c.dim('Plan:')}   ${tasks.length} task${tasks.length !== 1 ? 's' : ''} initially scheduled  ${c.dim('(PM may spawn more during review)')}`);
       err('');
@@ -364,6 +389,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
 
     // ── Wave starting ────────────────────────────────────────────────────────
     onWaveStart: (waveNumber: number, tasks: TeamTask[]) => {
+      runState.waveStart(waveNumber, tasks.map((t) => t.id));
       waveEntries.clear();
       for (const t of tasks) waveEntries.set(t.id, { agent: t.agent, title: t.title, hadBlocker: false });
 
@@ -378,6 +404,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
 
     // ── Task starting ────────────────────────────────────────────────────────
     onTaskStart: (id: string, agent: string, title: string) => {
+      runState.taskStart(id);
       err(
         `  ${c.cyan('→')} ${c.dim(rpad('[' + id + ']', 10))} ${rpad(agent, 22)} ${c.dim(title.slice(0, 50))}`,
       );
@@ -385,6 +412,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
 
     // ── Task complete ─────────────────────────────────────────────────────────
     onTaskComplete: (id: string, agent: string, output: string, hadBlocker: boolean) => {
+      runState.taskComplete(id, output, hadBlocker);
       completedTotal++;
       const entry = waveEntries.get(id);
       if (entry) entry.hadBlocker = hadBlocker;
@@ -406,9 +434,33 @@ export async function runTeamCli(argv: string[]): Promise<void> {
       }
     },
 
+    // ── Wave review (PM evaluating) ─────────────────────────────────────────────
+    onWaveReview: () => {
+      runState.waveReviewing();
+    },
+
+    // ── Tasks spawned during adjust ─────────────────────────────────────────────
+    onTasksSpawned: (tasks: TeamTask[]) => {
+      runState.addTasks(tasks);
+    },
+
+    // ── Synthesizing ────────────────────────────────────────────────────────────
+    onSynthesizing: () => {
+      runState.synthesizing();
+    },
+
+    // ── HITL pause / abort (run-state only; no scroll output needed) ─────────────
+    onHitlPause: (paused: boolean) => {
+      runState.setHitlPaused(paused);
+    },
+    onAbortPending: () => {
+      runState.setAbortPending();
+    },
+
     // ── Wave complete ─────────────────────────────────────────────────────────
     onWaveComplete: (waveNumber: number, decision: ReviewDecision) => {
       void waveNumber;   // available for future use
+      runState.waveComplete(decision.pmNotes);
 
       const blockerCount = [...waveEntries.values()].filter(e => e.hadBlocker).length;
       err('');
@@ -495,6 +547,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
   err('');
 
   // Notify on completion (rich contextual message)
+  runState.done();
   hitlQueue.cleanup();
   await notifier.notify({
     event: 'complete', goal, summary: 'Run complete',

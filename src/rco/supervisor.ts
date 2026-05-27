@@ -136,6 +136,16 @@ export function bgStatus(stateDir: string, json = false): void {
   const alive   = isProcessRunning(rec.pid);
   const elapsed = Date.now() - rec.startedAt;
 
+  // ── HITL state (run-state.json + CLI-side hitl-state.json) ───────────────────
+  let hitlPaused   = runState?.hitlPaused       ?? false;
+  let abortPending = runState?.hitlAbortPending ?? false;
+  try {
+    const hitlStateFile = path.join(stateDir, 'hitl-state.json');
+    const hs = JSON.parse(fs.readFileSync(hitlStateFile, 'utf-8')) as { paused?: boolean; abortPending?: boolean };
+    if (hs.paused)       hitlPaused   = true;
+    if (hs.abortPending) abortPending = true;
+  } catch { /* no hitl state — fine */ }
+
   if (json) {
     console.log(JSON.stringify({
       running:        alive,
@@ -149,6 +159,8 @@ export function bgStatus(stateDir: string, json = false): void {
       wave:           runState?.currentWave     ?? null,
       tasksCompleted: runState?.completedTasks  ?? null,
       totalTasks:     runState?.totalTasks      ?? null,
+      hitlPaused:     hitlPaused,
+      abortPending:   abortPending,
     }));
     if (!alive) removeSupervisorRecord(stateDir);
     return;
@@ -170,8 +182,14 @@ export function bgStatus(stateDir: string, json = false): void {
   const row     = (label: string, value: string) =>
     w(`  ${dim(label.padEnd(12))}  ${value}`);
 
+  const yellow = (s: string) => `\x1b[33m${s}\x1b[0m`;
   const statusIcon  = alive ? green('🟢 Running') : red('🔴 Stopped');
-  const phaseStr    = runState ? `  ${dim('·')}  ${phaseLabel(runState.status, runState.currentWave)}` : '';
+  const hitlSuffix  = hitlPaused
+    ? `  ${dim('·')}  ${yellow('⏸ PAUSED')}`
+    : abortPending
+      ? `  ${dim('·')}  ${yellow('⚠ Abort pending')}`
+      : '';
+  const phaseStr    = runState ? `  ${dim('·')}  ${phaseLabel(runState.status, runState.currentWave)}${hitlSuffix}` : '';
   const goalSnip    = rec.goal.slice(0, cols - 20);
 
   w();
@@ -187,6 +205,12 @@ export function bgStatus(stateDir: string, json = false): void {
     const bar    = progressBar(runState.completedTasks, runState.totalTasks);
     const counts = `${runState.completedTasks} / ${runState.totalTasks} tasks  ·  ${runState.currentWave} wave${runState.currentWave !== 1 ? 's' : ''}`;
     row('Progress', `${dim('[' + bar + ']')}  ${dim(counts)}`);
+  }
+
+  if (hitlPaused) {
+    row('HITL', `${yellow('⏸  Paused')}  — send ${cyan('roland resume')} to continue`);
+  } else if (abortPending) {
+    row('HITL', `${yellow('⚠  Abort pending')}  — will stop after current wave`);
   }
 
   row('Restarts', rec.restarts > 0 ? String(rec.restarts) : dim('0'));

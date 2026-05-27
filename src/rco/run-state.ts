@@ -41,6 +41,10 @@ export interface RunState {
   activeTaskIds: string[];
   pmNotes?: string;
   errorMessage?: string;
+  /** True while run is paused via `roland pause`. Updated by orchestrator. */
+  hitlPaused?: boolean;
+  /** True after `roland abort` is queued, before it is processed. */
+  hitlAbortPending?: boolean;
 }
 
 // ── Writer (used by team-cli / orchestrator callbacks) ────────────────────────
@@ -142,6 +146,21 @@ export class RunStateWriter {
   synthesizing(): void {
     this.state.status = 'synthesizing';
     this.state.activeTaskIds = [];
+    this.flush();
+  }
+
+  setHitlPaused(paused: boolean): void {
+    if (paused) {
+      this.state.hitlPaused = true;
+    } else {
+      delete this.state.hitlPaused;
+      delete this.state.hitlAbortPending;
+    }
+    this.flush();
+  }
+
+  setAbortPending(): void {
+    this.state.hitlAbortPending = true;
     this.flush();
   }
 

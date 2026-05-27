@@ -170,6 +170,14 @@ export class TuiRenderer {
     const redraw = () => {
       const state = readRunState(stateDir);
       if (state) {
+        // Overlay HITL state from hitl-state.json (updated by CLI immediately
+        // when commands are pushed, even before the orchestrator processes them).
+        try {
+          const hitlStateFile = path.join(stateDir, 'hitl-state.json');
+          const hitlState = JSON.parse(fs.readFileSync(hitlStateFile, 'utf-8')) as { paused?: boolean; abortPending?: boolean };
+          if (hitlState.paused)       state.hitlPaused = true;
+          if (hitlState.abortPending) state.hitlAbortPending = true;
+        } catch { /* no hitl state file — fine */ }
         renderer.lastState = state;
         renderer.draw(state);
         if (state.status === 'done' || state.status === 'error') {
@@ -269,6 +277,17 @@ export class TuiRenderer {
     const barRow = ` ${waveLabel}[${bar}]${countLabel}`;
     lines.push(row(barRow));
     lines.push(div);
+
+    // ── HITL state banner ─────────────────────────────────────────────────────
+    if (state.hitlPaused) {
+      const pauseMsg = ` ${y('⏸')}  ${b('PAUSED')} ${d('— send')} ${cy('roland resume')} ${d('to continue')}`;
+      lines.push(row(pauseMsg));
+      lines.push(div);
+    } else if (state.hitlAbortPending) {
+      const abortMsg = ` ${y('⚠️')}  ${b('Abort queued')} ${d('— run will stop after current wave finishes')}`;
+      lines.push(row(abortMsg));
+      lines.push(div);
+    }
 
     // ── Task list ─────────────────────────────────────────────────────────────
     const maxTaskRows = Math.max(3, Math.min(state.tasks.length, Math.floor((process.stdout.rows ?? 30) - 14)));
