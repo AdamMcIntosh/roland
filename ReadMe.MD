@@ -98,12 +98,27 @@ roland status
 | `roland watch` | Auto-run on git commits or file changes |
 | `roland pr [number]` | Review / fix a GitHub PR via the `gh` CLI |
 | `roland status` | Live TUI observer (run from a second terminal) |
+| **Background mode** | |
+| `roland team "..." --background` | Run detached; returns immediately |
+| `roland bg-status` | Show running job: wave, phase, task progress |
+| `roland bg-logs [--follow]` | Tail the background log (stream live with `--follow`) |
+| `roland bg-stop` | Gracefully stop the background run |
+| **Human-in-the-Loop** | _(while a run is active)_ |
+| `roland pause` | Pause before the next wave |
+| `roland resume` | Resume after a pause |
+| `roland abort` | Stop after the current wave finishes |
+| `roland inject "..."` | Post a directive to the Lead PM mid-run |
+| `roland unblock <id> [msg]` | Send guidance to a blocked agent |
+| `roland replan` | Ask PM to re-evaluate remaining tasks |
+| `roland hitl-status` | Show pause state and command queue |
+| **Utility** | |
 | `roland doctor` | Diagnose install, agents, recipes, permissions |
 | `roland pm-log` | Print the PM event timeline for the current project |
-| `npm run serve-dashboard` | Web dashboard — live status, usage & cost history (http://127.0.0.1:8081) |
+| `npm run serve-dashboard` | Web dashboard — command center (http://127.0.0.1:8081) |
 | `roland mcp-config` | Print / merge the Cursor MCP config entry |
-| `roland serve` | Start the MCP server (default with no subcommand) |
+| `roland serve` | Start the MCP server (Cursor / VS Code) |
 | `roland --help` | Full flag reference |
+| `roland --version` | Print version |
 
 ---
 
@@ -119,6 +134,8 @@ roland team "goal" --notify             # desktop notification on complete/error
 roland team "goal" --webhook <url>      # POST to ntfy.sh, Slack, Discord, or any URL
 roland team "goal" --state-dir <dir>    # custom persistence dir (default: .roland)
 roland team "goal" --clean              # wipe blackboard + messages before running (keep memory.md)
+roland team "goal" --background         # run detached; returns immediately (monitor with roland bg-status)
+roland team "goal" --no-improve         # skip the self-improvement retrospective phase
 ```
 
 ### `roland watch` — continuous mode
@@ -144,6 +161,46 @@ roland pr 42 --notify
 
 > Requires the [`gh` CLI](https://cli.github.com/) installed and authenticated.
 
+### Background mode — long-running jobs
+
+Run a team session detached from your terminal. The process continues even after you close the window.
+
+```bash
+roland team "goal" --background         # start detached (alias: roland run "goal" --detach)
+```
+
+Monitor and control:
+
+```bash
+roland bg-status                        # show goal, wave, phase, task progress
+roland bg-status --json                 # machine-readable (for scripting / CI)
+roland bg-logs                          # tail the most recent log (last 50 lines)
+roland bg-logs --follow                 # stream live  (Ctrl+C to stop)
+roland bg-stop                          # graceful stop: abort → waits → SIGTERM → SIGKILL
+```
+
+Logs are written to `.roland/logs/bg-<timestamp>.log`. Background mode auto-restarts on crash (up to 3 times with exponential back-off).
+
+---
+
+### Human-in-the-Loop Controls — steer a run in progress
+
+Send commands to a **running** `roland team` session from any terminal in the same directory:
+
+```bash
+roland pause                                   # pause before the next wave
+roland resume                                  # resume a paused run
+roland abort                                   # stop after the current wave finishes
+roland inject "use Redis for caching"          # post a directive to the Lead PM
+roland unblock task-3 "use REST not gRPC"      # send guidance to a blocked agent
+roland replan                                  # ask PM to re-evaluate remaining tasks
+roland hitl-status                             # show pause state, abort pending, queue length
+```
+
+All HITL controls work with foreground and background (`--background`) runs. They're also available as buttons in the [Web Dashboard](#️-web-dashboard-20) whenever a run is active.
+
+---
+
 ### Global flags _(team / watch / pr)_
 
 | Flag | Description |
@@ -157,40 +214,46 @@ roland pr 42 --notify
 
 ---
 
-## 📊 Usage Dashboard
+## 🎛 Web Dashboard 2.0
 
-A browser-based dashboard that serves as Roland's central hub — showing live job status during a run and historical usage, cost, and agent breakdown across all runs.
+A full command center for Roland — live WebSocket updates, 4-tab navigation, HITL controls built in.
 
 ```bash
-# From your project directory:
 npm run serve-dashboard
 # → http://127.0.0.1:8081
 ```
 
-The dashboard auto-refreshes: live run status every 5 s, usage history every 30 s. It's useful at any time — not just during active runs.
+### Tabs
 
-### What it shows
+| Tab | Contents |
+|-----|----------|
+| **Overview** | Stats cards (runs, cost, tokens, active jobs) · Live job progress with **Pause / Resume / Replan / Abort** buttons · Recent run cards filterable by Today / Week / Month / All Time |
+| **History** | All past runs, searchable by goal · Click any run to expand: full task list, wave decisions, blockers |
+| **Memory** | Browse all five knowledge sections of `.roland/memory.md` · Inline editor: edit and save directly from the browser |
+| **Actions** | New run form · Watch Mode toggle · PR review input · Recent goals as one-click chips · Live HITL panel |
 
-| Section | Contents |
-|---------|----------|
-| **Overview cards** | Total runs · Est. cost · Tokens used · Active jobs — all filterable by Today / Week / Month / All Time |
-| **Live Status** | Current job goal, wave progress, per-task status (pending / running / done / blocked) with elapsed times |
-| **Recent Runs** | Last 10 runs — status icon, duration, cost, click to expand task list |
-| **Usage Trends** | Tokens + cost over time (line chart) and model distribution (doughnut) |
-| **Agent Breakdown** | Sortable table: every agent's token count, cost estimate, call count, and avg duration |
+### Live updates via WebSocket
+
+The dashboard connects via WebSocket and receives push updates whenever `run-state.json` or `hitl-state.json` changes. Task status, blockers, and pause state update instantly — no polling delay.
+
+### HITL from the browser
+
+The **Overview** tab shows **Pause**, **Resume**, **Replan**, and **Abort** buttons whenever a run is active. These write directly to `.roland/hitl.json` — same as running `roland pause` / `roland resume` in the terminal.
 
 ### Pointing it at your project
 
-`npm run serve-dashboard` reads `.roland/` in the current directory. For a project in a different location:
-
 ```bash
+# Current directory's .roland/:
+npm run serve-dashboard
+
+# Different project or state directory:
 node scripts/serve-dashboard.js --state-dir /path/to/project/.roland
 node scripts/serve-dashboard.js --state-dir /path/to/project/.roland --port 8082
 ```
 
 ### Backfilling existing projects
 
-Usage data is recorded automatically from the next `roland team` run onward. To create a synthetic entry from a previous run's `run-state.json`:
+Usage data is recorded automatically from the next `roland team` run. To create an entry from a previous run's `run-state.json`:
 
 ```bash
 node scripts/backfill-usage.mjs --state-dir /path/to/project/.roland
@@ -371,10 +434,23 @@ Roland auto-detects the webhook format:
 roland watch --webhook https://ntfy.sh/my-roland-alerts
 ```
 
-**Slack / Discord:**
+**Slack / Discord / custom webhook:**
 ```bash
 roland team "goal" --webhook https://hooks.slack.com/services/...
 ```
+
+For non-ntfy.sh URLs, Roland POSTs this JSON body:
+```json
+{
+  "text": "✅ Roland complete: \"add rate limiting\"",
+  "title": "Roland complete",
+  "body": "\"add rate limiting\" · 8 tasks · 2 waves · 4m 23s",
+  "event": "complete",
+  "goal": "add rate limiting to the Express API"
+}
+```
+
+`event` is one of `complete | error | blocker | wave-complete | hitl-pause`. Use your webhook handler to route, filter, or reformat.
 
 ### Persistence (`.roland/` directory)
 
@@ -398,7 +474,7 @@ Roland reads `memory.md` at the start of every run and updates it after synthesi
 You type a goal
       │
       ▼
-Lead PM  (grok-4.3)
+Lead PM  (claude-opus-4-7)
   ├─ reads .roland/memory.md   ← decisions from prior runs
   ├─ reads .roland/blackboard  ← current project state
   └─ decomposes into tasks
@@ -490,6 +566,57 @@ roland pr 142 --fix         # second pass: implement improvements
 **Run `roland doctor` after any install change.**
 ```bash
 roland doctor
+```
+
+---
+
+## 🔧 Troubleshooting
+
+**`CURSOR_API_KEY is not set`**
+```bash
+export CURSOR_API_KEY=your_key_here   # add to .zshrc / .bashrc / PowerShell $PROFILE
+roland doctor                          # verify the full install
+```
+
+**Agent timeout — run stalls or never completes**
+
+Default timeout is 25 minutes per agent. Override for complex tasks or fast-fail in CI:
+```bash
+ROLAND_AGENT_TIMEOUT_MS=900000 roland "goal"    # 15-minute timeout
+ROLAND_AGENT_TIMEOUT_MS=60000  roland "goal"    # 1-minute timeout (testing)
+```
+
+**Garbled output on mobile SSH / Termius**
+
+The fancy TUI uses alternate-screen ANSI codes that some SSH clients mishandle (`^[[A[[A` garbage). Fix:
+```bash
+export ROLAND_SIMPLE_TUI=1    # add to shell profile — clean scrolling on any terminal
+roland team "goal" --simple-tui  # or per-run
+```
+
+**`roland status` shows "No run-state found"**
+
+The run hasn't started yet, already finished, or used a custom `--state-dir`:
+```bash
+roland bg-status                                     # check if a background run is active
+roland status --state-dir /path/to/project/.roland   # custom dir
+```
+
+**Memory file `.roland/memory.md` looks corrupted**
+
+Open `http://127.0.0.1:8081` → **Memory** tab to view and edit it in the browser. Or edit the file directly — it's plain Markdown with `## Section Name` headers and `- bullet` lists.
+
+**Background run crashed without finishing**
+```bash
+roland bg-logs               # tail the most recent log
+roland bg-status             # check if PID file still exists (.roland/supervisor.pid)
+```
+Log files persist at `.roland/logs/bg-<timestamp>.log` even after the process exits.
+
+**`roland doctor` shows failures**
+```bash
+roland doctor       # shows exactly which check failed and how to fix it
+npm run build       # re-run if agents/ or recipes/ are missing from dist/
 ```
 
 ---

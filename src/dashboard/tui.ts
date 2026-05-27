@@ -273,7 +273,8 @@ export class TuiRenderer {
     const waveLabel = state.currentWave > 0
       ? b(`Wave ${state.currentWave}`) + d('  ·  ')
       : '';
-    const countLabel = d(`  ${state.completedTasks} / ${state.totalTasks} tasks`);
+    const pct = state.totalTasks > 0 ? ` ${Math.round((state.completedTasks / state.totalTasks) * 100)}%` : '';
+    const countLabel = d(`  ${state.completedTasks} / ${state.totalTasks} tasks${pct}`);
     const barRow = ` ${waveLabel}[${bar}]${countLabel}`;
     lines.push(row(barRow));
     lines.push(div);

@@ -249,12 +249,26 @@ async function main(): Promise<void> {
   const argv = process.argv.slice(2);
 
   // --help / -h (check before any parsing)
-  if (argv.includes('--help') || argv.includes('-h') || argv.length === 0 && process.stdin.isTTY) {
-    // Only show help for -h/--help; no-arg case still starts the MCP server.
-    if (argv.includes('--help') || argv.includes('-h')) {
-      printHelp();
-      process.exit(0);
-    }
+  if (argv.includes('--help') || argv.includes('-h')) {
+    printHelp();
+    process.exit(0);
+  }
+
+  // --version / -v
+  if (argv.includes('--version') || argv.includes('-v')) {
+    try {
+      const pkgPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json');
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as { version: string };
+      console.log(`roland ${pkg.version}`);
+    } catch { console.log('roland 1.0.0'); }
+    process.exit(0);
+  }
+
+  // Bare `roland` in an interactive terminal → show help (friendlier than starting the MCP server).
+  // When stdin is piped (Cursor / VS Code spawns `roland serve` or bare `roland`), fall through to serve().
+  if (argv.length === 0 && (process.stdin as NodeJS.ReadStream).isTTY) {
+    printHelp();
+    process.exit(0);
   }
 
   let [cmd, ...rest] = argv;
@@ -489,6 +503,14 @@ async function main(): Promise<void> {
         process.exit(1);
     }
   } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes('CURSOR_API_KEY')) {
+      console.error('\n  ❌  Missing API key — CURSOR_API_KEY is not set\n');
+      console.error('  Add to your shell profile (.zshrc / .bashrc / PowerShell $PROFILE):\n');
+      console.error('    export CURSOR_API_KEY=your_key_here\n');
+      console.error('  Get your key: https://cursor.com/settings → API Keys\n');
+      process.exit(1);
+    }
     logger.error('❌ Fatal error:', error);
     console.error(error);
     process.exit(1);

@@ -165,6 +165,21 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     process.exit(1);
   }
 
+  // ── CURSOR_API_KEY early check ──────────────────────────────────────────────
+  if (!process.env.CURSOR_API_KEY) {
+    err('');
+    err(`  ${c.bold('❌  CURSOR_API_KEY is not set')}`);
+    err('');
+    err('  Agent execution requires a Cursor API key. Add to your shell profile:');
+    err('');
+    err(`    ${c.cyan('export CURSOR_API_KEY=your_key_here')}    ${c.dim('# .zshrc / .bashrc / PowerShell $PROFILE')}`);
+    err('');
+    err('  Get your key at: https://cursor.com/settings → API Keys');
+    err(`  Or diagnose your install: ${c.cyan('roland doctor')}`);
+    err('');
+    process.exit(1);
+  }
+
   // ── Background / detach mode ───────────────────────────────────────────────
   if (background) {
     await spawnBackground(goal, argv, stateDir);
