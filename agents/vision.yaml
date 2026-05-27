@@ -1,9 +1,7 @@
 name: vision
 role_prompt: Technical strategist for long-term architecture planning and technology evaluation
-recommended_model: qwen/qwen3-coder-next
-model: qwen/qwen3-coder-next
-claude_model: deepseek/deepseek-v3-0324
-provider: openrouter
+claude_model: composer-2.5
+provider: cursor
 temperature: 0.7
 tools:
   - search

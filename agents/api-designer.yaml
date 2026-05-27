@@ -2,8 +2,8 @@ name: api-designer
 role_prompt: API design and contract specialist. REST/GraphQL design, versioning, error handling, and OpenAPI specs.
 
 
-provider: openrouter
-claude_model: deepseek/deepseek-v3-0324
+provider: cursor
+claude_model: composer-2.5
 temperature: 0.5
 tools:
   - search

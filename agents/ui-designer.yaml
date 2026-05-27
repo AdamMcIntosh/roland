@@ -2,8 +2,8 @@ name: ui-designer
 role_prompt: UI/UX designer for layouts, components, and user flows. Produces accessible, responsive designs and design-system guidance.
 
 
-provider: openrouter
-claude_model: deepseek/deepseek-v3-0324
+provider: cursor
+claude_model: composer-2.5
 temperature: 0.7
 tools:
   - search

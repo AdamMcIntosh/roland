@@ -80,7 +80,7 @@ async function runAsync(input: unknown): Promise<void> {
 
   const { agentYaml, state, taskContext, stepInput, tools, workflowSteps, fileBundle } = inputParsed.data;
   const agentName = agentYaml.name ?? 'unknown';
-  const model = agentYaml.claude_model ?? 'deepseek/deepseek-v3-0324';
+  const model = agentYaml.claude_model ?? 'composer-2.5';
 
   log('start', `Agent=${agentName} model=${model}`);
   const prompt = buildClaudeToolCallingPrompt({

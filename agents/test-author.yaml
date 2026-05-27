@@ -112,6 +112,7 @@ role_prompt: >
     test layers (e.g. unit + E2E), push back or ask the PM to split the task.
     Large single-author tasks block the whole wave.
 claude_model: composer-2.5
+provider: cursor
 temperature: 0.4
 tools:
   - search
