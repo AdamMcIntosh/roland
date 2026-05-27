@@ -108,6 +108,7 @@ Follow these rules before you write a single task:
   2. Always include a unique \`jti\` (JWT ID) claim in every access token you sign. Use \`crypto.randomUUID()\` for jti. Without jti, rotating refresh tokens produces identical access tokens when the clock hasn't advanced, breaking rotation tests and replay-detection.
   \`\`\`
 - **HARD RULE — keep tests in sync with implementation changes.** Any task that fixes or changes implementation behavior MUST also update or remove test assertions that relied on the old behavior — in the same task, or in an explicit follow-up \`test-author\` task with \`dependsOn\` pointing at the executor task. Examples of stale assertions that must be cleaned up: \`expect(req.destroy).toHaveBeenCalledOnce()\` after removing an early destroy call; \`expect(res.status).toBe(500)\` after changing an error to return 400. Never leave a passing implementation alongside a test that asserts the old (incorrect) behavior — it will fail immediately and block the suite. If the fix is in an executor task, include the test cleanup in that same description, or spawn a dedicated test-author follow-up before test-executor runs.
+- **HARD RULE — no partial deliverables.** A task is only complete when the feature is fully functional end-to-end. "Adding the constant" or "writing the helper" is NOT done — done means the feature is wired into every relevant route, handler, middleware stack, and test. Every \`executor\` task description MUST include this reminder verbatim: "⚠️ COMPLETENESS CHECK: Before marking this task done, verify the feature is reachable end-to-end — every route, handler, and middleware that must use the new code actually calls it. A constant or helper that is not wired in is a partial delivery and a release blocker."
 - **Long tasks block the whole wave.** If a task will take more than ~15 minutes, ask yourself whether it can be split so other work proceeds while it runs.
 - **Keep task descriptions tight.** Write each \`description\` in ≤150 words — directive, not exhaustive. Workers read the Blackboard for full context; your brief just needs to tell them *what* to do and *where*.
 
@@ -231,6 +232,14 @@ Group every open item into three tiers. Each item must name the specific file, f
 
 ### 🔴 Release Blockers
 _Must be resolved before any deployment._ Numbered list. State severity, location, issue, and fix.
+
+**Before writing this section, explicitly audit every feature delivered this run for end-to-end completeness:**
+- Is every new route registered in the router/app?
+- Is every middleware (rate limiter, validator, auth guard, etc.) applied to the correct route(s)?
+- Is every handler calling the helpers/services it was supposed to use?
+- Are tests exercising the wired path, not just unit-testing isolated helpers?
+
+If **any feature was only partially implemented** (helper written but not called from the route; constant defined but not applied; middleware created but not mounted), it MUST appear here as a numbered 🔴 blocker with: the specific file and line where the wiring is missing, what exact code change is needed, and a \`roland team "..."\` follow-up command the developer can run to fix it.
 
 ### 🟡 Pre-Production Checklist
 _Should land before external users see this._ Use \`[ ]\` checkbox format.
@@ -547,6 +556,18 @@ ${pendingSection}
 ${capBlackboard(ctx.blackboardSnapshot)}
 
 ${ctx.inboxMessages ? `---\n\n## Your Inbox\n\n${ctx.inboxMessages}\n` : ''}
+
+---
+
+## Completeness Verification — MANDATORY BEFORE DECIDING
+
+For **every executor task** in this wave, answer these three questions before choosing \`continue\` or \`adjust\`:
+
+1. **Is the feature reachable end-to-end?** Did the agent wire the new code into the relevant route(s), handler(s), and middleware — not just write a helper or constant in isolation?
+2. **Are tests present and covering the wired path?** A test that only exercises a helper function does not prove the route works.
+3. **Would a developer hitting the endpoint right now observe the intended behaviour?** If no, it is partial delivery.
+
+If **any answer is "no" or "unclear"**, you MUST respond with \`"decision": "adjust"\` and spawn a follow-up executor task to complete the wiring. Partial delivery is a release blocker — do not let it pass through to synthesis.
 
 ---
 
