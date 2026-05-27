@@ -3,199 +3,1157 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RCO Dashboard</title>
+  <title>Roland Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/hotkeys-js@3.13.0/dist/hotkeys.min.js"></script>
   <style>
+    /* ── CSS Variables / Theming ─────────────────────────────────────────────── */
     :root {
-      --bg: #1a1a2e;
-      --fg: #eee;
-      --muted: #aaa;
-      --accent: #8f8;
-      --chart-bg: rgba(99, 102, 241, 0.6);
+      --bg:       #0f0f1a;
+      --surface:  #1a1a2e;
+      --fg:       #e8e8f0;
+      --muted:    #8888aa;
+      --border:   rgba(255,255,255,0.08);
+      --indigo:   #6366f1;
+      --amber:    #f59e0b;
+      --emerald:  #10b981;
+      --red:      #ef4444;
+      --purple:   #8b5cf6;
+      --cyan:     #06b6d4;
+      --card-bg:  rgba(99,102,241,0.08);
+      --card-border: rgba(99,102,241,0.22);
     }
     [data-theme="light"] {
-      --bg: #f5f5f5;
-      --fg: #222;
-      --muted: #555;
-      --accent: #282;
-      --chart-bg: rgba(99, 102, 241, 0.5);
+      --bg:       #f0f0f6;
+      --surface:  #ffffff;
+      --fg:       #1a1a2e;
+      --muted:    #5a5a7a;
+      --border:   rgba(0,0,0,0.09);
+      --card-bg:  rgba(99,102,241,0.06);
+      --card-border: rgba(99,102,241,0.18);
     }
-    @media (prefers-color-scheme: light) {
-      body:not([data-theme="dark"]) { --bg: #f5f5f5; --fg: #222; --muted: #555; --accent: #282; }
+
+    /* ── Reset / Base ────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 0; padding: 0;
+      background: var(--bg); color: var(--fg);
+      transition: background .2s, color .2s;
+      min-height: 100vh;
     }
-    body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem; background: var(--bg); color: var(--fg); transition: background 0.2s, color 0.2s; }
-    h1 { font-size: 1.25rem; }
-    #status { color: var(--accent); font-size: 0.9rem; margin-bottom: 0.5rem; }
-    #metrics { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.5rem; }
-    #log { max-height: 120px; overflow-y: auto; font-size: 0.8rem; color: var(--muted); outline: none; }
-    #log:focus { outline: 2px solid var(--accent); }
-    .chart-container { position: relative; height: 280px; margin-top: 1rem; }
-    canvas { max-height: 280px; }
-    .toolbar { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; }
-    .toolbar button { padding: 0.35rem 0.75rem; cursor: pointer; border: 1px solid var(--muted); background: var(--bg); color: var(--fg); border-radius: 4px; }
-    .toolbar button:hover { background: var(--muted); color: var(--bg); }
-    #collab-prompt { margin-top: 0.5rem; padding: 0.5rem; background: rgba(99, 102, 241, 0.2); border-radius: 4px; display: none; }
-    #collab-prompt.visible { display: block; }
-    #collab-feedback { width: 100%; min-height: 60px; margin-top: 0.25rem; padding: 0.25rem; }
+    h2 {
+      font-size: .8rem; margin: 0 0 .6rem;
+      color: var(--muted); font-weight: 600;
+      text-transform: uppercase; letter-spacing: .06em;
+    }
+    a { color: var(--indigo); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    button { cursor: pointer; font-family: inherit; }
+
+    /* ── Layout ──────────────────────────────────────────────────────────────── */
+    .page { max-width: 1200px; margin: 0 auto; padding: 1rem 1.25rem 2rem; }
+
+    /* ── Header ──────────────────────────────────────────────────────────────── */
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: .75rem 1.25rem; margin-bottom: 0;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .header-left  { display: flex; align-items: center; gap: 1rem; }
+    .header-right { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+
+    .site-title { font-size: 1.1rem; font-weight: 700; margin: 0; letter-spacing: -.01em; }
+    .site-title span { color: var(--indigo); }
+
+    /* Live indicator */
+    .live-indicator { display: flex; align-items: center; gap: .4rem; font-size: .78rem; color: var(--muted); }
+    .live-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--muted); flex-shrink: 0;
+      transition: background .3s;
+    }
+    .live-dot.active { background: var(--emerald); box-shadow: 0 0 0 3px rgba(16,185,129,.2); }
+    @keyframes pulse-ring {
+      0%   { box-shadow: 0 0 0 0 rgba(16,185,129,.4); }
+      70%  { box-shadow: 0 0 0 6px rgba(16,185,129,0); }
+      100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+    }
+    .live-dot.active { animation: pulse-ring 2s ease-out infinite; }
+
+    /* Period pills */
+    .period-pills { display: flex; gap: .3rem; }
+    .period-pill {
+      padding: .22rem .65rem; border: 1px solid var(--border);
+      background: transparent; color: var(--muted);
+      border-radius: 20px; font-size: .75rem;
+      transition: all .15s;
+    }
+    .period-pill:hover  { border-color: var(--muted); color: var(--fg); }
+    .period-pill.active { background: rgba(99,102,241,.2); color: var(--fg); border-color: var(--indigo); }
+
+    /* Theme toggle */
+    .btn-icon {
+      padding: .28rem .6rem; background: transparent;
+      border: 1px solid var(--border); border-radius: 6px;
+      color: var(--muted); font-size: .78rem;
+      transition: all .15s;
+    }
+    .btn-icon:hover { border-color: var(--muted); color: var(--fg); }
+
+    /* Last-updated */
+    .last-updated { font-size: .7rem; color: var(--muted); white-space: nowrap; }
+
+    /* ── Overview Cards ──────────────────────────────────────────────────────── */
+    .cards {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: .75rem; margin: 1rem 0;
+    }
+    @media (max-width: 700px) {
+      .cards { grid-template-columns: repeat(2, 1fr); }
+    }
+    .card {
+      background: var(--card-bg); border: 1px solid var(--card-border);
+      border-radius: 10px; padding: .85rem 1rem;
+    }
+    .card-value { font-size: 1.6rem; font-weight: 700; line-height: 1.15; letter-spacing: -.02em; }
+    .card-label { font-size: .72rem; color: var(--muted); margin-top: .25rem; }
+    .card-sub   { font-size: .68rem; color: var(--muted); margin-top: .2rem; opacity: .8; }
+    .card-estimate {
+      grid-column: 1 / -1;
+      font-size: .68rem; color: var(--muted);
+      padding: .25rem 0 .1rem;
+    }
+
+    /* ── Section wrapper ─────────────────────────────────────────────────────── */
+    .section { margin-bottom: 1.25rem; }
+    .section-box {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden;
+    }
+    .section-header { padding: .7rem 1rem .4rem; }
+
+    /* ── Live Status Section ─────────────────────────────────────────────────── */
+    .live-section { padding: 1rem; }
+
+    /* Idle state */
+    .idle-state { display: flex; align-items: center; gap: .5rem; font-size: .82rem; color: var(--muted); padding: .5rem 0; }
+
+    /* Active job header */
+    .active-job-header { margin-bottom: .75rem; }
+    .active-goal { font-size: 1rem; font-weight: 700; margin-bottom: .5rem; line-height: 1.4; }
+    .active-meta {
+      display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+      font-size: .75rem; color: var(--muted);
+    }
+
+    /* Status pill */
+    .status-pill {
+      display: inline-flex; align-items: center; gap: .3rem;
+      padding: .18rem .55rem; border-radius: 20px; font-size: .7rem; font-weight: 600;
+    }
+    .status-pill.planning    { background: rgba(99,102,241,.18);  color: var(--indigo); }
+    .status-pill.running     { background: rgba(16,185,129,.15);  color: var(--emerald); }
+    .status-pill.reviewing   { background: rgba(245,158,11,.15);  color: var(--amber); }
+    .status-pill.synthesizing{ background: rgba(139,92,246,.15);  color: var(--purple); }
+    .status-pill.done        { background: rgba(16,185,129,.12);  color: var(--emerald); }
+    .status-pill.error       { background: rgba(239,68,68,.15);   color: var(--red); }
+
+    /* Progress bar */
+    .progress-wrap { margin: .5rem 0; }
+    .progress-label { display: flex; justify-content: space-between; font-size: .7rem; color: var(--muted); margin-bottom: .25rem; }
+    .progress-bar { height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--indigo); border-radius: 3px; transition: width .4s ease; }
+
+    /* PM phase banner */
+    .pm-banner {
+      padding: .4rem .75rem; border-radius: 6px; font-size: .75rem;
+      margin-bottom: .75rem; display: flex; align-items: center; gap: .4rem;
+    }
+    .pm-banner.planning     { background: rgba(99,102,241,.1);  color: var(--indigo);  border: 1px solid rgba(99,102,241,.2); }
+    .pm-banner.reviewing    { background: rgba(245,158,11,.08); color: var(--amber);   border: 1px solid rgba(245,158,11,.2); }
+    .pm-banner.synthesizing { background: rgba(139,92,246,.1);  color: var(--purple);  border: 1px solid rgba(139,92,246,.2); }
+
+    /* Task grid */
+    .task-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: .5rem;
+    }
+    @media (max-width: 700px) {
+      .task-grid { grid-template-columns: 1fr 1fr; }
+    }
+    .task-card {
+      background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: .55rem .7rem; font-size: .75rem;
+    }
+    .task-card.status-running  { border-color: rgba(16,185,129,.35); }
+    .task-card.status-done     { opacity: .7; }
+    .task-card.status-blocked  { border-color: rgba(245,158,11,.4); }
+    .task-card.status-error    { border-color: rgba(239,68,68,.4); }
+    .task-card.status-pending  { opacity: .5; }
+
+    .task-top { display: flex; align-items: center; gap: .35rem; margin-bottom: .25rem; }
+    .task-icon { font-size: .85rem; flex-shrink: 0; }
+    .task-agent { font-size: .65rem; color: var(--muted); }
+    .task-title { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; line-height: 1.3; }
+    .task-time  { font-size: .65rem; color: var(--muted); margin-top: .15rem; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .task-card.status-running .task-icon { animation: blink 1.5s ease-in-out infinite; }
+
+    /* ── Recent Runs ─────────────────────────────────────────────────────────── */
+    .run-row {
+      display: flex; align-items: baseline; gap: .75rem;
+      padding: .45rem 1rem; border-bottom: 1px solid var(--border);
+      font-size: .8rem; cursor: pointer; transition: background .1s;
+    }
+    .run-row:last-child { border-bottom: none; }
+    .run-row:hover { background: rgba(99,102,241,.05); }
+    .run-row.expanded { background: rgba(99,102,241,.04); }
+
+    .run-time-badge {
+      flex-shrink: 0; background: var(--card-bg); border: 1px solid var(--border);
+      border-radius: 4px; padding: .12rem .4rem; font-size: .67rem; color: var(--muted);
+      white-space: nowrap;
+    }
+    .run-status-icon { flex-shrink: 0; font-size: .85rem; }
+    .run-goal { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.4; }
+    .run-meta { display: flex; gap: .5rem; align-items: center; flex-shrink: 0; color: var(--muted); font-size: .7rem; white-space: nowrap; }
+    .run-blocker-badge {
+      padding: .1rem .35rem; border-radius: 3px; font-size: .63rem; font-weight: 700;
+      background: rgba(239,68,68,.18); color: #f87171;
+    }
+
+    /* Expanded task list */
+    .run-tasks-detail {
+      padding: .4rem 1rem .7rem 2.8rem;
+      border-bottom: 1px solid var(--border);
+      display: none;
+    }
+    .run-tasks-detail.open { display: block; }
+    .run-tasks-detail .detail-row {
+      display: flex; align-items: baseline; gap: .5rem;
+      font-size: .72rem; color: var(--muted); padding: .18rem 0;
+    }
+    .detail-agent { min-width: 80px; color: var(--fg); font-size: .7rem; }
+    .detail-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .detail-dur   { flex-shrink: 0; }
+
+    /* ── Charts Row ──────────────────────────────────────────────────────────── */
+    .charts-row {
+      display: grid; grid-template-columns: 2fr 1fr;
+      gap: .75rem; margin-bottom: 1.25rem;
+    }
+    @media (max-width: 700px) { .charts-row { grid-template-columns: 1fr; } }
+    .chart-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: .85rem 1rem; }
+    .chart-box .chart-wrap { position: relative; height: 200px; }
+    .chart-box canvas { max-height: 200px; }
+
+    /* ── Agent Table ─────────────────────────────────────────────────────────── */
+    .table-scroll { overflow-x: auto; }
+    .usage-table { width: 100%; border-collapse: collapse; font-size: .79rem; }
+    .usage-table th {
+      text-align: left; padding: .42rem .85rem;
+      color: var(--muted); font-weight: 600; font-size: .72rem;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer; user-select: none; white-space: nowrap;
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .usage-table th:hover { color: var(--fg); }
+    .usage-table th.sort-asc::after  { content: ' ↑'; color: var(--indigo); }
+    .usage-table th.sort-desc::after { content: ' ↓'; color: var(--indigo); }
+    .usage-table td { padding: .42rem .85rem; border-bottom: 1px solid var(--border); }
+    .usage-table tr:last-child td { border-bottom: none; }
+    .usage-table tbody tr:hover td { background: rgba(99,102,241,.05); }
+
+    /* Model badge */
+    .model-badge {
+      display: inline-block; padding: .1rem .45rem;
+      border-radius: 20px; font-size: .67rem; font-weight: 600;
+    }
+
+    /* ── Utilities ───────────────────────────────────────────────────────────── */
+    .empty { color: var(--muted); text-align: center; padding: 2rem; font-size: .82rem; }
+    .spinning { animation: spin .7s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Responsive: hide some cols on small screens */
+    @media (max-width: 700px) {
+      .run-meta { display: none; }
+    }
+
+    /* ── Cost card color tiers ──────────────────────────────────────────────── */
+    .card-value.cost-green  { color: var(--emerald); }
+    .card-value.cost-yellow { color: var(--amber); }
+    .card-value.cost-red    { color: var(--red); }
+
+    /* ── Live-active section box glow ───────────────────────────────────────── */
+    .section-box.live-active {
+      border-color: rgba(16,185,129,.45);
+      box-shadow: 0 0 0 2px rgba(16,185,129,.08), 0 0 18px rgba(16,185,129,.07);
+    }
+
+    /* ── Idle state — last run sub-line ─────────────────────────────────────── */
+    .idle-last { font-size: .72rem; color: var(--muted); margin-top: .2rem; }
+
+    /* ── Export CSV button ───────────────────────────────────────────────────── */
+    .btn-export {
+      padding: .22rem .6rem; background: transparent;
+      border: 1px solid var(--border); border-radius: 6px;
+      color: var(--muted); font-size: .72rem; transition: all .15s;
+      flex-shrink: 0;
+    }
+    .btn-export:hover { border-color: var(--indigo); color: var(--fg); }
   </style>
 </head>
 <body>
-  <h1>RCO Dashboard</h1>
-  <div class="toolbar">
-    <button type="button" id="btn-dark" aria-label="Toggle dark mode">Dark mode</button>
-    <button type="button" id="btn-csv" aria-label="Export logs to CSV">Export CSV</button>
-  </div>
-  <div id="status">Connecting to WebSocket…</div>
-  <div id="metrics"></div>
-  <div id="collab-prompt">
-    <div id="collab-message"></div>
-    <textarea id="collab-feedback" placeholder="Add feedback and press Submit to continue"></textarea>
-    <button type="button" id="btn-collab-submit">Submit</button>
-  </div>
-  <div class="chart-container">
-    <canvas id="dependencyChart"></canvas>
-  </div>
-  <div id="log" tabindex="0"></div>
+
+  <!-- ── Header ──────────────────────────────────────────────────────────────── -->
+  <header class="header">
+    <div class="header-left">
+      <h1 class="site-title"><span>Roland</span></h1>
+      <div class="live-indicator">
+        <div class="live-dot" id="live-dot"></div>
+        <span id="live-label">Idle</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="period-pills">
+        <button class="period-pill active" data-period="today">Today</button>
+        <button class="period-pill" data-period="week">Week</button>
+        <button class="period-pill" data-period="month">Month</button>
+        <button class="period-pill" data-period="all">All Time</button>
+      </div>
+      <button class="btn-icon" id="btn-theme" aria-label="Toggle theme">🌙</button>
+      <span class="last-updated" id="last-updated"></span>
+    </div>
+  </header>
+
+  <main class="page">
+
+    <!-- ── Overview Cards ────────────────────────────────────────────────────── -->
+    <section class="section">
+      <div class="cards">
+        <div class="card">
+          <div class="card-value" id="card-runs">—</div>
+          <div class="card-label">Total Runs</div>
+          <div class="card-sub" id="card-runs-sub"></div>
+        </div>
+        <div class="card">
+          <div class="card-value" id="card-cost">—</div>
+          <div class="card-label">Est. Cost (period)</div>
+          <div class="card-sub" id="card-cost-sub"></div>
+        </div>
+        <div class="card">
+          <div class="card-value" id="card-tokens">—</div>
+          <div class="card-label">Tokens Used (period)</div>
+          <div class="card-sub" id="card-tokens-sub"></div>
+        </div>
+        <div class="card">
+          <div class="card-value" id="card-active">0</div>
+          <div class="card-label">Active Jobs</div>
+          <div class="card-sub" id="card-active-sub"></div>
+        </div>
+        <div class="card-estimate">
+          ⚠️ Estimates only (chars ÷ 4 ≈ tokens). Actual Cursor billing may differ.
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Live Status ────────────────────────────────────────────────────────── -->
+    <section class="section">
+      <div class="section-box" id="live-section-box">
+        <div class="section-header"><h2>Live Status</h2></div>
+        <div class="live-section" id="live-section">
+          <!-- populated by renderLiveStatus() -->
+          <div class="idle-state"><span>○</span><span>No active run</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Recent Runs ────────────────────────────────────────────────────────── -->
+    <section class="section">
+      <div class="section-box">
+        <div class="section-header"><h2>Recent Runs</h2></div>
+        <div id="recent-runs">
+          <div class="empty">Loading…</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Usage Trends ───────────────────────────────────────────────────────── -->
+    <div class="charts-row">
+      <div class="chart-box">
+        <h2>Tokens &amp; Cost Over Time</h2>
+        <div class="chart-wrap"><canvas id="tokensChart"></canvas></div>
+      </div>
+      <div class="chart-box">
+        <h2>Token Distribution by Model</h2>
+        <div class="chart-wrap"><canvas id="modelChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- ── Agent & Model Breakdown ───────────────────────────────────────────── -->
+    <section class="section">
+      <div class="section-box">
+        <div class="section-header" style="display:flex;align-items:center;justify-content:space-between;padding-right:.65rem">
+          <h2 style="margin:0">Agent &amp; Model Breakdown</h2>
+          <button class="btn-export" id="btn-export-csv" title="Download current view as CSV">⬇ Export CSV</button>
+        </div>
+        <div class="table-scroll">
+          <table class="usage-table" id="agent-table">
+            <thead>
+              <tr>
+                <th data-sort="agent">Agent</th>
+                <th data-sort="model">Model</th>
+                <th data-sort="tokens" class="sort-desc">Tokens</th>
+                <th data-sort="cost">Est. Cost</th>
+                <th data-sort="calls">Calls</th>
+                <th data-sort="avgDuration">Avg Duration</th>
+              </tr>
+            </thead>
+            <tbody id="agent-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
   <script>
-    const WS_URL = 'ws://127.0.0.1:8080';
-    const logEl = document.getElementById('log');
-    const statusEl = document.getElementById('status');
-    const metricsEl = document.getElementById('metrics');
-    const collabPromptEl = document.getElementById('collab-prompt');
-    const collabMessageEl = document.getElementById('collab-message');
-    const collabFeedbackEl = document.getElementById('collab-feedback');
-    const btnCollabSubmit = document.getElementById('btn-collab-submit');
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Constants & Config
+  // ═══════════════════════════════════════════════════════════════════════════
 
-    let chart = null;
-    const stateLog = [];
-    let currentSessionId = null;
+  const RUN_STATE_POLL_MS  = 5_000;
+  const USAGE_POLL_MS      = 30_000;
+  const ACTIVE_STALE_MS    = 600_000; // 10 min
 
-    function ensureChart() {
-      if (chart) return;
-      const ctx = document.getElementById('dependencyChart').getContext('2d');
-      const isDark = document.body.getAttribute('data-theme') !== 'light';
-      chart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-          labels: [],
-          datasets: [{ label: 'Agent steps', data: [], backgroundColor: isDark ? 'rgba(99, 102, 241, 0.6)' : 'rgba(99, 102, 241, 0.5)' }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: { y: { beginAtZero: true } }
+  /** Model → hex color mapping */
+  const MODEL_COLORS = {
+    'grok-4.3':          '#f59e0b',
+    'composer-2.5':      '#6366f1',
+    'claude-opus-4-7':   '#8b5cf6',
+    'claude-sonnet-4-6': '#10b981',
+    'claude-haiku-4-5':  '#06b6d4',
+  };
+
+  function modelColor(m) {
+    return MODEL_COLORS[m] || '#6b7280';
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Format Helpers
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  function formatTokens(n) {
+    if (n == null || isNaN(n)) return '0';
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+    if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'K';
+    return String(Math.round(n));
+  }
+
+  function formatCost(usd) {
+    if (usd == null || isNaN(usd)) return '$0.00';
+    if (usd >= 1)    return '$' + usd.toFixed(2);
+    if (usd >= 0.01) return '$' + usd.toFixed(3);
+    return '$' + usd.toFixed(4);
+  }
+
+  function formatDuration(ms) {
+    if (!ms || ms < 0) return '—';
+    if (ms >= 3_600_000) {
+      const h = Math.floor(ms / 3_600_000);
+      const m = Math.floor((ms % 3_600_000) / 60_000);
+      return h + 'h ' + m + 'm';
+    }
+    if (ms >= 60_000) return Math.floor(ms / 60_000) + 'm ' + Math.round((ms % 60_000) / 1_000) + 's';
+    return (ms / 1_000).toFixed(1) + 's';
+  }
+
+  function formatTime(ts) {
+    if (!ts) return '';
+    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function formatDate(ts) {
+    if (!ts) return '';
+    const d   = new Date(ts);
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const yestStart  = todayStart - 86_400_000;
+    if (ts >= todayStart)  return 'Today';
+    if (ts >= yestStart)   return 'Yesterday';
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  }
+
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  State
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  let usageData    = [];   // RunUsageRecord[]
+  let runState     = null; // RunState | null
+  let period       = 'today';
+  let agentSortCol = 'tokens';
+  let agentSortDir = 'desc';
+  let tokensChart  = null;
+  let modelChart   = null;
+
+  // ── Active-run helper ──────────────────────────────────────────────────────
+  const ACTIVE_STATUSES = new Set(['planning', 'running', 'reviewing', 'synthesizing']);
+
+  function isRunActive(rs) {
+    return rs != null
+      && ACTIVE_STATUSES.has(rs.status)
+      && (Date.now() - rs.updatedAt) < ACTIVE_STALE_MS;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Data Fetching
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  async function fetchUsage() {
+    try {
+      const res = await fetch('/api/usage');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const json = await res.json();
+      usageData = Array.isArray(json) ? json : [];
+    } catch (e) {
+      console.warn('Usage fetch failed:', e.message);
+    }
+  }
+
+  async function fetchRunState() {
+    try {
+      const res = await fetch('/api/run-state');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const json = await res.json();
+      runState = (json && typeof json === 'object' && json.runId) ? json : null;
+    } catch (e) {
+      console.warn('Run-state fetch failed:', e.message);
+      runState = null;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Period Filter
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  function periodCutoff(p) {
+    const now = Date.now();
+    const map = { today: now - 86_400_000, week: now - 7 * 86_400_000, month: now - 30 * 86_400_000, all: 0 };
+    return map[p] ?? 0;
+  }
+
+  function filterRuns(runs, p) {
+    const cutoff = periodCutoff(p);
+    return cutoff === 0 ? runs : runs.filter(r => r.timestamp >= cutoff);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Render: Header live indicator
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  function renderLiveIndicator() {
+    const dot   = document.getElementById('live-dot');
+    const label = document.getElementById('live-label');
+    if (isRunActive(runState)) {
+      dot.classList.add('active');
+      label.textContent = '1 job running';
+    } else {
+      dot.classList.remove('active');
+      label.textContent = 'Idle';
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Render: Overview Cards
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  function renderCards() {
+    const filtered  = filterRuns(usageData, period);
+    const allTime   = usageData;
+
+    // Total runs (all time; sub shows period if different)
+    const totalRuns   = allTime.length;
+    const periodRuns  = filtered.length;
+    document.getElementById('card-runs').textContent = totalRuns;
+    document.getElementById('card-runs-sub').textContent =
+      period !== 'all' ? 'Period: ' + periodRuns : '';
+
+    // Cost (color-coded: green < $5, yellow $5–$20, red > $20)
+    const periodCost = filtered.reduce((s, r) => s + (r.totalCostUsd || 0), 0);
+    const allCost    = allTime.reduce((s, r) => s + (r.totalCostUsd || 0), 0);
+    const costEl = document.getElementById('card-cost');
+    costEl.textContent = formatCost(periodCost);
+    costEl.className   = 'card-value'
+      + (periodCost === 0 ? '' : periodCost < 5 ? ' cost-green' : periodCost < 20 ? ' cost-yellow' : ' cost-red');
+    document.getElementById('card-cost-sub').textContent =
+      period !== 'all' ? 'All time: ' + formatCost(allCost) : '';
+
+    // Tokens
+    const periodTok = filtered.reduce((s, r) => s + (r.totalTokens || 0), 0);
+    const allTok    = allTime.reduce((s, r) => s + (r.totalTokens || 0), 0);
+    document.getElementById('card-tokens').textContent    = formatTokens(periodTok);
+    document.getElementById('card-tokens-sub').textContent =
+      period !== 'all' ? 'All time: ' + formatTokens(allTok) : '';
+
+    // Active jobs
+    const active = isRunActive(runState) ? 1 : 0;
+    document.getElementById('card-active').textContent   = active;
+    document.getElementById('card-active-sub').textContent =
+      active ? runState.goal.slice(0, 40) + (runState.goal.length > 40 ? '…' : '') : '';
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Render: Live Status Section
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  function statusPillHtml(status) {
+    const labels = {
+      planning: '⚙️ Planning', running: '▶ Running',
+      reviewing: '🔍 Reviewing', synthesizing: '✍ Synthesizing',
+      done: '✓ Done', error: '✕ Error',
+    };
+    const text = labels[status] || status;
+    return '<span class="status-pill ' + status + '">' + escHtml(text) + '</span>';
+  }
+
+  function taskIcon(status) {
+    return { pending: '◌', running: '●', done: '✓', blocked: '⚠', error: '✕' }[status] || '◌';
+  }
+
+  function elapsedSince(ts) {
+    if (!ts) return '';
+    const ms = Date.now() - ts;
+    if (ms < 0) return '';
+    if (ms < 60_000) return Math.round(ms / 1_000) + 's';
+    return Math.floor(ms / 60_000) + 'm ' + Math.round((ms % 60_000) / 1_000) + 's';
+  }
+
+  function timeAgo(ts) {
+    if (!ts) return '';
+    const secs = Math.floor((Date.now() - ts) / 1000);
+    if (secs < 60)        return secs + 's ago';
+    if (secs < 3_600)     return Math.floor(secs / 60) + 'm ago';
+    if (secs < 86_400)    return Math.floor(secs / 3_600) + 'h ago';
+    if (secs < 7 * 86_400) return Math.floor(secs / 86_400) + 'd ago';
+    return formatDate(ts) + ' at ' + formatTime(ts);
+  }
+
+  function renderLiveStatus() {
+    const el  = document.getElementById('live-section');
+    const box = document.getElementById('live-section-box');
+
+    if (!isRunActive(runState)) {
+      box.classList.remove('live-active');
+      // Idle state — find last run from usage history
+      const lastRun = usageData.length
+        ? [...usageData].sort((a, b) => b.timestamp - a.timestamp)[0]
+        : null;
+      const lastLine = lastRun
+        ? '<div class="idle-last">Last run: ' + escHtml(timeAgo(lastRun.timestamp))
+            + ' — ' + escHtml(lastRun.goal.slice(0, 55) + (lastRun.goal.length > 55 ? '…' : '')) + '</div>'
+        : '';
+      el.innerHTML =
+        '<div class="idle-state">' +
+          '<span style="font-size:1rem">○</span>' +
+          '<div><div>No active run</div>' + lastLine + '</div>' +
+        '</div>';
+      return;
+    }
+
+    box.classList.add('live-active');
+
+    const rs = runState;
+    const pct = rs.totalTasks > 0 ? Math.round((rs.completedTasks / rs.totalTasks) * 100) : 0;
+
+    // PM phase banner (only for non-running statuses)
+    let bannerHtml = '';
+    if (rs.status === 'planning' || rs.status === 'reviewing' || rs.status === 'synthesizing') {
+      const bannerText = {
+        planning:     '⚙️ Lead PM is analyzing the goal and building the task plan…',
+        reviewing:    '🔍 Lead PM is reviewing wave results and deciding next steps…',
+        synthesizing: '✍ Lead PM is writing the final synthesis…',
+      }[rs.status] || '';
+      bannerHtml = '<div class="pm-banner ' + rs.status + '">' + escHtml(bannerText) + '</div>';
+    }
+
+    // Task grid
+    const tasks = Array.isArray(rs.tasks) ? rs.tasks : [];
+    let taskCardsHtml = '';
+    for (const t of tasks) {
+      const icon    = taskIcon(t.status);
+      const elapsed = t.status === 'running' ? elapsedSince(t.startedAt)
+                    : t.status === 'done'    ? formatDuration(t.completedAt && t.startedAt ? t.completedAt - t.startedAt : 0)
+                    : '';
+      taskCardsHtml +=
+        '<div class="task-card status-' + escHtml(t.status) + '" title="' + escHtml(t.title) + '">' +
+          '<div class="task-top">' +
+            '<span class="task-icon">' + icon + '</span>' +
+            '<span class="task-agent">' + escHtml(t.agent || '') + '</span>' +
+          '</div>' +
+          '<div class="task-title">' + escHtml(t.title) + '</div>' +
+          (elapsed ? '<div class="task-time">' + escHtml(elapsed) + '</div>' : '') +
+        '</div>';
+    }
+
+    el.innerHTML =
+      '<div class="active-job-header">' +
+        '<div class="active-goal">' + escHtml(rs.goal) + '</div>' +
+        '<div class="active-meta">' +
+          statusPillHtml(rs.status) +
+          '<span>Wave ' + rs.currentWave + '</span>' +
+          '<span>' + rs.completedTasks + ' / ' + rs.totalTasks + ' tasks</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="progress-wrap">' +
+        '<div class="progress-label"><span>Progress</span><span>' + pct + '%</span></div>' +
+        '<div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%"></div></div>' +
+      '</div>' +
+      bannerHtml +
+      '<div class="task-grid">' + taskCardsHtml + '</div>';
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Render: Recent Runs (last 10)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Tracks which run rows are expanded (by runId)
+  const expandedRuns = new Set();
+
+  function runStatusIcon(run, isActiveRun) {
+    if (isActiveRun) return '⏳';
+    if (run.blockersEncountered > 0) return '🚨';
+    // Treat no durationMs as potentially errored if we have no tasks
+    return '✅';
+  }
+
+  function renderRecentRuns() {
+    // Merge usage history with current active run-state if it's running
+    const sorted = [...usageData].sort((a, b) => b.timestamp - a.timestamp).slice(0, 10);
+    const active = isRunActive(runState);
+
+    // If the active run isn't already in the top-10 usage history, prepend a synthetic entry
+    let rows = sorted;
+    if (active && !sorted.find(r => r.runId === runState.runId)) {
+      const synth = {
+        runId: runState.runId,
+        timestamp: runState.startedAt,
+        goal: runState.goal,
+        wavesRun: runState.currentWave,
+        blockersEncountered: 0,
+        durationMs: Date.now() - runState.startedAt,
+        tasks: runState.tasks || [],
+        totalTokens: 0,
+        totalCostUsd: 0,
+        _synthetic: true,
+      };
+      rows = [synth, ...sorted].slice(0, 10);
+    }
+
+    const container = document.getElementById('recent-runs');
+    if (rows.length === 0) {
+      container.innerHTML = '<div class="empty">No runs yet</div>';
+      return;
+    }
+
+    let html = '';
+    for (const run of rows) {
+      const isActive = active && run.runId === runState.runId;
+      const icon     = run._synthetic ? '⏳' : runStatusIcon(run, isActive);
+      const taskCount = (run.tasks || []).filter(t => !(t.taskId || t.id || '').startsWith('pm-')).length;
+      const blockerBadge = run.blockersEncountered > 0
+        ? '<span class="run-blocker-badge">⚠ ' + run.blockersEncountered + ' blocker' + (run.blockersEncountered > 1 ? 's' : '') + '</span>'
+        : '';
+      const dateStr = formatDate(run.timestamp) + ' ' + formatTime(run.timestamp);
+      const isExp   = expandedRuns.has(run.runId);
+
+      html +=
+        '<div class="run-row' + (isExp ? ' expanded' : '') + '" data-run-id="' + escHtml(run.runId) + '">' +
+          '<span class="run-time-badge">' + escHtml(dateStr) + '</span>' +
+          '<span class="run-status-icon">' + icon + '</span>' +
+          '<span class="run-goal" title="' + escHtml(run.goal) + '">' + escHtml(run.goal) + '</span>' +
+          '<span class="run-meta">' +
+            run.wavesRun + 'w &middot; ' + taskCount + 't &middot; ' +
+            formatTokens(run.totalTokens || 0) + ' &middot; ' +
+            formatCost(run.totalCostUsd || 0) + ' &middot; ' +
+            formatDuration(run.durationMs || 0) +
+            blockerBadge +
+          '</span>' +
+        '</div>';
+
+      // Expanded task detail
+      if (isExp) {
+        const tasks = Array.isArray(run.tasks) ? run.tasks : [];
+        let detailRows = '';
+        for (const t of tasks) {
+          const agent = t.agent || '';
+          const title = t.taskTitle || t.title || t.taskId || t.id || '';
+          const dur   = t.durationMs ? formatDuration(t.durationMs) : '—';
+          detailRows +=
+            '<div class="detail-row">' +
+              '<span class="detail-agent">' + escHtml(agent) + '</span>' +
+              '<span class="detail-title">' + escHtml(title) + '</span>' +
+              '<span class="detail-dur">' + dur + '</span>' +
+            '</div>';
         }
-      });
-    }
-
-    function updateChartFromGraph(nodes, edges) {
-      ensureChart();
-      const labels = nodes.map(n => n.label);
-      const data = labels.map(() => 0);
-      edges.forEach(e => {
-        const fromLabel = nodes.find(n => n.id === e.from)?.label ?? e.from;
-        const idx = labels.indexOf(fromLabel);
-        if (idx >= 0) data[idx]++;
-      });
-      chart.data.labels = labels;
-      chart.data.datasets[0].data = data;
-      chart.update();
-    }
-
-    function appendLog(msg, payload) {
-      const line = document.createElement('div');
-      line.textContent = new Date().toLocaleTimeString() + ' ' + msg;
-      logEl.appendChild(line);
-      logEl.scrollTop = logEl.scrollHeight;
-      if (payload) stateLog.push({ ts: payload.timestamp || Date.now(), type: payload.type || 'log', agent: payload.agent || '', message: msg });
-    }
-
-    function updateMetrics(payload) {
-      const parts = [];
-      if (payload.tokensEstimated != null) parts.push('Tokens (est.): ' + payload.tokensEstimated);
-      if (payload.stepsCount != null) parts.push('Steps: ' + (payload.currentStep != null ? payload.currentStep + 1 : 0) + ' / ' + payload.stepsCount);
-      if (payload.sessionId) currentSessionId = payload.sessionId;
-      metricsEl.textContent = parts.length ? parts.join(' | ') : '';
-    }
-
-    function showCollabPrompt(payload) {
-      currentSessionId = payload.sessionId;
-      collabMessageEl.textContent = payload.collabPrompt || 'Paused for feedback.';
-      collabFeedbackEl.value = '';
-      collabPromptEl.classList.add('visible');
-    }
-
-    function hideCollabPrompt() {
-      collabPromptEl.classList.remove('visible');
-    }
-
-    function sendCollabFeedback() {
-      if (!currentSessionId || !ws || ws.readyState !== 1) return;
-      const feedback = collabFeedbackEl.value.trim();
-      ws.send(JSON.stringify({ type: 'collab_feedback', sessionId: currentSessionId, feedback }));
-      hideCollabPrompt();
-    }
-
-    function exportCSV() {
-      const rows = stateLog.length ? stateLog : [{ ts: Date.now(), type: 'none', agent: '', message: 'No log entries' }];
-      const csv = Papa.unparse(rows);
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'rco-dashboard-logs-' + new Date().toISOString().slice(0, 10) + '.csv';
-      a.click();
-      URL.revokeObjectURL(a.href);
-    }
-
-    function setTheme(theme) {
-      document.body.setAttribute('data-theme', theme);
-      document.getElementById('btn-dark').textContent = theme === 'dark' ? 'Light mode' : 'Dark mode';
-      if (chart) {
-        chart.data.datasets[0].backgroundColor = theme === 'dark' ? 'rgba(99, 102, 241, 0.6)' : 'rgba(99, 102, 241, 0.5)';
-        chart.update();
+        html +=
+          '<div class="run-tasks-detail open" data-detail-for="' + escHtml(run.runId) + '">' +
+            (detailRows || '<div style="color:var(--muted);font-size:.72rem">No task details</div>') +
+          '</div>';
       }
     }
 
-    function toggleTheme() {
-      const t = document.body.getAttribute('data-theme');
-      const next = t === 'dark' ? 'light' : 'dark';
-      setTheme(next);
+    container.innerHTML = html;
+
+    // Attach click handlers
+    container.querySelectorAll('.run-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const id = row.dataset.runId;
+        if (expandedRuns.has(id)) expandedRuns.delete(id);
+        else expandedRuns.add(id);
+        renderRecentRuns();
+      });
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Render: Usage Trends Charts
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  function renderTokensChart(runs) {
+    const sorted    = [...runs].sort((a, b) => a.timestamp - b.timestamp);
+    const labels    = sorted.map(r => formatDate(r.timestamp) + ' ' + formatTime(r.timestamp));
+    const tokData   = sorted.map(r => r.totalTokens || 0);
+    const costData  = sorted.map(r => +(r.totalCostUsd || 0).toFixed(4));
+    const isDark    = document.body.getAttribute('data-theme') !== 'light';
+    const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.07)';
+    const tickColor = isDark ? '#666' : '#888';
+
+    if (!tokensChart) {
+      const ctx = document.getElementById('tokensChart').getContext('2d');
+      tokensChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            {
+              label: 'Tokens (est.)',
+              data: tokData,
+              borderColor: '#6366f1',
+              backgroundColor: 'rgba(99,102,241,0.09)',
+              fill: true, tension: 0.35, yAxisID: 'yTok',
+              pointRadius: sorted.length > 20 ? 0 : 3,
+            },
+            {
+              label: 'Cost USD (est.)',
+              data: costData,
+              borderColor: '#f59e0b',
+              backgroundColor: 'rgba(245,158,11,0.06)',
+              fill: false, tension: 0.35, yAxisID: 'yCost',
+              pointRadius: sorted.length > 20 ? 0 : 3,
+            },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { labels: { font: { size: 11 }, color: isDark ? '#ccc' : '#333' } } },
+          scales: {
+            yTok: {
+              beginAtZero: true, position: 'left',
+              title: { display: true, text: 'Tokens', font: { size: 10 }, color: tickColor },
+              grid:  { color: gridColor },
+              ticks: { color: tickColor, font: { size: 10 }, callback: v => formatTokens(v) },
+            },
+            yCost: {
+              beginAtZero: true, position: 'right',
+              title: { display: true, text: 'Cost ($)', font: { size: 10 }, color: tickColor },
+              grid:  { drawOnChartArea: false },
+              ticks: { color: tickColor, font: { size: 10 }, callback: v => '$' + v.toFixed(3) },
+            },
+            x: {
+              grid: { color: gridColor },
+              ticks: { color: tickColor, font: { size: 9 }, maxRotation: 40, maxTicksLimit: 10 },
+            },
+          },
+        },
+      });
+    } else {
+      tokensChart.data.labels              = labels;
+      tokensChart.data.datasets[0].data   = tokData;
+      tokensChart.data.datasets[1].data   = costData;
+      tokensChart.update('none');
+    }
+  }
+
+  function renderModelChart(runs) {
+    const modelToks = {};
+    for (const run of runs) {
+      for (const task of (run.tasks || [])) {
+        const toks = (task.estimatedInputTokens || 0) + (task.estimatedOutputTokens || 0);
+        modelToks[task.model] = (modelToks[task.model] || 0) + toks;
+      }
+    }
+    const models  = Object.keys(modelToks).sort((a, b) => modelToks[b] - modelToks[a]);
+    const values  = models.map(m => modelToks[m]);
+    const colors  = models.map(m => modelColor(m));
+    const isDark  = document.body.getAttribute('data-theme') !== 'light';
+    const lblColor = isDark ? '#ccc' : '#444';
+
+    if (!modelChart) {
+      const ctx = document.getElementById('modelChart').getContext('2d');
+      modelChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: models,
+          datasets: [{ data: values, backgroundColor: colors, borderWidth: 1, borderColor: 'transparent' }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'right', labels: { color: lblColor, font: { size: 10 }, boxWidth: 12 } },
+            tooltip: {
+              callbacks: {
+                label: ctx => ' ' + ctx.label + ': ' + formatTokens(ctx.raw) + ' tok',
+              },
+            },
+          },
+        },
+      });
+    } else {
+      modelChart.data.labels                       = models;
+      modelChart.data.datasets[0].data            = values;
+      modelChart.data.datasets[0].backgroundColor = colors;
+      modelChart.update('none');
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Render: Agent & Model Breakdown Table
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  function renderAgentTable(runs) {
+    const agentMap = {};
+    for (const run of runs) {
+      for (const task of (run.tasks || [])) {
+        if (!agentMap[task.agent]) {
+          agentMap[task.agent] = {
+            agent: task.agent, model: task.model,
+            tokens: 0, cost: 0, calls: 0, totalDuration: 0,
+          };
+        }
+        const r    = agentMap[task.agent];
+        r.tokens  += (task.estimatedInputTokens || 0) + (task.estimatedOutputTokens || 0);
+        r.cost    += task.estimatedCostUsd || 0;
+        r.calls   += 1;
+        r.totalDuration += task.durationMs || 0;
+      }
     }
 
-    let ws = null;
-    function connect() {
-      ws = new WebSocket(WS_URL);
-      ws.onopen = () => { statusEl.textContent = 'Connected to RCO WebSocket (port 8080)'; statusEl.style.color = 'var(--accent)'; };
-      ws.onclose = () => { statusEl.textContent = 'Disconnected. Reconnecting…'; statusEl.style.color = '#f88'; setTimeout(connect, 2000); };
-      ws.onerror = () => {};
-      ws.onmessage = (ev) => {
-        try {
-          const payload = JSON.parse(ev.data);
-          if (payload.type === 'log') appendLog('[' + (payload.agent || '') + '] ' + (payload.message || ''), payload);
-          if (payload.type === 'graph' && payload.nodes && payload.edges) updateChartFromGraph(payload.nodes, payload.edges);
-          if (payload.type === 'metrics') updateMetrics(payload);
-          if (payload.type === 'collab_pause') showCollabPrompt(payload);
-          if (payload.type === 'collab_resume') hideCollabPrompt();
-        } catch (e) {}
-      };
+    let rows = Object.values(agentMap);
+    rows.sort((a, b) => {
+      const key = agentSortCol === 'avgDuration' ? 'avgDuration' : agentSortCol;
+      const va  = key === 'avgDuration' ? (a.calls ? a.totalDuration / a.calls : 0) : a[key];
+      const vb  = key === 'avgDuration' ? (b.calls ? b.totalDuration / b.calls : 0) : b[key];
+      if (typeof va === 'string') return agentSortDir === 'desc' ? vb.localeCompare(va) : va.localeCompare(vb);
+      return agentSortDir === 'desc' ? vb - va : va - vb;
+    });
+
+    // Update sort indicators on headers
+    document.querySelectorAll('#agent-table th[data-sort]').forEach(th => {
+      th.className = th.dataset.sort === agentSortCol ? 'sort-' + agentSortDir : '';
+    });
+
+    const tbody = document.getElementById('agent-tbody');
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty">No agent calls in this period</td></tr>';
+      return;
     }
 
-    hotkeys('ctrl+r', function(e) { e.preventDefault(); connect(); });
-    hotkeys('up', function(e) { if (document.activeElement === logEl) { e.preventDefault(); logEl.scrollTop -= 20; } });
-    hotkeys('down', function(e) { if (document.activeElement === logEl) { e.preventDefault(); logEl.scrollTop += 20; } });
+    tbody.innerHTML = '';
+    for (const r of rows) {
+      const avg = r.calls ? r.totalDuration / r.calls : 0;
+      const c   = modelColor(r.model);
+      const tr  = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + escHtml(r.agent) + '</td>' +
+        '<td><span class="model-badge" style="background:' + c + '22;color:' + c + '">' + escHtml(r.model) + '</span></td>' +
+        '<td>' + formatTokens(r.tokens) + '</td>' +
+        '<td>' + formatCost(r.cost) + '</td>' +
+        '<td>' + r.calls + '</td>' +
+        '<td>' + formatDuration(avg) + '</td>';
+      tbody.appendChild(tr);
+    }
+  }
 
-    document.getElementById('btn-dark').addEventListener('click', toggleTheme);
-    document.getElementById('btn-csv').addEventListener('click', exportCSV);
-    btnCollabSubmit.addEventListener('click', sendCollabFeedback);
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Full Render (called after any data change)
+  // ═══════════════════════════════════════════════════════════════════════════
 
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
-      document.body.setAttribute('data-theme', 'light');
-      document.getElementById('btn-dark').textContent = 'Dark mode';
+  function renderAll() {
+    const filtered = filterRuns(usageData, period);
+    renderLiveIndicator();
+    renderCards();
+    renderLiveStatus();
+    renderRecentRuns();
+    renderTokensChart(filtered);
+    renderModelChart(filtered);
+    renderAgentTable(filtered);
+
+    // Update last-updated time
+    document.getElementById('last-updated').textContent =
+      'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Polling
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /** Poll run-state (fast: every 5 s) */
+  async function pollRunState() {
+    await fetchRunState();
+    // Only re-render the live-sensitive parts to avoid chart flicker
+    renderLiveIndicator();
+    renderCards();
+    renderLiveStatus();
+    // Rebuild recent runs list to reflect active run merging
+    renderRecentRuns();
+  }
+
+  /** Poll usage history (slow: every 30 s) */
+  async function pollUsage() {
+    await fetchUsage();
+    renderAll();
+  }
+
+  // Initial load: fetch both simultaneously
+  (async () => {
+    await Promise.all([fetchUsage(), fetchRunState()]);
+    renderAll();
+  })();
+
+  // Start polling intervals
+  setInterval(pollRunState, RUN_STATE_POLL_MS);
+  setInterval(pollUsage,    USAGE_POLL_MS);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Period Selector
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  document.querySelectorAll('.period-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      period = btn.dataset.period;
+      document.querySelectorAll('.period-pill').forEach(b => b.classList.toggle('active', b.dataset.period === period));
+      const filtered = filterRuns(usageData, period);
+      renderCards();
+      renderTokensChart(filtered);
+      renderModelChart(filtered);
+      renderAgentTable(filtered);
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Agent Table Sort
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  document.querySelectorAll('#agent-table th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      if (agentSortCol === th.dataset.sort) {
+        agentSortDir = agentSortDir === 'desc' ? 'asc' : 'desc';
+      } else {
+        agentSortCol = th.dataset.sort;
+        agentSortDir = 'desc';
+      }
+      renderAgentTable(filterRuns(usageData, period));
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Theme
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  function setTheme(theme) {
+    document.body.setAttribute('data-theme', theme);
+    document.getElementById('btn-theme').textContent = theme === 'dark' ? '☀️' : '🌙';
+    // Re-render charts so their label colors update
+    if (tokensChart) { tokensChart.destroy(); tokensChart = null; }
+    if (modelChart)  { modelChart.destroy();  modelChart  = null; }
+    const filtered = filterRuns(usageData, period);
+    renderTokensChart(filtered);
+    renderModelChart(filtered);
+  }
+
+  function toggleTheme() {
+    setTheme(document.body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  }
+
+  document.getElementById('btn-theme').addEventListener('click', toggleTheme);
+
+  // Detect system preference on first load; default to dark
+  const prefersDark = !(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
+  document.body.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+  document.getElementById('btn-theme').textContent = prefersDark ? '☀️' : '🌙';
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Export CSV
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  document.getElementById('btn-export-csv').addEventListener('click', () => {
+    const filtered = filterRuns(usageData, period);
+
+    // Rebuild agent aggregation (same logic as renderAgentTable)
+    const agentMap = {};
+    for (const run of filtered) {
+      for (const task of (run.tasks || [])) {
+        if (!agentMap[task.agent]) {
+          agentMap[task.agent] = {
+            agent: task.agent, model: task.model,
+            tokens: 0, cost: 0, calls: 0, totalDuration: 0,
+          };
+        }
+        const r = agentMap[task.agent];
+        r.tokens += (task.estimatedInputTokens || 0) + (task.estimatedOutputTokens || 0);
+        r.cost   += task.estimatedCostUsd || 0;
+        r.calls  += 1;
+        r.totalDuration += task.durationMs || 0;
+      }
     }
 
-    connect();
+    const rows = Object.values(agentMap)
+      .sort((a, b) => b.tokens - a.tokens)
+      .map(r => ({
+        'Agent':             r.agent,
+        'Model':             r.model,
+        'Tokens (est.)':     r.tokens,
+        'Est. Cost (USD)':   r.cost.toFixed(4),
+        'Calls':             r.calls,
+        'Avg Duration (ms)': r.calls ? Math.round(r.totalDuration / r.calls) : 0,
+      }));
+
+    if (rows.length === 0) { alert('No data in the current period.'); return; }
+
+    const csv  = Papa.unparse(rows);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = 'roland-agents-' + period + '-' + new Date().toISOString().slice(0, 10) + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // ── Hotkey ─────────────────────────────────────────────────────────────────
+  hotkeys('d', () => toggleTheme());
   </script>
 </body>
 </html>

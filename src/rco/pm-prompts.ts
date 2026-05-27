@@ -76,7 +76,7 @@ ${ctx.goal}
 
 ---
 
-${ctx.projectMemory ? `## Project Memory\n\nThis project has been worked on before. Key context from prior runs:\n\n${ctx.projectMemory}\n\n---\n\n` : ''}## Current Blackboard State
+${ctx.projectMemory ? `## Project Memory\n\nThis project has been worked on before. The memory is organised into four sections — consult each one before planning:\n\n### Architecture Decisions\nEstablished tech choices and design patterns — don't contradict these without explicit justification.\n\n### Coding Standards\nFile layout, naming conventions, testing conventions — your engineers must follow these.\n\n### Past Mistakes\nThings that went wrong in previous runs — actively prevent each one in your task descriptions.\n\n### Preferences\nUser/team preferences — honour these when making trade-offs.\n\n${ctx.projectMemory}\n\n---\n\n` : ''}## Current Blackboard State
 
 ${capBlackboard(ctx.blackboardSnapshot)}
 
@@ -255,30 +255,41 @@ Architectural, design, and process decisions the team reached, with brief ration
 
 ## Memory Extract
 
-After completing the sections above, write this final section so Roland can remember what matters for next time.
-Keep it tight — 5–10 bullets max across three categories:
+After completing the sections above, write this final section so Roland can update its long-term project memory.
+Use **exactly** the four section headers below — this is machine-parsed. Keep it tight: 2–5 bullets per section, only what is new or changed this run. Omit a section entirely if you have nothing new for it.
 
-**Decisions:** Key architectural or design choices made this run (tech stack additions, patterns adopted, APIs chosen).
+**Architecture Decisions:**
+- Key architectural or tech-stack choices made this run (new frameworks, APIs, patterns adopted).
+- Only include decisions that will matter to future engineers working on this project.
 
-**Patterns:** File/naming/testing conventions established or followed — anything a new engineer needs to know to fit in.
+**Coding Standards:**
+- File layout, naming conventions, testing conventions that were established or confirmed this run.
+- Anything a new engineer must know to stay consistent with the codebase.
 
-**Avoid:** Specific pitfalls, wrong approaches that were tried, or constraints the PM must not violate on future runs.
+**Past Mistakes:**
+- Specific pitfalls encountered or prevented this run — concrete, actionable "never do X" bullets.
+- Include root cause where helpful so future engineers understand why.
 
-Example format:
+**Preferences:**
+- User or team preferences surfaced this run (tooling choices, style preferences, workflow preferences).
+- Only include if they differ from obvious defaults or were explicitly stated.
+
+Example format (use this structure exactly):
 \`\`\`
-**Decisions:**
+**Architecture Decisions:**
 - Uses Fastify (not Express) — chosen for plugin ecosystem and TypeScript support
-- Zod validates all request/response boundaries
+- Zod validates all request/response boundaries; no manual type coercion
 
-**Patterns:**
-- Routes live in src/routes/{domain}.ts; controllers in src/controllers/{domain}.ts
-- Integration tests use vitest + real DB (no mocks for DB layer)
+**Coding Standards:**
+- Routes in src/routes/{domain}.ts; controllers in src/controllers/{domain}.ts
+- Integration tests use vitest + real DB; no mocking of the DB layer
 
-**Avoid:**
-- Don't add raw SQL — ORM only (Drizzle)
-- Don't use \`any\` in TypeScript — strict mode is enforced
+**Past Mistakes:**
 - Never call req.destroy() before sending the HTTP response — send the error JSON first, then drain
-- Always include a unique jti claim (crypto.randomUUID()) in every JWT — omitting it makes rotation produce identical tokens
+- Always include a unique jti claim (crypto.randomUUID()) in every JWT access token
+
+**Preferences:**
+- TypeScript strict mode — never use \`any\`; use unknown + type guards instead
 \`\`\`
 
 ---
@@ -301,6 +312,78 @@ Tailor each step to what was actually built this run. Follow this order:
 
 Format: numbered list. Each item that includes a command must show it in a \`code block\`.
 `;
+}
+
+// ── Cursor chat interactive session prompt ────────────────────────────────────
+
+/**
+ * System prompt for interactive Cursor chat sessions where Roland acts as
+ * the Lead PM in-chat. Unlike the batch terminal mode, this variant:
+ *  - handles small tasks directly (file edits, explanations)
+ *  - delegates complex goals to the PM team via `roland_run_team`
+ *  - operates turn-by-turn with the user
+ *
+ * Used by the `.cursor/rules/roland.mdc` persona and exported for the
+ * `roland_hello` MCP tool to surface as part of its welcome payload.
+ */
+export function buildCursorSessionPMPrompt(): string {
+  return `# Roland — Interactive Cursor Session
+
+You are **Roland**, an AI-powered Lead PM and Engineering Manager operating inside Cursor chat.
+
+## Your Two Modes
+
+| Mode | When | Action |
+|------|------|--------|
+| **Direct** | Simple tasks: questions, 1–3 file edits, single-module bugs | Handle in chat using Cursor's file tools |
+| **PM Team** | Complex goals: new features, multi-file refactors, security audits, anything needing parallel specialists | Call \`roland_run_team({ goal })\` |
+
+## Decision Process
+
+1. **Call \`triage\`** with the user's message to assess complexity (skip for greetings/follow-ups)
+2. **If simple/medium** → act directly: read files, propose changes, edit
+3. **If complex** → ask the user:
+   > "This is a full-team job — architect + executor + test-author running in parallel. Want me to kick it off?"
+   Then call \`roland_run_team({ goal: "..." })\` when confirmed
+
+## Tracking Team Progress
+
+After launching a team run, check in with:
+- \`pm_standup()\` — board snapshot; blockers appear first
+- \`get_team_context()\` — full structured board state
+
+Resolve blockers immediately — they are your highest-priority action:
+\`\`\`
+unblock_task({ taskKey, blockerKey, resolution: "concrete decision here" })
+\`\`\`
+
+## Direct Editing Workflow
+
+1. Call \`read_context({ files: [...] })\` to load relevant code
+2. Propose the change in 3–5 bullets
+3. Edit files using Cursor's tools
+4. Summarise: what changed, why, any follow-up
+
+## PM Board Tools
+
+| Tool | Purpose |
+|------|---------|
+| \`roland_hello()\` | Welcome + project state snapshot |
+| \`roland_run_team({ goal })\` | Launch background PM team run |
+| \`pm_standup()\` | Board digest — blockers first, next actions |
+| \`get_team_context()\` | Full structured board |
+| \`spawn_task()\` | Add a task manually |
+| \`unblock_task()\` | Resolve a blocker |
+| \`complete_task()\` | Submit work |
+| \`synthesize_deliverable()\` | Final rollup when all tasks done |
+| \`start_team_recipe()\` | Instantiate: full-feature-team / bugfix-team / refactor-team |
+
+## Style
+
+- **Direct and PM-voiced**: "Starting Wave 1 — architect + executor in parallel."
+- **Proactive**: check \`pm_standup()\` before new work to surface any blockers
+- **Brief by default**: short replies unless detail is requested
+- **Always next-step**: never dead-end a response`;
 }
 
 // ── Wave review (PM control loop) ────────────────────────────────────────────

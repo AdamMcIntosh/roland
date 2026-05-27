@@ -37,6 +37,9 @@ import { parseWorkerSignals } from './worker-signals.js';
 import type { AgentYaml } from './types.js';
 import { AGENT_TIMEOUT_MS, AGENT_MAX_RETRIES, RETRY_BASE_DELAY, BLACKBOARD_RESULT_MAX_CHARS } from './constants.js';
 import { ProjectMemory } from './project-memory.js';
+import { buildTaskUsage, buildRunUsage, saveRunUsage } from './usage-tracker.js';
+import type { TaskUsageRecord } from './usage-tracker.js';
+import { HitlQueue } from './hitl.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -83,6 +86,17 @@ export interface TeamOrchestratorOptions {
   onTasksSpawned?: (tasks: TeamTask[]) => void;
   /** Fired just before the Lead PM begins the final synthesis. */
   onSynthesizing?: () => void;
+  /**
+   * Fired when an agent signals a BLOCKER.
+   * Receives: taskId, agent name, blocker description, current wave number.
+   * Use this to fire contextual notifications from the calling code.
+   */
+  onBlockerDetected?: (taskId: string, agent: string, description: string, waveNumber: number) => void;
+  /**
+   * HITL command queue. When provided, the orchestrator polls it at the start
+   * of each wave and acts on pause / resume / unblock / inject / replan / abort.
+   */
+  hitlQueue?: HitlQueue;
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -202,7 +216,13 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     goal, stateDir = '.roland', agentsDir: agentsDirOverride,
     onPlanReady, onWaveStart, onTaskStart, onTaskComplete, onWaveComplete,
     onWaveReview, onTasksSpawned, onSynthesizing,
+    onBlockerDetected, hitlQueue,
   } = opts;
+
+  // ── Usage tracking ────────────────────────────────────────────────────────
+  const runId    = Date.now().toString(36);
+  const runStart = Date.now();
+  const allTaskUsage: TaskUsageRecord[] = [];
 
   // ── Coordination layer ────────────────────────────────────────────────────
   console.error('[Team] Initializing coordination layer...');
@@ -229,7 +249,65 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   // ── Shared execution state ─────────────────────────────────────────────────
   const taskResults: Record<string, TeamTaskResult> = {};
   const completedIds = new Set<string>();
-  let totalBlockers = 0;
+  let totalBlockers    = 0;
+  let currentWaveNumber = 0; // tracks active wave for onBlockerDetected calls
+
+  // ── HITL processor ────────────────────────────────────────────────────────
+  // Called at the start of each wave. Returns true if the run should be aborted.
+  async function processHitl(): Promise<boolean> {
+    if (!hitlQueue) return false;
+
+    // If paused, block here until resumed or timed out
+    if (hitlQueue.isPaused()) {
+      const shouldAbort = await hitlQueue.waitForResume();
+      if (shouldAbort) return true;
+    }
+
+    const cmds = hitlQueue.drainAll();
+    for (const cmd of cmds) {
+      switch (cmd.cmd) {
+        case 'pause':
+          hitlQueue.setPaused(true);
+          if (await hitlQueue.waitForResume()) return true;
+          break;
+        case 'unblock': {
+          const target = cmd.taskId ?? '';
+          const msg    = cmd.message ?? 'Unblocked by human operator';
+          if (target) {
+            bus.send('human', target, 'Human Unblock', msg);
+            console.error(`[HITL] ↑ Unblocked ${target}: "${msg.slice(0, 80)}"`);
+          }
+          break;
+        }
+        case 'inject':
+          if (cmd.text) {
+            blackboard.post({
+              type: 'decision', title: 'Human Directive',
+              content: cmd.text, status: 'pending',
+              author: 'human', priority: 'high',
+              tags: ['hitl', 'human-directive'], relatedIds: [],
+            });
+            console.error(`[HITL] 💉 Injected: "${cmd.text.slice(0, 80)}"`);
+          }
+          break;
+        case 'replan':
+          blackboard.post({
+            type: 'decision', title: 'Replan Requested',
+            content: 'Human operator requested a replan. Re-evaluate all remaining tasks and adjust the plan as needed.',
+            status: 'pending', author: 'human', priority: 'critical',
+            tags: ['hitl', 'replan'], relatedIds: [],
+          });
+          console.error('[HITL] 🔄 Replan request posted — PM will see it on next wave review');
+          break;
+        case 'abort':
+          console.error('[HITL] 🛑 Abort received — stopping after current wave');
+          return true;
+        default:
+          break;
+      }
+    }
+    return false;
+  }
 
   // ── executeTask closure ────────────────────────────────────────────────────
   async function executeTask(task: TeamTask): Promise<WaveResult> {
@@ -272,8 +350,9 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     }
 
     onTaskStart?.(task.id, task.agent, task.title);
-
+    const taskCallStart = Date.now();
     const output = await callCursorAgent(task.agent, modelId, workerPrompt);
+    allTaskUsage.push(buildTaskUsage(task.id, task.title, task.agent, modelId, workerPrompt.length, output.length, Date.now() - taskCallStart));
 
     // ── Parse worker signals ───────────────────────────────────────────────
     const signals = parseWorkerSignals(output);
@@ -293,6 +372,8 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
           tags: ['blocker', task.id],
           relatedIds: [],
         });
+        // Fire blocker notification callback (wired to Notifier in team-cli.ts)
+        onBlockerDetected?.(task.id, task.agent, blocker.description, currentWaveNumber);
       }
     }
 
@@ -328,11 +409,10 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   // ── Phase 1: Lead PM planning ─────────────────────────────────────────────
   console.error('[Team] Phase 1: Lead PM planning...');
 
-  const planText = await callCursorAgent(
-    'Lead-PM',
-    'grok-4.3',
-    buildLeadPMPlanningPrompt({ goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined, projectMemory: memorySnapshot || undefined }),
-  );
+  const planningPrompt = buildLeadPMPlanningPrompt({ goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined, projectMemory: memorySnapshot || undefined });
+  const pmPlanStart = Date.now();
+  const planText = await callCursorAgent('Lead-PM', 'grok-4.3', planningPrompt);
+  allTaskUsage.push(buildTaskUsage('pm-planning', 'Lead PM: Planning', 'Lead-PM', 'grok-4.3', planningPrompt.length, planText.length, Date.now() - pmPlanStart));
 
   const rawPlan = extractJsonBlock(planText);
   const plan: TeamPlan = isTeamPlan(rawPlan) ? rawPlan : fallbackPlan(goal);
@@ -351,6 +431,13 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
 
   while (remaining.length > 0) {
     waveNumber++;
+    currentWaveNumber = waveNumber;
+
+    // ── HITL check ────────────────────────────────────────────────────────
+    if (await processHitl()) {
+      console.error(`[Team] HITL abort — stopping after wave ${waveNumber - 1}`);
+      break;
+    }
 
     const ready = remaining.filter((t) => t.dependsOn.every((d) => completedIds.has(d)));
     if (ready.length === 0) {
@@ -384,20 +471,19 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
       }
       onWaveReview?.(waveNumber);
 
-      const reviewText = await callCursorAgent(
-        'Lead-PM',
-        'grok-4.3',
-        buildLeadPMReviewPrompt({
-          goal,
-          waveNumber,
-          waveResults,
-          remainingTasks: remaining,
-          blackboardSnapshot: blackboard.snapshot(),
-          roster,
-          inboxMessages: bus.inboxSummary('Lead-PM') || undefined,
-          detectedBlockers: detectedBlockers.length > 0 ? detectedBlockers : undefined,
-        }),
-      );
+      const reviewPrompt = buildLeadPMReviewPrompt({
+        goal,
+        waveNumber,
+        waveResults,
+        remainingTasks: remaining,
+        blackboardSnapshot: blackboard.snapshot(),
+        roster,
+        inboxMessages: bus.inboxSummary('Lead-PM') || undefined,
+        detectedBlockers: detectedBlockers.length > 0 ? detectedBlockers : undefined,
+      });
+      const pmReviewStart = Date.now();
+      const reviewText = await callCursorAgent('Lead-PM', 'grok-4.3', reviewPrompt);
+      allTaskUsage.push(buildTaskUsage(`pm-review-${waveNumber}`, `Lead PM: Wave ${waveNumber} Review`, 'Lead-PM', 'grok-4.3', reviewPrompt.length, reviewText.length, Date.now() - pmReviewStart));
 
       const rawDecision = extractJsonBlock(reviewText);
       const decision: ReviewDecision = isReviewDecision(rawDecision)
@@ -441,21 +527,33 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   console.error('[Team] Phase 3: Lead PM synthesis...');
   onSynthesizing?.();
 
-  const synthesis = await callCursorAgent(
-    'Lead-PM',
-    'grok-4.3',
-    buildLeadPMSynthesisPrompt({ goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined, taskResults }),
-  );
+  const synthesisPrompt = buildLeadPMSynthesisPrompt({ goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined, taskResults });
+  const pmSynthStart = Date.now();
+  const synthesis = await callCursorAgent('Lead-PM', 'grok-4.3', synthesisPrompt);
+  allTaskUsage.push(buildTaskUsage('pm-synthesis', 'Lead PM: Synthesis', 'Lead-PM', 'grok-4.3', synthesisPrompt.length, synthesis.length, Date.now() - pmSynthStart));
   console.error('[Team] Synthesis complete');
 
   // ── Persist memory extract ────────────────────────────────────────────────
-  const runId = Date.now().toString(36);
   const appended = memory.extractAndAppend(synthesis, goal, runId);
   if (appended) {
     console.error('[Team] Project memory updated — .roland/memory.md');
   } else {
     console.error('[Team] No Memory Extract found in synthesis — memory unchanged');
   }
+
+  // ── Save usage record ─────────────────────────────────────────────────────
+  const runUsage = buildRunUsage({
+    runId, runStart, runEnd: Date.now(),
+    goal, wavesRun: waveNumber, blockersEncountered: totalBlockers,
+    tasks: allTaskUsage,
+  });
+  saveRunUsage(stateDir, runUsage);
+  console.error(
+    `[Team] Usage: ~${runUsage.totalTokens.toLocaleString()} est. tokens` +
+    ` | ~$${runUsage.totalCostUsd.toFixed(4)} est. cost` +
+    ` | ${runUsage.tasks.length} agent call(s)` +
+    ` | saved to ${stateDir}/usage-history.json`,
+  );
 
   const goalEntry = blackboard.read({ type: 'task', status: 'in_progress' }).find((e) => e.tags.includes('goal'));
   if (goalEntry) blackboard.patch(goalEntry.id, { status: 'done' });

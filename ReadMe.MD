@@ -100,6 +100,7 @@ roland status
 | `roland status` | Live TUI observer (run from a second terminal) |
 | `roland doctor` | Diagnose install, agents, recipes, permissions |
 | `roland pm-log` | Print the PM event timeline for the current project |
+| `npm run serve-dashboard` | Web dashboard — live status, usage & cost history (http://127.0.0.1:8081) |
 | `roland mcp-config` | Print / merge the Cursor MCP config entry |
 | `roland serve` | Start the MCP server (default with no subcommand) |
 | `roland --help` | Full flag reference |
@@ -152,6 +153,194 @@ roland pr 42 --notify
 | `--state-dir <dir>` | Persistence directory (default: `.roland`) |
 | `--quiet`, `-q` | Suppress progress; print synthesis to stdout only |
 | `--no-tui` | Scrolling log instead of the live dashboard |
+| `--simple-tui`, `--no-fancy` | ASCII-only scrolling output (mobile SSH, Termius, limited terminals) |
+
+---
+
+## 📊 Usage Dashboard
+
+A browser-based dashboard that serves as Roland's central hub — showing live job status during a run and historical usage, cost, and agent breakdown across all runs.
+
+```bash
+# From your project directory:
+npm run serve-dashboard
+# → http://127.0.0.1:8081
+```
+
+The dashboard auto-refreshes: live run status every 5 s, usage history every 30 s. It's useful at any time — not just during active runs.
+
+### What it shows
+
+| Section | Contents |
+|---------|----------|
+| **Overview cards** | Total runs · Est. cost · Tokens used · Active jobs — all filterable by Today / Week / Month / All Time |
+| **Live Status** | Current job goal, wave progress, per-task status (pending / running / done / blocked) with elapsed times |
+| **Recent Runs** | Last 10 runs — status icon, duration, cost, click to expand task list |
+| **Usage Trends** | Tokens + cost over time (line chart) and model distribution (doughnut) |
+| **Agent Breakdown** | Sortable table: every agent's token count, cost estimate, call count, and avg duration |
+
+### Pointing it at your project
+
+`npm run serve-dashboard` reads `.roland/` in the current directory. For a project in a different location:
+
+```bash
+node scripts/serve-dashboard.js --state-dir /path/to/project/.roland
+node scripts/serve-dashboard.js --state-dir /path/to/project/.roland --port 8082
+```
+
+### Backfilling existing projects
+
+Usage data is recorded automatically from the next `roland team` run onward. To create a synthetic entry from a previous run's `run-state.json`:
+
+```bash
+node scripts/backfill-usage.mjs --state-dir /path/to/project/.roland
+```
+
+### Demo data (trying it out without a real run)
+
+```bash
+node scripts/seed-usage-demo.mjs          # seeds 12 realistic demo runs into .roland/
+npm run serve-dashboard                   # open http://127.0.0.1:8081
+```
+
+> **Note:** Token counts and costs are **estimates** (input chars ÷ 4 ≈ tokens). Actual charges depend on your Cursor API tier and are not exposed by the SDK.
+
+---
+
+## 💬 Using Roland in Cursor Chat
+
+Roland is a registered MCP server — once connected, it appears in Cursor as a set of powerful tools **and** as a first-class chat persona. Type naturally and Roland triages your request, handles small tasks directly, or spins up the full PM team for complex goals.
+
+### 1 · Connect Roland to Cursor
+
+```bash
+# In the roland repo directory:
+roland mcp-config --write    # merges entry into ~/.cursor/mcp.json
+
+# Then restart Cursor.
+# Verify it's live: open Cursor chat and type:
+# @roland hello
+```
+
+> The `mcp-config` command writes a single entry to `~/.cursor/mcp.json`:
+> ```json
+> { "mcpServers": { "roland": { "command": "node", "args": ["dist/index.js"] } } }
+> ```
+> If you installed globally (`npm link`), you can also use `"command": "roland", "args": ["serve"]`.
+
+---
+
+### 2 · Activate the Roland chat persona
+
+Roland ships a Cursor Rules file that turns your chat session into an interactive PM session:
+
+1. Open **Cursor Settings** → **Rules** → **Project Rules**
+2. You will see the `roland` rule listed (from `.cursor/rules/roland.mdc` in this repo)
+3. Enable it — or attach it to a conversation via the 📎 **rules** button in the chat toolbar
+
+Once active, every chat message is triaged through Roland:
+- **Small tasks** are handled directly in chat (file edits, explanations, quick fixes)
+- **Complex goals** trigger an offer to run the full PM team
+
+---
+
+### 3 · Talk to Roland
+
+```
+# Start a session — Roland greets you with project state:
+@roland hello
+
+# Small task — Roland edits directly:
+@roland why does the login endpoint return 401 intermittently?
+
+# Complex goal — Roland offers to launch the team:
+@roland add complete OAuth2 support with GitHub and Google providers
+
+# Check team progress:
+@roland what's the status?
+
+# Launch a standard recipe workflow:
+start_team_recipe({ "recipe": "bugfix-team", "goal": "fix memory leak in WebSocket handler" })
+```
+
+---
+
+### 4 · Roland's tools in Cursor chat
+
+These MCP tools are available directly in the Cursor chat tool palette:
+
+| Tool | Description |
+|------|-------------|
+| `roland_hello` | Welcome message + current project state |
+| `roland_run_team` | Launch a background PM team run for a complex goal |
+| `pm_standup` | Board snapshot — blockers first, then suggested actions |
+| `get_team_context` | Full structured board state |
+| `spawn_task` | Add a task to the board manually |
+| `unblock_task` | Resolve a blocker with a concrete decision |
+| `synthesize_deliverable` | Roll up all completed work into a final summary |
+| `start_team_recipe` | Instantiate: `full-feature-team` · `bugfix-team` · `refactor-team` |
+| `triage` | Route any message to the best agent persona |
+
+---
+
+### 5 · Example conversation
+
+```
+You:    @roland add pagination to the users API endpoint
+
+Roland: [triages → medium complexity]
+        Focused implementation — I'll handle this directly. Reading the users route…
+
+        [reads src/routes/users.ts, src/controllers/users.ts]
+
+        Plan:
+        1. Add `?limit=20&cursor=<id>` query params to GET /users
+        2. Return `{ data: User[], nextCursor: string | null }` shape
+        3. Update the OpenAPI spec
+        4. Add tests for edge cases (empty result, last page)
+
+        Making changes now…
+        [edits files]
+
+        ✅ Done. Cursor-based pagination added to GET /users.
+        Run `npm test` to confirm — tests added in test/routes/users.test.ts.
+```
+
+```
+You:    @roland build a full multi-tenant billing system with Stripe
+
+Roland: [triages → complex]
+        That's a full-team job — architect (schema design), executor (Stripe
+        integration + webhooks), test-author (coverage), security-reviewer (PCI
+        surface). Estimated 3 waves, ~25 min. Kick it off?
+
+You:    yes
+
+Roland: [calls roland_run_team({ goal: "multi-tenant billing with Stripe — subscriptions,
+        usage-based pricing, webhook handling, and PCI-compliant card storage" })]
+
+        ✅ Team started (PID 48291). Wave 1 planning now.
+        Call pm_standup() any time for live status, or run `roland status` in your terminal.
+```
+
+---
+
+### 6 · Per-project MCP config (optional)
+
+For projects that always use Roland, commit a `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "roland": {
+      "command": "node",
+      "args": ["/absolute/path/to/roland/dist/index.js"]
+    }
+  }
+}
+```
+
+This auto-connects Roland for every team member who opens the project in Cursor — no manual setup required.
 
 ---
 
@@ -163,6 +352,7 @@ roland pr 42 --notify
 |----------|---------|-------------|
 | `CURSOR_API_KEY` | _(required)_ | API key for agent execution |
 | `ROLAND_NOTIFY` | `0` | Set to `1` to enable notifications for all commands |
+| `ROLAND_SIMPLE_TUI` | `0` | Set to `1` for ASCII-only output — mobile SSH, Termius, limited terminals |
 | `ROLAND_AGENT_TIMEOUT_MS` | `1500000` (25 min) | Per-agent hard timeout |
 | `ROLAND_AGENT_RETRIES` | `2` | Max retries before a synthetic BLOCKER is raised |
 
@@ -194,8 +384,9 @@ All state is stored in `.roland/` inside your project:
 |------|----------|
 | `memory.md` | Cross-run knowledge — tech stack, patterns, things to avoid |
 | `blackboard.json` | Shared task context — results, blockers, inter-agent messages |
-| `run-state.json` | Live run state (read by `roland status`) |
+| `run-state.json` | Live run state (read by `roland status` and the web dashboard) |
 | `messages.json` | Agent-to-agent message bus |
+| `usage-history.json` | Per-run token and cost estimates — grows automatically with every run |
 
 Roland reads `memory.md` at the start of every run and updates it after synthesis. The more you use Roland on a project, the better it knows it.
 
@@ -264,6 +455,17 @@ After a few runs, Roland knows your stack, naming conventions, and past decision
 The live dashboard only works in interactive terminals.
 ```bash
 roland team "run the full review suite" --no-tui --quiet >> review.md
+```
+
+**On mobile SSH or Termius? Use simple mode.**
+The fancy TUI uses alternate-screen buffer codes that some SSH clients mishandle, producing garbage like `^[[A[[A`. Simple mode scrolls cleanly on any terminal.
+```bash
+# Set once in your shell profile (applies to every command):
+export ROLAND_SIMPLE_TUI=1
+
+# Or per-run:
+roland team "goal" --simple-tui
+roland status --simple-tui
 ```
 
 **Pair `roland watch` with `--once` for pre-push hooks.**

@@ -77,6 +77,7 @@ roland status
 | Get a desktop notification | `--notify` |
 | Get a phone notification (ntfy.sh) | `--webhook https://ntfy.sh/your-topic` |
 | Use in CI / pipe output | `--no-tui --quiet` |
+| Use on mobile SSH / Termius | `--simple-tui` |
 | See agent output as it streams | `--stream` |
 | Watch file changes instead of git | `--pattern "src/**/*.ts"` |
 | Run watch once and exit | `--once` |
@@ -91,9 +92,11 @@ roland status
 # ~/.zshrc  or  ~/.bashrc  or  PowerShell $PROFILE
 export CURSOR_API_KEY=your_key_here
 export ROLAND_NOTIFY=1          # desktop notification on every run
+export ROLAND_SIMPLE_TUI=1      # add this if you SSH from a phone or use Termius
 ```
 
-With `ROLAND_NOTIFY=1` set, you never need `--notify` again.
+With `ROLAND_NOTIFY=1` set, you never need `--notify` again.  
+With `ROLAND_SIMPLE_TUI=1` set, the TUI auto-degrades to clean ASCII output everywhere.
 
 ---
 
@@ -161,11 +164,88 @@ rm .roland/memory.md
 │                             │  │                            │
 │  roland "build the feature" │  │  roland status             │
 │                             │  │                            │
-│  (PM plans, agents run)     │  │  (live dashboard: wave     │
-│                             │  │   progress, task status,   │
-│                             │  │   agent activity)          │
+│  (PM plans, agents run)     │  │  (live TUI: wave progress, │
+│                             │  │   task status, blockers)   │
 └─────────────────────────────┘  └────────────────────────────┘
 ```
+
+**On mobile SSH or Termius?** Use `--simple-tui` (or set `ROLAND_SIMPLE_TUI=1` in your profile) to avoid garbled output from alternate-screen buffer codes:
+
+```bash
+# Terminal 1 (Termius / SSH)
+roland "build the feature" --simple-tui
+
+# Terminal 2 (Termius / SSH)
+roland status --simple-tui
+```
+
+For a richer view, open the **web dashboard** instead of (or alongside) `roland status`:
+
+```bash
+# Terminal 2 — start the web dashboard
+npm run serve-dashboard
+# → http://127.0.0.1:8081
+```
+
+The browser dashboard shows the same live progress as `roland status`, plus historical usage and cost data across all your past runs.
+
+---
+
+## 📊 Web Dashboard
+
+The dashboard is Roland's central hub — available at any time, not just during active runs.
+
+```bash
+# Start from your project root:
+npm run serve-dashboard
+
+# Point at a different project:
+node scripts/serve-dashboard.js --state-dir /path/to/project/.roland
+```
+
+Open **http://127.0.0.1:8081** in your browser.
+
+### What you'll see
+
+```
+Roland  ● 1 job running                        Today  Week  Month  All Time
+
+  12 Runs      $4.21 Est.    642K Tokens    1 Active
+  ──────────── ──────────── ─────────────  ──────────
+
+  LIVE STATUS
+  ● Running: "Add JWT refresh token rotation..."   Wave 2 · 3/6 tasks
+  ✓ architect     Design auth architecture         40s
+  ✓ executor      Implement JWT service            31s
+  ● test-author   Write unit tests                 12s…
+  ◌ test-executor Pending
+  ◌ writer        Pending
+
+  RECENT RUNS
+  14:32  ✅  Refactor user service — clean arch    6w·7t  $0.81  6m 37s
+  12:15  ✅  Add JWT refresh token rotation        2w·7t  $0.41  4m 12s
+
+  USAGE TRENDS          TOKEN DISTRIBUTION BY MODEL
+  [line chart]          [doughnut: composer-2.5 / grok-4.3]
+
+  AGENT & MODEL BREAKDOWN
+  executor    composer-2.5   45.2K   $0.18   4   31s avg
+  test-author composer-2.5   28.1K   $0.11   2   38s avg
+  Lead-PM     grok-4.3       29.8K   $0.09   3   18s avg
+```
+
+### Keyboard shortcut
+- `d` — toggle dark / light mode
+
+### First run on an existing project
+
+Usage data is written automatically from your next run. To populate the dashboard from a previous run:
+
+```bash
+node scripts/backfill-usage.mjs --state-dir .roland
+```
+
+> Token counts and costs are estimates (chars ÷ 4). Actual Cursor API charges are not exposed by the SDK.
 
 ---
 
@@ -210,6 +290,22 @@ roland --help                   # flag reference
 roland pm-log                   # PM reasoning timeline
 cat .roland/memory.md           # what Roland knows about this project
 ```
+
+**Garbled output / `^[[A[[A[[A` on SSH or Termius?**
+
+The fancy TUI uses alternate-screen buffer codes that some SSH clients mishandle.
+Switch to simple mode — it scrolls cleanly on any terminal:
+```bash
+# Per-run:
+roland team "goal" --simple-tui
+roland status --simple-tui
+
+# Permanent (add to ~/.zshrc / ~/.bashrc / PowerShell $PROFILE):
+export ROLAND_SIMPLE_TUI=1
+```
+Roland also auto-detects SSH sessions without declared truecolor support and
+falls back to simple mode automatically. If auto-detection doesn't fire, set
+`ROLAND_SIMPLE_TUI=1` explicitly.
 
 **Agents not found?**
 ```bash
