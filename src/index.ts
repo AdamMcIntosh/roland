@@ -235,7 +235,7 @@ function printHelp(): void {
 
 const KNOWN_CMDS = new Set([
   'serve', 'mcp-config', 'doctor', 'pm-log',
-  'team', 'run', 'status', 'watch', 'pr',
+  'team', 'run', 'goal', 'start', 'status', 'watch', 'pr',
   // HITL controls
   'pause', 'resume', 'unblock', 'inject', 'replan', 'abort', 'hitl-status',
   // Background supervisor
@@ -308,8 +308,10 @@ async function main(): Promise<void> {
         await runTeamCli(['team', ...rest]);
         break;
       }
-      case 'run': {
-        // 'roland run "goal"' is an alias for 'roland team "goal"'.
+      case 'run':
+      case 'goal':
+      case 'start': {
+        // 'roland run/goal/start "goal"' are aliases for 'roland team "goal"'.
         // '--detach' is accepted alongside '--background' by runTeamCli.
         const { runTeamCli } = await import('./rco/team-cli.js');
         await runTeamCli(['team', ...rest]);
