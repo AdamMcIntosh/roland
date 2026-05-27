@@ -38,9 +38,25 @@ function sendResult(result: WorkerOutput): void {
 }
 
 
+// ── Network-error helpers (mirrors team-orchestrator.ts) ─────────────────────
+// Kept local so agentWorker.ts stays self-contained as a child-process entry
+// point (no shared state with the orchestrator).
+
+const WORKER_NETWORK_PATTERNS = [
+  'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND',
+  'ConnectError', 'connect error', 'socket hang up',
+  'network error', 'aborted',
+];
+
+const WORKER_RETRY_DELAYS = [2_000, 8_000, 15_000];
+
+function isWorkerNetworkError(err: Error): boolean {
+  const msg = err.message.toLowerCase();
+  return WORKER_NETWORK_PATTERNS.some((p) => msg.includes(p.toLowerCase()));
+}
+
 /**
- * Production path: create a real @cursor/sdk Agent, send the prompt, and
- * return the result wrapped in the JSON envelope the rest of the worker expects.
+ * Single SDK call — no retry.  Retry logic lives in the wrapper below.
  */
 async function getResponseViaCursorSDK(prompt: string, agentName: string, model: string): Promise<string> {
   const apiKey = process.env.CURSOR_API_KEY;
@@ -64,6 +80,45 @@ async function getResponseViaCursorSDK(prompt: string, agentName: string, model:
   }
 
   return JSON.stringify({ output: runResult.result ?? '', success: true });
+}
+
+/**
+ * Resilient wrapper around getResponseViaCursorSDK.
+ *
+ * Network / connection errors use the faster WORKER_RETRY_DELAYS schedule
+ * (2 s → 8 s → 15 s). Other errors use a simple doubling back-off (5 s → 10 s).
+ * Max 3 total attempts. Throws on final failure so the caller can surface a
+ * clean error envelope.
+ */
+async function getResponseViaCursorSDKWithRetry(prompt: string, agentName: string, model: string): Promise<string> {
+  const maxAttempts = 3;
+  let lastErr: Error = new Error('unknown');
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await getResponseViaCursorSDK(prompt, agentName, model);
+    } catch (err) {
+      lastErr = err instanceof Error ? err : new Error(String(err));
+
+      if (attempt >= maxAttempts) break;
+
+      const netError = isWorkerNetworkError(lastErr);
+      const delay = netError
+        ? (WORKER_RETRY_DELAYS[attempt - 1] ?? WORKER_RETRY_DELAYS[WORKER_RETRY_DELAYS.length - 1])
+        : 5_000 * attempt;
+
+      log(
+        'cursor-sdk',
+        netError
+          ? `Cursor API temporarily unavailable (${lastErr.message.slice(0, 80).trim()}) — retrying in ${delay / 1000}s (attempt ${attempt}/${maxAttempts})`
+          : `Attempt ${attempt} failed: ${lastErr.message.slice(0, 80)} — retrying in ${delay / 1000}s`,
+      );
+
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+
+  throw lastErr;
 }
 
 async function runAsync(input: unknown): Promise<void> {
@@ -94,9 +149,9 @@ async function runAsync(input: unknown): Promise<void> {
 
   let rawResponse: string;
   if (process.env.CURSOR_API_KEY) {
-    // Production: real Cursor SDK agent
+    // Production: real Cursor SDK agent (with network-aware retry)
     try {
-      rawResponse = await getResponseViaCursorSDK(prompt, agentName, model);
+      rawResponse = await getResponseViaCursorSDKWithRetry(prompt, agentName, model);
       log('cursor-sdk', `Agent "${agentName}" completed`);
     } catch (err) {
       log('cursor-sdk', `Failed: ${(err as Error).message}`);

@@ -35,7 +35,11 @@ import { loadAllAgents, resolveAgentsDir } from './loadConfig.js';
 import { toCursorModelId } from './model-routing.js';
 import { parseWorkerSignals } from './worker-signals.js';
 import type { AgentYaml } from './types.js';
-import { AGENT_TIMEOUT_MS, AGENT_MAX_RETRIES, RETRY_BASE_DELAY, BLACKBOARD_RESULT_MAX_CHARS } from './constants.js';
+import {
+  AGENT_TIMEOUT_MS, AGENT_MAX_RETRIES, RETRY_BASE_DELAY,
+  NETWORK_RETRY_DELAYS, NETWORK_ERROR_PATTERNS,
+  BLACKBOARD_RESULT_MAX_CHARS,
+} from './constants.js';
 import { ProjectMemory } from './project-memory.js';
 import {
   buildRetrospectivePrompt,
@@ -156,6 +160,18 @@ function fallbackPlan(goal: string): TeamPlan {
 // returns a synthetic BLOCKER string so the PM can handle it in the next wave review
 // instead of crashing the entire orchestration.
 
+/**
+ * Returns true when the error looks like a transient network / connection issue.
+ * These get a faster retry schedule (NETWORK_RETRY_DELAYS) and a more
+ * user-friendly message than generic SDK failures.
+ */
+function isNetworkError(err: Error): boolean {
+  const msg = err.message;
+  return NETWORK_ERROR_PATTERNS.some((p) =>
+    msg.toLowerCase().includes(p.toLowerCase()),
+  );
+}
+
 /** Single attempt: one SDK call with a hard timeout and a 60 s heartbeat. */
 async function callCursorAgentOnce(agentName: string, modelId: string, prompt: string): Promise<string> {
   const apiKey = process.env.CURSOR_API_KEY;
@@ -203,37 +219,75 @@ async function callCursorAgentOnce(agentName: string, modelId: string, prompt: s
 
 /**
  * Resilient wrapper: retries transient failures with exponential back-off.
+ *
+ * Network / connection errors (ECONNRESET, ConnectError, aborted…) are
+ * detected by isNetworkError() and retried on the faster NETWORK_RETRY_DELAYS
+ * schedule (2 s → 8 s → 15 s). All other errors use the generic
+ * RETRY_BASE_DELAY doubling schedule.
+ *
  * If all attempts fail, returns a synthetic BLOCKER signal so the PM can
  * handle the failure gracefully rather than crashing the orchestration.
+ * The BLOCKER message includes a resume hint when the root cause is a
+ * connection error so the user knows partial progress was saved.
  */
 async function callCursorAgent(agentName: string, modelId: string, prompt: string): Promise<string> {
   let lastErr: Error = new Error('unknown');
+  const maxAttempts = AGENT_MAX_RETRIES + 1;
 
-  for (let attempt = 1; attempt <= AGENT_MAX_RETRIES + 1; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       return await callCursorAgentOnce(agentName, modelId, prompt);
     } catch (err) {
       lastErr = err instanceof Error ? err : new Error(String(err));
-      if (attempt <= AGENT_MAX_RETRIES) {
-        const delay = RETRY_BASE_DELAY * attempt;
+
+      if (attempt >= maxAttempts) break;
+
+      const netError = isNetworkError(lastErr);
+      const delay = netError
+        ? (NETWORK_RETRY_DELAYS[attempt - 1] ?? NETWORK_RETRY_DELAYS[NETWORK_RETRY_DELAYS.length - 1])
+        : RETRY_BASE_DELAY * attempt;
+
+      if (netError) {
+        console.error(
+          `[Team]   🌐 ${agentName} — Cursor API temporarily unavailable` +
+          ` (${lastErr.message.slice(0, 80).trim()}), retrying in ${delay / 1000}s…` +
+          ` (attempt ${attempt}/${maxAttempts})`,
+        );
+      } else {
         console.error(
           `[Team]   ⚠️  ${agentName} attempt ${attempt} failed: ${lastErr.message.slice(0, 100)}` +
           ` — retrying in ${delay / 1000}s`,
         );
-        await new Promise((r) => setTimeout(r, delay));
       }
+
+      await new Promise((r) => setTimeout(r, delay));
     }
   }
 
   // All retries exhausted — surface as a blocker instead of crashing.
-  console.error(`[Team]   💀 ${agentName} failed after ${AGENT_MAX_RETRIES + 1} attempts: ${lastErr.message.slice(0, 120)}`);
-  return [
+  const netError = isNetworkError(lastErr);
+  const errSummary = lastErr.message.slice(0, 120);
+
+  console.error(
+    `[Team]   💀 ${agentName} failed after ${maxAttempts} attempts` +
+    (netError ? ' (connection error)' : '') +
+    `: ${errSummary}`,
+  );
+
+  const lines = [
     '## 🚨 BLOCKER',
-    `**Description:** Agent "${agentName}" failed to respond after ${AGENT_MAX_RETRIES + 1} attempts.`,
-    `Last error: ${lastErr.message}`,
+    `**Description:** Agent "${agentName}" failed to respond after ${maxAttempts} attempts.`,
+    netError
+      ? `Connection error: ${errSummary}\nThis appears to be a transient Cursor API issue. Partial progress has been saved to the project state.`
+      : `Last error: ${errSummary}`,
+    netError
+      ? 'Use `roland resume` (CLI) or `/resume` (chat) to continue once connectivity is restored.'
+      : '',
     '**Needs from:** lead-pm',
     '**Impact:** This task produced no output and must be retried or re-scoped by the PM.',
-  ].join('\n');
+  ].filter(Boolean);
+
+  return lines.join('\n');
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────

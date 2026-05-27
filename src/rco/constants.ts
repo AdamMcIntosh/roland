@@ -30,8 +30,43 @@ export const AGENT_MAX_RETRIES = Number(process.env.ROLAND_AGENT_RETRIES) || 2;
 /**
  * Base delay before the first retry (ms). Doubles on each subsequent attempt.
  * Retry 1 → 5 s, Retry 2 → 10 s.
+ *
+ * Only used for non-network errors. Transient connection errors use
+ * NETWORK_RETRY_DELAYS instead, which starts faster.
  */
 export const RETRY_BASE_DELAY = 5_000;
+
+/**
+ * Retry delays (ms) specifically for transient network / connection errors.
+ * Sequence: 2 s → 8 s → 15 s.
+ *
+ * Network errors (ECONNRESET, ConnectError, etc.) almost always resolve
+ * within seconds; a 5 s initial delay is unnecessarily slow. The three
+ * entries map to attempts 1, 2, and 3 respectively. If AGENT_MAX_RETRIES
+ * is raised above 2 the final entry is reused for all additional attempts.
+ */
+export const NETWORK_RETRY_DELAYS: readonly number[] = [2_000, 8_000, 15_000];
+
+/**
+ * Substrings that identify a transient network / connection error.
+ * Matched case-insensitively against err.message.
+ *
+ * Covers Node.js socket errors, Buf Connect-protocol errors from the
+ * @cursor/sdk, and common HTTP-client abort messages.
+ */
+export const NETWORK_ERROR_PATTERNS: readonly string[] = [
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'ETIMEDOUT',
+  'ENOTFOUND',
+  'ConnectError',
+  'connect error',
+  'socket hang up',
+  'network error',
+  'aborted',
+  'read ECONNRESET',
+  'write ECONNRESET',
+];
 
 // ── Blackboard ────────────────────────────────────────────────────────────────
 
