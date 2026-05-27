@@ -23,49 +23,83 @@ export const AGENT_TIMEOUT_MS = Number(process.env.ROLAND_AGENT_TIMEOUT_MS) || 2
 
 /**
  * Maximum retries on transient SDK errors before returning a synthetic BLOCKER.
- * Override: ROLAND_AGENT_RETRIES=0  (disable retries)
+ * Default: 4 → 5 total attempts (1 initial + 4 retries).
+ *
+ * Override: ROLAND_AGENT_RETRIES=0  (disable retries, 1 attempt only)
+ *           ROLAND_AGENT_RETRIES=2  (3 total, original behaviour)
  */
-export const AGENT_MAX_RETRIES = Number(process.env.ROLAND_AGENT_RETRIES) || 2;
+export const AGENT_MAX_RETRIES = Number(process.env.ROLAND_AGENT_RETRIES) || 4;
 
 /**
- * Base delay before the first retry (ms). Doubles on each subsequent attempt.
- * Retry 1 → 5 s, Retry 2 → 10 s.
- *
- * Only used for non-network errors. Transient connection errors use
- * NETWORK_RETRY_DELAYS instead, which starts faster.
+ * Base delay before the first retry (ms) for non-network errors.
+ * Kept for backward compatibility; prefer GENERIC_RETRY_DELAYS for new code.
  */
 export const RETRY_BASE_DELAY = 5_000;
 
 /**
- * Retry delays (ms) specifically for transient network / connection errors.
- * Sequence: 2 s → 8 s → 15 s.
+ * Retry delays (ms) for transient network / connection errors.
+ * Sequence: 2 s → 5 s → 10 s → 20 s → 30 s.
  *
- * Network errors (ECONNRESET, ConnectError, etc.) almost always resolve
- * within seconds; a 5 s initial delay is unnecessarily slow. The three
- * entries map to attempts 1, 2, and 3 respectively. If AGENT_MAX_RETRIES
- * is raised above 2 the final entry is reused for all additional attempts.
+ * Network errors (ECONNRESET, ConnectError, etc.) are usually transient and
+ * resolve quickly; starting at 2 s catches most recoveries in the first retry.
+ * Entries map 1-to-1 to retry attempts. The final entry is reused if
+ * AGENT_MAX_RETRIES exceeds the array length.
  */
-export const NETWORK_RETRY_DELAYS: readonly number[] = [2_000, 8_000, 15_000];
+export const NETWORK_RETRY_DELAYS: readonly number[] = [2_000, 5_000, 10_000, 20_000, 30_000];
+
+/**
+ * Retry delays (ms) for generic (non-network) SDK errors.
+ * Sequence: 5 s → 10 s → 20 s → 30 s → 45 s.
+ *
+ * Slower than NETWORK_RETRY_DELAYS because non-network errors (SDK internal
+ * errors, model errors) are less likely to resolve immediately and benefit
+ * from giving the service more recovery time.
+ */
+export const GENERIC_RETRY_DELAYS: readonly number[] = [5_000, 10_000, 20_000, 30_000, 45_000];
+
+/**
+ * Maximum number of agent calls allowed to run concurrently across all waves.
+ *
+ * Large parallel waves (e.g. 10+ tasks) overwhelm the Cursor API and cause
+ * connection resets. Throttling to 6 slots means tasks queue behind a
+ * semaphore rather than all opening sockets at once.
+ *
+ * Override: ROLAND_MAX_CONCURRENT=4   (aggressive throttle, slow machines)
+ *           ROLAND_MAX_CONCURRENT=12  (higher throughput, fast/stable connections)
+ */
+export const MAX_CONCURRENT_AGENTS = Number(process.env.ROLAND_MAX_CONCURRENT) || 6;
 
 /**
  * Substrings that identify a transient network / connection error.
  * Matched case-insensitively against err.message.
  *
- * Covers Node.js socket errors, Buf Connect-protocol errors from the
- * @cursor/sdk, and common HTTP-client abort messages.
+ * Covers:
+ *  - Node.js socket errors (ECONNRESET, ECONNREFUSED, ETIMEDOUT, ENOTFOUND)
+ *  - Buf Connect-protocol errors from the @cursor/sdk (ConnectError)
+ *  - Undici / fetch abort and timeout messages
+ *  - Proxy and load-balancer disconnect signals
  */
 export const NETWORK_ERROR_PATTERNS: readonly string[] = [
   'ECONNRESET',
   'ECONNREFUSED',
   'ETIMEDOUT',
   'ENOTFOUND',
+  'EPIPE',
+  'ENETUNREACH',
+  'EHOSTUNREACH',
   'ConnectError',
   'connect error',
+  'connection reset',
+  'connection refused',
+  'connection closed',
   'socket hang up',
   'network error',
+  'fetch failed',
   'aborted',
   'read ECONNRESET',
   'write ECONNRESET',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_SOCKET',
 ];
 
 // ── Blackboard ────────────────────────────────────────────────────────────────

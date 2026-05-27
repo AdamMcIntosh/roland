@@ -1,22 +1,25 @@
 /**
  * Retry-resilience smoke test.
  *
- * Verifies that:
- *  1. isNetworkError() correctly classifies ECONNRESET / ConnectError / aborted
- *     as network errors, and generic errors as non-network.
- *  2. NETWORK_RETRY_DELAYS has 3 entries with the expected 2s → 8s → 15s schedule.
- *  3. NETWORK_ERROR_PATTERNS covers all required substrings.
- *  4. The callCursorAgent retry logic (simulated) uses the faster schedule for
- *     network errors and the doubling schedule for generic errors.
+ * Verifies:
+ *  1. NETWORK_RETRY_DELAYS  — 5-entry schedule: 2s → 5s → 10s → 20s → 30s
+ *  2. GENERIC_RETRY_DELAYS  — 5-entry schedule: 5s → 10s → 20s → 30s → 45s
+ *  3. MAX_CONCURRENT_AGENTS — default 6
+ *  4. NETWORK_ERROR_PATTERNS — covers all required error strings (10 positive, 5 negative)
+ *  5. Retry delay selection — correct table chosen per error type
+ *  6. Total attempt count   — AGENT_MAX_RETRIES=4 → 5 total attempts
+ *  7. Synthetic BLOCKER message — network vs generic content differences
+ *  8. runConcurrent throttle — verifies at most N tasks run at once
  *
  * Runs entirely in-memory — no SDK calls, no file I/O.
  */
 
 import {
   NETWORK_RETRY_DELAYS,
+  GENERIC_RETRY_DELAYS,
   NETWORK_ERROR_PATTERNS,
-  RETRY_BASE_DELAY,
   AGENT_MAX_RETRIES,
+  MAX_CONCURRENT_AGENTS,
 } from '../dist/rco/constants.js';
 
 let passed = 0;
@@ -40,27 +43,54 @@ function isNetworkError(err) {
   );
 }
 
-// ── Test 1: NETWORK_RETRY_DELAYS schedule ────────────────────────────────────
-console.log('\n\x1b[1mTest 1: NETWORK_RETRY_DELAYS schedule\x1b[0m');
-assert('Has 3 entries',               NETWORK_RETRY_DELAYS.length === 3,           `got ${NETWORK_RETRY_DELAYS.length}`);
-assert('Attempt 1 delay = 2 s',       NETWORK_RETRY_DELAYS[0] === 2_000,           `got ${NETWORK_RETRY_DELAYS[0]}`);
-assert('Attempt 2 delay = 8 s',       NETWORK_RETRY_DELAYS[1] === 8_000,           `got ${NETWORK_RETRY_DELAYS[1]}`);
-assert('Attempt 3 delay = 15 s',      NETWORK_RETRY_DELAYS[2] === 15_000,          `got ${NETWORK_RETRY_DELAYS[2]}`);
-assert('Faster than RETRY_BASE_DELAY (5 s)', NETWORK_RETRY_DELAYS[0] < RETRY_BASE_DELAY, `${NETWORK_RETRY_DELAYS[0]} vs ${RETRY_BASE_DELAY}`);
+// ── Helper: mirrors the delay selection in callCursorAgent
+function retryDelay(attempt, netError) {
+  const delayTable = netError ? NETWORK_RETRY_DELAYS : GENERIC_RETRY_DELAYS;
+  return delayTable[attempt - 1] ?? delayTable[delayTable.length - 1];
+}
 
-// ── Test 2: isNetworkError classification ────────────────────────────────────
-console.log('\n\x1b[1mTest 2: isNetworkError() classification\x1b[0m');
+// ── Test 1: NETWORK_RETRY_DELAYS schedule ────────────────────────────────────
+console.log('\n\x1b[1mTest 1: NETWORK_RETRY_DELAYS schedule (2s → 5s → 10s → 20s → 30s)\x1b[0m');
+assert('Has 5 entries',          NETWORK_RETRY_DELAYS.length === 5,   `got ${NETWORK_RETRY_DELAYS.length}`);
+assert('Attempt 1 → 2 s',        NETWORK_RETRY_DELAYS[0] === 2_000,   `got ${NETWORK_RETRY_DELAYS[0]}`);
+assert('Attempt 2 → 5 s',        NETWORK_RETRY_DELAYS[1] === 5_000,   `got ${NETWORK_RETRY_DELAYS[1]}`);
+assert('Attempt 3 → 10 s',       NETWORK_RETRY_DELAYS[2] === 10_000,  `got ${NETWORK_RETRY_DELAYS[2]}`);
+assert('Attempt 4 → 20 s',       NETWORK_RETRY_DELAYS[3] === 20_000,  `got ${NETWORK_RETRY_DELAYS[3]}`);
+assert('Attempt 5 → 30 s',       NETWORK_RETRY_DELAYS[4] === 30_000,  `got ${NETWORK_RETRY_DELAYS[4]}`);
+
+// ── Test 2: GENERIC_RETRY_DELAYS schedule ────────────────────────────────────
+console.log('\n\x1b[1mTest 2: GENERIC_RETRY_DELAYS schedule (5s → 10s → 20s → 30s → 45s)\x1b[0m');
+assert('Has 5 entries',          GENERIC_RETRY_DELAYS.length === 5,   `got ${GENERIC_RETRY_DELAYS.length}`);
+assert('Attempt 1 → 5 s',        GENERIC_RETRY_DELAYS[0] === 5_000,   `got ${GENERIC_RETRY_DELAYS[0]}`);
+assert('Attempt 2 → 10 s',       GENERIC_RETRY_DELAYS[1] === 10_000,  `got ${GENERIC_RETRY_DELAYS[1]}`);
+assert('Attempt 3 → 20 s',       GENERIC_RETRY_DELAYS[2] === 20_000,  `got ${GENERIC_RETRY_DELAYS[2]}`);
+assert('Attempt 4 → 30 s',       GENERIC_RETRY_DELAYS[3] === 30_000,  `got ${GENERIC_RETRY_DELAYS[3]}`);
+assert('Attempt 5 → 45 s',       GENERIC_RETRY_DELAYS[4] === 45_000,  `got ${GENERIC_RETRY_DELAYS[4]}`);
+assert('Network attempt 1 faster than generic', NETWORK_RETRY_DELAYS[0] < GENERIC_RETRY_DELAYS[0]);
+
+// ── Test 3: MAX_CONCURRENT_AGENTS ────────────────────────────────────────────
+console.log('\n\x1b[1mTest 3: MAX_CONCURRENT_AGENTS default\x1b[0m');
+assert('Default = 6',            MAX_CONCURRENT_AGENTS === 6,         `got ${MAX_CONCURRENT_AGENTS}`);
+assert('Reasonable range',       MAX_CONCURRENT_AGENTS >= 1 && MAX_CONCURRENT_AGENTS <= 32);
+
+// ── Test 4: isNetworkError classification ────────────────────────────────────
+console.log('\n\x1b[1mTest 4: isNetworkError() classification\x1b[0m');
 const shouldBeNet = [
   'read ECONNRESET',
   'write ECONNRESET',
   'connect ECONNREFUSED 127.0.0.1:3000',
   'connect ETIMEDOUT',
   'getaddrinfo ENOTFOUND api.cursor.sh',
-  '[aborted] read ECONNRESET',         // exact string from the bug report
+  '[aborted] read ECONNRESET',           // exact string from the bug report
   'ConnectError: connection refused',
   'socket hang up',
   'network error occurred',
   'request aborted',
+  'connection reset by peer',
+  'UND_ERR_SOCKET: other side closed',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'write EPIPE',
+  'fetch failed',
 ];
 
 const shouldNotBeNet = [
@@ -72,38 +102,33 @@ const shouldNotBeNet = [
 ];
 
 for (const msg of shouldBeNet) {
-  assert(`Classifies as network: "${msg.slice(0, 60)}"`, isNetworkError(new Error(msg)), `returned false`);
+  assert(`Network: "${msg.slice(0, 55)}"`, isNetworkError(new Error(msg)));
 }
-
 for (const msg of shouldNotBeNet) {
-  assert(`Not network error: "${msg.slice(0, 60)}"`, !isNetworkError(new Error(msg)), `returned true`);
+  assert(`Not network: "${msg.slice(0, 55)}"`, !isNetworkError(new Error(msg)));
 }
 
-// ── Test 3: Retry delay selection ────────────────────────────────────────────
-console.log('\n\x1b[1mTest 3: Retry delay selection (network vs generic)\x1b[0m');
+// ── Test 5: Retry delay selection ────────────────────────────────────────────
+console.log('\n\x1b[1mTest 5: Retry delay selection\x1b[0m');
+assert('Network attempt 1 → 2 s',  retryDelay(1, true)  === 2_000,  `got ${retryDelay(1, true)}`);
+assert('Network attempt 2 → 5 s',  retryDelay(2, true)  === 5_000,  `got ${retryDelay(2, true)}`);
+assert('Network attempt 3 → 10 s', retryDelay(3, true)  === 10_000, `got ${retryDelay(3, true)}`);
+assert('Network attempt 4 → 20 s', retryDelay(4, true)  === 20_000, `got ${retryDelay(4, true)}`);
+assert('Network attempt 5 → 30 s', retryDelay(5, true)  === 30_000, `got ${retryDelay(5, true)}`);
+assert('Network attempt 6 → 30 s (clamp)', retryDelay(6, true) === 30_000, `got ${retryDelay(6, true)}`);
+assert('Generic attempt 1 → 5 s',  retryDelay(1, false) === 5_000,  `got ${retryDelay(1, false)}`);
+assert('Generic attempt 2 → 10 s', retryDelay(2, false) === 10_000, `got ${retryDelay(2, false)}`);
+assert('Generic attempt 5 → 45 s', retryDelay(5, false) === 45_000, `got ${retryDelay(5, false)}`);
+assert('Generic attempt 6 → 45 s (clamp)', retryDelay(6, false) === 45_000, `got ${retryDelay(6, false)}`);
 
-function retryDelay(attempt, netError) {
-  return netError
-    ? (NETWORK_RETRY_DELAYS[attempt - 1] ?? NETWORK_RETRY_DELAYS[NETWORK_RETRY_DELAYS.length - 1])
-    : RETRY_BASE_DELAY * attempt;
-}
+// ── Test 6: Total attempt count ──────────────────────────────────────────────
+console.log('\n\x1b[1mTest 6: Total attempt count\x1b[0m');
+assert('AGENT_MAX_RETRIES default = 4',          AGENT_MAX_RETRIES === 4,  `got ${AGENT_MAX_RETRIES}`);
+assert('maxAttempts = AGENT_MAX_RETRIES + 1 = 5', AGENT_MAX_RETRIES + 1 === 5);
 
-assert('Network attempt 1 → 2 s',    retryDelay(1, true)  === 2_000,  `got ${retryDelay(1, true)}`);
-assert('Network attempt 2 → 8 s',    retryDelay(2, true)  === 8_000,  `got ${retryDelay(2, true)}`);
-assert('Network attempt 3 → 15 s',   retryDelay(3, true)  === 15_000, `got ${retryDelay(3, true)}`);
-assert('Network attempt 4 → 15 s (clamp)', retryDelay(4, true) === 15_000, `got ${retryDelay(4, true)}`);
-assert('Generic attempt 1 → 5 s',    retryDelay(1, false) === 5_000,  `got ${retryDelay(1, false)}`);
-assert('Generic attempt 2 → 10 s',   retryDelay(2, false) === 10_000, `got ${retryDelay(2, false)}`);
+// ── Test 7: Synthetic BLOCKER content ────────────────────────────────────────
+console.log('\n\x1b[1mTest 7: Synthetic BLOCKER message content\x1b[0m');
 
-// ── Test 4: AGENT_MAX_RETRIES = 2 → 3 total attempts ────────────────────────
-console.log('\n\x1b[1mTest 4: Total attempt count\x1b[0m');
-assert('AGENT_MAX_RETRIES default = 2',          AGENT_MAX_RETRIES === 2,  `got ${AGENT_MAX_RETRIES}`);
-assert('maxAttempts = AGENT_MAX_RETRIES + 1 = 3', AGENT_MAX_RETRIES + 1 === 3);
-
-// ── Test 5: Synthetic BLOCKER content for network errors ─────────────────────
-console.log('\n\x1b[1mTest 5: Synthetic BLOCKER message format\x1b[0m');
-
-// Mirror the BLOCKER construction from team-orchestrator.ts
 function syntheticBlocker(agentName, lastErr, maxAttempts) {
   const netError = isNetworkError(lastErr);
   const errSummary = lastErr.message.slice(0, 120);
@@ -111,10 +136,10 @@ function syntheticBlocker(agentName, lastErr, maxAttempts) {
     '## 🚨 BLOCKER',
     `**Description:** Agent "${agentName}" failed to respond after ${maxAttempts} attempts.`,
     netError
-      ? `Connection error: ${errSummary}\nThis appears to be a transient Cursor API issue. Partial progress has been saved to the project state.`
+      ? `Connection error: ${errSummary}\nThis appears to be a transient Cursor API issue. Partial progress from completed tasks has been saved to the project blackboard.`
       : `Last error: ${errSummary}`,
     netError
-      ? 'Use `roland resume` (CLI) or `/resume` (chat) to continue once connectivity is restored.'
+      ? 'Use `roland resume` (CLI) or `/resume` (chat) to continue once connectivity is restored. The PM will re-scope or retry this task.'
       : '',
     '**Needs from:** lead-pm',
     '**Impact:** This task produced no output and must be retried or re-scoped by the PM.',
@@ -122,16 +147,85 @@ function syntheticBlocker(agentName, lastErr, maxAttempts) {
   return lines.join('\n');
 }
 
-const netBlocker = syntheticBlocker('executor', new Error('read ECONNRESET'), 3);
-const genericBlocker = syntheticBlocker('executor', new Error('Agent timed out'), 3);
+const netBlocker = syntheticBlocker('executor', new Error('read ECONNRESET'), 5);
+const genericBlocker = syntheticBlocker('executor', new Error('Agent timed out'), 5);
 
-assert('Network BLOCKER contains "Connection error"',        netBlocker.includes('Connection error'));
-assert('Network BLOCKER contains "transient Cursor API"',    netBlocker.includes('transient Cursor API issue'));
-assert('Network BLOCKER contains resume hint',               netBlocker.includes('roland resume'));
-assert('Network BLOCKER contains ## 🚨 BLOCKER header',     netBlocker.includes('## 🚨 BLOCKER'));
-assert('Generic BLOCKER contains "Last error"',              genericBlocker.includes('Last error'));
-assert('Generic BLOCKER does NOT contain resume hint',       !genericBlocker.includes('roland resume'));
-assert('Generic BLOCKER does NOT contain "Connection error"',!genericBlocker.includes('Connection error'));
+assert('Network BLOCKER: ## 🚨 BLOCKER header',        netBlocker.includes('## 🚨 BLOCKER'));
+assert('Network BLOCKER: "Connection error"',           netBlocker.includes('Connection error'));
+assert('Network BLOCKER: "transient Cursor API issue"', netBlocker.includes('transient Cursor API issue'));
+assert('Network BLOCKER: "project blackboard"',         netBlocker.includes('project blackboard'));
+assert('Network BLOCKER: resume hint',                  netBlocker.includes('roland resume'));
+assert('Network BLOCKER: /resume hint',                 netBlocker.includes('/resume'));
+assert('Generic BLOCKER: "Last error"',                 genericBlocker.includes('Last error'));
+assert('Generic BLOCKER: no resume hint',               !genericBlocker.includes('roland resume'));
+assert('Generic BLOCKER: no "Connection error"',        !genericBlocker.includes('Connection error'));
+
+// ── Test 8: runConcurrent throttle ───────────────────────────────────────────
+console.log('\n\x1b[1mTest 8: runConcurrent — max N concurrent tasks\x1b[0m');
+
+// Inline implementation mirrors team-orchestrator.ts
+async function runConcurrent(factories, limit) {
+  const results = new Array(factories.length);
+  let nextIdx = 0;
+  async function worker() {
+    while (nextIdx < factories.length) {
+      const idx = nextIdx++;
+      results[idx] = await factories[idx]();
+    }
+  }
+  const slots = Math.min(limit, factories.length);
+  await Promise.all(Array.from({ length: slots }, () => worker()));
+  return results;
+}
+
+// Verify result order is preserved
+{
+  const results = await runConcurrent(
+    [1, 2, 3, 4, 5].map((n) => () => Promise.resolve(n * 10)),
+    3,
+  );
+  assert('Result order preserved (limit 3, 5 tasks)', JSON.stringify(results) === '[10,20,30,40,50]', JSON.stringify(results));
+}
+
+// Verify concurrency is capped
+{
+  let peakConcurrent = 0;
+  let current = 0;
+  const LIMIT = 3;
+  const TASKS = 10;
+
+  const factories = Array.from({ length: TASKS }, (_, i) => async () => {
+    current++;
+    peakConcurrent = Math.max(peakConcurrent, current);
+    await new Promise((r) => setTimeout(r, 5)); // tiny async yield
+    current--;
+    return i;
+  });
+
+  const results = await runConcurrent(factories, LIMIT);
+  assert(`Peak concurrency ≤ ${LIMIT} (was ${peakConcurrent})`, peakConcurrent <= LIMIT, `peakConcurrent=${peakConcurrent}`);
+  assert(`All ${TASKS} tasks completed`,  results.length === TASKS, `got ${results.length}`);
+  assert('Results are sequential [0..9]', results.every((v, i) => v === i), JSON.stringify(results));
+}
+
+// Edge: fewer tasks than limit
+{
+  const results = await runConcurrent(
+    [7, 8].map((n) => () => Promise.resolve(n)),
+    10,
+  );
+  assert('Fewer tasks than limit still works', JSON.stringify(results) === '[7,8]', JSON.stringify(results));
+}
+
+// Edge: limit = 1 (sequential)
+{
+  const order = [];
+  await runConcurrent(
+    [1, 2, 3].map((n) => async () => { order.push(n); }),
+    1,
+  );
+  assert('limit=1 runs sequentially', JSON.stringify(order) === '[1,2,3]', JSON.stringify(order));
+}
 
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log('');

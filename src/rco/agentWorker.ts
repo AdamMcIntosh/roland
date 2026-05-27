@@ -43,12 +43,16 @@ function sendResult(result: WorkerOutput): void {
 // point (no shared state with the orchestrator).
 
 const WORKER_NETWORK_PATTERNS = [
-  'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND',
-  'ConnectError', 'connect error', 'socket hang up',
-  'network error', 'aborted',
+  'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'EPIPE', 'ENETUNREACH',
+  'ConnectError', 'connect error', 'connection reset', 'connection refused',
+  'connection closed', 'socket hang up', 'network error', 'fetch failed',
+  'aborted', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET',
 ];
 
-const WORKER_RETRY_DELAYS = [2_000, 8_000, 15_000];
+// Network: 2s → 5s → 10s → 20s → 30s
+const WORKER_NETWORK_DELAYS = [2_000, 5_000, 10_000, 20_000, 30_000];
+// Generic: 5s → 10s → 20s → 30s → 45s
+const WORKER_GENERIC_DELAYS = [5_000, 10_000, 20_000, 30_000, 45_000];
 
 function isWorkerNetworkError(err: Error): boolean {
   const msg = err.message.toLowerCase();
@@ -85,13 +89,13 @@ async function getResponseViaCursorSDK(prompt: string, agentName: string, model:
 /**
  * Resilient wrapper around getResponseViaCursorSDK.
  *
- * Network / connection errors use the faster WORKER_RETRY_DELAYS schedule
- * (2 s → 8 s → 15 s). Other errors use a simple doubling back-off (5 s → 10 s).
- * Max 3 total attempts. Throws on final failure so the caller can surface a
+ * Network errors use WORKER_NETWORK_DELAYS (2 s → 5 s → 10 s → 20 s → 30 s).
+ * Other errors use WORKER_GENERIC_DELAYS (5 s → 10 s → 20 s → 30 s → 45 s).
+ * Max 5 total attempts. Throws on final failure so the caller can surface a
  * clean error envelope.
  */
 async function getResponseViaCursorSDKWithRetry(prompt: string, agentName: string, model: string): Promise<string> {
-  const maxAttempts = 3;
+  const maxAttempts = 5;
   let lastErr: Error = new Error('unknown');
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -103,9 +107,8 @@ async function getResponseViaCursorSDKWithRetry(prompt: string, agentName: strin
       if (attempt >= maxAttempts) break;
 
       const netError = isWorkerNetworkError(lastErr);
-      const delay = netError
-        ? (WORKER_RETRY_DELAYS[attempt - 1] ?? WORKER_RETRY_DELAYS[WORKER_RETRY_DELAYS.length - 1])
-        : 5_000 * attempt;
+      const delayTable = netError ? WORKER_NETWORK_DELAYS : WORKER_GENERIC_DELAYS;
+      const delay = delayTable[attempt - 1] ?? delayTable[delayTable.length - 1];
 
       log(
         'cursor-sdk',

@@ -36,8 +36,9 @@ import { toCursorModelId } from './model-routing.js';
 import { parseWorkerSignals } from './worker-signals.js';
 import type { AgentYaml } from './types.js';
 import {
-  AGENT_TIMEOUT_MS, AGENT_MAX_RETRIES, RETRY_BASE_DELAY,
-  NETWORK_RETRY_DELAYS, NETWORK_ERROR_PATTERNS,
+  AGENT_TIMEOUT_MS, AGENT_MAX_RETRIES,
+  NETWORK_RETRY_DELAYS, GENERIC_RETRY_DELAYS, NETWORK_ERROR_PATTERNS,
+  MAX_CONCURRENT_AGENTS,
   BLACKBOARD_RESULT_MAX_CHARS,
 } from './constants.js';
 import { ProjectMemory } from './project-memory.js';
@@ -155,6 +156,38 @@ function fallbackPlan(goal: string): TeamPlan {
   };
 }
 
+// ── Concurrency limiter ───────────────────────────────────────────────────────
+
+/**
+ * Run an array of task factories with at most `limit` running concurrently.
+ *
+ * Works like Promise.all() but queues excess tasks behind a semaphore.
+ * Result order matches input order. Any rejection propagates immediately
+ * (same behaviour as Promise.all).
+ *
+ * This throttles large parallel waves so we never open more than
+ * MAX_CONCURRENT_AGENTS sockets to the Cursor API at once, which is the
+ * primary cause of ECONNRESET spikes during wide waves.
+ */
+async function runConcurrent<T>(
+  factories: Array<() => Promise<T>>,
+  limit: number,
+): Promise<T[]> {
+  const results: T[] = new Array(factories.length);
+  let nextIdx = 0;
+
+  async function worker(): Promise<void> {
+    while (nextIdx < factories.length) {
+      const idx = nextIdx++;
+      results[idx] = await factories[idx]();
+    }
+  }
+
+  const slots = Math.min(limit, factories.length);
+  await Promise.all(Array.from({ length: slots }, () => worker()));
+  return results;
+}
+
 // ── Cursor SDK helper ─────────────────────────────────────────────────────────
 // Timeout / retry constants live in constants.ts. On final failure, callCursorAgent
 // returns a synthetic BLOCKER string so the PM can handle it in the next wave review
@@ -218,17 +251,16 @@ async function callCursorAgentOnce(agentName: string, modelId: string, prompt: s
 }
 
 /**
- * Resilient wrapper: retries transient failures with exponential back-off.
+ * Resilient wrapper: retries transient failures with separate back-off tables.
  *
- * Network / connection errors (ECONNRESET, ConnectError, aborted…) are
- * detected by isNetworkError() and retried on the faster NETWORK_RETRY_DELAYS
- * schedule (2 s → 8 s → 15 s). All other errors use the generic
- * RETRY_BASE_DELAY doubling schedule.
+ * Network / connection errors (ECONNRESET, ConnectError, UND_ERR_SOCKET…) use
+ * NETWORK_RETRY_DELAYS (2 s → 5 s → 10 s → 20 s → 30 s). All other errors
+ * use GENERIC_RETRY_DELAYS (5 s → 10 s → 20 s → 30 s → 45 s).
+ * Both tables have 5 entries → 5 total attempts when AGENT_MAX_RETRIES = 4.
  *
- * If all attempts fail, returns a synthetic BLOCKER signal so the PM can
- * handle the failure gracefully rather than crashing the orchestration.
- * The BLOCKER message includes a resume hint when the root cause is a
- * connection error so the user knows partial progress was saved.
+ * On final failure, returns a synthetic BLOCKER so the PM can handle it in the
+ * next wave review rather than crashing the orchestration. Network-error BLOCKERs
+ * include a resume hint so the user knows partial progress is already saved.
  */
 async function callCursorAgent(agentName: string, modelId: string, prompt: string): Promise<string> {
   let lastErr: Error = new Error('unknown');
@@ -243,9 +275,8 @@ async function callCursorAgent(agentName: string, modelId: string, prompt: strin
       if (attempt >= maxAttempts) break;
 
       const netError = isNetworkError(lastErr);
-      const delay = netError
-        ? (NETWORK_RETRY_DELAYS[attempt - 1] ?? NETWORK_RETRY_DELAYS[NETWORK_RETRY_DELAYS.length - 1])
-        : RETRY_BASE_DELAY * attempt;
+      const delayTable = netError ? NETWORK_RETRY_DELAYS : GENERIC_RETRY_DELAYS;
+      const delay = delayTable[attempt - 1] ?? delayTable[delayTable.length - 1];
 
       if (netError) {
         console.error(
@@ -278,10 +309,10 @@ async function callCursorAgent(agentName: string, modelId: string, prompt: strin
     '## 🚨 BLOCKER',
     `**Description:** Agent "${agentName}" failed to respond after ${maxAttempts} attempts.`,
     netError
-      ? `Connection error: ${errSummary}\nThis appears to be a transient Cursor API issue. Partial progress has been saved to the project state.`
+      ? `Connection error: ${errSummary}\nThis appears to be a transient Cursor API issue. Partial progress from completed tasks has been saved to the project blackboard.`
       : `Last error: ${errSummary}`,
     netError
-      ? 'Use `roland resume` (CLI) or `/resume` (chat) to continue once connectivity is restored.'
+      ? 'Use `roland resume` (CLI) or `/resume` (chat) to continue once connectivity is restored. The PM will re-scope or retry this task.'
       : '',
     '**Needs from:** lead-pm',
     '**Impact:** This task produced no output and must be retried or re-scoped by the PM.',
@@ -560,8 +591,15 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     console.error(`[Team] Wave ${waveNumber}: ${ready.length} task(s) in parallel — ${ready.map((t) => t.id).join(', ')}`);
     onWaveStart?.(waveNumber, ready);
 
-    // Execute wave in parallel
-    const waveResults = await Promise.all(ready.map((task) => executeTask(task)));
+    // Execute wave with concurrency cap (MAX_CONCURRENT_AGENTS) to avoid
+    // overwhelming the Cursor API with too many simultaneous socket connections.
+    if (ready.length > MAX_CONCURRENT_AGENTS) {
+      console.error(`[Team]   ⚡ Wave ${waveNumber}: throttling ${ready.length} tasks to ${MAX_CONCURRENT_AGENTS} concurrent slots`);
+    }
+    const waveResults = await runConcurrent(
+      ready.map((task) => () => executeTask(task)),
+      MAX_CONCURRENT_AGENTS,
+    );
 
     // ── PM Review ─────────────────────────────────────────────────────────
     if (remaining.length > 0) {
