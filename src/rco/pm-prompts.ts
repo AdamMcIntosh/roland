@@ -27,6 +27,8 @@ export interface PlanningContext {
   inboxMessages?: string;
   /** Capped snapshot of .roland/memory.md from prior runs (injected when present). */
   projectMemory?: string;
+  /** Injection block from project knowledge files (ROLAND.md, ARCHITECTURE.md, etc.). */
+  projectKnowledge?: string;
 }
 
 export interface SynthesisContext extends PlanningContext {
@@ -76,7 +78,7 @@ ${ctx.goal}
 
 ---
 
-${ctx.projectMemory ? `## Project Memory\n\nThis project has been worked on before. The memory is organised into four sections — consult each one before planning:\n\n### Architecture Decisions\nEstablished tech choices and design patterns — don't contradict these without explicit justification.\n\n### Coding Standards\nFile layout, naming conventions, testing conventions — your engineers must follow these.\n\n### Past Mistakes\nThings that went wrong in previous runs — actively prevent each one in your task descriptions.\n\n### Preferences\nUser/team preferences — honour these when making trade-offs.\n\n${ctx.projectMemory}\n\n---\n\n` : ''}## Current Blackboard State
+${ctx.projectKnowledge ? `${ctx.projectKnowledge}\n\n---\n\n` : ''}${ctx.projectMemory ? `## Project Memory\n\nThis project has been worked on before. The memory is organised into four sections — consult each one before planning:\n\n### Architecture Decisions\nEstablished tech choices and design patterns — don't contradict these without explicit justification.\n\n### Coding Standards\nFile layout, naming conventions, testing conventions — your engineers must follow these.\n\n### Past Mistakes\nThings that went wrong in previous runs — actively prevent each one in your task descriptions.\n\n### Preferences\nUser/team preferences — honour these when making trade-offs.\n\n${ctx.projectMemory}\n\n---\n\n` : ''}## Current Blackboard State
 
 ${capBlackboard(ctx.blackboardSnapshot)}
 
@@ -291,6 +293,24 @@ Example format (use this structure exactly):
 **Preferences:**
 - TypeScript strict mode — never use \`any\`; use unknown + type guards instead
 \`\`\`
+
+---
+
+## Knowledge Update
+
+After completing all sections above, record any significant architectural decisions that should be permanently documented in \`DECISIONS.md\`. This section is **optional** — only include it when a meaningful architectural decision was made this run that isn't already in the project's documentation.
+
+A meaningful decision is one that future engineers should know about when making similar choices: tech stack selections, pattern adoptions, deliberate trade-offs, or permanent constraints.
+
+Use **exactly** this format — it is machine-parsed:
+
+\`\`\`
+**DECISIONS.md:**
+- [Decision: what was chosen, and the one-sentence rationale]
+- [Another decision if applicable]
+\`\`\`
+
+Limit to 2–4 bullets. Do not pad with obvious or routine decisions. If nothing meaningful was decided, **omit this entire section**.
 
 ---
 

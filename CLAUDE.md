@@ -330,6 +330,50 @@ memory.addBullet('Past Mistakes', 'Never call req.destroy() before sending HTTP 
 
 ---
 
+## Project Knowledge System
+
+`src/rco/project-knowledge.ts` — automatic project documentation discovery and injection.
+
+### Discovery files (scanned at project root, in priority order)
+
+| File | Purpose | Priority |
+|------|---------|---------|
+| `ROLAND.md` | Project-specific instructions, constraints, preferences | Highest |
+| `ARCHITECTURE.md` | High-level design, system patterns, tech decisions | High |
+| `TECH-STACK.md` | Frameworks, libraries, versions, gotchas, conventions | High |
+| `REQUIREMENTS.md` | Business rules, user stories, acceptance criteria | Medium |
+| `SPECS.md` | Alternative requirements/spec file | Medium |
+| `DECISIONS.md` | Architecture Decision Records — auto-updated after runs | Low |
+
+### How it works
+
+1. `loadProjectKnowledge(cwd)` scans for the above files at run start
+2. Present files are loaded and a proportional character budget allocated (total cap: 12,000 chars)
+3. Injection block (`## Project Knowledge`) is prepended to the Lead PM planning prompt — before `## Project Memory`
+4. After synthesis, `appendDecisions()` parses the PM's `## Knowledge Update` block and appends new bullets to `DECISIONS.md`
+
+### Character budget allocation
+
+Budget is split proportionally by weight: ROLAND.md (30%), ARCHITECTURE.md (25%), TECH-STACK.md (25%), REQUIREMENTS/SPECS (15% each), DECISIONS.md (10%). Files are truncated cleanly at line boundaries when over budget.
+
+### Prompt order (planning phase)
+
+```
+Goal → Project Knowledge → Project Memory → Blackboard → Task Scoping Rules
+```
+
+### DECISIONS.md auto-update
+
+The synthesis prompt asks the PM to write a `## Knowledge Update` section:
+```
+## Knowledge Update
+**DECISIONS.md:**
+- [Decision and rationale]
+```
+`appendDecisions()` parses this block, deduplicates (first 60 chars), and appends a dated section to `DECISIONS.md`. The PM only writes to `DECISIONS.md` — `ARCHITECTURE.md`, `TECH-STACK.md`, and `ROLAND.md` are human-curated and never auto-modified.
+
+---
+
 ## Background / Supervisor Mode
 
 `src/rco/supervisor.ts` — detached process management.
@@ -446,6 +490,7 @@ roland abort                          # stop after current wave completes
 | Usage demo seeder | `scripts/seed-usage-demo.mjs` |
 | Run backfill tool | `scripts/backfill-usage.mjs` |
 | Structured project memory | `src/rco/project-memory.ts` |
+| Project knowledge system  | `src/rco/project-knowledge.ts` |
 | HITL command queue | `src/rco/hitl.ts` |
 | Background supervisor | `src/rco/supervisor.ts` |
 | Contextual notifier | `src/rco/notifier.ts` |

@@ -37,6 +37,7 @@ import { parseWorkerSignals } from './worker-signals.js';
 import type { AgentYaml } from './types.js';
 import { AGENT_TIMEOUT_MS, AGENT_MAX_RETRIES, RETRY_BASE_DELAY, BLACKBOARD_RESULT_MAX_CHARS } from './constants.js';
 import { ProjectMemory } from './project-memory.js';
+import { loadProjectKnowledge, appendDecisions } from './project-knowledge.js';
 import { buildTaskUsage, buildRunUsage, saveRunUsage } from './usage-tracker.js';
 import type { TaskUsageRecord } from './usage-tracker.js';
 import { HitlQueue } from './hitl.js';
@@ -232,6 +233,11 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   const memorySnapshot = memory.snapshot();
   if (memorySnapshot) console.error('[Team] Project memory loaded — injecting into planning prompt');
 
+  const knowledge = loadProjectKnowledge(process.cwd());
+  if (knowledge.files.length > 0) {
+    console.error(`[Team] Project knowledge loaded — ${knowledge.summary}`);
+  }
+
   blackboard.post({ type: 'task', title: 'TEAM GOAL', content: goal, status: 'in_progress', author: 'system', priority: 'critical', tags: ['goal'], relatedIds: [] });
 
   const agentsDir = resolveAgentsDir(import.meta.url, agentsDirOverride);
@@ -409,7 +415,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   // ── Phase 1: Lead PM planning ─────────────────────────────────────────────
   console.error('[Team] Phase 1: Lead PM planning...');
 
-  const planningPrompt = buildLeadPMPlanningPrompt({ goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined, projectMemory: memorySnapshot || undefined });
+  const planningPrompt = buildLeadPMPlanningPrompt({ goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined, projectMemory: memorySnapshot || undefined, projectKnowledge: knowledge.injectionBlock || undefined });
   const pmPlanStart = Date.now();
   const planText = await callCursorAgent('Lead-PM', 'grok-4.3', planningPrompt);
   allTaskUsage.push(buildTaskUsage('pm-planning', 'Lead PM: Planning', 'Lead-PM', 'grok-4.3', planningPrompt.length, planText.length, Date.now() - pmPlanStart));
@@ -539,6 +545,12 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     console.error('[Team] Project memory updated — .roland/memory.md');
   } else {
     console.error('[Team] No Memory Extract found in synthesis — memory unchanged');
+  }
+
+  // ── Persist knowledge update (DECISIONS.md) ───────────────────────────────
+  const decisionsAdded = appendDecisions(synthesis, goal, runId, process.cwd());
+  if (decisionsAdded > 0) {
+    console.error(`[Team] DECISIONS.md updated — ${decisionsAdded} new decision(s) appended`);
   }
 
   // ── Save usage record ─────────────────────────────────────────────────────
