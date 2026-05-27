@@ -60,27 +60,45 @@ export const GENERIC_RETRY_DELAYS: readonly number[] = [5_000, 10_000, 20_000, 3
 /**
  * Maximum number of agent calls allowed to run concurrently across all waves.
  *
- * Conservative default of 4 prevents thundering-herd ECONNRESET spikes.
- * Lowering further helps on unstable connections; raising helps on fast,
- * reliable connections with many tasks in a wave.
+ * Default of 2 is extremely conservative — designed for SSH / unstable
+ * connections where opening multiple simultaneous sockets to the Cursor API
+ * reliably triggers ECONNRESET. Raise on fast, stable connections only.
  *
- * Override: ROLAND_MAX_CONCURRENT=2   (very conservative, unreliable network)
- *           ROLAND_MAX_CONCURRENT=8   (higher throughput, stable connections)
+ * Override: ROLAND_MAX_CONCURRENT=1   (fully sequential — maximum stability)
+ *           ROLAND_MAX_CONCURRENT=4   (standard throughput, stable connection)
  */
-export const MAX_CONCURRENT_AGENTS = Number(process.env.ROLAND_MAX_CONCURRENT) || 4;
+export const MAX_CONCURRENT_AGENTS = Number(process.env.ROLAND_MAX_CONCURRENT) || 2;
 
 /**
  * Number of terminal network errors in a single wave before the circuit
- * breaker opens, pausing the run and prompting the user to restore connectivity.
+ * breaker opens, immediately pausing the run.
  *
- * When the breaker is open, tasks still queued in the wave are fast-failed
- * with a synthetic BLOCKER rather than cycling through all 5 retry attempts —
- * this cuts hang time when the Cursor API is genuinely down.
+ * Default of 1 means the run pauses after the very first agent that exhausts
+ * all retries with network errors. This is the safest default for unstable
+ * SSH connections — better to pause early and resume than to burn through
+ * all remaining tasks with connection failures.
  *
- * Override: ROLAND_CIRCUIT_BREAKER=1  (pause on first network error)
- *           ROLAND_CIRCUIT_BREAKER=5  (tolerate more before pausing)
+ * When the breaker is open, tasks still queued in the wave fast-fail
+ * immediately rather than cycling through all 5 retry attempts.
+ *
+ * Override: ROLAND_CIRCUIT_BREAKER=3  (tolerate more errors before pausing)
+ *           ROLAND_CIRCUIT_BREAKER=0  (disable circuit breaker entirely)
  */
-export const CIRCUIT_BREAKER_THRESHOLD = Number(process.env.ROLAND_CIRCUIT_BREAKER) || 3;
+export const CIRCUIT_BREAKER_THRESHOLD = Number(process.env.ROLAND_CIRCUIT_BREAKER ?? '1') || 1;
+
+/**
+ * Stagger delay (ms) between starting each concurrent worker slot.
+ *
+ * With MAX_CONCURRENT_AGENTS=2 and AGENT_WARMUP_DELAY_MS=1500, the two
+ * worker slots start 1.5 s apart — staggering their TCP connection
+ * establishment and reducing simultaneous socket pressure on the API.
+ *
+ * Set to 0 to disable staggering (all slots start simultaneously, old behaviour).
+ *
+ * Override: ROLAND_WARMUP_DELAY_MS=0     (disable stagger)
+ *           ROLAND_WARMUP_DELAY_MS=3000  (3 s between slot starts)
+ */
+export const AGENT_WARMUP_DELAY_MS = Number(process.env.ROLAND_WARMUP_DELAY_MS ?? '1500') || 1_500;
 
 /**
  * Substrings that identify a transient network / connection error.

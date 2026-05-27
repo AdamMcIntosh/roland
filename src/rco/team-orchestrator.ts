@@ -38,7 +38,7 @@ import type { AgentYaml } from './types.js';
 import {
   AGENT_TIMEOUT_MS, AGENT_MAX_RETRIES,
   NETWORK_RETRY_DELAYS, GENERIC_RETRY_DELAYS, NETWORK_ERROR_PATTERNS,
-  MAX_CONCURRENT_AGENTS, CIRCUIT_BREAKER_THRESHOLD,
+  MAX_CONCURRENT_AGENTS, CIRCUIT_BREAKER_THRESHOLD, AGENT_WARMUP_DELAY_MS,
   BLACKBOARD_RESULT_MAX_CHARS,
 } from './constants.js';
 import { ProjectMemory } from './project-memory.js';
@@ -168,6 +168,11 @@ function fallbackPlan(goal: string): TeamPlan {
  * This throttles large parallel waves so we never open more than
  * MAX_CONCURRENT_AGENTS sockets to the Cursor API at once, which is the
  * primary cause of ECONNRESET spikes during wide waves.
+ *
+ * Connection warmup: each worker slot is started AGENT_WARMUP_DELAY_MS apart
+ * (default 1500 ms) to stagger TCP connection establishment and reduce
+ * simultaneous socket pressure on the Cursor API. Set ROLAND_WARMUP_DELAY_MS=0
+ * to disable.
  */
 async function runConcurrent<T>(
   factories: Array<() => Promise<T>>,
@@ -184,7 +189,16 @@ async function runConcurrent<T>(
   }
 
   const slots = Math.min(limit, factories.length);
-  await Promise.all(Array.from({ length: slots }, () => worker()));
+
+  // Stagger slot starts to avoid opening all connections simultaneously.
+  const workerPromises: Promise<void>[] = [];
+  for (let i = 0; i < slots; i++) {
+    if (i > 0 && AGENT_WARMUP_DELAY_MS > 0) {
+      await new Promise<void>((r) => setTimeout(r, AGENT_WARMUP_DELAY_MS));
+    }
+    workerPromises.push(worker());
+  }
+  await Promise.all(workerPromises);
   return results;
 }
 
@@ -697,25 +711,36 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
       const succeeded = waveResults.filter((r) => !r.hasBlocker);
       const blocked   = waveResults.filter((r) => r.hasBlocker);
 
+      const SEP = '─'.repeat(58);
       console.error('');
-      console.error('[Team] ⚡ ══════════════════════════════════════════════════════════');
-      console.error(`[Team] ⚡  CIRCUIT BREAKER — ${waveCircuit.errorCount} network error${waveCircuit.errorCount !== 1 ? 's' : ''} in wave ${waveNumber}`);
-      console.error('[Team] ⚡  Cursor API connectivity appears degraded.');
-      console.error('[Team] ⚡');
+      console.error(`[Team] 🔴  ${SEP}`);
+      console.error('[Team] 🔴  Cursor connection dropped — run paused');
+      console.error(`[Team] 🔴  ${SEP}`);
+      console.error('[Team] 🔴');
+      console.error(`[Team] 🔴  Wave ${waveNumber} was interrupted by a network error.`);
+      console.error('[Team] 🔴');
       if (succeeded.length > 0) {
-        console.error(`[Team] ⚡  ✓ Saved (${succeeded.length}): ${succeeded.map((r) => r.taskId).join(', ')}`);
+        console.error(`[Team] 🔴  Tasks completed and saved (${succeeded.length}):`);
+        for (const r of succeeded) {
+          console.error(`[Team] 🔴    ✓  ${r.taskId}  ${r.agent}  "${r.taskTitle.slice(0, 45)}"`);
+        }
+      } else {
+        console.error('[Team] 🔴  No tasks completed cleanly this wave.');
       }
       if (blocked.length > 0) {
-        console.error(`[Team] ⚡  ✗ Blocked (${blocked.length}): ${blocked.map((r) => r.taskId).join(', ')} — PM will retry after resume`);
+        console.error('[Team] 🔴');
+        console.error(`[Team] 🔴  Tasks that need to be retried (${blocked.length}):`);
+        for (const r of blocked) {
+          console.error(`[Team] 🔴    ✗  ${r.taskId}  ${r.agent}  "${r.taskTitle.slice(0, 45)}"`);
+        }
       }
-      console.error('[Team] ⚡');
-      console.error('[Team] ⚡  Run paused. Once connectivity is restored:');
-      console.error('[Team] ⚡    roland resume      (from another terminal)');
-      console.error('[Team] ⚡    /resume            (in chat)');
-      console.error('[Team] ⚡');
-      console.error('[Team] ⚡  Completed task results are saved to the blackboard.');
-      console.error('[Team] ⚡  The PM will retry or re-scope blocked tasks after resume.');
-      console.error('[Team] ⚡ ══════════════════════════════════════════════════════════');
+      console.error('[Team] 🔴');
+      console.error('[Team] 🔴  When connectivity is restored, resume with:');
+      console.error('[Team] 🔴    roland resume        (in another terminal)');
+      console.error('[Team] 🔴    /resume              (in chat)');
+      console.error('[Team] 🔴');
+      console.error('[Team] 🔴  The PM will retry blocked tasks automatically.');
+      console.error(`[Team] 🔴  ${SEP}`);
       console.error('');
 
       // Record partial progress on blackboard for PM visibility

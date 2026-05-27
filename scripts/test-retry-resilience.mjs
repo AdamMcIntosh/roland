@@ -21,6 +21,7 @@ import {
   AGENT_MAX_RETRIES,
   MAX_CONCURRENT_AGENTS,
   CIRCUIT_BREAKER_THRESHOLD,
+  AGENT_WARMUP_DELAY_MS,
 } from '../dist/rco/constants.js';
 
 let passed = 0;
@@ -69,12 +70,14 @@ assert('Attempt 4 → 30 s',       GENERIC_RETRY_DELAYS[3] === 30_000,  `got ${G
 assert('Attempt 5 → 45 s',       GENERIC_RETRY_DELAYS[4] === 45_000,  `got ${GENERIC_RETRY_DELAYS[4]}`);
 assert('Network attempt 1 faster than generic', NETWORK_RETRY_DELAYS[0] < GENERIC_RETRY_DELAYS[0]);
 
-// ── Test 3: MAX_CONCURRENT_AGENTS + CIRCUIT_BREAKER_THRESHOLD ────────────────
-console.log('\n\x1b[1mTest 3: MAX_CONCURRENT_AGENTS and CIRCUIT_BREAKER_THRESHOLD defaults\x1b[0m');
-assert('Default MAX_CONCURRENT = 4',      MAX_CONCURRENT_AGENTS === 4,          `got ${MAX_CONCURRENT_AGENTS}`);
-assert('Concurrent reasonable range',     MAX_CONCURRENT_AGENTS >= 1 && MAX_CONCURRENT_AGENTS <= 32);
-assert('CIRCUIT_BREAKER_THRESHOLD = 3',   CIRCUIT_BREAKER_THRESHOLD === 3,      `got ${CIRCUIT_BREAKER_THRESHOLD}`);
-assert('Circuit threshold reasonable',    CIRCUIT_BREAKER_THRESHOLD >= 1 && CIRCUIT_BREAKER_THRESHOLD <= 20);
+// ── Test 3: Concurrency + circuit breaker + warmup constants ─────────────────
+console.log('\n\x1b[1mTest 3: Concurrency, circuit breaker, and warmup defaults\x1b[0m');
+assert('Default MAX_CONCURRENT = 2',       MAX_CONCURRENT_AGENTS === 2,          `got ${MAX_CONCURRENT_AGENTS}`);
+assert('Concurrent reasonable range',      MAX_CONCURRENT_AGENTS >= 1 && MAX_CONCURRENT_AGENTS <= 32);
+assert('CIRCUIT_BREAKER_THRESHOLD = 1',    CIRCUIT_BREAKER_THRESHOLD === 1,      `got ${CIRCUIT_BREAKER_THRESHOLD}`);
+assert('Circuit threshold reasonable',     CIRCUIT_BREAKER_THRESHOLD >= 0 && CIRCUIT_BREAKER_THRESHOLD <= 20);
+assert('AGENT_WARMUP_DELAY_MS = 1500',     AGENT_WARMUP_DELAY_MS === 1_500,      `got ${AGENT_WARMUP_DELAY_MS}`);
+assert('Warmup delay reasonable (0–10 s)', AGENT_WARMUP_DELAY_MS >= 0 && AGENT_WARMUP_DELAY_MS <= 10_000);
 
 // ── Test 4: isNetworkError classification ────────────────────────────────────
 console.log('\n\x1b[1mTest 4: isNetworkError() classification\x1b[0m');
