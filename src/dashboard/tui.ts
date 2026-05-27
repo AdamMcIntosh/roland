@@ -86,6 +86,13 @@ export class TuiRenderer {
   private readonly stateFilePath: string;
   private active = false;
 
+  // Stored as instance properties so they can be passed to removeListener.
+  // Arrow functions defined inline in process.on() cannot be removed later.
+  private readonly _onExit    = () => this.stop();
+  private readonly _onSigint  = () => { this.stop(); process.exit(0); };
+  private readonly _onSigterm = () => { this.stop(); process.exit(0); };
+  private readonly _onResize  = () => { if (this.lastState) this.draw(this.lastState); };
+
   constructor(stateFilePath: string) {
     this.stateFilePath = stateFilePath;
   }
@@ -105,15 +112,12 @@ export class TuiRenderer {
     }, 250);
 
     // Handle terminal resize
-    process.stdout.on('resize', () => {
-      if (this.lastState) this.draw(this.lastState);
-    });
+    process.stdout.on('resize', this._onResize);
 
-    // Restore terminal on any exit
-    const restore = () => this.stop();
-    process.on('exit', restore);
-    process.on('SIGINT', () => { this.stop(); process.exit(0); });
-    process.on('SIGTERM', () => { this.stop(); process.exit(0); });
+    // Restore terminal on any exit — registered once, removed in stop()
+    process.on('exit',   this._onExit);
+    process.on('SIGINT',  this._onSigint);
+    process.on('SIGTERM', this._onSigterm);
   }
 
   update(state: RunState): void {
@@ -127,6 +131,12 @@ export class TuiRenderer {
     if (this.timer) { clearInterval(this.timer); this.timer = null; }
     process.stdout.write('\x1b[?1049l'); // leave alternate screen
     process.stdout.write('\x1b[?25h');   // show cursor
+    // Remove all listeners added in start() so they don't accumulate
+    // across multiple TuiRenderer instances in the same process.
+    process.stdout.removeListener('resize', this._onResize);
+    process.removeListener('exit',   this._onExit);
+    process.removeListener('SIGINT',  this._onSigint);
+    process.removeListener('SIGTERM', this._onSigterm);
   }
 
   // ── Observer (roland status) ──────────────────────────────────────────────

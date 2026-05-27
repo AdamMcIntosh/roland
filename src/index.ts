@@ -25,6 +25,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { setMaxListeners } from 'events';
 import { McpServer } from './server/mcp-server.js';
 import { loadConfig } from './config/config-loader.js';
 import { logger } from './utils/logger.js';
@@ -32,6 +33,13 @@ import { Roster } from './pm/roster.js';
 import { TeamRecipes } from './pm/team-recipes.js';
 import { PMEventLog } from './pm/event-log.js';
 import { renderTimeline } from './pm/render.js';
+
+// Raise the global EventEmitter/EventTarget default before any SDK code runs.
+// The Cursor SDK adds one internal abort listener per parallel agent call; on a
+// wave with 10+ tasks the default limit of 10 fires MaxListenersExceededWarning.
+// setMaxListeners(n) with no target sets the process-wide default for all new
+// EventEmitter *and* EventTarget instances (including AbortSignal) — Node 15.4+.
+setMaxListeners(30);
 
 const CURSOR_CONFIG = path.join(os.homedir(), '.cursor', 'mcp.json');
 const ROLAND_ENTRY = { command: 'roland', args: ['serve'] };

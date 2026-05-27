@@ -115,6 +115,12 @@ export class SimpleTuiRenderer {
   private readonly stateFilePath: string;
   private active = false;
 
+  // Stored as instance properties so they can be passed to removeListener.
+  // Arrow functions defined inline in process.on() cannot be removed later.
+  private readonly _onExit    = () => this.stop();
+  private readonly _onSigint  = () => { this.stop(); process.exit(0); };
+  private readonly _onSigterm = () => { this.stop(); process.exit(0); };
+
   constructor(stateFilePath: string) {
     this.stateFilePath = stateFilePath;
   }
@@ -130,10 +136,10 @@ export class SimpleTuiRenderer {
     process.stderr.write(c.bold('Roland PM Team') + '\n');
     process.stderr.write('='.repeat(w) + '\n\n');
 
-    const restore = () => this.stop();
-    process.on('exit',   restore);
-    process.on('SIGINT',  () => { this.stop(); process.exit(0); });
-    process.on('SIGTERM', () => { this.stop(); process.exit(0); });
+    // Registered once; removed in stop() to prevent accumulation across instances
+    process.on('exit',   this._onExit);
+    process.on('SIGINT',  this._onSigint);
+    process.on('SIGTERM', this._onSigterm);
   }
 
   update(state: RunState): void {
@@ -141,9 +147,14 @@ export class SimpleTuiRenderer {
     this.printDelta(state);
   }
 
-  /** No-op — no alternate screen was entered so nothing to restore. */
+  /** Removes all process listeners registered in start(). */
   stop(): void {
+    if (!this.active) return;
     this.active = false;
+    // No alternate screen to restore, but clean up signal listeners
+    process.removeListener('exit',   this._onExit);
+    process.removeListener('SIGINT',  this._onSigint);
+    process.removeListener('SIGTERM', this._onSigterm);
   }
 
   // ── Observer mode (roland status --simple-tui or auto-detected) ─────────────
