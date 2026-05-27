@@ -363,8 +363,6 @@ export async function runTeamCli(argv: string[]): Promise<void> {
   // Scroll mode also writes run-state.json so external observers (roland status,
   // bg-status) can monitor progress and HITL pause/abort state without a TUI.
   const runState = new RunStateWriter(stateDir, goal);
-  let scheduledTotal = 0;   // initial plan count; grows as PM spawns tasks
-  let completedTotal = 0;
 
   // Per-wave tracking: reset each wave so the wave-complete display is accurate
   const waveEntries = new Map<string, { agent: string; title: string; hadBlocker: boolean }>();
@@ -397,7 +395,6 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     // ── Plan ready ───────────────────────────────────────────────────────────
     onPlanReady: (tasks: TeamTask[]) => {
       runState.planReady(tasks);
-      scheduledTotal = tasks.length;
       err(`  ${c.dim('Plan:')}   ${tasks.length} task${tasks.length !== 1 ? 's' : ''} initially scheduled  ${c.dim('(PM may spawn more during review)')}`);
       err('');
     },
@@ -408,11 +405,14 @@ export async function runTeamCli(argv: string[]): Promise<void> {
       waveEntries.clear();
       for (const t of tasks) waveEntries.set(t.id, { agent: t.agent, title: t.title, hadBlocker: false });
 
+      // Use RunStateWriter as single source of truth — counts are always
+      // derived from the task array so dynamic spawning is reflected correctly.
+      const rs  = runState.get();
+      const bar = progressBar(rs.completedTasks, rs.totalTasks);
       err(rule());
-      const bar = progressBar(completedTotal, scheduledTotal);
       err(
         `  ${c.bold(`Wave ${waveNumber}`)}  ${c.dim('·')}  ${tasks.length} task${tasks.length !== 1 ? 's' : ''} in parallel  ` +
-        `${c.dim('[')}${bar}${c.dim(']')}  ${c.dim(completedTotal + '/' + scheduledTotal + ' tasks done')}`,
+        `${c.dim('[')}${bar}${c.dim(']')}  ${c.dim(rs.completedTasks + '/' + rs.totalTasks + ' tasks done')}`,
       );
       err('');
     },
@@ -428,7 +428,6 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     // ── Task complete ─────────────────────────────────────────────────────────
     onTaskComplete: (id: string, agent: string, output: string, hadBlocker: boolean) => {
       runState.taskComplete(id, output, hadBlocker);
-      completedTotal++;
       const entry = waveEntries.get(id);
       if (entry) entry.hadBlocker = hadBlocker;
 
@@ -506,7 +505,6 @@ export async function runTeamCli(argv: string[]): Promise<void> {
 
         err('');
         for (const t of (decision.newTasks ?? [])) {
-          scheduledTotal++;
           err(
             `  ${c.green('+')} spawn    ${c.cyan(rpad(t.id, 10))} → ${c.bold(rpad(t.agent, 20))}  ` +
             c.dim('"' + t.title.slice(0, 52) + '"'),
