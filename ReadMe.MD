@@ -226,39 +226,6 @@ roland serve                    # start the MCP server (Cursor / VS Code)
 
 ---
 
-## 🎛 Web Dashboard
-
-A browser-based command center — live progress, usage history, HITL controls, and memory editor.
-
-```bash
-npm run serve-dashboard          # → http://127.0.0.1:8081
-node scripts/serve-dashboard.js --state-dir /path/to/project/.roland --port 8082
-```
-
-### Tabs
-
-| Tab | Contents |
-|-----|----------|
-| **Overview** | Stats cards · Live job progress · **Pause / Resume / Replan / Abort** buttons · Recent run cards |
-| **History** | All past runs, searchable · Click to expand: task list, wave decisions, blockers |
-| **Memory** | Browse all five knowledge sections of `.roland/memory.md` · Inline editor |
-| **Actions** | New run form · Watch Mode toggle · PR review input · Recent goals as one-click chips |
-
-Updates are pushed via WebSocket — no polling delay.
-
-```bash
-# Seed demo data (try the dashboard without a real run):
-node scripts/seed-usage-demo.mjs
-npm run serve-dashboard
-
-# Backfill a previous run's usage data:
-node scripts/backfill-usage.mjs --state-dir .roland
-```
-
-> Token counts and costs are estimates (chars ÷ 4). Actual Cursor API charges are not exposed by the SDK.
-
----
-
 ## 🔬 How It Works
 
 ```
@@ -296,9 +263,11 @@ PM synthesises
 | **PM** | `grok-4.3` | `lead-pm` — planning, review, synthesis |
 | **Execution** | `composer-2.5` | All worker agents (executor, architect, test-author, test-executor, code-reviewer, security-reviewer, writer, …) |
 
+The Lead PM is the orchestrator — it decomposes goals into parallel tasks and makes real-time decisions about which tasks to run, in what order, and how to unblock stalled work. All specialist agents are uniform executors running the same powerful reasoning model.
+
 ### Agent roster
 
-30+ specialist personas defined in `agents/*.yaml`. Common assignments:
+45+ specialist personas defined in `agents/*.yaml`. Common assignments:
 
 | Agent | Role |
 |-------|------|
@@ -312,7 +281,40 @@ PM synthesises
 
 ---
 
-## 🧠 Project Memory & Self-Improvement
+## 🎛 Web Dashboard
+
+A browser-based command center — live progress, usage history, HITL controls, and memory editor.
+
+```bash
+npm run serve-dashboard          # → http://127.0.0.1:8081
+node scripts/serve-dashboard.js --state-dir /path/to/project/.roland --port 8082
+```
+
+### Tabs
+
+| Tab | Contents |
+|-----|----------|
+| **Overview** | Stats cards · Live job progress · **Pause / Resume / Replan / Abort** buttons · Recent run cards |
+| **History** | All past runs, searchable · Click to expand: task list, wave decisions, blockers |
+| **Memory** | Browse all five knowledge sections of `.roland/memory.md` · Inline editor |
+| **Actions** | New run form · Watch Mode toggle · PR review input · Recent goals as one-click chips |
+
+Updates are pushed via WebSocket — no polling delay.
+
+```bash
+# Seed demo data (try the dashboard without a real run):
+node scripts/seed-usage-demo.mjs
+npm run serve-dashboard
+
+# Backfill a previous run's usage data:
+node scripts/backfill-usage.mjs --state-dir .roland
+```
+
+> Token counts and costs are estimates (chars ÷ 4). Actual Cursor API charges are not exposed by the SDK.
+
+---
+
+## 🧠 Project Memory & Self-Improvement v2
 
 Roland learns your project over time.
 
@@ -327,9 +329,9 @@ After every synthesis, Roland updates `.roland/memory.md` with:
 
 The longer you use Roland on a project, the better it knows it.
 
-### Self-improvement retrospective (v2)
+### Self-improvement retrospective
 
-After each synthesis, Roland runs a structured retrospective — 5 questions about what went well, root causes of blockers, and new standards. It proposes memory updates and **auto-accepts after 15 seconds** (you can review and reject inline). Disable with `--no-improve` or `/improve off` in chat.
+After each synthesis, Roland runs a structured 5-question retrospective — what went well, root causes of blockers, wrong assumptions, gotchas, and new standards. It proposes memory updates and **auto-accepts after 15 seconds** (you can review and reject inline). Disable with `--no-improve` or `/improve off` in chat.
 
 ### Smart recall
 
@@ -337,7 +339,39 @@ Instead of dumping the full memory, Roland scores bullets by keyword overlap wit
 
 ---
 
-## ⚙️ Configuration
+## ⚙️ Resilience & Performance
+
+Roland is built for unreliable networks (SSH, mobile, unstable connections).
+
+### Defaults
+
+| Setting | Default | Purpose |
+|---------|---------|---------|
+| **Max concurrent agents** | 2 | Stagger TCP connections to API |
+| **Circuit breaker threshold** | 1 | Pause on first wave of network errors |
+| **Agent warmup delay** | 1500 ms | Space out worker slot starts |
+| **Agent timeout** | 1500000 ms (25 min) | Per-agent wall-clock limit |
+| **Max retries** | 4 | 5 total attempts (1 initial + 4 retries) |
+
+**Retry sequences:**
+- Network errors: 2s → 5s → 10s → 20s → 30s (fast recovery)
+- Generic SDK errors: 5s → 10s → 20s → 30s → 45s (slower recovery)
+
+All values include ±30% jitter to prevent thundering herd.
+
+### Environment variable overrides
+
+| Variable | Default | Example |
+|----------|---------|---------|
+| `ROLAND_MAX_CONCURRENT` | `2` | `ROLAND_MAX_CONCURRENT=4` on fast, stable connections |
+| `ROLAND_CIRCUIT_BREAKER` | `1` | `ROLAND_CIRCUIT_BREAKER=3` to tolerate more errors |
+| `ROLAND_WARMUP_DELAY_MS` | `1500` | `ROLAND_WARMUP_DELAY_MS=0` to disable staggering |
+| `ROLAND_AGENT_TIMEOUT_MS` | `1500000` | `ROLAND_AGENT_TIMEOUT_MS=900000` for 15-minute timeout |
+| `ROLAND_AGENT_RETRIES` | `4` | `ROLAND_AGENT_RETRIES=2` for 3 total attempts |
+
+---
+
+## 🔧 Configuration
 
 ### Environment variables
 
@@ -346,8 +380,6 @@ Instead of dumping the full memory, Roland scores bullets by keyword overlap wit
 | `CURSOR_API_KEY` | _(required)_ | API key for agent execution |
 | `ROLAND_NOTIFY` | `0` | `1` = enable notifications for all commands |
 | `ROLAND_SIMPLE_TUI` | `0` | `1` = ASCII-only output (mobile SSH, Termius) |
-| `ROLAND_AGENT_TIMEOUT_MS` | `1500000` (25 min) | Per-agent hard timeout |
-| `ROLAND_AGENT_RETRIES` | `2` | Max retries before a synthetic BLOCKER is raised |
 | `ROLAND_STATE_DIR` | `.roland` | Default persistence directory |
 
 ### Notifications
@@ -441,6 +473,20 @@ roland bg-status                                     # check background run
 roland status --state-dir /path/to/project/.roland   # custom dir
 ```
 
+**Network errors (ECONNRESET, socket hangs) on SSH**
+
+This is the circuit breaker protecting you. After a wave of network failures, Roland pauses and waits for you to resume:
+```bash
+# Check logs
+roland bg-logs
+
+# Resume when the network is stable
+roland resume
+
+# Or increase tolerance
+ROLAND_CIRCUIT_BREAKER=3 roland team "goal"
+```
+
 **`.roland/memory.md` looks wrong**
 
 Open `http://127.0.0.1:8081` → **Memory** tab to view and edit in the browser. Or edit the file directly — plain Markdown with `## Section Name` headers.
@@ -488,9 +534,9 @@ npm run dev             # watch mode (auto-rebuild)
 npm test                # run test suite (Vitest)
 npm run test:run        # single pass
 npm run lint            # lint check
-node scripts/test-routing.mjs      # model routing smoke test (8/8)
-node scripts/test-signals.mjs      # signal parser smoke test (8/8)
-node scripts/test-task-counting.mjs # task counting smoke test (42/42)
+node scripts/test-routing.mjs            # model routing smoke test (8/8)
+node scripts/test-signals.mjs            # signal parser smoke test (8/8)
+node scripts/test-retry-resilience.mjs   # retry/circuit-breaker smoke test (70/70)
 ```
 
 ---

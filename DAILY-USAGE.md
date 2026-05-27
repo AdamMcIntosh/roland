@@ -45,7 +45,9 @@ Open chat and describe the work the way you'd brief a senior engineer — specif
 ❯ fix auth
 ```
 
-### What happens next
+---
+
+## 👀 What Happens Next
 
 ```
   ○  Roland  ·  Planning your team…
@@ -66,6 +68,13 @@ Open chat and describe the work the way you'd brief a senior engineer — specif
 ```
 
 Dim `→` lines = agents working. Bright `✓` lines = tasks done. The wave closes with a single summary line — no noise.
+
+**The Lead PM (grok-4.3)** orchestrates the whole run:
+1. **Planning** — decomposes your goal into parallel tasks
+2. **Review** — after each wave, examines results and decides whether to continue, adjust, or unblock
+3. **Synthesis** — produces the final executive summary when all tasks are done
+
+All **specialist agents (executor, architect, test-author, etc.)** run composer-2.5 — a fast, reasoning-capable model that balances speed with depth.
 
 ---
 
@@ -356,6 +365,34 @@ roland watch --once \
 
 ---
 
+## ⚙️ Resilience on Unstable Networks
+
+Roland is built for unreliable connections. If you're on SSH, mobile, or an unstable link, these defaults protect you:
+
+### What Roland does automatically
+
+- **Staggered worker starts** — 1.5 s between agent launches (not 20 simultaneous TCP connections)
+- **Circuit breaker** — pauses the run after the first wave of network errors, rather than wasting attempts
+- **Smart retries** — network errors retry faster (2s, 5s, 10s…) than SDK errors (5s, 10s, 20s…)
+- **Jitter** — all retry delays include ±30% random variance to prevent thundering herd
+
+### When to override
+
+```bash
+# Fast, stable connection? Speed up:
+ROLAND_MAX_CONCURRENT=4 roland "goal"
+
+# Flaky SSH? Tolerate more errors:
+ROLAND_CIRCUIT_BREAKER=3 roland "goal"
+
+# Mobile/unstable? Fully sequential, maximum stability:
+ROLAND_MAX_CONCURRENT=1 roland "goal"
+```
+
+All settings persist for one command. For permanent changes, export them in your shell profile.
+
+---
+
 ## 🩺 Troubleshooting
 
 ### `CURSOR_API_KEY not set`
@@ -379,6 +416,26 @@ roland team "goal" --simple-tui   # or per-run
 ```bash
 ROLAND_AGENT_TIMEOUT_MS=900000 roland "goal"    # 15-minute timeout
 ROLAND_AGENT_TIMEOUT_MS=60000  roland "goal"    # 1-minute (fast-fail testing)
+```
+
+### Network errors (ECONNRESET, socket hang up) — run pauses
+
+This is the circuit breaker protecting you from burning through retries. Check what happened:
+
+```bash
+roland bg-logs    # see the error details
+```
+
+Then resume when the network is stable:
+
+```bash
+roland resume
+```
+
+Or increase error tolerance:
+
+```bash
+ROLAND_CIRCUIT_BREAKER=3 roland team "goal"    # tolerate up to 3 waves of errors
 ```
 
 ### Run shows blockers but no guidance on what to do
@@ -451,3 +508,4 @@ roland doctor     # confirms agents are present
 | Toggle notify | `/notify` | `--notify` flag |
 | Full help | `/help` | `roland --help` |
 | Quit | `/exit` or Ctrl+D | — |
+

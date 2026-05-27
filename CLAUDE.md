@@ -73,7 +73,7 @@ roland team "..." --state-dir /tmp  # use alternate state directory
 ```
 
 **How it works:**
-1. **Lead PM** (claude-opus-4-7) reads the goal and roster, outputs a JSON task plan
+1. **Lead PM** (grok-4.3) reads the goal and roster, outputs a JSON task plan
 2. Tasks with no `dependsOn` run **in parallel** (one wave)
 3. After each wave, PM reviews outputs and decides: `continue` or `adjust`
    - `adjust` can spawn new tasks, send unblock messages, or re-scope pending tasks
@@ -92,7 +92,7 @@ roland team "..." --state-dir /tmp  # use alternate state directory
 
 | Lane | Model | Agent names that map here |
 |------|-------|--------------------------|
-| PM | `claude-opus-4-7` | `lead-pm`, `Lead-PM` |
+| PM | `grok-4.3` | `lead-pm`, `Lead-PM` |
 | Reasoning | `claude-sonnet-4-6` | architect, review*, critic, plan*, analyst, scientist, research*, design*, explore*, security*, **author** |
 | Execution | `composer-2.5` | executor*, build-fixer, test-executor, tdd-guide, designer, writer, doc* |
 
@@ -204,8 +204,9 @@ All retry/timeout/concurrency constants live in `src/rco/constants.ts`:
 AGENT_MAX_RETRIES = 4          // 5 total attempts (1 initial + 4 retries)
 NETWORK_RETRY_DELAYS = [2s, 5s, 10s, 20s, 30s]   // ±30% jitter applied
 GENERIC_RETRY_DELAYS = [5s, 10s, 20s, 30s, 45s]  // ±30% jitter applied
-MAX_CONCURRENT_AGENTS = 4      // per-wave concurrency cap
-CIRCUIT_BREAKER_THRESHOLD = 3  // network errors before circuit opens
+MAX_CONCURRENT_AGENTS = 2      // per-wave concurrency cap (SSH-safe default)
+CIRCUIT_BREAKER_THRESHOLD = 1  // pause on first terminal network error
+AGENT_WARMUP_DELAY_MS = 1500   // stagger between concurrent slot starts
 ```
 
 On final failure, `callCursorAgent` returns a synthetic BLOCKER string rather than throwing —
@@ -264,8 +265,9 @@ All four smoke tests exit 1 on any failure. Run the appropriate one after touchi
 |----------|---------|---------|
 | `ROLAND_AGENT_TIMEOUT_MS` | `1500000` (25 min) | Per-agent wall-clock timeout |
 | `ROLAND_AGENT_RETRIES` | `4` | Retries before synthetic BLOCKER (5 total attempts) |
-| `ROLAND_MAX_CONCURRENT` | `4` | Max concurrent agent calls per wave |
-| `ROLAND_CIRCUIT_BREAKER` | `3` | Network errors before circuit opens and run pauses |
+| `ROLAND_MAX_CONCURRENT` | `2` | Max concurrent agent calls per wave |
+| `ROLAND_CIRCUIT_BREAKER` | `1` | Network errors before circuit opens and run pauses |
+| `ROLAND_WARMUP_DELAY_MS` | `1500` | Stagger delay (ms) between concurrent slot starts |
 | `ROLAND_STATE_DIR` | `.roland` | Blackboard + message-bus directory |
 | `ROLAND_QUIET` | unset | Suppress wave progress output |
 | `ROLAND_SIMPLE_TUI` | unset | Set to `1` for ASCII-only output (mobile SSH / Termius) |
