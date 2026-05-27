@@ -122,7 +122,23 @@ Follow these rules before you write a single task:
 
 ## Required Output
 
-Write a brief analysis (2–4 sentences), then provide your task plan in a \`\`\`json block:
+**Step 1 — Memory Citations** _(only if Project Memory was provided above)_
+
+Write a \`## Memory Citations\` block listing which memory bullets influenced your plan and how.
+This is shown to the user so they can see learning in action.
+
+Format:
+\`\`\`
+## Memory Citations
+- "[memory bullet paraphrase]" → how this shaped task X or constraint Y
+- "[another bullet]" → why it changed your approach to Z
+\`\`\`
+
+If no prior memory was relevant, write: \`## Memory Citations\n_(no prior memory relevant to this goal)_\`
+
+**Step 2 — Brief Analysis** (2–4 sentences): Your decomposition rationale.
+
+**Step 3 — Task Plan** in a \`\`\`json block:
 
 \`\`\`json
 {
@@ -276,6 +292,15 @@ Use **exactly** the four section headers below — this is machine-parsed. Keep 
 - User or team preferences surfaced this run (tooling choices, style preferences, workflow preferences).
 - Only include if they differ from obvious defaults or were explicitly stated.
 
+**Proven Patterns:** _(new in v2 — include when a specific approach worked particularly well)_
+- Reusable techniques that produced good outcomes this run. Be concrete:
+  "Split test-author tasks by layer (unit / integration / E2E) — lets three agents run in parallel"
+  is better than "parallel testing was good."
+
+**Anti-Patterns:** _(new in v2 — include when a recurring mistake was encountered or prevented)_
+- Things to actively avoid, with root cause and a concrete example from this run.
+  Format: \`[what to avoid] — root cause: [why it happens]; example: [specific case]\`
+
 Example format (use this structure exactly):
 \`\`\`
 **Architecture Decisions:**
@@ -292,6 +317,12 @@ Example format (use this structure exactly):
 
 **Preferences:**
 - TypeScript strict mode — never use \`any\`; use unknown + type guards instead
+
+**Proven Patterns:**
+- Parallel test-author tasks per layer (unit/integration/E2E) — maximises concurrency, each agent stays focused
+
+**Anti-Patterns:**
+- Mutating shared state across parallel agents — root cause: missing coordination; example: two executors both writing to the same config file
 \`\`\`
 
 ---

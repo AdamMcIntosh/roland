@@ -42,6 +42,10 @@ import {
   parseRetrospectiveOutput,
   showMemoryProposal,
   applyRetroUpdate,
+  parsePlanCitations,
+  parseSelfCritique,
+  collectHumanFeedback,
+  type HumanFeedback,
 } from './self-improvement.js';
 import { loadProjectKnowledge, appendDecisions } from './project-knowledge.js';
 import { buildTaskUsage, buildRunUsage, saveRunUsage } from './usage-tracker.js';
@@ -466,6 +470,15 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   }
   onPlanReady?.(plan.tasks);
 
+  // ── Display memory citations (show user learning-in-action) ───────────────
+  if (memorySnapshot) {
+    const citations = parsePlanCitations(planText);
+    if (citations.length > 0) {
+      console.error(`[Team] 🧠 Memory influenced this plan (${citations.length} citation${citations.length !== 1 ? 's' : ''}):`);
+      for (const c of citations) console.error(`[Team]   · ${c.slice(0, 120)}`);
+    }
+  }
+
   // ── Phase 2: PM control loop ──────────────────────────────────────────────
   console.error('[Team] Phase 2: Starting PM control loop...');
 
@@ -592,13 +605,23 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
 
   // ── Phase 4: Self-improvement retrospective ───────────────────────────────
   if (!noImprove) {
-    console.error('[Team] Phase 4: Self-improvement retrospective...');
+    // Collect optional human feedback (interactive scroll/TTY mode only)
+    let humanFeedback: HumanFeedback | undefined;
+    if (interactive && Boolean((process.stderr as NodeJS.WriteStream).isTTY)) {
+      const fb = await collectHumanFeedback(goal, { isTTY: true, timeoutSeconds: 30 });
+      if (fb) {
+        humanFeedback = fb;
+        console.error(`[Team] Feedback recorded: ${fb.rating}/10${fb.notes ? ` — "${fb.notes.slice(0, 60)}"` : ''}`);
+      }
+    }
+
+    console.error('[Team] Phase 4: Self-improvement retrospective (v2)...');
 
     const taskSummary = Object.entries(taskResults)
       .map(([id, r]) => `- ${id} [${r.agent}]: "${r.taskTitle}"${r.hadBlocker ? ' ⚠️ blocker' : ' ✓'}`)
       .join('\n');
 
-    const retroPrompt  = buildRetrospectivePrompt(goal, synthesis, taskSummary, memory.structuredSnapshot());
+    const retroPrompt  = buildRetrospectivePrompt(goal, synthesis, taskSummary, memory.structuredSnapshot(), humanFeedback);
     const pmModel      = toCursorModelId('', 'lead-pm');
     const retroStart   = Date.now();
     const retroText    = await callCursorAgent('Lead-PM', pmModel, retroPrompt);
@@ -628,6 +651,14 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
       }
     } else {
       console.error('[Team] Retrospective: nothing new to document this run');
+    }
+
+    // Display PM self-critique (always shown when present, regardless of memory acceptance)
+    const critique = parseSelfCritique(retroText);
+    if (critique) {
+      const lines = critique.split('\n').map((l) => l.trim()).filter((l) => l.length > 0).slice(0, 5);
+      console.error('[Team] 💭 Planning self-critique:');
+      for (const line of lines) console.error(`[Team]   ${line.slice(0, 115)}`);
     }
   }
 
