@@ -23,12 +23,12 @@ export const AGENT_TIMEOUT_MS = Number(process.env.ROLAND_AGENT_TIMEOUT_MS) || 2
 
 /**
  * Maximum retries on transient SDK errors before returning a synthetic BLOCKER.
- * Default: 4 → 5 total attempts (1 initial + 4 retries).
+ * Default: 5 → 6 total attempts (1 initial + 5 retries).
  *
  * Override: ROLAND_AGENT_RETRIES=0  (disable retries, 1 attempt only)
- *           ROLAND_AGENT_RETRIES=2  (3 total, original behaviour)
+ *           ROLAND_AGENT_RETRIES=2  (3 total, fast iteration)
  */
-export const AGENT_MAX_RETRIES = Number(process.env.ROLAND_AGENT_RETRIES) || 4;
+export const AGENT_MAX_RETRIES = Number(process.env.ROLAND_AGENT_RETRIES) || 5;
 
 /**
  * Base delay before the first retry (ms) for non-network errors.
@@ -38,36 +38,37 @@ export const RETRY_BASE_DELAY = 5_000;
 
 /**
  * Retry delays (ms) for transient network / connection errors.
- * Sequence: 2 s → 5 s → 10 s → 20 s → 30 s.
+ * Sequence: 2 s → 6 s → 12 s → 25 s → 40 s → 60 s  (6 entries, 6 total attempts).
  *
- * Network errors (ECONNRESET, ConnectError, etc.) are usually transient and
- * resolve quickly; starting at 2 s catches most recoveries in the first retry.
- * Entries map 1-to-1 to retry attempts. The final entry is reused if
- * AGENT_MAX_RETRIES exceeds the array length.
+ * Network errors (ECONNRESET, ConnectError, etc.) are usually transient.
+ * Starting at 2 s catches fast recoveries; the long tail (40 s, 60 s) absorbs
+ * longer outages during heavy runs. Entries map 1-to-1 to retry attempts.
+ * The final entry is reused if AGENT_MAX_RETRIES exceeds the array length.
  */
-export const NETWORK_RETRY_DELAYS: readonly number[] = [2_000, 5_000, 10_000, 20_000, 30_000];
+export const NETWORK_RETRY_DELAYS: readonly number[] = [2_000, 6_000, 12_000, 25_000, 40_000, 60_000];
 
 /**
  * Retry delays (ms) for generic (non-network) SDK errors.
- * Sequence: 5 s → 10 s → 20 s → 30 s → 45 s.
+ * Sequence: 5 s → 12 s → 25 s → 40 s → 60 s → 90 s  (6 entries, 6 total attempts).
  *
  * Slower than NETWORK_RETRY_DELAYS because non-network errors (SDK internal
  * errors, model errors) are less likely to resolve immediately and benefit
  * from giving the service more recovery time.
  */
-export const GENERIC_RETRY_DELAYS: readonly number[] = [5_000, 10_000, 20_000, 30_000, 45_000];
+export const GENERIC_RETRY_DELAYS: readonly number[] = [5_000, 12_000, 25_000, 40_000, 60_000, 90_000];
 
 /**
  * Maximum number of agent calls allowed to run concurrently across all waves.
  *
- * Default of 2 is extremely conservative — designed for SSH / unstable
- * connections where opening multiple simultaneous sockets to the Cursor API
- * reliably triggers ECONNRESET. Raise on fast, stable connections only.
+ * Default of 4 gives good parallel throughput on stable connections.
+ * Drop to 1 (fully sequential) for maximum stability on unstable SSH
+ * connections where ECONNRESET under load is a concern.
  *
- * Override: ROLAND_MAX_CONCURRENT=1   (fully sequential — maximum stability)
- *           ROLAND_MAX_CONCURRENT=4   (standard throughput, stable connection)
+ * Override: ROLAND_MAX_CONCURRENT=1   (sequential, one socket at a time)
+ *           ROLAND_MAX_CONCURRENT=2   (conservative, light parallelism)
+ *           ROLAND_MAX_CONCURRENT=8   (high throughput, stable connection)
  */
-export const MAX_CONCURRENT_AGENTS = Number(process.env.ROLAND_MAX_CONCURRENT) || 2;
+export const MAX_CONCURRENT_AGENTS = Number(process.env.ROLAND_MAX_CONCURRENT) || 4;
 
 /**
  * Number of terminal network errors in a single wave before the circuit

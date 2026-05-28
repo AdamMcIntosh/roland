@@ -16,7 +16,7 @@ import readline from 'readline';
 import fs   from 'fs';
 import path from 'path';
 import { runTeam } from './team-orchestrator.js';
-import type { TeamTask } from './team-orchestrator.js';
+import type { TeamTask, CircuitBreakInfo } from './team-orchestrator.js';
 import type { ReviewDecision } from './pm-prompts.js';
 import { RunStateWriter } from './run-state.js';
 import { Notifier } from './notifier.js';
@@ -92,9 +92,13 @@ export interface ChatContext {
   notify:     boolean;
   stream:     boolean;
   noImprove:  boolean;
+  parallel:    boolean;
   webhookUrl?: string;
   agentsDir?:  string;
   simple:      boolean;
+  // Shared readline — passed to runTeam so self-improvement prompts reuse it
+  // instead of creating a competing interface that would close stdin.
+  rl?: readline.Interface;
   // Runtime state
   lastGoal?: string;
   runCount:  number;
@@ -142,8 +146,10 @@ function printWelcome(ctx: ChatContext): void {
   const notifyLabel  = ctx.notify     ? c.green('on')  : c.dim('off');
   const streamLabel  = ctx.stream     ? c.green('on')  : c.dim('off');
   const improveLabel = !ctx.noImprove ? c.green('on')  : c.dim('off');
+  const modeLabel    = ctx.parallel   ? c.green('parallel (4)') : c.yellow('sequential');
   ln(
     `  ${c.dim('State:')} ${c.dim(ctx.stateDir)}  ` +
+    `${c.dim('·')}  ${c.dim('mode:')} ${modeLabel}  ` +
     `${c.dim('·')}  ${c.dim('notify:')} ${notifyLabel}  ` +
     `${c.dim('·')}  ${c.dim('stream:')} ${streamLabel}  ` +
     `${c.dim('·')}  ${c.dim('improve:')} ${improveLabel}`,
@@ -186,6 +192,7 @@ function printChatHelp(): void {
   ln(`${S}  ${c.cyan('/stream')} ${c.dim('[on|off]')}           Toggle task output previews`);
   ln(`${S}  ${c.cyan('/notify')} ${c.dim('[on|off]')}           Toggle desktop notifications`);
   ln(`${S}  ${c.cyan('/improve')} ${c.dim('[on|off]')}          Toggle self-improvement`);
+  ln(`${S}  ${c.cyan('/parallel')} ${c.dim('[on|off]')}         Toggle parallel (default: on) / sequential safe mode`);
   ln(`${S}  ${c.cyan('/state-dir')} ${c.dim('<dir>')}           Set persistence directory`);
   ln(`${S}  ${c.cyan('/clean')}                    Clear blackboard + messages`);
   ln('');
@@ -197,6 +204,192 @@ function printChatHelp(): void {
   ln('');
 }
 
+// ── Live status block ─────────────────────────────────────────────────────────
+
+/**
+ * Renders a live in-place status block during a goal run.
+ *
+ * Fancy mode (default): uses ANSI cursor-up + erase-to-end to rewrite a fixed
+ * block of lines in place — a live "dashboard" without alternate screen.
+ *
+ * Simple mode (SSH / dumb terminal): no cursor movement; falls back to
+ * periodic one-line heartbeat prints every 25 s so the terminal doesn't appear
+ * frozen during long test-author / test-executor steps.
+ */
+class ChatLiveStatus {
+  private blockLines = 0;
+  private tickTimer: NodeJS.Timeout | null = null;
+  private readonly simple:     boolean;
+  private readonly sequential: boolean;
+
+  private phase: 'planning' | 'running' | 'reviewing' | 'synthesizing' = 'planning';
+  private waveNumber     = 0;
+  private totalTasks     = 0;
+  private completedTasks = 0;
+  private readonly activeTasks = new Map<string, { agent: string; title: string; startMs: number }>();
+
+  constructor(simple: boolean, sequential: boolean) {
+    this.simple     = simple;
+    this.sequential = sequential;
+  }
+
+  // ── Block rendering ─────────────────────────────────────────────────────────
+
+  private renderBlock(): string {
+    const w = Math.min(cols(), 100);
+    const lines: string[] = [];
+
+    if (this.phase === 'planning') {
+      lines.push(`  ${c.dim('○')}  ${c.dim('Roland')}  ${c.dim('·')}  ${c.italic(c.dim('Planning your team…'))}`);
+
+    } else if (this.phase === 'reviewing') {
+      lines.push(`  ${c.dim('○')}  ${c.dim('Lead PM reviewing results…')}`);
+
+    } else if (this.phase === 'synthesizing') {
+      lines.push(`  ${c.dim('○')}  ${c.dim('Synthesizing final deliverable…')}`);
+
+    } else {
+      // running — wave/step header + active tasks with elapsed time
+      const bar  = progressBar(this.completedTasks, this.totalTasks, 14);
+      const prog = c.dim(this.completedTasks + '/' + this.totalTasks);
+
+      if (this.sequential) {
+        const first = [...this.activeTasks.values()][0];
+        lines.push(
+          `  ${c.bold(`Step ${this.waveNumber}`)}` +
+          `  ${c.dim('·')}  ${first ? c.cyan(first.agent) : c.dim('waiting')}` +
+          `  ${bar}  ${prog}`,
+        );
+      } else {
+        lines.push(
+          `  ${c.bold(`Wave ${this.waveNumber}`)}` +
+          `  ${c.dim('·')}  ${this.activeTasks.size} active` +
+          `  ${bar}  ${prog}`,
+        );
+      }
+
+      if (this.activeTasks.size === 0) {
+        lines.push(`  ${c.dim('↻')}  ${c.dim('waiting for agents…')}`);
+      }
+      for (const { agent, title, startMs } of this.activeTasks.values()) {
+        const elt = elapsedStr(Date.now() - startMs);
+        lines.push(
+          `  ${c.dim('↻')}  ${c.dim(rpad(agent, 20))}  ` +
+          `${c.dim(title.slice(0, Math.max(10, w - 38)))}  ` +
+          `${c.dim('(' + elt + '…)')}`,
+        );
+      }
+    }
+
+    return lines.join('\n') + '\n';
+  }
+
+  private eraseBlock(): void {
+    if (this.simple || this.blockLines === 0) return;
+    process.stderr.write(`\x1b[${this.blockLines}A\x1b[0J`);
+    this.blockLines = 0;
+  }
+
+  private drawBlock(): void {
+    if (this.simple) return;
+    const content = this.renderBlock();
+    process.stderr.write(content);
+    this.blockLines = (content.match(/\n/g) ?? []).length;
+  }
+
+  private refresh(): void {
+    this.eraseBlock();
+    this.drawBlock();
+  }
+
+  // ── Public API — permanent output ───────────────────────────────────────────
+
+  /** Erase block → write permanent scrolling line → redraw block. */
+  printLine(s = ''): void {
+    if (this.simple) { process.stderr.write(s + '\n'); return; }
+    this.eraseBlock();
+    process.stderr.write(s + '\n');
+    this.drawBlock();
+  }
+
+  /** Print a horizontal rule as a permanent scrolling line. */
+  printRule(ch = '─', indent = 2): void {
+    this.printLine(' '.repeat(indent) + ch.repeat(Math.max(4, Math.min(cols(), 100) - indent)));
+  }
+
+  // ── Public API — state transitions ──────────────────────────────────────────
+
+  /** Draw the initial block and start the tick timer. */
+  start(): void {
+    this.drawBlock();
+    // Fancy: refresh every 5 s to keep elapsed times current
+    // Simple: every 25 s print one heartbeat line per active task
+    const interval = this.simple ? 25_000 : 5_000;
+    this.tickTimer = setInterval(() => {
+      if (this.simple) {
+        for (const { agent, title, startMs } of this.activeTasks.values()) {
+          process.stderr.write(
+            `  ${c.dim('↻')}  ${c.dim(rpad(agent, 20))}  ` +
+            `${c.dim(title.slice(0, 44))}  ` +
+            `${c.dim('(' + elapsedStr(Date.now() - startMs) + ' elapsed…)')}\n`,
+          );
+        }
+      } else {
+        this.refresh();
+      }
+    }, interval);
+  }
+
+  planReady(totalTasks: number): void {
+    this.totalTasks = totalTasks;
+    this.phase = 'running';
+    this.refresh();
+  }
+
+  waveStart(waveNumber: number, completedTasks: number, totalTasks: number): void {
+    this.waveNumber     = waveNumber;
+    this.completedTasks = completedTasks;
+    this.totalTasks     = totalTasks;
+    this.activeTasks.clear();
+    this.phase = 'running';
+    this.refresh();
+  }
+
+  taskStart(id: string, agent: string, title: string): void {
+    this.activeTasks.set(id, { agent, title, startMs: Date.now() });
+    if (this.simple) {
+      // Simple mode: print a → line (no live block to show it in-place)
+      process.stderr.write(
+        `  ${c.dim('→')}  ${c.dim(rpad(agent, 20))}  ${c.dim(title.slice(0, 50))}\n`,
+      );
+    } else {
+      this.refresh();
+    }
+  }
+
+  taskDone(id: string, completedTasks: number): void {
+    this.activeTasks.delete(id);
+    this.completedTasks = completedTasks;
+    this.refresh();
+  }
+
+  reviewing(): void {
+    this.phase = 'reviewing';
+    this.refresh();
+  }
+
+  synthesizing(): void {
+    this.phase = 'synthesizing';
+    this.refresh();
+  }
+
+  /** Stop the tick timer and erase the live block. */
+  stop(): void {
+    if (this.tickTimer) { clearInterval(this.tickTimer); this.tickTimer = null; }
+    this.eraseBlock();
+  }
+}
+
 // ── Run a goal inline ─────────────────────────────────────────────────────────
 
 async function runGoalInline(goal: string, ctx: ChatContext): Promise<void> {
@@ -204,10 +397,7 @@ async function runGoalInline(goal: string, ctx: ChatContext): Promise<void> {
 
   // ── Conversational lead-in ─────────────────────────────────────────────────
   ln('');
-  // Truncate long goals gracefully with ellipsis
-  const goalDisplay = goal.length > W - 18
-    ? goal.slice(0, W - 21) + '…'
-    : goal;
+  const goalDisplay = goal.length > W - 18 ? goal.slice(0, W - 21) + '…' : goal;
   ln(`  ${c.bold('You')}  ${c.dim('·')}  ${goalDisplay}`);
   ln('');
 
@@ -217,10 +407,6 @@ async function runGoalInline(goal: string, ctx: ChatContext): Promise<void> {
     ln('');
     return;
   }
-
-  // "Thinking" response before planning begins
-  ln(`  ${c.dim('○')}  ${c.dim('Roland')}  ${c.dim('·')}  ${c.italic(c.dim('Planning your team…'))}`);
-  ln('');
 
   const runState  = new RunStateWriter(ctx.stateDir, goal);
   const useNotify = ctx.notify || Boolean(ctx.webhookUrl);
@@ -232,14 +418,18 @@ async function runGoalInline(goal: string, ctx: ChatContext): Promise<void> {
     onBlocker:  useNotify,
     onWave:     false,
   });
-  const hitlQueue = new HitlQueue(ctx.stateDir);
-  const runStart  = Date.now();
+  const hitlQueue  = new HitlQueue(ctx.stateDir);
+  const runStart   = Date.now();
+  const liveStatus = new ChatLiveStatus(ctx.simple, !ctx.parallel);
 
   // Track per-wave metadata for summaries
   type WaveEntry = { agent: string; title: string; hadBlocker: boolean; startMs?: number };
-  const waveEntries  = new Map<string, WaveEntry>();
-  let waveStartTime  = Date.now();
-  let totalPlanned   = 0;
+  const waveEntries = new Map<string, WaveEntry>();
+  let waveStartTime = Date.now();
+  let totalPlanned  = 0;
+
+  // Start the live status block — shows "Planning your team…" immediately
+  liveStatus.start();
 
   try {
     const result = await runTeam({
@@ -249,12 +439,14 @@ async function runGoalInline(goal: string, ctx: ChatContext): Promise<void> {
       hitlQueue,
       noImprove:   ctx.noImprove,
       interactive: Boolean((process.stderr as NodeJS.WriteStream).isTTY) && !ctx.noImprove,
+      sequential:  !ctx.parallel,
+      rl:          ctx.rl,
 
       onBlockerDetected: (_taskId, agent, description, waveNumber) => {
         void notifier.notify({
           event: 'blocker', goal,
-          summary:          `${agent} blocked on wave ${waveNumber}`,
-          blockerAgent:      agent,
+          summary:           `${agent} blocked on wave ${waveNumber}`,
+          blockerAgent:       agent,
           blockerDescription: description,
           waveNumber,
         });
@@ -264,15 +456,15 @@ async function runGoalInline(goal: string, ctx: ChatContext): Promise<void> {
       onPlanReady: (tasks: TeamTask[]) => {
         runState.planReady(tasks);
         totalPlanned = tasks.length;
+        liveStatus.planReady(tasks.length);
 
-        // Overwrite the "planning…" feel with a confirmed plan line
         const est = estimateWaveMin(tasks.length);
-        ln(
+        liveStatus.printLine(
           `  ${c.green('✓')}  ${c.bold('Roland')}  ${c.dim('·')}  ` +
           `${c.bold(String(tasks.length))} task${tasks.length !== 1 ? 's' : ''} planned` +
           `  ${c.dim('·')}  ${c.dim('est. ' + est)}`,
         );
-        ln('');
+        liveStatus.printLine('');
       },
 
       // ── Wave starting ────────────────────────────────────────────────────────
@@ -286,45 +478,49 @@ async function runGoalInline(goal: string, ctx: ChatContext): Promise<void> {
 
         const rs  = runState.get();
         const bar = progressBar(rs.completedTasks, rs.totalTasks, 14);
+        liveStatus.waveStart(waveNumber, rs.completedTasks, rs.totalTasks);
+        liveStatus.printRule('─');
 
-        // Wave header — compact, not intrusive
-        ln(rule('─'));
-        ln(
-          `  ${c.bold(`Wave ${waveNumber}`)}` +
-          `  ${c.dim('·')}  ${tasks.length} task${tasks.length !== 1 ? 's' : ''}` +
-          `  ${bar}  ${c.dim(rs.completedTasks + '/' + rs.totalTasks)}`,
-        );
-        ln('');
+        if (!ctx.parallel) {
+          const task = tasks[0];
+          liveStatus.printLine(
+            `  ${c.bold(`Step ${waveNumber}`)}` +
+            `  ${c.dim('·')}  ${c.cyan(task?.agent ?? '?')}` +
+            `  ${bar}  ${c.dim(rs.completedTasks + '/' + rs.totalTasks)}`,
+          );
+        } else {
+          liveStatus.printLine(
+            `  ${c.bold(`Wave ${waveNumber}`)}` +
+            `  ${c.dim('·')}  ${tasks.length} task${tasks.length !== 1 ? 's' : ''}` +
+            `  ${bar}  ${c.dim(rs.completedTasks + '/' + rs.totalTasks)}`,
+          );
+        }
+        liveStatus.printLine('');
       },
 
-      // ── Task starting — dim; just shows what's in flight ────────────────────
+      // ── Task starting — live block shows it; simple mode prints a → line ─────
       onTaskStart: (id: string, agent: string, title: string) => {
         runState.taskStart(id);
         const entry = waveEntries.get(id);
         if (entry) entry.startMs = Date.now();
-
-        // Use a dim arrow so it recedes vs. completions
-        ln(
-          `  ${c.dim('→')}  ${c.dim(rpad(agent, 20))}  ` +
-          `${c.dim(title.slice(0, Math.max(10, W - 28)))}`,
-        );
+        liveStatus.taskStart(id, agent, title);
       },
 
-      // ── Task complete — more prominent than start ────────────────────────────
+      // ── Task complete — erase block, print permanent line, redraw block ────────
       onTaskComplete: (id: string, agent: string, output: string, hadBlocker: boolean) => {
         runState.taskComplete(id, output, hadBlocker);
         const entry = waveEntries.get(id);
         if (entry) entry.hadBlocker = hadBlocker;
 
-        const task  = runState.get().tasks.find((t) => t.id === id);
-        const dur   = (task?.startedAt && task?.completedAt)
+        const rs   = runState.get();
+        const task = rs.tasks.find((t) => t.id === id);
+        const dur  = (task?.startedAt && task?.completedAt)
           ? c.dim('  ' + elapsedStr(task.completedAt - task.startedAt))
           : '';
-        const badge = hadBlocker
-          ? `  ${c.red('⚡ blocked')}`
-          : '';
+        const badge = hadBlocker ? `  ${c.red('⚡ blocked')}` : '';
 
-        ln(
+        liveStatus.taskDone(id, rs.completedTasks);
+        liveStatus.printLine(
           `  ${hadBlocker ? c.red('✗') : c.green('✓')}  ` +
           `${rpad(agent, 20)}  ` +
           `${(entry?.title ?? '').slice(0, Math.max(10, W - 32))}` +
@@ -333,25 +529,24 @@ async function runGoalInline(goal: string, ctx: ChatContext): Promise<void> {
 
         if (ctx.stream && output.trim()) {
           const preview = output.slice(0, 320).replace(/\n{3,}/g, '\n\n');
-          ln('');
-          for (const l of preview.split('\n')) ln(`     ${c.dim(l)}`);
-          if (output.length > 320) ln(`     ${c.dim('…(full output in synthesis)')}`);
-          ln('');
+          liveStatus.printLine('');
+          for (const l of preview.split('\n')) liveStatus.printLine(`     ${c.dim(l)}`);
+          if (output.length > 320) liveStatus.printLine(`     ${c.dim('…(full output in synthesis)')}`);
+          liveStatus.printLine('');
         }
       },
 
-      // ── Wave review — one calm line ──────────────────────────────────────────
+      // ── Wave review — update live block phase ────────────────────────────────
       onWaveReview: () => {
         runState.waveReviewing();
-        ln('');
-        ln(`  ${c.dim('○')}  ${c.dim('Lead PM reviewing results…')}`);
+        liveStatus.reviewing();
       },
 
       // ── Tasks spawned mid-run ────────────────────────────────────────────────
       onTasksSpawned: (tasks: TeamTask[]) => {
         runState.addTasks(tasks);
         for (const t of tasks) {
-          ln(
+          liveStatus.printLine(
             `  ${c.cyan('+')}  ${c.dim('spawn')}  ${c.bold(rpad(t.agent, 18))}  ` +
             `${c.dim('"' + t.title.slice(0, 52) + '"')}`,
           );
@@ -363,78 +558,117 @@ async function runGoalInline(goal: string, ctx: ChatContext): Promise<void> {
         void waveNumber;
         runState.waveComplete(decision.pmNotes);
 
-        const blockers   = [...waveEntries.values()].filter((e) => e.hadBlocker).length;
-        const waveDur    = elapsedStr(Date.now() - waveStartTime);
-        const newTasks   = decision.newTasks ?? [];
-        const unblocks   = decision.unblocks ?? [];
-        const adjust     = decision.decision !== 'continue';
+        const blockers = [...waveEntries.values()].filter((e) => e.hadBlocker).length;
+        const waveDur  = elapsedStr(Date.now() - waveStartTime);
+        const newTasks = decision.newTasks ?? [];
+        const unblocks = decision.unblocks ?? [];
+        const adjust   = decision.decision !== 'continue';
 
-        ln('');
+        liveStatus.printLine('');
 
         if (blockers > 0) {
-          ln(
+          liveStatus.printLine(
             `  ${c.red('⚡')}  ${blockers} blocker${blockers !== 1 ? 's' : ''} this wave` +
             `  ${c.dim('—')}  ${c.dim('see synthesis for details')}`,
           );
         }
 
         if (!adjust) {
-          ln(
+          liveStatus.printLine(
             `  ${c.dim('└')}  Wave done  ${c.dim('·')}  ${c.dim(waveDur)}` +
             `  ${c.dim('·')}  ${c.green('PM approved')}`,
           );
         } else {
-          ln(
+          liveStatus.printLine(
             `  ${c.dim('└')}  Wave done  ${c.dim('·')}  ${c.dim(waveDur)}` +
             `  ${c.dim('·')}  ${c.yellow('PM adjusted plan')}`,
           );
           if (decision.pmNotes) {
-            const note = decision.pmNotes.slice(0, W - 8).replace(/\n/g, ' ');
-            ln(`     ${c.dim(note)}`);
+            liveStatus.printLine(`     ${c.dim(decision.pmNotes.slice(0, W - 8).replace(/\n/g, ' '))}`);
           }
           for (const t of newTasks) {
-            ln(
+            liveStatus.printLine(
               `     ${c.cyan('+')}  ${c.bold(rpad(t.agent, 18))}  ` +
               `${c.dim('"' + t.title.slice(0, 52) + '"')}`,
             );
           }
           for (const u of unblocks) {
-            ln(
+            liveStatus.printLine(
               `     ${c.yellow('↑')}  ${c.bold(rpad(u.forAgent, 18))}  ` +
               `${c.dim('"' + u.message.slice(0, 52) + '"')}`,
             );
           }
         }
 
-        ln('');
+        liveStatus.printLine('');
       },
 
       // ── Synthesizing ─────────────────────────────────────────────────────────
       onSynthesizing: () => {
         runState.synthesizing();
-        ln(rule('─'));
-        ln(`  ${c.dim('○')}  ${c.dim('Synthesizing final deliverable…')}`);
-        ln('');
+        liveStatus.printRule('─');
+        liveStatus.synthesizing();
       },
 
       // ── HITL pause / resume ───────────────────────────────────────────────────
       onHitlPause: (paused: boolean) => {
         runState.setHitlPaused(paused);
-        ln('');
+        liveStatus.printLine('');
         if (paused) {
-          ln(`  ${c.yellow('⏸')}  ${c.bold('Run paused')}  ${c.dim('—')}  type ${c.cyan('/resume')} to continue`);
+          liveStatus.printLine(`  ${c.yellow('⏸')}  ${c.bold('Run paused')}  ${c.dim('—')}  type ${c.cyan('/resume')} to continue`);
         } else {
-          ln(`  ${c.green('▶')}  ${c.bold('Resumed')}`);
+          liveStatus.printLine(`  ${c.green('▶')}  ${c.bold('Resumed')}`);
         }
-        ln('');
+        liveStatus.printLine('');
       },
 
       // ── Abort pending ─────────────────────────────────────────────────────────
       onAbortPending: () => {
         runState.setAbortPending();
-        ln('');
-        ln(`  ${c.yellow('⚠')}  Abort queued — stopping after current wave`);
-        ln('');
+        liveStatus.printLine('');
+        liveStatus.printLine(`  ${c.yellow('⚠')}  Abort queued — stopping after current wave`);
+        liveStatus.printLine('');
+      },
+
+      // ── Circuit breaker ───────────────────────────────────────────────────────
+      onCircuitBreak: (info: CircuitBreakInfo) => {
+        const CW  = Math.min(cols(), 72);
+        const bar = '═'.repeat(CW - 4);
+        liveStatus.printLine('');
+        liveStatus.printLine(`  ${c.red('╔' + bar + '╗')}`);
+        liveStatus.printLine(`  ${c.red('║')}  ${c.bold(c.red('Connection lost — run paused'))}${' '.repeat(Math.max(0, CW - 36))}${c.red('║')}`);
+        liveStatus.printLine(`  ${c.red('╚' + bar + '╝')}`);
+        liveStatus.printLine('');
+        liveStatus.printLine(
+          `  ${c.red('✗')}  Wave ${info.waveNumber} interrupted` +
+          `  ${c.dim('·')}  ${info.errorCount} network error${info.errorCount !== 1 ? 's' : ''}` +
+          (info.failedAgents.length > 0 ? `  ${c.dim('·')}  ${c.red(info.failedAgents.join(', '))}` : ''),
+        );
+        liveStatus.printLine('');
+
+        if (info.savedTasks.length > 0) {
+          liveStatus.printLine(`  ${c.green('✓')}  ${c.bold(`${info.savedTasks.length} task${info.savedTasks.length !== 1 ? 's' : ''} saved`)}`);
+          for (const t of info.savedTasks) {
+            liveStatus.printLine(`     ${c.dim('·')}  ${c.dim(t.agent)}  ${t.title.slice(0, CW - 20)}`);
+          }
+          liveStatus.printLine('');
+        }
+
+        if (info.blockedTasks.length > 0) {
+          liveStatus.printLine(`  ${c.yellow('⚡')}  ${c.bold(`${info.blockedTasks.length} task${info.blockedTasks.length !== 1 ? 's' : ''} need retry`)}`);
+          for (const t of info.blockedTasks) {
+            liveStatus.printLine(`     ${c.dim('·')}  ${c.dim(t.agent)}  ${t.title.slice(0, CW - 20)}`);
+          }
+          liveStatus.printLine('');
+        }
+
+        liveStatus.printLine(`  ${c.dim('Partial progress has been saved to the project blackboard.')}`);
+        liveStatus.printLine(`  ${c.dim('The PM will automatically retry blocked tasks when you resume.')}`);
+        liveStatus.printLine('');
+        liveStatus.printLine(`  ${c.bold('Restore connectivity, then resume with:')}`);
+        liveStatus.printLine(`    ${c.cyan('❯')} ${c.bold('/resume')}         ${c.dim('(in this chat)')}`);
+        liveStatus.printLine(`    ${c.cyan('❯')} ${c.bold('roland resume')}   ${c.dim('(from another terminal)')}`);
+        liveStatus.printLine('');
       },
     });
 
@@ -445,6 +679,7 @@ async function runGoalInline(goal: string, ctx: ChatContext): Promise<void> {
 
     runState.done();
     hitlQueue.cleanup();
+    liveStatus.stop();
     ctx.lastGoal = goal;
     ctx.runCount++;
 
@@ -472,11 +707,12 @@ async function runGoalInline(goal: string, ctx: ChatContext): Promise<void> {
 
     // ── Conversational "what next?" ────────────────────────────────────────────
     ln('');
-    ln(`  ${c.bold('What\'s next?')}`);
-    ln(`  ${c.dim('Type another goal, or try:')}`);
-    ln(`  ${c.cyan('/refine')} ${c.dim('"Fix the failing tests"')}   run a follow-up`);
-    ln(`  ${c.cyan('/status')}                        check run state`);
-    ln(`  ${c.cyan('/help')}                          all commands`);
+    ln(`  ${c.bold('Run complete.')}  ${c.dim('What would you like to do next?')}`);
+    ln('');
+    ln(`  ${c.dim('Type a new goal, or try:')}`);
+    ln(`  ${c.cyan('/refine')} ${c.dim('"Fix the failing tests"')}    follow up on this run`);
+    ln(`  ${c.cyan('/status')}                         show run details`);
+    ln(`  ${c.cyan('/help')}                           all commands`);
     ln('');
 
     await notifier.notify({
@@ -489,6 +725,7 @@ async function runGoalInline(goal: string, ctx: ChatContext): Promise<void> {
     const msg = e instanceof Error ? e.message : String(e);
     runState.error(msg);
     hitlQueue.cleanup();
+    liveStatus.stop();
 
     ln('');
     ln(`  ${c.red('✗')}  ${c.bold('Run failed')}  ${c.dim('·')}  ${msg.slice(0, 200)}`);
@@ -673,6 +910,16 @@ async function handleCommand(input: string, ctx: ChatContext): Promise<void> {
       break;
     }
 
+    case 'parallel': {
+      const v = args[0]?.toLowerCase();
+      if (v === 'on' || v === '1') ctx.parallel = true;
+      else if (v === 'off' || v === '0') ctx.parallel = false;
+      else ctx.parallel = !ctx.parallel;
+      ln(`  ${ctx.parallel ? c.green('●') : c.yellow('●')}  ${ctx.parallel ? c.green('Parallel mode') : c.yellow('Sequential mode')} ${ctx.parallel ? c.dim('— 4 concurrent agents') : c.dim('— one agent at a time (safe mode)')}`);
+      ln('');
+      break;
+    }
+
     case 'state-dir': case 'statedir': {
       if (!args[0]) {
         ln(`  ${c.dim('Current:')} ${ctx.stateDir}`);
@@ -766,6 +1013,7 @@ export interface ChatOptions {
   noImprove?:  boolean;
   webhookUrl?: string;
   agentsDir?:  string;
+  parallel?:   boolean;
 }
 
 export async function startChat(options: ChatOptions = {}): Promise<void> {
@@ -774,6 +1022,7 @@ export async function startChat(options: ChatOptions = {}): Promise<void> {
     notify:     options.notify    ?? (process.env.ROLAND_NOTIFY === '1'),
     stream:     options.stream    ?? false,
     noImprove:  options.noImprove ?? false,
+    parallel:   options.parallel  ?? (process.env.ROLAND_SEQUENTIAL !== '1'),
     webhookUrl: options.webhookUrl,
     agentsDir:  options.agentsDir,
     simple:     isSimpleTui(),
@@ -793,7 +1042,7 @@ export async function startChat(options: ChatOptions = {}): Promise<void> {
           '/help', '/status', '/pause', '/resume', '/abort',
           '/inject ', '/replan', '/unblock ', '/refine ',
           '/bg-status', '/bg-logs', '/bg-stop',
-          '/stream', '/notify', '/improve', '/state-dir ', '/clean',
+          '/stream', '/notify', '/improve', '/parallel', '/state-dir ', '/clean',
           '/clear', '/exit', '/quit',
         ];
         const hits = cmds.filter((x) => x.startsWith(line));
@@ -803,11 +1052,23 @@ export async function startChat(options: ChatOptions = {}): Promise<void> {
     },
   });
 
-  // Ctrl+C on empty line gives a hint rather than exiting immediately —
-  // same behaviour as Claude Code.
+  // Share the readline with ctx so runTeam can reuse it for self-improvement
+  // prompts instead of creating a competing interface that would close stdin.
+  ctx.rl = rl;
+
+  // Ctrl+C: first press shows a hint; second press within 1.5 s exits cleanly.
+  let lastSigint = 0;
   rl.on('SIGINT', () => {
+    const now = Date.now();
+    if (now - lastSigint < 1500) {
+      ln('');
+      ln(`  ${c.dim('Goodbye. Run')} ${c.cyan('roland')} ${c.dim('anytime.')}`);
+      ln('');
+      process.exit(0);
+    }
+    lastSigint = now;
     ln('');
-    ln(`  ${c.dim('(Ctrl+D or')} ${c.cyan('/exit')} ${c.dim('to quit)')}`);
+    ln(`  ${c.dim('Press Ctrl+C again to exit, or type')} ${c.cyan('/exit')}`);
     ln('');
     rl.setPrompt(PROMPT);
     rl.prompt();

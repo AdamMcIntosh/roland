@@ -38,10 +38,13 @@ export interface HumanFeedback {
  * Auto-skips after timeoutSeconds. Returns null when not TTY or user skips.
  *
  * Input format: "7" or "8 parallel waves worked great here"
+ *
+ * Pass `rl` to reuse the caller's readline interface instead of creating a
+ * competing one on stdin (which would close stdin and kill the outer REPL).
  */
 export async function collectHumanFeedback(
   goal: string,
-  opts: { isTTY: boolean; timeoutSeconds: number },
+  opts: { isTTY: boolean; timeoutSeconds: number; rl?: readline.Interface },
 ): Promise<HumanFeedback | null> {
   if (!opts.isTTY) return null;
 
@@ -57,25 +60,23 @@ export async function collectHumanFeedback(
 
   return new Promise<HumanFeedback | null>((resolve) => {
     let settled = false;
+    let innerRl: readline.Interface | undefined;
 
     const settle = (result: HumanFeedback | null, label?: string) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      try { rl.close(); } catch { /* already closed */ }
+      if (opts.rl) {
+        opts.rl.removeListener('line', onLine);
+      } else if (innerRl) {
+        try { innerRl.close(); } catch { /* already closed */ }
+      }
       if (label) w(`${dim(label)}\n`);
       w('\n');
       resolve(result);
     };
 
-    const timer = setTimeout(
-      () => settle(null, '(auto-skipped)'),
-      opts.timeoutSeconds * 1_000,
-    );
-
-    const rl = readline.createInterface({ input: process.stdin, terminal: false });
-
-    rl.once('line', (input) => {
+    const onLine = (input: string) => {
       const trimmed = input.trim();
       if (!trimmed) { settle(null, '(skipped)'); return; }
 
@@ -91,9 +92,20 @@ export async function collectHumanFeedback(
         { rating, notes },
         `Recorded ${rating}/10${notes ? ` — "${notes.slice(0, 60)}"` : ''}`,
       );
-    });
+    };
 
-    rl.once('close', () => settle(null));
+    const timer = setTimeout(
+      () => settle(null, '(auto-skipped)'),
+      opts.timeoutSeconds * 1_000,
+    );
+
+    if (opts.rl) {
+      opts.rl.once('line', onLine);
+    } else {
+      innerRl = readline.createInterface({ input: process.stdin, terminal: false });
+      innerRl.once('line', onLine);
+      innerRl.once('close', () => settle(null));
+    }
   });
 }
 
@@ -385,6 +397,11 @@ export interface MemoryProposalOptions {
   isTTY: boolean;
   /** Seconds before auto-accept fires. Default 15. */
   timeoutSeconds: number;
+  /**
+   * Reuse an existing readline interface instead of creating a competing one
+   * on stdin. Required when called from the chat REPL to prevent closing stdin.
+   */
+  rl?: readline.Interface;
 }
 
 /**
@@ -454,14 +471,28 @@ export async function showMemoryProposal(
   // ── Wait for input with timeout ──────────────────────────────────────────
   return new Promise<'accepted' | 'skipped'>((resolve) => {
     let settled = false;
+    let innerRl: readline.Interface | undefined;
 
     const settle = (result: 'accepted' | 'skipped', label: string) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      try { rl.close(); } catch { /* already closed */ }
+      if (opts.rl) {
+        opts.rl.removeListener('line', onLine);
+      } else if (innerRl) {
+        try { innerRl.close(); } catch { /* already closed */ }
+      }
       w(`  ${dim(label)}\n\n`);
       resolve(result);
+    };
+
+    const onLine = (input: string) => {
+      const s = input.trim().toLowerCase();
+      if (s === 's' || s === 'skip') {
+        settle('skipped', 'Skipped — memory unchanged.');
+      } else {
+        settle('accepted', 'Accepted.');
+      }
     };
 
     const timer = setTimeout(() => {
@@ -469,23 +500,15 @@ export async function showMemoryProposal(
       settle('accepted', 'Auto-accepted.');
     }, opts.timeoutSeconds * 1_000);
 
-    const rl = readline.createInterface({
-      input:    process.stdin,
-      terminal: false,
-    });
+    w(`  ${dim(`[Enter] Accept all   [s] Skip   (auto-accept in ${opts.timeoutSeconds}s)`)}\n`);
 
-    w(`  ${dim(`[Enter] Accept all   [s] Skip   (auto-accept in ${opts.timeoutSeconds}s)`)}  `);
-
-    rl.once('line', (input) => {
-      const s = input.trim().toLowerCase();
-      if (s === 's' || s === 'skip') {
-        settle('skipped', 'Skipped — memory unchanged.');
-      } else {
-        settle('accepted', 'Accepted.');
-      }
-    });
-
-    rl.once('close', () => settle('accepted', 'Auto-accepted (stdin closed).'));
+    if (opts.rl) {
+      opts.rl.once('line', onLine);
+    } else {
+      innerRl = readline.createInterface({ input: process.stdin, terminal: false });
+      innerRl.once('line', onLine);
+      innerRl.once('close', () => settle('accepted', 'Auto-accepted (stdin closed).'));
+    }
   });
 }
 

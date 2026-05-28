@@ -178,6 +178,7 @@ function printHelp(): void {
   ln();
   ln('  ' + b('TEAM FLAGS'));
   ln(`    ${b('--stream')}, -s              Print task output snippets as each agent completes`);
+  ln(`    ${b('--sequential')}              One agent at a time  ${d('(safe mode for unstable connections)')}`);
   ln();
   ln('  ' + b('WATCH FLAGS'));
   ln(`    ${b('--task')} "description"       Fixed goal instead of commit message`);
@@ -216,9 +217,10 @@ function printHelp(): void {
   ln('  ' + b('ENVIRONMENT'));
   ln(`    ${b('ROLAND_NOTIFY=1')}            Enable notifications for all commands`);
   ln(`    ${b('ROLAND_SIMPLE_TUI=1')}        Simple ASCII output  ${d('(mobile SSH, Termius, limited terminals)')}`);
+  ln(`    ${b('ROLAND_SEQUENTIAL=1')}        Sequential safe mode  ${d('(one agent at a time; use --sequential flag per-run)')}`);
   ln(`    ${b('CURSOR_API_KEY')}             Required for agent execution`);
   ln(`    ${b('ROLAND_AGENT_TIMEOUT_MS')}    Agent timeout  ${d('(default: 25 min)')}`);
-  ln(`    ${b('ROLAND_AGENT_RETRIES')}       Max retries per agent  ${d('(default: 4)')}`);
+  ln(`    ${b('ROLAND_AGENT_RETRIES')}       Max retries per agent  ${d('(default: 5)')}`);
   ln();
   ln('  ' + b('EXAMPLES'));
   ln(`    ${d('# Run a team session')}`);
@@ -315,6 +317,7 @@ async function main(): Promise<void> {
           notify:    rest.includes('--notify') || rest.includes('-n'),
           stream:    rest.includes('--stream') || rest.includes('-s'),
           noImprove: rest.includes('--no-improve'),
+          parallel:  !rest.includes('--sequential'),
           webhookUrl: rest.find((_, i) => rest[i - 1] === '--webhook'),
         });
         break;

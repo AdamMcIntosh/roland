@@ -84,6 +84,15 @@ export interface TeamResult {
   blockersEncountered: number;
 }
 
+/** Payload delivered to the `onCircuitBreak` callback when the wave circuit breaker opens. */
+export interface CircuitBreakInfo {
+  waveNumber:   number;
+  errorCount:   number;
+  failedAgents: string[];
+  savedTasks:   Array<{ id: string; agent: string; title: string }>;
+  blockedTasks: Array<{ id: string; agent: string; title: string }>;
+}
+
 export interface TeamOrchestratorOptions {
   goal: string;
   stateDir?: string;
@@ -129,6 +138,30 @@ export interface TeamOrchestratorOptions {
    * Default: false (auto-accept).
    */
   interactive?: boolean;
+  /**
+   * Fired when the wave circuit breaker opens — a terminal network error has
+   * exhausted all retries for at least one agent. Carries partial progress so
+   * callers can render a rich UI (saved tasks, blocked tasks, resume command).
+   * The run is paused via HITL immediately after this callback returns.
+   */
+  onCircuitBreak?: (info: CircuitBreakInfo) => void;
+  /**
+   * Existing readline interface to reuse for interactive prompts (rating, memory
+   * approval). When provided, no competing readline is created on stdin — required
+   * when called from the chat REPL to prevent closing stdin and killing the loop.
+   */
+  rl?: import('readline').Interface;
+  /**
+   * When true (default), tasks are executed one at a time with a PM review
+   * after each individual task. This gives maximum PM control and uses only
+   * one Cursor API connection at a time — recommended for long, complex goals
+   * and unstable connections.
+   *
+   * When false (parallel mode), all dependency-free tasks in a wave run
+   * concurrently up to MAX_CONCURRENT_AGENTS. Enable with --parallel or
+   * ROLAND_PARALLEL=1.
+   */
+  sequential?: boolean;
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -429,7 +462,9 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     onWaveReview, onTasksSpawned, onSynthesizing,
     onBlockerDetected, hitlQueue,
     onHitlPause, onAbortPending,
-    noImprove = false, interactive = false,
+    noImprove = false, interactive = false, rl,
+    onCircuitBreak,
+    sequential = true,
   } = opts;
 
   // ── Usage tracking ────────────────────────────────────────────────────────
@@ -680,15 +715,23 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
       break;
     }
 
-    const ready = remaining.filter((t) => t.dependsOn.every((d) => completedIds.has(d)));
-    if (ready.length === 0) {
+    const allReady = remaining.filter((t) => t.dependsOn.every((d) => completedIds.has(d)));
+
+    let ready: TeamTask[];
+    if (allReady.length === 0) {
       console.error('[Team] WARNING: unresolvable dependencies — running remaining tasks to avoid deadlock');
-      ready.push(...remaining.splice(0));
+      ready = remaining.splice(0);
     } else {
+      // Sequential mode: one task per wave for maximum PM control.
+      // Parallel mode: all ready tasks run concurrently (up to MAX_CONCURRENT_AGENTS).
+      ready = sequential ? [allReady[0]] : allReady;
       for (const t of ready) remaining.splice(remaining.indexOf(t), 1);
     }
 
-    console.error(`[Team] Wave ${waveNumber}: ${ready.length} task(s) in parallel — ${ready.map((t) => t.id).join(', ')}`);
+    const modeLabel = sequential
+      ? `Step ${waveNumber}  [${ready[0]?.agent ?? '?'}]`
+      : `Wave ${waveNumber}: ${ready.length} task(s) in parallel`;
+    console.error(`[Team] ${modeLabel} — ${ready.map((t) => t.id).join(', ')}`);
     onWaveStart?.(waveNumber, ready);
 
     // Reset circuit breaker for this wave (clears error count and open flag)
@@ -707,9 +750,19 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     // ── Circuit breaker check ─────────────────────────────────────────────
     // If CIRCUIT_BREAKER_THRESHOLD network errors occurred this wave, pause the
     // run so the user can restore connectivity before the PM review proceeds.
-    if (waveCircuit.isOpen) {
+    const circuitBroke = waveCircuit.isOpen;
+    if (circuitBroke) {
       const succeeded = waveResults.filter((r) => !r.hasBlocker);
       const blocked   = waveResults.filter((r) => r.hasBlocker);
+
+      // Notify caller with structured info for rich UI rendering
+      onCircuitBreak?.({
+        waveNumber,
+        errorCount:   waveCircuit.errorCount,
+        failedAgents: [...waveCircuit.failedAgents],
+        savedTasks:   succeeded.map((r) => ({ id: r.taskId, agent: r.agent, title: r.taskTitle })),
+        blockedTasks: blocked.map((r) => ({ id: r.taskId, agent: r.agent, title: r.taskTitle })),
+      });
 
       const SEP = '─'.repeat(58);
       console.error('');
@@ -778,7 +831,9 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     }
 
     // ── PM Review ─────────────────────────────────────────────────────────
-    if (remaining.length > 0) {
+    // Skip when the circuit broke this wave — the PM review would also fail on
+    // a downed connection. PM reviews normally after the run is resumed.
+    if (remaining.length > 0 && !circuitBroke) {
       // Collect blockers detected this wave
       const detectedBlockers = waveResults
         .filter((r) => r.hasBlocker)
@@ -876,7 +931,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     // Collect optional human feedback (interactive scroll/TTY mode only)
     let humanFeedback: HumanFeedback | undefined;
     if (interactive && Boolean((process.stderr as NodeJS.WriteStream).isTTY)) {
-      const fb = await collectHumanFeedback(goal, { isTTY: true, timeoutSeconds: 30 });
+      const fb = await collectHumanFeedback(goal, { isTTY: true, timeoutSeconds: 30, rl });
       if (fb) {
         humanFeedback = fb;
         console.error(`[Team] Feedback recorded: ${fb.rating}/10${fb.notes ? ` — "${fb.notes.slice(0, 60)}"` : ''}`);
@@ -905,6 +960,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
         quiet:          !interactive,
         isTTY:          Boolean((process.stderr as NodeJS.WriteStream).isTTY),
         timeoutSeconds: 15,
+        rl,
       });
 
       if (decision === 'accepted') {

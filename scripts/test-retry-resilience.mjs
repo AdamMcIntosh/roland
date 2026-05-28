@@ -2,12 +2,12 @@
  * Retry-resilience smoke test.
  *
  * Verifies:
- *  1. NETWORK_RETRY_DELAYS  — 5-entry schedule: 2s → 5s → 10s → 20s → 30s
- *  2. GENERIC_RETRY_DELAYS  — 5-entry schedule: 5s → 10s → 20s → 30s → 45s
- *  3. MAX_CONCURRENT_AGENTS — default 6
- *  4. NETWORK_ERROR_PATTERNS — covers all required error strings (10 positive, 5 negative)
+ *  1. NETWORK_RETRY_DELAYS  — 6-entry schedule: 2s → 6s → 12s → 25s → 40s → 60s
+ *  2. GENERIC_RETRY_DELAYS  — 6-entry schedule: 5s → 12s → 25s → 40s → 60s → 90s
+ *  3. MAX_CONCURRENT_AGENTS — default 4
+ *  4. NETWORK_ERROR_PATTERNS — covers all required error strings (15 positive, 5 negative)
  *  5. Retry delay selection — correct table chosen per error type
- *  6. Total attempt count   — AGENT_MAX_RETRIES=4 → 5 total attempts
+ *  6. Total attempt count   — AGENT_MAX_RETRIES=5 → 6 total attempts
  *  7. Synthetic BLOCKER message — network vs generic content differences
  *  8. runConcurrent throttle — verifies at most N tasks run at once
  *
@@ -52,27 +52,29 @@ function retryDelay(attempt, netError) {
 }
 
 // ── Test 1: NETWORK_RETRY_DELAYS schedule ────────────────────────────────────
-console.log('\n\x1b[1mTest 1: NETWORK_RETRY_DELAYS schedule (2s → 5s → 10s → 20s → 30s)\x1b[0m');
-assert('Has 5 entries',          NETWORK_RETRY_DELAYS.length === 5,   `got ${NETWORK_RETRY_DELAYS.length}`);
-assert('Attempt 1 → 2 s',        NETWORK_RETRY_DELAYS[0] === 2_000,   `got ${NETWORK_RETRY_DELAYS[0]}`);
-assert('Attempt 2 → 5 s',        NETWORK_RETRY_DELAYS[1] === 5_000,   `got ${NETWORK_RETRY_DELAYS[1]}`);
-assert('Attempt 3 → 10 s',       NETWORK_RETRY_DELAYS[2] === 10_000,  `got ${NETWORK_RETRY_DELAYS[2]}`);
-assert('Attempt 4 → 20 s',       NETWORK_RETRY_DELAYS[3] === 20_000,  `got ${NETWORK_RETRY_DELAYS[3]}`);
-assert('Attempt 5 → 30 s',       NETWORK_RETRY_DELAYS[4] === 30_000,  `got ${NETWORK_RETRY_DELAYS[4]}`);
+console.log('\n\x1b[1mTest 1: NETWORK_RETRY_DELAYS schedule (2s → 6s → 12s → 25s → 40s → 60s)\x1b[0m');
+assert('Has 6 entries',          NETWORK_RETRY_DELAYS.length === 6,   `got ${NETWORK_RETRY_DELAYS.length}`);
+assert('Attempt 1 →  2 s',       NETWORK_RETRY_DELAYS[0] === 2_000,   `got ${NETWORK_RETRY_DELAYS[0]}`);
+assert('Attempt 2 →  6 s',       NETWORK_RETRY_DELAYS[1] === 6_000,   `got ${NETWORK_RETRY_DELAYS[1]}`);
+assert('Attempt 3 → 12 s',       NETWORK_RETRY_DELAYS[2] === 12_000,  `got ${NETWORK_RETRY_DELAYS[2]}`);
+assert('Attempt 4 → 25 s',       NETWORK_RETRY_DELAYS[3] === 25_000,  `got ${NETWORK_RETRY_DELAYS[3]}`);
+assert('Attempt 5 → 40 s',       NETWORK_RETRY_DELAYS[4] === 40_000,  `got ${NETWORK_RETRY_DELAYS[4]}`);
+assert('Attempt 6 → 60 s',       NETWORK_RETRY_DELAYS[5] === 60_000,  `got ${NETWORK_RETRY_DELAYS[5]}`);
 
 // ── Test 2: GENERIC_RETRY_DELAYS schedule ────────────────────────────────────
-console.log('\n\x1b[1mTest 2: GENERIC_RETRY_DELAYS schedule (5s → 10s → 20s → 30s → 45s)\x1b[0m');
-assert('Has 5 entries',          GENERIC_RETRY_DELAYS.length === 5,   `got ${GENERIC_RETRY_DELAYS.length}`);
-assert('Attempt 1 → 5 s',        GENERIC_RETRY_DELAYS[0] === 5_000,   `got ${GENERIC_RETRY_DELAYS[0]}`);
-assert('Attempt 2 → 10 s',       GENERIC_RETRY_DELAYS[1] === 10_000,  `got ${GENERIC_RETRY_DELAYS[1]}`);
-assert('Attempt 3 → 20 s',       GENERIC_RETRY_DELAYS[2] === 20_000,  `got ${GENERIC_RETRY_DELAYS[2]}`);
-assert('Attempt 4 → 30 s',       GENERIC_RETRY_DELAYS[3] === 30_000,  `got ${GENERIC_RETRY_DELAYS[3]}`);
-assert('Attempt 5 → 45 s',       GENERIC_RETRY_DELAYS[4] === 45_000,  `got ${GENERIC_RETRY_DELAYS[4]}`);
+console.log('\n\x1b[1mTest 2: GENERIC_RETRY_DELAYS schedule (5s → 12s → 25s → 40s → 60s → 90s)\x1b[0m');
+assert('Has 6 entries',          GENERIC_RETRY_DELAYS.length === 6,   `got ${GENERIC_RETRY_DELAYS.length}`);
+assert('Attempt 1 →  5 s',       GENERIC_RETRY_DELAYS[0] === 5_000,   `got ${GENERIC_RETRY_DELAYS[0]}`);
+assert('Attempt 2 → 12 s',       GENERIC_RETRY_DELAYS[1] === 12_000,  `got ${GENERIC_RETRY_DELAYS[1]}`);
+assert('Attempt 3 → 25 s',       GENERIC_RETRY_DELAYS[2] === 25_000,  `got ${GENERIC_RETRY_DELAYS[2]}`);
+assert('Attempt 4 → 40 s',       GENERIC_RETRY_DELAYS[3] === 40_000,  `got ${GENERIC_RETRY_DELAYS[3]}`);
+assert('Attempt 5 → 60 s',       GENERIC_RETRY_DELAYS[4] === 60_000,  `got ${GENERIC_RETRY_DELAYS[4]}`);
+assert('Attempt 6 → 90 s',       GENERIC_RETRY_DELAYS[5] === 90_000,  `got ${GENERIC_RETRY_DELAYS[5]}`);
 assert('Network attempt 1 faster than generic', NETWORK_RETRY_DELAYS[0] < GENERIC_RETRY_DELAYS[0]);
 
 // ── Test 3: Concurrency + circuit breaker + warmup constants ─────────────────
 console.log('\n\x1b[1mTest 3: Concurrency, circuit breaker, and warmup defaults\x1b[0m');
-assert('Default MAX_CONCURRENT = 2',       MAX_CONCURRENT_AGENTS === 2,          `got ${MAX_CONCURRENT_AGENTS}`);
+assert('Default MAX_CONCURRENT = 4',       MAX_CONCURRENT_AGENTS === 4,          `got ${MAX_CONCURRENT_AGENTS}`);
 assert('Concurrent reasonable range',      MAX_CONCURRENT_AGENTS >= 1 && MAX_CONCURRENT_AGENTS <= 32);
 assert('CIRCUIT_BREAKER_THRESHOLD = 1',    CIRCUIT_BREAKER_THRESHOLD === 1,      `got ${CIRCUIT_BREAKER_THRESHOLD}`);
 assert('Circuit threshold reasonable',     CIRCUIT_BREAKER_THRESHOLD >= 0 && CIRCUIT_BREAKER_THRESHOLD <= 20);
@@ -116,21 +118,23 @@ for (const msg of shouldNotBeNet) {
 
 // ── Test 5: Retry delay selection ────────────────────────────────────────────
 console.log('\n\x1b[1mTest 5: Retry delay selection\x1b[0m');
-assert('Network attempt 1 → 2 s',  retryDelay(1, true)  === 2_000,  `got ${retryDelay(1, true)}`);
-assert('Network attempt 2 → 5 s',  retryDelay(2, true)  === 5_000,  `got ${retryDelay(2, true)}`);
-assert('Network attempt 3 → 10 s', retryDelay(3, true)  === 10_000, `got ${retryDelay(3, true)}`);
-assert('Network attempt 4 → 20 s', retryDelay(4, true)  === 20_000, `got ${retryDelay(4, true)}`);
-assert('Network attempt 5 → 30 s', retryDelay(5, true)  === 30_000, `got ${retryDelay(5, true)}`);
-assert('Network attempt 6 → 30 s (clamp)', retryDelay(6, true) === 30_000, `got ${retryDelay(6, true)}`);
-assert('Generic attempt 1 → 5 s',  retryDelay(1, false) === 5_000,  `got ${retryDelay(1, false)}`);
-assert('Generic attempt 2 → 10 s', retryDelay(2, false) === 10_000, `got ${retryDelay(2, false)}`);
-assert('Generic attempt 5 → 45 s', retryDelay(5, false) === 45_000, `got ${retryDelay(5, false)}`);
-assert('Generic attempt 6 → 45 s (clamp)', retryDelay(6, false) === 45_000, `got ${retryDelay(6, false)}`);
+assert('Network attempt 1 →  2 s',  retryDelay(1, true)  === 2_000,  `got ${retryDelay(1, true)}`);
+assert('Network attempt 2 →  6 s',  retryDelay(2, true)  === 6_000,  `got ${retryDelay(2, true)}`);
+assert('Network attempt 3 → 12 s',  retryDelay(3, true)  === 12_000, `got ${retryDelay(3, true)}`);
+assert('Network attempt 4 → 25 s',  retryDelay(4, true)  === 25_000, `got ${retryDelay(4, true)}`);
+assert('Network attempt 5 → 40 s',  retryDelay(5, true)  === 40_000, `got ${retryDelay(5, true)}`);
+assert('Network attempt 6 → 60 s',  retryDelay(6, true)  === 60_000, `got ${retryDelay(6, true)}`);
+assert('Network attempt 7 → 60 s (clamp)', retryDelay(7, true) === 60_000, `got ${retryDelay(7, true)}`);
+assert('Generic attempt 1 →  5 s',  retryDelay(1, false) === 5_000,  `got ${retryDelay(1, false)}`);
+assert('Generic attempt 2 → 12 s',  retryDelay(2, false) === 12_000, `got ${retryDelay(2, false)}`);
+assert('Generic attempt 5 → 60 s',  retryDelay(5, false) === 60_000, `got ${retryDelay(5, false)}`);
+assert('Generic attempt 6 → 90 s',  retryDelay(6, false) === 90_000, `got ${retryDelay(6, false)}`);
+assert('Generic attempt 7 → 90 s (clamp)', retryDelay(7, false) === 90_000, `got ${retryDelay(7, false)}`);
 
 // ── Test 6: Total attempt count ──────────────────────────────────────────────
 console.log('\n\x1b[1mTest 6: Total attempt count\x1b[0m');
-assert('AGENT_MAX_RETRIES default = 4',          AGENT_MAX_RETRIES === 4,  `got ${AGENT_MAX_RETRIES}`);
-assert('maxAttempts = AGENT_MAX_RETRIES + 1 = 5', AGENT_MAX_RETRIES + 1 === 5);
+assert('AGENT_MAX_RETRIES default = 5',          AGENT_MAX_RETRIES === 5,  `got ${AGENT_MAX_RETRIES}`);
+assert('maxAttempts = AGENT_MAX_RETRIES + 1 = 6', AGENT_MAX_RETRIES + 1 === 6);
 
 // ── Test 7: Synthetic BLOCKER content ────────────────────────────────────────
 console.log('\n\x1b[1mTest 7: Synthetic BLOCKER message content\x1b[0m');
@@ -153,8 +157,8 @@ function syntheticBlocker(agentName, lastErr, maxAttempts) {
   return lines.join('\n');
 }
 
-const netBlocker = syntheticBlocker('executor', new Error('read ECONNRESET'), 5);
-const genericBlocker = syntheticBlocker('executor', new Error('Agent timed out'), 5);
+const netBlocker = syntheticBlocker('executor', new Error('read ECONNRESET'), 6);
+const genericBlocker = syntheticBlocker('executor', new Error('Agent timed out'), 6);
 
 assert('Network BLOCKER: ## 🚨 BLOCKER header',        netBlocker.includes('## 🚨 BLOCKER'));
 assert('Network BLOCKER: "Connection error"',           netBlocker.includes('Connection error'));
@@ -162,6 +166,7 @@ assert('Network BLOCKER: "transient Cursor API issue"', netBlocker.includes('tra
 assert('Network BLOCKER: "project blackboard"',         netBlocker.includes('project blackboard'));
 assert('Network BLOCKER: resume hint',                  netBlocker.includes('roland resume'));
 assert('Network BLOCKER: /resume hint',                 netBlocker.includes('/resume'));
+assert('Network BLOCKER: 6 attempts',                   netBlocker.includes('6 attempts'));
 assert('Generic BLOCKER: "Last error"',                 genericBlocker.includes('Last error'));
 assert('Generic BLOCKER: no resume hint',               !genericBlocker.includes('roland resume'));
 assert('Generic BLOCKER: no "Connection error"',        !genericBlocker.includes('Connection error'));
@@ -223,14 +228,14 @@ async function runConcurrent(factories, limit) {
   assert('Fewer tasks than limit still works', JSON.stringify(results) === '[7,8]', JSON.stringify(results));
 }
 
-// Edge: limit = 1 (sequential)
+// Edge: limit = 1 (sequential) — now the default
 {
   const order = [];
   await runConcurrent(
     [1, 2, 3].map((n) => async () => { order.push(n); }),
     1,
   );
-  assert('limit=1 runs sequentially', JSON.stringify(order) === '[1,2,3]', JSON.stringify(order));
+  assert('limit=1 runs sequentially (default)', JSON.stringify(order) === '[1,2,3]', JSON.stringify(order));
 }
 
 // ── Test 9: withJitter helper ─────────────────────────────────────────────────
