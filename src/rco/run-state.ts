@@ -45,6 +45,10 @@ export interface RunState {
   hitlPaused?: boolean;
   /** True after `roland abort` is queued, before it is processed. */
   hitlAbortPending?: boolean;
+  /** Set when the wave circuit breaker opens due to connection errors. */
+  connectionDropped?: boolean;
+  /** Human-readable detail about the connection drop (wave, agent count, etc.). */
+  connectionDropMessage?: string;
 }
 
 // ── Writer (used by team-cli / orchestrator callbacks) ────────────────────────
@@ -161,6 +165,18 @@ export class RunStateWriter {
 
   setAbortPending(): void {
     this.state.hitlAbortPending = true;
+    this.flush();
+  }
+
+  setConnectionDropped(message: string): void {
+    this.state.connectionDropped = true;
+    this.state.connectionDropMessage = message;
+    this.flush();
+  }
+
+  clearConnectionDropped(): void {
+    delete this.state.connectionDropped;
+    delete this.state.connectionDropMessage;
     this.flush();
   }
 

@@ -8,6 +8,12 @@ role_prompt: >
   validation function, you must call it from the handler. If you change behaviour, you must update
   the tests. Always verify: "Is the feature reachable and exercised end-to-end?" before marking
   your task done. Partial implementations that leave features unconnected are a release blocker.
+
+  **Scope discipline — mandatory:**
+  Prefer small, incremental changes. Complete one logical piece per task. Do not expand scope
+  beyond what the task description explicitly asks for. If you discover adjacent work that is
+  needed, note it as a BLOCKER or MESSAGE to the PM rather than doing it yourself. One focused
+  deliverable done well is always better than two half-finished ones.
 provider: cursor
 claude_model: composer-2.5
 temperature: 0.7

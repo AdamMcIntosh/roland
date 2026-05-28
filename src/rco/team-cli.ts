@@ -261,7 +261,63 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     const runState = new RunStateWriter(stateDir, goal);
     const stateFilePath = path.join(stateDir, 'run-state.json');
     const useSimpleTui = simpleTui || isSimpleTui();
-    const tui = useSimpleTui ? new SimpleTuiRenderer(stateFilePath) : new TuiRenderer(stateFilePath);
+
+    // Command handler: executes /status /pause /resume /abort /help typed inside the TUI.
+    // Uses an indirection object so tui (const) can be referenced after assignment.
+    const cmdDispatch = { fn: (_cmd: string): void => { /* populated after tui is created */ } };
+    const tui = useSimpleTui
+      ? new SimpleTuiRenderer(stateFilePath)
+      : new TuiRenderer(stateFilePath, { onCommand: (cmd) => cmdDispatch.fn(cmd) });
+    if (tui instanceof TuiRenderer) {
+      cmdDispatch.fn = (cmd: string): void => {
+        const state = runState.get();
+        const totalSec = Math.floor((Date.now() - state.startedAt) / 1000);
+        const mm = Math.floor(totalSec / 60);
+        const ss = (totalSec % 60).toString().padStart(2, '0');
+        const verb = cmd.trim().toLowerCase().split(/\s+/)[0];
+
+        switch (verb) {
+          case '/status': {
+            const running = state.tasks.filter((t) => state.activeTaskIds.includes(t.id));
+            const doneCount = state.tasks.filter(
+              (t) => t.status === 'done' || t.status === 'blocked',
+            ).length;
+            const lines = [
+              `${state.status}  ·  Wave ${state.currentWave}  ·  ${doneCount}/${state.totalTasks} tasks  ·  ${mm}m ${ss}s elapsed`,
+              running.length > 0
+                ? `Running: ${running.map((t) => `${t.agent} · ${t.title.slice(0, 36)}`).join('  |  ')}`
+                : 'No agents currently active',
+            ];
+            if (state.pmNotes) lines.push(`PM: ${state.pmNotes.slice(0, 90)}`);
+            tui.showMessage(lines.join('\n'));
+            break;
+          }
+          case '/pause':
+            hitlQueue.push({ cmd: 'pause' });
+            tui.showMessage('⏸  Pause queued — takes effect before the next wave starts');
+            break;
+          case '/resume':
+            hitlQueue.push({ cmd: 'resume' });
+            tui.showMessage('▶  Resume queued — run will continue');
+            break;
+          case '/abort':
+            hitlQueue.push({ cmd: 'abort' });
+            tui.showMessage('🛑  Abort queued — run will stop after current wave finishes');
+            break;
+          case '/help':
+            tui.showMessage([
+              '/status   Wave, task counts, running agents, elapsed time',
+              '/pause    Pause before the next wave starts',
+              '/resume   Continue after a pause',
+              '/abort    Stop cleanly after the current wave',
+            ].join('\n'));
+            break;
+          default:
+            tui.showMessage(`Unknown: ${cmd}  — try /help`);
+        }
+      };
+    }
+
     tui.start();
     tui.update(runState.get());
 
@@ -314,10 +370,17 @@ export async function runTeamCli(argv: string[]): Promise<void> {
         },
         onHitlPause: (paused) => {
           runState.setHitlPaused(paused);
+          if (!paused) runState.clearConnectionDropped();
           tui.update(runState.get());
         },
         onAbortPending: () => {
           runState.setAbortPending();
+          tui.update(runState.get());
+        },
+        onCircuitBreak: (info) => {
+          const agents = info.failedAgents.slice(0, 3).join(', ');
+          const msg = `Wave ${info.waveNumber} · ${info.errorCount} network error${info.errorCount !== 1 ? 's' : ''} (${agents})`;
+          runState.setConnectionDropped(msg);
           tui.update(runState.get());
         },
       });
@@ -483,9 +546,19 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     // ── HITL pause / abort (run-state only; no scroll output needed) ─────────────
     onHitlPause: (paused: boolean) => {
       runState.setHitlPaused(paused);
+      if (!paused) runState.clearConnectionDropped();
     },
     onAbortPending: () => {
       runState.setAbortPending();
+    },
+    onCircuitBreak: (info) => {
+      const agents = info.failedAgents.slice(0, 3).join(', ');
+      runState.setConnectionDropped(`Wave ${info.waveNumber} · ${info.errorCount} network error${info.errorCount !== 1 ? 's' : ''} (${agents})`);
+      err('');
+      err(`  ${c.red('🔴')}  ${c.bold('Connection dropped — run paused')}`);
+      err(`  ${c.dim('Wave ' + info.waveNumber + ' hit ' + info.errorCount + ' network error' + (info.errorCount !== 1 ? 's' : '') + '.')}`);
+      err(`  ${c.dim('Restore connectivity, then resume with:')}  ${c.cyan('roland resume')}  ${c.dim('or')}  ${c.cyan('/resume')}  ${c.dim('(chat)')}`);
+      err('');
     },
 
     // ── Wave complete ─────────────────────────────────────────────────────────

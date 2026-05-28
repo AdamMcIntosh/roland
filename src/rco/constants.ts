@@ -23,12 +23,12 @@ export const AGENT_TIMEOUT_MS = Number(process.env.ROLAND_AGENT_TIMEOUT_MS) || 2
 
 /**
  * Maximum retries on transient SDK errors before returning a synthetic BLOCKER.
- * Default: 5 → 6 total attempts (1 initial + 5 retries).
+ * Default: 6 → 7 total attempts (1 initial + 6 retries).
  *
  * Override: ROLAND_AGENT_RETRIES=0  (disable retries, 1 attempt only)
  *           ROLAND_AGENT_RETRIES=2  (3 total, fast iteration)
  */
-export const AGENT_MAX_RETRIES = Number(process.env.ROLAND_AGENT_RETRIES) || 5;
+export const AGENT_MAX_RETRIES = Number(process.env.ROLAND_AGENT_RETRIES) || 6;
 
 /**
  * Base delay before the first retry (ms) for non-network errors.
@@ -38,68 +38,73 @@ export const RETRY_BASE_DELAY = 5_000;
 
 /**
  * Retry delays (ms) for transient network / connection errors.
- * Sequence: 2 s → 6 s → 12 s → 25 s → 40 s → 60 s  (6 entries, 6 total attempts).
+ * Sequence: 2 s → 6 s → 12 s → 25 s → 40 s → 60 s → 90 s  (7 entries, 7 total attempts).
  *
  * Network errors (ECONNRESET, ConnectError, etc.) are usually transient.
- * Starting at 2 s catches fast recoveries; the long tail (40 s, 60 s) absorbs
+ * Starting at 2 s catches fast recoveries; the long tail (60 s, 90 s) absorbs
  * longer outages during heavy runs. Entries map 1-to-1 to retry attempts.
  * The final entry is reused if AGENT_MAX_RETRIES exceeds the array length.
  */
-export const NETWORK_RETRY_DELAYS: readonly number[] = [2_000, 6_000, 12_000, 25_000, 40_000, 60_000];
+export const NETWORK_RETRY_DELAYS: readonly number[] = [2_000, 6_000, 12_000, 25_000, 40_000, 60_000, 90_000];
 
 /**
  * Retry delays (ms) for generic (non-network) SDK errors.
- * Sequence: 5 s → 12 s → 25 s → 40 s → 60 s → 90 s  (6 entries, 6 total attempts).
+ * Sequence: 5 s → 12 s → 25 s → 40 s → 60 s → 90 s → 120 s  (7 entries, 7 total attempts).
  *
  * Slower than NETWORK_RETRY_DELAYS because non-network errors (SDK internal
  * errors, model errors) are less likely to resolve immediately and benefit
  * from giving the service more recovery time.
  */
-export const GENERIC_RETRY_DELAYS: readonly number[] = [5_000, 12_000, 25_000, 40_000, 60_000, 90_000];
+export const GENERIC_RETRY_DELAYS: readonly number[] = [5_000, 12_000, 25_000, 40_000, 60_000, 90_000, 120_000];
 
 /**
  * Maximum number of agent calls allowed to run concurrently across all waves.
  *
  * Default of 4 gives good parallel throughput on stable connections.
- * Drop to 1 (fully sequential) for maximum stability on unstable SSH
- * connections where ECONNRESET under load is a concern.
+ * Drop to 2 for lighter API pressure, or 1 for fully sequential safe mode.
  *
  * Override: ROLAND_MAX_CONCURRENT=1   (sequential, one socket at a time)
- *           ROLAND_MAX_CONCURRENT=2   (conservative, light parallelism)
- *           ROLAND_MAX_CONCURRENT=8   (high throughput, stable connection)
+ *           ROLAND_MAX_CONCURRENT=2   (conservative, reduced ECONNRESET risk)
+ *           ROLAND_MAX_CONCURRENT=8   (high throughput, very stable connection)
  */
-export const MAX_CONCURRENT_AGENTS = Number(process.env.ROLAND_MAX_CONCURRENT) || 4;
+export const MAX_CONCURRENT_AGENTS = Number(process.env.ROLAND_MAX_CONCURRENT) || 2;
 
 /**
- * Number of terminal network errors in a single wave before the circuit
- * breaker opens, immediately pausing the run.
+ * Number of network-error retry attempts (across all concurrent agents in a
+ * wave) before the circuit breaker opens and pauses the run.
  *
- * Default of 1 means the run pauses after the very first agent that exhausts
- * all retries with network errors. This is the safest default for unstable
- * SSH connections — better to pause early and resume than to burn through
- * all remaining tasks with connection failures.
+ * Unlike the old "terminal errors only" model, each individual network-error
+ * retry attempt counts toward this threshold — so widespread outages are
+ * detected quickly even before any single agent exhausts all its retries.
+ *
+ * Default of 3: with 4 concurrent agents all hitting ECONNRESET on attempt 1
+ * the circuit opens after just ~3 retry failures (within the first few seconds).
+ * A single agent with isolated transient errors needs 3 consecutive network
+ * failures before tripping — avoiding false positives from brief hiccups.
  *
  * When the breaker is open, tasks still queued in the wave fast-fail
- * immediately rather than cycling through all 5 retry attempts.
+ * immediately rather than cycling through all 7 retry attempts.
  *
- * Override: ROLAND_CIRCUIT_BREAKER=3  (tolerate more errors before pausing)
+ * Override: ROLAND_CIRCUIT_BREAKER=1  (trip on first network retry — maximum sensitivity)
+ *           ROLAND_CIRCUIT_BREAKER=6  (tolerate more errors before pausing)
  *           ROLAND_CIRCUIT_BREAKER=0  (disable circuit breaker entirely)
  */
-export const CIRCUIT_BREAKER_THRESHOLD = Number(process.env.ROLAND_CIRCUIT_BREAKER ?? '1') || 1;
+export const CIRCUIT_BREAKER_THRESHOLD = Number(process.env.ROLAND_CIRCUIT_BREAKER ?? '3') || 3;
 
 /**
  * Stagger delay (ms) between starting each concurrent worker slot.
  *
- * With MAX_CONCURRENT_AGENTS=2 and AGENT_WARMUP_DELAY_MS=1500, the two
- * worker slots start 1.5 s apart — staggering their TCP connection
- * establishment and reducing simultaneous socket pressure on the API.
+ * With MAX_CONCURRENT_AGENTS=2 and AGENT_WARMUP_DELAY_MS=3000, the two
+ * worker slots start 3 s apart — giving each connection time to fully
+ * establish before the next one opens, reducing simultaneous socket
+ * pressure on the Cursor API.
  *
  * Set to 0 to disable staggering (all slots start simultaneously, old behaviour).
  *
  * Override: ROLAND_WARMUP_DELAY_MS=0     (disable stagger)
- *           ROLAND_WARMUP_DELAY_MS=3000  (3 s between slot starts)
+ *           ROLAND_WARMUP_DELAY_MS=1500  (faster starts, less protection)
  */
-export const AGENT_WARMUP_DELAY_MS = Number(process.env.ROLAND_WARMUP_DELAY_MS ?? '1500') || 1_500;
+export const AGENT_WARMUP_DELAY_MS = Number(process.env.ROLAND_WARMUP_DELAY_MS ?? '3000') || 3_000;
 
 /**
  * Substrings that identify a transient network / connection error.

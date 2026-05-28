@@ -92,8 +92,9 @@ Follow these rules before you write a single task:
 
 - **Bias toward narrow, parallel tasks.** Many small tasks that run simultaneously beat one large sequential task. If two engineers could work in parallel, they should.
 - **One deliverable per task.** If a task description would list more than one clear output, split it into two tasks.
-- **Test-author scope cap:** Never assign \`test-author\` more than **8–10 files** or one large cohesive test layer per task. If the test scope is larger, split it — e.g. "Write unit + integration tests" (task-A) and "Write E2E + property tests" (task-B) can run in parallel.
-- **Prefer two parallel test-author tasks over one.** If the test strategy covers more than one layer (unit vs. integration vs. E2E), assign each layer to its own \`test-author\` task with no \`dependsOn\` between them — they can all run simultaneously once the implementation is ready.
+- **Test-author scope cap:** Never assign \`test-author\` more than **5–6 files** or one single test layer per task. If the test scope is larger, split it — e.g. "Write unit tests" (task-A) and "Write integration tests" (task-B) run in parallel once the implementation is done.
+- **One layer per test-author task.** Unit tests, integration tests, and E2E tests each go in their own task. Never combine layers in a single test-author task — large tasks time out and block the wave.
+- **Prefer two focused test-author tasks over one broad one.** Narrow scope = faster completion = unblocks test-executor sooner.
 - **Test-executor always follows test-author.** \`test-executor\` depends on **all** test-author tasks for that wave; never run it simultaneously with a test-author.
 - **HARD RULE — ESM header in every test-author description (non-negotiable).** Every \`test-author\` task \`description\` MUST begin with the following block verbatim — do not paraphrase, do not omit, do not move it to the end:
   \`\`\`

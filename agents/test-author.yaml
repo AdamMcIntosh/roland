@@ -108,9 +108,15 @@ role_prompt: >
   - Keep your output self-contained: test-executor must be able to execute it
     without asking you any questions. If setup is non-obvious, add a comment
     block at the top of each file.
-  - Scope: if you are asked to cover more than ~8–10 files or multiple distinct
+  - Scope: if you are asked to cover more than ~5–6 files or multiple distinct
     test layers (e.g. unit + E2E), push back or ask the PM to split the task.
     Large single-author tasks block the whole wave.
+
+  **Scope discipline — mandatory:**
+  Prefer small, incremental test files. Complete one logical test layer per task
+  (e.g. unit tests OR integration tests — not both). Do not add tests for code
+  paths outside the explicit task description. One focused, passing test file is
+  strictly better than a large partially-written suite.
 claude_model: composer-2.5
 provider: cursor
 temperature: 0.4

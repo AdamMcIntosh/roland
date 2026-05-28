@@ -359,16 +359,21 @@ async function callCursorAgentOnce(agentName: string, modelId: string, prompt: s
  * and ±30% jitter to de-synchronise concurrent retries.
  *
  * Network / connection errors (ECONNRESET, ConnectError, UND_ERR_SOCKET…) use
- * NETWORK_RETRY_DELAYS (2 s → 5 s → 10 s → 20 s → 30 s) + jitter.
- * All other errors use GENERIC_RETRY_DELAYS (5 s → 10 s → 20 s → 30 s → 45 s) + jitter.
- * Both tables have 5 entries → 5 total attempts when AGENT_MAX_RETRIES = 4.
+ * NETWORK_RETRY_DELAYS (2 s → 6 s → 12 s → 25 s → 40 s → 60 s → 90 s) + jitter.
+ * All other errors use GENERIC_RETRY_DELAYS (5 s → 12 s → 25 s → 40 s → 60 s → 90 s → 120 s) + jitter.
+ * Both tables have 7 entries → 7 total attempts when AGENT_MAX_RETRIES = 6.
  *
  * Circuit breaker: if the wave-level WaveCircuitBreaker is already open when
  * this is called, the call returns a synthetic fast-fail BLOCKER immediately
  * without attempting any SDK calls, cutting hang time during widespread outages.
  *
- * On final failure, records the error in the circuit breaker (network errors only)
- * and returns a synthetic BLOCKER so the PM can handle it in the next wave review.
+ * Each network-error retry attempt (not just final exhaustion) is recorded in the
+ * circuit breaker. With CIRCUIT_BREAKER_THRESHOLD=3 and 4 concurrent agents all
+ * hitting connection errors, the circuit opens after ~3 retry failures (within
+ * seconds) rather than waiting for one agent to exhaust all 7 attempts (~4 min).
+ *
+ * On final failure returns a synthetic BLOCKER so the PM can handle it in the
+ * next wave review without crashing the entire orchestration.
  */
 async function callCursorAgent(
   agentName: string,
@@ -398,18 +403,25 @@ async function callCursorAgent(
     } catch (err) {
       lastErr = err instanceof Error ? err : new Error(String(err));
 
+      const netError = isNetworkError(lastErr);
+
+      // Record every network-error attempt (not just final exhaustion) so the
+      // circuit breaker can open quickly during widespread outages, even before
+      // any single agent has burned through all its retries.
+      if (netError) {
+        circuitBreaker?.recordNetworkError(agentName);
+      }
+
       if (attempt >= maxAttempts) break;
 
-      const netError = isNetworkError(lastErr);
       const delayTable = netError ? NETWORK_RETRY_DELAYS : GENERIC_RETRY_DELAYS;
       const baseDelay = delayTable[attempt - 1] ?? delayTable[delayTable.length - 1];
       const delay = withJitter(baseDelay);   // ±30% random jitter
 
       if (netError) {
         console.error(
-          `[Team]   🌐 ${agentName} — Cursor API temporarily unavailable` +
-          ` (${lastErr.message.slice(0, 80).trim()}), retrying in ${(delay / 1000).toFixed(1)}s…` +
-          ` (attempt ${attempt}/${maxAttempts})`,
+          `[Team]   🌐 ${agentName} — connection error, retrying in ${(delay / 1000).toFixed(1)}s` +
+          ` (attempt ${attempt}/${maxAttempts}) — run is still alive; use 'roland status' to monitor`,
         );
       } else {
         console.error(
@@ -432,10 +444,7 @@ async function callCursorAgent(
     `: ${errSummary}`,
   );
 
-  // Record in the wave circuit breaker — may open the circuit for queued tasks
-  if (netError) {
-    circuitBreaker?.recordNetworkError(agentName);
-  }
+  // (Network errors already recorded to the circuit breaker inside the retry loop above.)
 
   const lines = [
     '## 🚨 BLOCKER',
@@ -464,7 +473,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     onHitlPause, onAbortPending,
     noImprove = false, interactive = false, rl,
     onCircuitBreak,
-    sequential = true,
+    sequential = false,
   } = opts;
 
   // ── Usage tracking ────────────────────────────────────────────────────────
