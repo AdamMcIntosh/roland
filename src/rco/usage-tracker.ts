@@ -16,7 +16,7 @@ import path from 'path';
 // estimates.  Update the table if you have better data.
 
 const MODEL_PRICING: Record<string, { inputUsdPerMTok: number; outputUsdPerMTok: number }> = {
-  'grok-4.3':          { inputUsdPerMTok:  5.00, outputUsdPerMTok: 15.00 },
+  'gpt-5.4-nano':      { inputUsdPerMTok:  0.20, outputUsdPerMTok:  1.25 },
   'composer-2.5':      { inputUsdPerMTok:  3.00, outputUsdPerMTok: 12.00 },
   'claude-opus-4-7':   { inputUsdPerMTok: 15.00, outputUsdPerMTok: 75.00 },
   'claude-sonnet-4-6': { inputUsdPerMTok:  3.00, outputUsdPerMTok: 15.00 },

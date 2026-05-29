@@ -1,8 +1,8 @@
 import { toCursorModelId } from '../dist/rco/model-routing.js';
 
 // Cost-optimised routing strategy (2026-05):
-//   Lead PM only  → grok-4.3     (orchestration brain)
-//   All engineers → composer-2.5 (reasoning + execution + light lanes unified)
+//   Lead PM only  → gpt-5.4-nano  (fast, cheap orchestration brain)
+//   All engineers → composer-2.5  (reasoning + execution + light lanes unified)
 const cases = [
   // QA split
   ['test-author',       ''],   // should → composer-2.5  (engineer: 'author' heuristic)
@@ -15,7 +15,7 @@ const cases = [
   ['executor',          ''],   // should → composer-2.5
   ['executor-high',     ''],   // should → composer-2.5
   // PM lane
-  ['Lead-PM',           ''],   // should → grok-4.3
+  ['Lead-PM',           ''],   // should → gpt-5.4-nano
 ];
 
 const EXPECTED = {
@@ -26,7 +26,7 @@ const EXPECTED = {
   'security-reviewer': 'composer-2.5',
   'executor':          'composer-2.5',
   'executor-high':     'composer-2.5',
-  'Lead-PM':           'grok-4.3',
+  'Lead-PM':           'gpt-5.4-nano',
 };
 
 let passed = 0, failed = 0;

@@ -443,6 +443,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
   err(`  ${c.dim('Goal:')}   ${goal.slice(0, COLS - 12)}`);
   err(`  ${c.dim('State:')}  ${stateDir}`);
   err(`  ${c.dim('Mode:')}   ${parallel ? c.green('parallel') + c.dim(' (4 concurrent agents)') : c.yellow('sequential') + c.dim(' (one agent at a time — safe mode)')}`);
+  err(`  ${c.dim('Models:')} ${c.cyan('Lead PM → GPT-5.4 Nano')}  ${c.dim('·')}  ${c.cyan('Engineers → Composer 2.5')}`);
   err('  ' + '═'.repeat(COLS - 2));
   err('');
 
