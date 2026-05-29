@@ -439,7 +439,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
   // ── Header ─────────────────────────────────────────────────────────────────
   err('');
   err('  ' + '═'.repeat(COLS - 2));
-  err('  ' + c.bold('🚀  Roland PM Team v1.1'));
+  err('  ' + c.bold('🚀  Roland PM Team v1.2'));
   err(`  ${c.dim('Goal:')}   ${goal.slice(0, COLS - 12)}`);
   err(`  ${c.dim('State:')}  ${stateDir}`);
   err(`  ${c.dim('Mode:')}   ${parallel ? c.green('parallel') + c.dim(' (4 concurrent agents)') : c.yellow('sequential') + c.dim(' (one agent at a time — safe mode)')}`);
@@ -466,7 +466,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     // ── Plan ready ───────────────────────────────────────────────────────────
     onPlanReady: (tasks: TeamTask[]) => {
       runState.planReady(tasks);
-      err(`  ${c.green('✅')} Plan ready — ${tasks.length} task${tasks.length !== 1 ? 's' : ''} scheduled.  ${c.dim('Run')} ${c.cyan('roland status')} ${c.dim('in another terminal to monitor.')}`);
+      err(`  ${c.green('✅')} Plan ready (${tasks.length} task${tasks.length !== 1 ? 's' : ''}).  ${c.dim('Type')} ${c.cyan('/status')} ${c.dim('to monitor live.')}`);
       err('');
     },
 

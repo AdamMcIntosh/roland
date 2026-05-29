@@ -1,6 +1,6 @@
 {
   "name": "roland",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Roland Code Orchestrator (RCO) — modular Claude-native orchestration, agents, and workflows",
   "main": "dist/index.js",
   "type": "module",
