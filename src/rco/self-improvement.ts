@@ -251,6 +251,21 @@ Honestly assess your own planning decisions:
 **Be specific and honest** — vague self-praise ("planning was good") is useless.
 This section is shown to the user so they can see Roland learning from its own decisions.
 
+### 6. Scoping Compliance
+Were task counts within the required limits this run?
+- Were there ≤ 4 tasks total? Were there ≤ 2 test-related tasks (test-author + test-executor combined)?
+- Did the PM default to sequential execution, or were tasks parallelised when they shouldn't have been?
+- Were any tasks too large (took >15 min, or generated a BLOCKER due to over-broad scope)?
+
+If scoping discipline failed, document the root cause and what the correct decomposition would have been. Scoping mistakes recur run-over-run and are the single highest-leverage thing to document.
+
+### 7. Production Hardening Compliance
+Did every executor task include and complete the production hardening checklist?
+- Were EF Core migrations, IConfiguration/user-secrets, input validation (ProblemDetails 400/422), rate limiting, structured logging (ILogger<T>), consistent ProblemDetails error responses, and CancellationToken propagation all present?
+- Were any hardening items silently skipped without justification in the task description or output?
+
+If gaps were found during synthesis or review, document them as Anti-Patterns with concrete "always inject X into executor task descriptions" guidance so the PM prevents the same gap automatically next run.
+
 ---
 
 ## Required Output

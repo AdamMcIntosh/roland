@@ -27,6 +27,7 @@ import {
   buildLeadPMPlanningPrompt,
   buildLeadPMReviewPrompt,
   buildLeadPMSynthesisPrompt,
+  buildFallbackSynthesisPrompt,
   isReviewDecision,
 } from './pm-prompts.js';
 import type { ReviewDecision, ReviewTask, WaveResult } from './pm-prompts.js';
@@ -187,6 +188,41 @@ function fallbackPlan(goal: string): TeamPlan {
     tasks: [{ id: 'task-1', title: goal.slice(0, 80), agent: 'executor', description: goal, dependsOn: [], priority: 'high' }],
     pmNotes: 'Fallback single-task plan — Lead PM did not return parseable JSON.',
   };
+}
+
+/** Auto-generated synthesis when the Lead PM fails to produce one after retries. */
+function buildMinimalSynthesis(goal: string, taskResults: Record<string, TeamTaskResult>): string {
+  const lines = [
+    '# Roland — Minimal Synthesis (auto-generated fallback)',
+    '',
+    `**Goal:** ${goal}`,
+    '',
+    '> **Note:** Lead PM synthesis could not be generated after retries. This is an auto-generated summary from task outputs. Run is still alive — use `roland status` to monitor, or `roland team "..."` with a narrower goal to continue.',
+    '',
+    '## Tasks Completed',
+    '',
+  ];
+  for (const [id, r] of Object.entries(taskResults)) {
+    lines.push(`- **${id}** [${r.agent}] ${r.hadBlocker ? '⚠️ blocker' : '✓'}: "${r.taskTitle}"`);
+  }
+  lines.push('');
+  lines.push('## Output Excerpts');
+  lines.push('');
+  for (const [id, r] of Object.entries(taskResults)) {
+    const excerpt = r.output.slice(0, 600).replace(/\n{3,}/g, '\n\n');
+    lines.push(`### ${id}: ${r.taskTitle}`);
+    lines.push(excerpt);
+    if (r.output.length > 600) lines.push('\n…(truncated)');
+    lines.push('');
+  }
+  lines.push('## Immediate Next Steps');
+  lines.push('');
+  lines.push('1. Review the output excerpts above for files created or modified.');
+  lines.push('2. Run `dotnet test --no-build` (or `npm run test:run`) to check test status.');
+  lines.push('3. Use `roland team "..."` with a more focused goal to continue.');
+  lines.push('');
+  lines.push('_Full synthesis unavailable — rerun with a narrower goal if this recurs._');
+  return lines.join('\n');
 }
 
 // ── Concurrency limiter ───────────────────────────────────────────────────────
@@ -915,10 +951,30 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   console.error('[Team] Phase 3: Lead PM synthesis...');
   onSynthesizing?.();
 
-  const synthesisPrompt = buildLeadPMSynthesisPrompt({ goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined, taskResults });
+  const synthesisCtx = { goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined, taskResults };
+  const synthesisPrompt = buildLeadPMSynthesisPrompt(synthesisCtx);
   const pmSynthStart = Date.now();
-  const synthesis = await callCursorAgent('Lead-PM', 'grok-4.3', synthesisPrompt);
+  let synthesis = await callCursorAgent('Lead-PM', 'grok-4.3', synthesisPrompt);
   allTaskUsage.push(buildTaskUsage('pm-synthesis', 'Lead PM: Synthesis', 'Lead-PM', 'grok-4.3', synthesisPrompt.length, synthesis.length, Date.now() - pmSynthStart));
+
+  // "no detail" fallback: empty, too-short, or blocker-string responses mean the full
+  // synthesis failed. Retry once with a minimal focused prompt; if that also fails,
+  // auto-generate a plain-text summary from task outputs so the run always finishes.
+  const synthesisFailed = (s: string) => !s.trim() || s.trim().length < 200 || s.includes('## 🚨 BLOCKER');
+  if (synthesisFailed(synthesis)) {
+    console.error('[Team] ⚠️  Synthesis returned no detail — retrying with fallback prompt...');
+    console.error('[Team] ⚠️  Run is still alive — use `roland status` to monitor');
+    const fallbackPrompt = buildFallbackSynthesisPrompt(synthesisCtx);
+    const pmFallbackStart = Date.now();
+    synthesis = await callCursorAgent('Lead-PM', 'grok-4.3', fallbackPrompt);
+    allTaskUsage.push(buildTaskUsage('pm-synthesis-fallback', 'Lead PM: Fallback Synthesis', 'Lead-PM', 'grok-4.3', fallbackPrompt.length, synthesis.length, Date.now() - pmFallbackStart));
+
+    if (synthesisFailed(synthesis)) {
+      console.error('[Team] ⚠️  Fallback synthesis also failed — auto-generating minimal summary from task outputs');
+      synthesis = buildMinimalSynthesis(goal, taskResults);
+    }
+  }
+
   console.error('[Team] Synthesis complete');
 
   // ── Persist memory extract ────────────────────────────────────────────────
