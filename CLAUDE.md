@@ -16,9 +16,10 @@ npm run rco:dev         # run RCO orchestrator without building (tsx)
 npm run rco:team:dev    # PM team mode without building
 npm test                # Vitest unit tests
 npm run test:run        # Vitest, no watch
-node scripts/test-routing.mjs   # smoke-test model routing (8 cases)
-node scripts/test-signals.mjs   # smoke-test worker signal parsing (8 cases)
-node scripts/test-mcp-tools.mjs # smoke-test MCP server tools (8 cases)
+node scripts/test-routing.mjs          # smoke-test model routing (8 cases)
+node scripts/test-signals.mjs          # smoke-test worker signal parsing (8 cases)
+node scripts/test-mcp-tools.mjs        # smoke-test MCP server tools (8 cases)
+node scripts/test-retry-resilience.mjs # smoke-test retry/circuit-breaker/jitter (70 cases)
 ```
 
 **After any change to `src/`:**
@@ -72,7 +73,7 @@ roland team "..." --state-dir /tmp  # use alternate state directory
 ```
 
 **How it works:**
-1. **Lead PM** (claude-opus-4-7) reads the goal and roster, outputs a JSON task plan
+1. **Lead PM** (grok-4.3) reads the goal and roster, outputs a JSON task plan
 2. Tasks with no `dependsOn` run **in parallel** (one wave)
 3. After each wave, PM reviews outputs and decides: `continue` or `adjust`
    - `adjust` can spawn new tasks, send unblock messages, or re-scope pending tasks
@@ -91,7 +92,7 @@ roland team "..." --state-dir /tmp  # use alternate state directory
 
 | Lane | Model | Agent names that map here |
 |------|-------|--------------------------|
-| PM | `claude-opus-4-7` | `lead-pm`, `Lead-PM` |
+| PM | `grok-4.3` | `lead-pm`, `Lead-PM` |
 | Reasoning | `claude-sonnet-4-6` | architect, review*, critic, plan*, analyst, scientist, research*, design*, explore*, security*, **author** |
 | Execution | `composer-2.5` | executor*, build-fixer, test-executor, tdd-guide, designer, writer, doc* |
 
@@ -195,21 +196,36 @@ reason. Do not change dedup to slice-prefix comparison.
 
 ---
 
-## Timeout & Retry (`src/rco/team-orchestrator.ts`)
+## Timeout, Retry & Circuit Breaker (`src/rco/constants.ts` + `team-orchestrator.ts`)
+
+All retry/timeout/concurrency constants live in `src/rco/constants.ts`:
 
 ```typescript
-const AGENT_TIMEOUT_MS  = Number(process.env.ROLAND_AGENT_TIMEOUT_MS)  || 25 * 60 * 1000; // 25 min
-const AGENT_MAX_RETRIES = Number(process.env.ROLAND_AGENT_RETRIES)      || 2;
-const RETRY_BASE_DELAY  = 5_000; // doubles each retry
+AGENT_MAX_RETRIES = 4          // 5 total attempts (1 initial + 4 retries)
+NETWORK_RETRY_DELAYS = [2s, 5s, 10s, 20s, 30s]   // ±30% jitter applied
+GENERIC_RETRY_DELAYS = [5s, 10s, 20s, 30s, 45s]  // ±30% jitter applied
+MAX_CONCURRENT_AGENTS = 2      // per-wave concurrency cap (SSH-safe default)
+CIRCUIT_BREAKER_THRESHOLD = 1  // pause on first terminal network error
+AGENT_WARMUP_DELAY_MS = 1500   // stagger between concurrent slot starts
 ```
 
 On final failure, `callCursorAgent` returns a synthetic BLOCKER string rather than throwing —
 the PM sees it as a normal blocker and can re-scope or retry. Do not let agent failures throw
 past this boundary.
 
+**Circuit breaker:** if `CIRCUIT_BREAKER_THRESHOLD` terminal network errors occur in one
+wave, the `WaveCircuitBreaker` opens. Remaining queued tasks fast-fail (no retry cycles),
+the run pauses via the HITL queue, and a blackboard entry lists saved vs blocked tasks.
+User resumes with `roland resume` once connectivity is restored.
+
+**Jitter:** all retry delays have ±30% random jitter applied via `withJitter()` to prevent
+concurrent retries from hammering the API in sync (thundering-herd suppression).
+
 **Override for testing:**
 ```bash
-ROLAND_AGENT_TIMEOUT_MS=60000 roland team "..."   # 1-minute timeout
+ROLAND_AGENT_TIMEOUT_MS=60000 roland team "..."       # 1-minute timeout
+ROLAND_MAX_CONCURRENT=2 roland team "..."             # very conservative
+ROLAND_CIRCUIT_BREAKER=1 roland team "..."            # trip on first error
 ```
 
 ---
@@ -229,13 +245,17 @@ ROLAND_AGENT_TIMEOUT_MS=60000 roland team "..."   # 1-minute timeout
 ```bash
 npm test                            # Vitest watch
 npm run test:run                    # Vitest, single pass
-node scripts/test-routing.mjs       # model routing smoke test (8 cases, 8/8 must pass)
-node scripts/test-signals.mjs       # signal parser smoke test (8 cases, 8/8 must pass)
-node scripts/test-mcp-tools.mjs     # MCP server smoke test  (8 cases, 8/8 must pass)
+node scripts/test-routing.mjs          # model routing smoke test (8 cases, 8/8 must pass)
+node scripts/test-signals.mjs          # signal parser smoke test (8 cases, 8/8 must pass)
+node scripts/test-mcp-tools.mjs        # MCP server smoke test  (8 cases, 8/8 must pass)
+node scripts/test-retry-resilience.mjs # retry/circuit-breaker/jitter (70 cases, 70/70 must pass)
 ```
 
-All three smoke tests exit 1 on any failure. Run them after touching `model-routing.ts`,
-`worker-signals.ts`, or `mcp-server.ts`.
+All four smoke tests exit 1 on any failure. Run the appropriate one after touching:
+- `model-routing.ts` → test-routing
+- `worker-signals.ts` → test-signals
+- `mcp-server.ts` → test-mcp-tools
+- `constants.ts`, `team-orchestrator.ts`, `agentWorker.ts` → test-retry-resilience
 
 ---
 
@@ -244,7 +264,10 @@ All three smoke tests exit 1 on any failure. Run them after touching `model-rout
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `ROLAND_AGENT_TIMEOUT_MS` | `1500000` (25 min) | Per-agent wall-clock timeout |
-| `ROLAND_AGENT_RETRIES` | `2` | Retries before synthetic BLOCKER return |
+| `ROLAND_AGENT_RETRIES` | `4` | Retries before synthetic BLOCKER (5 total attempts) |
+| `ROLAND_MAX_CONCURRENT` | `2` | Max concurrent agent calls per wave |
+| `ROLAND_CIRCUIT_BREAKER` | `1` | Network errors before circuit opens and run pauses |
+| `ROLAND_WARMUP_DELAY_MS` | `1500` | Stagger delay (ms) between concurrent slot starts |
 | `ROLAND_STATE_DIR` | `.roland` | Blackboard + message-bus directory |
 | `ROLAND_QUIET` | unset | Suppress wave progress output |
 | `ROLAND_SIMPLE_TUI` | unset | Set to `1` for ASCII-only output (mobile SSH / Termius) |
@@ -327,6 +350,91 @@ The parser maps aliases: `Decisions` → Architecture Decisions, `Patterns` → 
 ```typescript
 memory.addBullet('Past Mistakes', 'Never call req.destroy() before sending HTTP response');
 ```
+
+---
+
+## Self-Improvement Loop
+
+`src/rco/self-improvement.ts` — post-run retrospective, memory proposal UI, and write-back.
+
+### How it works
+
+After every synthesis, **Phase 4** runs:
+1. **Retrospective LLM call** — Lead PM answers 5 structured questions about the run (what went well, root causes of blockers, wrong assumptions, gotchas, new standards)
+2. **Parse output** — `parseRetrospectiveOutput()` extracts bullets from `## Retrospective Memory Update` block
+3. **Diff against existing memory** — only bullets not already in `.roland/memory.md` are shown
+4. **Interactive proposal** (non-TUI mode with TTY) — shows a colour diff, auto-accepts after 15s
+5. **Write** — `applyRetroUpdate()` calls `memory.mergeAndWrite()` and logs count added
+
+### Memory sections (5 total)
+
+| Section | Purpose |
+|---------|---------|
+| `Architecture Decisions` | Tech choices and design patterns — don't contradict |
+| `Coding Standards` | Layout, naming, testing conventions |
+| `Past Mistakes` | "Never do X" bullets with root cause |
+| `Preferences` | User/team preferences |
+| `Project Gotchas` | **NEW** — environment quirks, API edge cases, tooling surprises |
+
+### Disabling
+
+```bash
+roland team "goal" --no-improve    # skip retrospective entirely
+```
+
+Set `noImprove: true` in `TeamOrchestratorOptions` for programmatic use.
+
+### Smart Recall (planning phase)
+
+Instead of dumping the full memory file, `memory.smartSnapshot(goal)` is used:
+- Tokenizes the run goal and each bullet
+- Scores by keyword overlap + small recency bonus (later position = more recent write)
+- Returns top 4 bullets per section, with a note for hidden entries
+- Total capped at `MEMORY_PROMPT_MAX_CHARS` (3,000 chars)
+
+---
+
+## Project Knowledge System
+
+`src/rco/project-knowledge.ts` — automatic project documentation discovery and injection.
+
+### Discovery files (scanned at project root, in priority order)
+
+| File | Purpose | Priority |
+|------|---------|---------|
+| `ROLAND.md` | Project-specific instructions, constraints, preferences | Highest |
+| `ARCHITECTURE.md` | High-level design, system patterns, tech decisions | High |
+| `TECH-STACK.md` | Frameworks, libraries, versions, gotchas, conventions | High |
+| `REQUIREMENTS.md` | Business rules, user stories, acceptance criteria | Medium |
+| `SPECS.md` | Alternative requirements/spec file | Medium |
+| `DECISIONS.md` | Architecture Decision Records — auto-updated after runs | Low |
+
+### How it works
+
+1. `loadProjectKnowledge(cwd)` scans for the above files at run start
+2. Present files are loaded and a proportional character budget allocated (total cap: 12,000 chars)
+3. Injection block (`## Project Knowledge`) is prepended to the Lead PM planning prompt — before `## Project Memory`
+4. After synthesis, `appendDecisions()` parses the PM's `## Knowledge Update` block and appends new bullets to `DECISIONS.md`
+
+### Character budget allocation
+
+Budget is split proportionally by weight: ROLAND.md (30%), ARCHITECTURE.md (25%), TECH-STACK.md (25%), REQUIREMENTS/SPECS (15% each), DECISIONS.md (10%). Files are truncated cleanly at line boundaries when over budget.
+
+### Prompt order (planning phase)
+
+```
+Goal → Project Knowledge → Project Memory → Blackboard → Task Scoping Rules
+```
+
+### DECISIONS.md auto-update
+
+The synthesis prompt asks the PM to write a `## Knowledge Update` section:
+```
+## Knowledge Update
+**DECISIONS.md:**
+- [Decision and rationale]
+```
+`appendDecisions()` parses this block, deduplicates (first 60 chars), and appends a dated section to `DECISIONS.md`. The PM only writes to `DECISIONS.md` — `ARCHITECTURE.md`, `TECH-STACK.md`, and `ROLAND.md` are human-curated and never auto-modified.
 
 ---
 
@@ -440,12 +548,15 @@ roland abort                          # stop after current wave completes
 | Routing smoke test | `scripts/test-routing.mjs` |
 | Signal smoke test | `scripts/test-signals.mjs` |
 | MCP tools smoke test | `scripts/test-mcp-tools.mjs` |
+| Retry/circuit-breaker smoke test | `scripts/test-retry-resilience.mjs` |
 | Usage tracker | `src/rco/usage-tracker.ts` |
 | Web dashboard HTML | `dashboard-ui/index.html` |
 | Dashboard HTTP server | `scripts/serve-dashboard.js` |
 | Usage demo seeder | `scripts/seed-usage-demo.mjs` |
 | Run backfill tool | `scripts/backfill-usage.mjs` |
 | Structured project memory | `src/rco/project-memory.ts` |
+| Project knowledge system  | `src/rco/project-knowledge.ts` |
+| Self-improvement loop     | `src/rco/self-improvement.ts` |
 | HITL command queue | `src/rco/hitl.ts` |
 | Background supervisor | `src/rco/supervisor.ts` |
 | Contextual notifier | `src/rco/notifier.ts` |

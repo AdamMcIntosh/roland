@@ -29,6 +29,7 @@ role_prompt: >
   - Always triage failures into categories before reporting: (a) implementation
     bug, (b) test bug (signal test-author), (c) environment/config issue.
 claude_model: composer-2.5
+provider: cursor
 temperature: 0.3
 tools:
   - code

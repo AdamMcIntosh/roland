@@ -155,9 +155,13 @@ function printHelp(): void {
   const ln = (s = '') => console.error(s);
 
   ln();
-  ln('  ' + b('🚀  Roland') + '  — PM-first AI Engineering Team');
+  ln('  ' + b('🚀  Roland v1.1') + '  — PM-first AI Engineering Team');
   ln();
-  ln('  ' + b('USAGE'));
+  ln('  ' + b('CHAT MODE') + '  ' + d('(default — just run: roland)'));
+  ln(`    ${cy('roland')}                            Start interactive chat  ${d('(type goals naturally, /help inside)')}`);
+  ln(`    ${cy('roland')} ${b('chat')}                        Same as above  ${d('(explicit)')}`);
+  ln();
+  ln('  ' + b('DIRECT COMMANDS'));
   ln(`    ${cy('roland')} ${b('"goal"')}                      Run a PM team on a goal ${d('(shortcut)')}`);
   ln(`    ${cy('roland')} ${b('team')} "goal"               Run a PM team with live dashboard`);
   ln(`    ${cy('roland')} ${b('watch')}                      Watch git commits, auto-run on change`);
@@ -174,6 +178,7 @@ function printHelp(): void {
   ln();
   ln('  ' + b('TEAM FLAGS'));
   ln(`    ${b('--stream')}, -s              Print task output snippets as each agent completes`);
+  ln(`    ${b('--sequential')}              One agent at a time  ${d('(safe mode for unstable connections)')}`);
   ln();
   ln('  ' + b('WATCH FLAGS'));
   ln(`    ${b('--task')} "description"       Fixed goal instead of commit message`);
@@ -187,9 +192,12 @@ function printHelp(): void {
   ln();
   ln('  ' + b('BACKGROUND MODE'));
   ln(`    ${cy('roland')} team "goal" ${b('--background')}   Run detached; returns immediately`);
-  ln(`    ${cy('roland')} ${b('bg-status')}                  Show if a background run is active`);
+  ln(`    ${cy('roland')} ${b('run')}  "goal" ${b('--detach')}     Alias for team --background`);
+  ln(`    ${cy('roland')} ${b('bg-status')}                  Show running job: wave, phase, task progress`);
+  ln(`    ${cy('roland')} ${b('bg-status')} --json            Machine-readable status (for scripting)`);
   ln(`    ${cy('roland')} ${b('bg-logs')}                    Tail the most recent background log`);
-  ln(`    ${cy('roland')} ${b('bg-stop')}                    Kill the background run`);
+  ln(`    ${cy('roland')} ${b('bg-logs')} --follow           Stream the log live  ${d('(Ctrl+C to stop)')}`);
+  ln(`    ${cy('roland')} ${b('bg-stop')}                    Gracefully stop (abort → SIGTERM → SIGKILL)`);
   ln();
   ln('  ' + b('HUMAN-IN-THE-LOOP') + '  ' + d('(while a run is active)'));
   ln(`    ${cy('roland')} ${b('pause')}                      Pause before the next wave`);
@@ -198,6 +206,7 @@ function printHelp(): void {
   ln(`    ${cy('roland')} ${b('inject')} "directive"         Post a directive to the Lead PM`);
   ln(`    ${cy('roland')} ${b('replan')}                     Ask PM to re-evaluate the plan`);
   ln(`    ${cy('roland')} ${b('abort')}                      Stop the run after current wave`);
+  ln(`    ${cy('roland')} ${b('hitl-status')}                Show HITL queue state and pause status`);
   ln();
   ln('  ' + b('UTILITY COMMANDS'));
   ln(`    ${cy('roland')} doctor              Diagnose your Roland install`);
@@ -208,9 +217,10 @@ function printHelp(): void {
   ln('  ' + b('ENVIRONMENT'));
   ln(`    ${b('ROLAND_NOTIFY=1')}            Enable notifications for all commands`);
   ln(`    ${b('ROLAND_SIMPLE_TUI=1')}        Simple ASCII output  ${d('(mobile SSH, Termius, limited terminals)')}`);
+  ln(`    ${b('ROLAND_SEQUENTIAL=1')}        Sequential safe mode  ${d('(one agent at a time; use --sequential flag per-run)')}`);
   ln(`    ${b('CURSOR_API_KEY')}             Required for agent execution`);
   ln(`    ${b('ROLAND_AGENT_TIMEOUT_MS')}    Agent timeout  ${d('(default: 25 min)')}`);
-  ln(`    ${b('ROLAND_AGENT_RETRIES')}       Max retries per agent  ${d('(default: 2)')}`);
+  ln(`    ${b('ROLAND_AGENT_RETRIES')}       Max retries per agent  ${d('(default: 5)')}`);
   ln();
   ln('  ' + b('EXAMPLES'));
   ln(`    ${d('# Run a team session')}`);
@@ -231,9 +241,9 @@ function printHelp(): void {
 
 const KNOWN_CMDS = new Set([
   'serve', 'mcp-config', 'doctor', 'pm-log',
-  'team', 'status', 'watch', 'pr',
+  'team', 'run', 'goal', 'start', 'status', 'watch', 'pr', 'chat',
   // HITL controls
-  'pause', 'resume', 'unblock', 'inject', 'replan', 'abort',
+  'pause', 'resume', 'unblock', 'inject', 'replan', 'abort', 'hitl-status',
   // Background supervisor
   'bg-status', 'bg-logs', 'bg-stop',
   '--help', '-h', '--version',
@@ -245,12 +255,27 @@ async function main(): Promise<void> {
   const argv = process.argv.slice(2);
 
   // --help / -h (check before any parsing)
-  if (argv.includes('--help') || argv.includes('-h') || argv.length === 0 && process.stdin.isTTY) {
-    // Only show help for -h/--help; no-arg case still starts the MCP server.
-    if (argv.includes('--help') || argv.includes('-h')) {
-      printHelp();
-      process.exit(0);
-    }
+  if (argv.includes('--help') || argv.includes('-h')) {
+    printHelp();
+    process.exit(0);
+  }
+
+  // --version / -v
+  if (argv.includes('--version') || argv.includes('-v')) {
+    try {
+      const pkgPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json');
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as { version: string };
+      console.log(`roland ${pkg.version}`);
+    } catch { console.log('roland 1.1.0'); }
+    process.exit(0);
+  }
+
+  // Bare `roland` in an interactive terminal → start chat mode (like Claude Code).
+  // When stdin is piped (Cursor / VS Code spawns `roland serve` or bare `roland`), fall through to serve().
+  if (argv.length === 0 && (process.stdin as NodeJS.ReadStream).isTTY) {
+    const { startChat } = await import('./rco/chat-interface.js');
+    await startChat();
+    process.exit(0);
   }
 
   let [cmd, ...rest] = argv;
@@ -285,7 +310,28 @@ async function main(): Promise<void> {
         pmLog(limit);
         break;
       }
+      case 'chat': {
+        const { startChat } = await import('./rco/chat-interface.js');
+        await startChat({
+          stateDir:  rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland',
+          notify:    rest.includes('--notify') || rest.includes('-n'),
+          stream:    rest.includes('--stream') || rest.includes('-s'),
+          noImprove: rest.includes('--no-improve'),
+          parallel:  !rest.includes('--sequential'),
+          webhookUrl: rest.find((_, i) => rest[i - 1] === '--webhook'),
+        });
+        break;
+      }
       case 'team': {
+        const { runTeamCli } = await import('./rco/team-cli.js');
+        await runTeamCli(['team', ...rest]);
+        break;
+      }
+      case 'run':
+      case 'goal':
+      case 'start': {
+        // 'roland run/goal/start "goal"' are aliases for 'roland team "goal"'.
+        // '--detach' is accepted alongside '--background' by runTeamCli.
         const { runTeamCli } = await import('./rco/team-cli.js');
         await runTeamCli(['team', ...rest]);
         break;
@@ -316,17 +362,31 @@ async function main(): Promise<void> {
       // ── HITL controls ───────────────────────────────────────────────────────
       case 'pause': {
         const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
-        const { writeHitlCommand } = await import('./rco/hitl.js');
+        const { writeHitlCommand, isRunActive, readRunGoal } = await import('./rco/hitl.js');
+        const active = isRunActive(stateDir);
+        const goal   = readRunGoal(stateDir);
+        if (!active) {
+          console.error(`⚠️  No active run in ${stateDir}${goal ? ` (last goal: "${goal.slice(0, 60)}")` : ''}`);
+          console.error('   Start a run with: roland team "your goal"');
+        }
         writeHitlCommand(stateDir, { cmd: 'pause' });
-        console.error('⏸  Pause sent — run will pause before the next wave starts.');
+        const goalHint = goal ? ` \x1b[2m("${goal.slice(0, 50)}")\x1b[0m` : '';
+        console.error(`⏸  Pause sent${goalHint}`);
+        console.error('   Run will pause before the next wave starts.');
         console.error('   Resume with: roland resume');
         break;
       }
       case 'resume': {
         const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
-        const { writeHitlCommand } = await import('./rco/hitl.js');
+        const { writeHitlCommand, isRunActive, readRunGoal } = await import('./rco/hitl.js');
+        const active = isRunActive(stateDir);
+        const goal   = readRunGoal(stateDir);
+        if (!active) {
+          console.error(`⚠️  No active run in ${stateDir}${goal ? ` (last goal: "${goal.slice(0, 60)}")` : ''}`);
+        }
         writeHitlCommand(stateDir, { cmd: 'resume' });
-        console.error('▶  Resume sent — run will continue shortly.');
+        const goalHint = goal ? ` \x1b[2m("${goal.slice(0, 50)}")\x1b[0m` : '';
+        console.error(`▶  Resume sent${goalHint} — run will continue shortly.`);
         break;
       }
       case 'unblock': {
@@ -340,9 +400,15 @@ async function main(): Promise<void> {
           console.error('Usage: roland unblock <task-id> [message]');
           process.exit(1);
         }
-        const { writeHitlCommand } = await import('./rco/hitl.js');
+        const { writeHitlCommand, isRunActive, readRunGoal } = await import('./rco/hitl.js');
+        const active = isRunActive(stateDir);
+        const goal   = readRunGoal(stateDir);
+        if (!active) {
+          console.error(`⚠️  No active run in ${stateDir}${goal ? ` (last goal: "${goal.slice(0, 60)}")` : ''}`);
+        }
         writeHitlCommand(stateDir, { cmd: 'unblock', taskId, message });
-        console.error(`↑  Unblock sent for task: ${taskId}${message ? ` — "${message}"` : ''}`);
+        console.error(`↑  Unblock sent to ${taskId}${message ? `: "${message}"` : ''}`);
+        console.error('   The agent for this task will see the guidance in its inbox.');
         break;
       }
       case 'inject': {
@@ -355,41 +421,95 @@ async function main(): Promise<void> {
           console.error('Usage: roland inject "directive text for the PM"');
           process.exit(1);
         }
-        const { writeHitlCommand } = await import('./rco/hitl.js');
+        const { writeHitlCommand, isRunActive, readRunGoal } = await import('./rco/hitl.js');
+        const active = isRunActive(stateDir);
+        const goal   = readRunGoal(stateDir);
+        if (!active) {
+          console.error(`⚠️  No active run in ${stateDir}${goal ? ` (last goal: "${goal.slice(0, 60)}")` : ''}`);
+        }
         writeHitlCommand(stateDir, { cmd: 'inject', text });
-        console.error(`💉 Injected: "${text.slice(0, 80)}"`);
+        console.error(`💉 Injected to Lead PM: "${text.slice(0, 80)}"`);
         console.error('   The Lead PM will see this directive on the next wave review.');
         break;
       }
       case 'replan': {
         const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
-        const { writeHitlCommand } = await import('./rco/hitl.js');
+        const { writeHitlCommand, isRunActive, readRunGoal } = await import('./rco/hitl.js');
+        const active = isRunActive(stateDir);
+        const goal   = readRunGoal(stateDir);
+        if (!active) {
+          console.error(`⚠️  No active run in ${stateDir}${goal ? ` (last goal: "${goal.slice(0, 60)}")` : ''}`);
+        }
         writeHitlCommand(stateDir, { cmd: 'replan' });
-        console.error('🔄 Replan requested — Lead PM will re-evaluate remaining tasks on the next wave review.');
+        console.error('🔄 Replan requested — PM will re-evaluate the plan on next review.');
         break;
       }
       case 'abort': {
         const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
-        const { writeHitlCommand } = await import('./rco/hitl.js');
+        const { writeHitlCommand, isRunActive, readRunGoal } = await import('./rco/hitl.js');
+        const active = isRunActive(stateDir);
+        const goal   = readRunGoal(stateDir);
+        if (!active) {
+          console.error(`⚠️  No active run in ${stateDir}${goal ? ` (last goal: "${goal.slice(0, 60)}")` : ''}`);
+        }
         writeHitlCommand(stateDir, { cmd: 'abort' });
-        console.error('🛑 Abort sent — run will stop after the current wave completes.');
-        console.error('   For an immediate kill, use: roland bg-stop');
+        console.error('🛑 Abort sent — run will stop after the current wave finishes.');
+        console.error('   For immediate stop: roland bg-stop');
+        break;
+      }
+      case 'hitl-status': {
+        const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const { isRunActive, readRunGoal, HitlQueue } = await import('./rco/hitl.js');
+        const active = isRunActive(stateDir);
+        const goal   = readRunGoal(stateDir);
+        const q = new HitlQueue(stateDir);
+        const hitlState = q.readState();
+        const queueLen  = hitlState.pendingCount ?? 0;
+
+        const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
+        const dim  = (s: string) => `\x1b[2m${s}\x1b[0m`;
+        const cy   = (s: string) => `\x1b[36m${s}\x1b[0m`;
+        const y    = (s: string) => `\x1b[33m${s}\x1b[0m`;
+        const g    = (s: string) => `\x1b[32m${s}\x1b[0m`;
+
+        console.error('');
+        console.error(`  ${bold('HITL Status')}  ${dim('(Human-in-the-Loop Controls)')}`);
+        console.error('');
+        console.error(`  Run active:    ${active ? g('yes') : dim('no')}${goal ? dim(` — "${goal.slice(0, 60)}"`) : ''}`);
+        console.error(`  Paused:        ${hitlState.paused ? y('yes ⏸') : dim('no')}`);
+        console.error(`  Abort pending: ${hitlState.abortPending ? y('yes ⚠️') : dim('no')}`);
+        console.error(`  Queue length:  ${queueLen > 0 ? y(String(queueLen)) : dim('0')}`);
+        console.error('');
+        if (active && !hitlState.paused) {
+          console.error(`  ${cy('roland pause')}             Pause before next wave`);
+          console.error(`  ${cy('roland abort')}             Stop after current wave`);
+          console.error(`  ${cy('roland inject "..."')}      Send directive to Lead PM`);
+        } else if (hitlState.paused) {
+          console.error(`  ${cy('roland resume')}            Resume the paused run`);
+        }
+        console.error('');
         break;
       }
 
       // ── Background supervisor ───────────────────────────────────────────────
       case 'bg-status': {
         const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const jsonMode = rest.includes('--json');
         const { bgStatus } = await import('./rco/supervisor.js');
-        bgStatus(stateDir);
+        bgStatus(stateDir, jsonMode);
         break;
       }
       case 'bg-logs': {
         const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const follow   = rest.includes('--follow') || rest.includes('-f');
         const linesIdx = rest.indexOf('--lines');
         const lines    = linesIdx >= 0 ? Number(rest[linesIdx + 1]) || 50 : 50;
-        const { bgLogs } = await import('./rco/supervisor.js');
-        bgLogs(stateDir, lines);
+        const { bgLogs, bgLogsFollow } = await import('./rco/supervisor.js');
+        if (follow) {
+          bgLogsFollow(stateDir);
+        } else {
+          bgLogs(stateDir, lines);
+        }
         break;
       }
       case 'bg-stop': {
@@ -404,6 +524,14 @@ async function main(): Promise<void> {
         process.exit(1);
     }
   } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes('CURSOR_API_KEY')) {
+      console.error('\n  ❌  Missing API key — CURSOR_API_KEY is not set\n');
+      console.error('  Add to your shell profile (.zshrc / .bashrc / PowerShell $PROFILE):\n');
+      console.error('    export CURSOR_API_KEY=your_key_here\n');
+      console.error('  Get your key: https://cursor.com/settings → API Keys\n');
+      process.exit(1);
+    }
     logger.error('❌ Fatal error:', error);
     console.error(error);
     process.exit(1);

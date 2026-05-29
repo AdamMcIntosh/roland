@@ -4,15 +4,21 @@
  * Written to .roland/memory.md after each run's synthesis phase.
  * Read at the start of each run and injected into the Lead PM planning prompt.
  *
- * Format: four persistent sections (Architecture Decisions, Coding Standards,
- * Past Mistakes, Preferences), each containing bullet points that accumulate
- * across runs. New bullets are merged in; duplicates are silently skipped.
+ * Sections (7 total):
+ *   Architecture Decisions  — tech stack choices, patterns adopted
+ *   Coding Standards        — file layout, naming, testing conventions
+ *   Past Mistakes           — "never do X" bullets with root causes
+ *   Preferences             — explicit user/team preferences
+ *   Project Gotchas         — environment quirks, API edge cases
+ *   Proven Patterns         — NEW v2: reusable approaches with [×N] frequency tracking
+ *   Anti-Patterns           — NEW v2: recurring mistakes, sorted by frequency
  *
  * Lifecycle:
  *   1. runTeam reads the snapshot → injected into Lead PM planning prompt
  *   2. Synthesis prompt asks PM to write a "## Memory Extract" section
  *   3. Orchestrator calls memory.extractAndAppend(synthesis, goal, runId)
- *   4. extractAndAppend parses the four-section format and merges new bullets
+ *   4. extractAndAppend parses the section format and merges new bullets
+ *   5. Retrospective writes Proven Patterns / Anti-Patterns; frequency is bumped on recurrence
  */
 
 import fs from 'fs';
@@ -26,17 +32,29 @@ export const MEMORY_PROMPT_MAX_CHARS = 3_000;
 /** Max bullets kept per section before oldest are pruned. */
 const MAX_BULLETS_PER_SECTION = 20;
 
-/** The four structured sections in memory.md. */
+/** All structured sections. Order determines display order in memory.md. */
 export const MEMORY_SECTIONS = [
   'Architecture Decisions',
   'Coding Standards',
   'Past Mistakes',
   'Preferences',
+  'Project Gotchas',
+  'Proven Patterns',
+  'Anti-Patterns',
 ] as const;
 
 export type MemorySection = (typeof MEMORY_SECTIONS)[number];
 
-/** Maps aliases used in Memory Extract blocks → canonical section names. */
+/**
+ * Sections where bullets are sorted by [×N] frequency descending.
+ * These sections track recurring patterns across multiple runs.
+ */
+const FREQUENCY_SORTED: ReadonlySet<MemorySection> = new Set<MemorySection>([
+  'Proven Patterns',
+  'Anti-Patterns',
+]);
+
+/** Maps aliases used in Memory Extract / Retrospective blocks → canonical section names. */
 const SECTION_ALIASES: Record<string, MemorySection> = {
   'architecture decisions': 'Architecture Decisions',
   'architecture':           'Architecture Decisions',
@@ -53,7 +71,76 @@ const SECTION_ALIASES: Record<string, MemorySection> = {
   'preferences':            'Preferences',
   'preference':             'Preferences',
   'user preferences':       'Preferences',
+  'project gotchas':        'Project Gotchas',
+  'gotchas':                'Project Gotchas',
+  'gotcha':                 'Project Gotchas',
+  'quirks':                 'Project Gotchas',
+  'environment quirks':     'Project Gotchas',
+  'environment':            'Project Gotchas',
+  // v2 — pattern tracking sections
+  'proven patterns':        'Proven Patterns',
+  'proven':                 'Proven Patterns',
+  'good patterns':          'Proven Patterns',
+  'what worked':            'Proven Patterns',
+  'patterns that worked':   'Proven Patterns',
+  'anti-patterns':          'Anti-Patterns',
+  'anti patterns':          'Anti-Patterns',
+  'antipatterns':           'Anti-Patterns',
+  'anti-pattern':           'Anti-Patterns',
+  'recurring mistakes':     'Anti-Patterns',
 };
+
+// ── Frequency tracking helpers ────────────────────────────────────────────────
+
+/**
+ * Strip the [×N] frequency prefix from a bullet, returning the bare text.
+ * Example: "[×3] always use parallel waves" → "always use parallel waves"
+ */
+export function stripFrequency(bullet: string): string {
+  return bullet.replace(/^\[×\d+\]\s*/, '').trim();
+}
+
+function getFrequency(bullet: string): number {
+  const m = bullet.match(/^\[×(\d+)\]/);
+  return m ? parseInt(m[1], 10) : 1;
+}
+
+/**
+ * Try to find an existing bullet in arr that matches incoming (first-50-char prefix)
+ * and increment its [×N] frequency counter in-place.
+ * Returns true if a match was found and bumped; false if the bullet is new.
+ */
+function bumpFrequency(arr: string[], incoming: string): boolean {
+  const key = stripFrequency(incoming).toLowerCase().slice(0, 50);
+  const idx = arr.findIndex((e) => stripFrequency(e).toLowerCase().slice(0, 50) === key);
+  if (idx === -1) return false;
+  const count = getFrequency(arr[idx]) + 1;
+  arr[idx] = `[×${count}] ${stripFrequency(arr[idx])}`;
+  return true;
+}
+
+// ── Smart recall helpers ──────────────────────────────────────────────────────
+
+const STOP_WORDS = new Set([
+  'this', 'that', 'with', 'from', 'have', 'will', 'been', 'when', 'where',
+  'what', 'which', 'they', 'them', 'their', 'then', 'than', 'into', 'each',
+  'also', 'some', 'more', 'most', 'other', 'just', 'should', 'would', 'could',
+  'must', 'need', 'used', 'uses', 'make', 'made', 'only', 'very', 'like',
+  'such', 'about', 'after', 'before', 'these', 'those', 'always', 'never', 'every',
+]);
+
+function tokenize(text: string): Set<string> {
+  return new Set(
+    text.toLowerCase().split(/\W+/).filter((w) => w.length > 3 && !STOP_WORDS.has(w)),
+  );
+}
+
+function scoreRelevance(bullet: string, goalTokens: Set<string>): number {
+  // Score against the bare text (strip [×N] prefix before tokenising)
+  const bt = tokenize(stripFrequency(bullet));
+  if (bt.size === 0) return 0;
+  return [...bt].filter((w) => goalTokens.has(w)).length / bt.size;
+}
 
 type SectionMap = Record<MemorySection, string[]>;
 
@@ -62,12 +149,9 @@ type SectionMap = Record<MemorySection, string[]>;
 const FILE_HEADER = '# Roland Project Memory\n\n_Updated automatically after each run. Edit manually at any time._\n';
 
 function emptySections(): SectionMap {
-  return {
-    'Architecture Decisions': [],
-    'Coding Standards':       [],
-    'Past Mistakes':          [],
-    'Preferences':            [],
-  };
+  return Object.fromEntries(
+    MEMORY_SECTIONS.map((s) => [s, [] as string[]]),
+  ) as SectionMap;
 }
 
 function serializeSections(sections: SectionMap, runInfo?: string): string {
@@ -88,11 +172,10 @@ function serializeSections(sections: SectionMap, runInfo?: string): string {
   return out;
 }
 
-/** Parse the four sections out of an existing memory.md file. */
+/** Parse all sections out of an existing memory.md file. */
 function parseSections(raw: string): SectionMap {
   const result = emptySections();
   for (const section of MEMORY_SECTIONS) {
-    // Match "## Section Name" … up to next "##" heading or end of file
     const escaped = section.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const re = new RegExp(`##\\s+${escaped}\\s*\\n([\\s\\S]*?)(?=\\n##|$)`, 'i');
     const m = raw.match(re);
@@ -111,7 +194,6 @@ function parseSections(raw: string): SectionMap {
 function canonicalSection(raw: string): MemorySection | null {
   const key = raw.toLowerCase().trim();
   if (SECTION_ALIASES[key]) return SECTION_ALIASES[key];
-  // Partial match fallback
   for (const [alias, canonical] of Object.entries(SECTION_ALIASES)) {
     if (key.includes(alias) || alias.includes(key)) return canonical;
   }
@@ -120,7 +202,7 @@ function canonicalSection(raw: string): MemorySection | null {
 
 /**
  * Parse the "## Memory Extract" block from synthesis output into a SectionMap.
- * Handles both the new four-section format and the legacy Decisions/Patterns/Avoid format.
+ * Handles both the original 5-section format and the new 7-section v2 format.
  */
 export function parseMemoryExtract(synthesis: string): SectionMap | null {
   const match = synthesis.match(/##\s+Memory Extract\s*\n([\s\S]*?)(?=\n##\s|\s*$)/i);
@@ -129,7 +211,6 @@ export function parseMemoryExtract(synthesis: string): SectionMap | null {
   const extractContent = match[1];
   const result = emptySections();
 
-  // Parse **Section Name:** bullet blocks
   const blockRe = /\*\*([^:*\n]+):\*\*\s*\n([\s\S]*?)(?=\*\*[^:*\n]+:\*\*|$)/g;
   let m: RegExpExecArray | null;
   let totalBullets = 0;
@@ -154,22 +235,35 @@ export function parseMemoryExtract(synthesis: string): SectionMap | null {
   return totalBullets > 0 ? result : null;
 }
 
-/** Merge incoming bullets into existing sections, deduplicating by prefix match. */
+/**
+ * Merge incoming bullets into existing sections.
+ *
+ * For all sections: duplicate detection uses the first-50-char prefix of the
+ * stripped (frequency-free) text.
+ *
+ * For Proven Patterns and Anti-Patterns: when a duplicate is found the existing
+ * bullet's [×N] counter is bumped instead of adding a second copy. These sections
+ * are then sorted by frequency descending so high-impact patterns surface first.
+ */
 function mergeSections(existing: SectionMap, incoming: SectionMap): SectionMap {
   const result = emptySections();
   for (const section of MEMORY_SECTIONS) {
-    const current  = existing[section] ?? [];
+    const current  = [...(existing[section] ?? [])];
     const newItems = incoming[section] ?? [];
 
-    const merged = [...current];
     for (const bullet of newItems) {
-      const key = bullet.toLowerCase().slice(0, 50);
-      const isDup = current.some((e) => e.toLowerCase().slice(0, 50) === key);
-      if (!isDup && bullet.length > 5) merged.push(bullet);
+      const bumped = bumpFrequency(current, bullet);
+      if (!bumped && bullet.length > 5) {
+        current.push(bullet);
+      }
     }
 
-    // Prune to most recent MAX_BULLETS_PER_SECTION
-    result[section] = merged.slice(-MAX_BULLETS_PER_SECTION);
+    // Frequency-tracked sections: sort highest-frequency first
+    const sorted = FREQUENCY_SORTED.has(section)
+      ? [...current].sort((a, b) => getFrequency(b) - getFrequency(a))
+      : current;
+
+    result[section] = sorted.slice(-MAX_BULLETS_PER_SECTION);
   }
   return result;
 }
@@ -199,6 +293,116 @@ export class ProjectMemory {
     }
   }
 
+  /**
+   * Returns the parsed SectionMap for the current memory file.
+   * Returns empty sections if the file does not exist.
+   */
+  parsedSections(): SectionMap {
+    try {
+      return parseSections(fs.readFileSync(this.filePath, 'utf-8'));
+    } catch {
+      return emptySections();
+    }
+  }
+
+  /**
+   * Merge an incoming SectionMap into the existing memory file and write it.
+   * Deduplication uses the first-50-char prefix of the stripped (frequency-free) text.
+   * Returns count of genuinely new bullets added (frequency bumps don't count).
+   */
+  mergeAndWrite(incoming: SectionMap, goal: string, runId: string): number {
+    let existing = emptySections();
+    try {
+      existing = parseSections(fs.readFileSync(this.filePath, 'utf-8'));
+    } catch { /* new file */ }
+
+    const merged = mergeSections(existing, incoming);
+
+    // Count truly new bullets (not frequency bumps)
+    let added = 0;
+    for (const s of MEMORY_SECTIONS) {
+      const existingKeys = new Set(
+        (existing[s] ?? []).map((e) => stripFrequency(e).toLowerCase().slice(0, 50)),
+      );
+      for (const b of merged[s]) {
+        if (!existingKeys.has(stripFrequency(b).toLowerCase().slice(0, 50))) added++;
+      }
+    }
+
+    // Also write when frequency counters changed (pattern reinforcement)
+    const hadBumps = this.hasFrequencyBumps(existing, merged);
+    if (added === 0 && !hadBumps) return 0;
+
+    const runInfo = `${new Date().toISOString().slice(0, 10)} · run ${runId} · ${goal.slice(0, 60)}`;
+    const newContent = serializeSections(merged, runInfo);
+
+    try {
+      fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
+      fs.writeFileSync(this.filePath, newContent, 'utf-8');
+    } catch (e) {
+      console.error('[Memory] Failed to write memory file:', (e as Error).message);
+      return 0;
+    }
+    return added;
+  }
+
+  /** True when any frequency-tracked section has changed (indicating pattern reinforcement). */
+  private hasFrequencyBumps(existing: SectionMap, merged: SectionMap): boolean {
+    for (const s of MEMORY_SECTIONS) {
+      if (!FREQUENCY_SORTED.has(s)) continue;
+      if ((existing[s] ?? []).join('|') !== (merged[s] ?? []).join('|')) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Returns a relevance-scored subset of the memory file tailored to the current goal.
+   *
+   * Scoring: keyword overlap with goal + small recency bonus + frequency bonus for
+   * Proven Patterns and Anti-Patterns (high-frequency entries surface more readily).
+   *
+   * At most MAX_PER_SECTION bullets per section; total capped at maxChars.
+   */
+  smartSnapshot(goal: string, maxChars = MEMORY_PROMPT_MAX_CHARS): string {
+    if (!this.hasMemory()) return '';
+
+    let raw = '';
+    try { raw = fs.readFileSync(this.filePath, 'utf-8'); } catch { return ''; }
+
+    const sections   = parseSections(raw);
+    const goalTokens = tokenize(goal);
+    const MAX_PER_SECTION = 4;
+
+    const lines: string[] = ['# Roland Project Memory (Smart Recall)\n'];
+
+    for (const section of MEMORY_SECTIONS) {
+      const bullets = sections[section];
+      if (bullets.length === 0) continue;
+
+      const scored = bullets
+        .map((bullet, idx) => ({
+          bullet,
+          score: scoreRelevance(bullet, goalTokens)
+            + (idx / Math.max(bullets.length, 1)) * 0.1
+            + (FREQUENCY_SORTED.has(section) ? getFrequency(bullet) * 0.05 : 0),
+        }))
+        .sort((a, b) => b.score - a.score);
+
+      const top       = scored.slice(0, MAX_PER_SECTION).map((s) => s.bullet);
+      const remaining = bullets.length - top.length;
+      const note      = remaining > 0 ? ` _(+${remaining} more in .roland/memory.md)_` : '';
+
+      lines.push(`## ${section}${note}\n`);
+      for (const b of top) lines.push(`- ${b}`);
+      lines.push('');
+    }
+
+    const result = lines.join('\n');
+    return result.length > maxChars
+      ? result.slice(0, maxChars) + '\n…(older entries omitted)'
+      : result;
+  }
+
   /** True if the memory file exists and has content. */
   hasMemory(): boolean {
     try {
@@ -210,44 +414,14 @@ export class ProjectMemory {
 
   /**
    * Parse the "## Memory Extract" section from a synthesis string, merge the
-   * new bullets into the existing four-section memory file, and write the result.
+   * new bullets into the existing memory file, and write the result.
    *
    * Returns true if at least one new bullet was written.
    */
   extractAndAppend(synthesis: string, goal: string, runId: string): boolean {
     const incoming = parseMemoryExtract(synthesis);
     if (!incoming) return false;
-
-    // Load and parse existing sections
-    let existing = emptySections();
-    try {
-      const raw = fs.readFileSync(this.filePath, 'utf-8');
-      existing = parseSections(raw);
-    } catch {
-      // No file yet — start fresh.
-    }
-
-    const merged = mergeSections(existing, incoming);
-
-    // Count new bullets added
-    let added = 0;
-    for (const s of MEMORY_SECTIONS) {
-      added += Math.max(0, merged[s].length - (existing[s]?.length ?? 0));
-    }
-    if (added === 0) return false;
-
-    const runInfo = `${new Date().toISOString().slice(0, 10)} · run ${runId} · ${goal.slice(0, 60)}`;
-    const newContent = serializeSections(merged, runInfo);
-
-    try {
-      fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
-      fs.writeFileSync(this.filePath, newContent, 'utf-8');
-    } catch (err) {
-      console.error('[Memory] Failed to write memory file:', (err as Error).message);
-      return false;
-    }
-
-    return true;
+    return this.mergeAndWrite(incoming, goal, runId) > 0;
   }
 
   /**
@@ -260,8 +434,8 @@ export class ProjectMemory {
       existing = parseSections(fs.readFileSync(this.filePath, 'utf-8'));
     } catch { /* new file */ }
 
-    const key = bullet.toLowerCase().slice(0, 50);
-    if (!existing[section].some((e) => e.toLowerCase().slice(0, 50) === key)) {
+    const key = stripFrequency(bullet).toLowerCase().slice(0, 50);
+    if (!existing[section].some((e) => stripFrequency(e).toLowerCase().slice(0, 50) === key)) {
       existing[section].push(bullet);
       if (existing[section].length > MAX_BULLETS_PER_SECTION) {
         existing[section] = existing[section].slice(-MAX_BULLETS_PER_SECTION);

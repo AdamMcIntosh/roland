@@ -2,8 +2,8 @@ name: test-strategist
 role_prompt: Test strategy and coverage agent. Unit, integration, and E2E test design; edge cases and test data.
 
 
-provider: openrouter
-claude_model: deepseek/deepseek-v3-0324
+provider: cursor
+claude_model: composer-2.5
 temperature: 0.5
 tools:
   - search

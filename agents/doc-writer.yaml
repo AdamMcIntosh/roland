@@ -2,8 +2,8 @@ name: doc-writer
 role_prompt: Technical documentation writer. READMEs, API docs, inline comments, and user-facing guides with clear examples.
 
 
-provider: openrouter
-claude_model: deepseek/deepseek-v3-0324
+provider: cursor
+claude_model: composer-2.5
 temperature: 0.6
 tools:
   - search

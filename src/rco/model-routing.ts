@@ -17,14 +17,15 @@
  *   composer-2.5  — ALL engineer agents (default for every non-PM agent)
  *   composer-2    — lighter composer variant (explicit use only)
  *
- * NOTE: claude-sonnet-* and claude-opus-* are NOT valid Cursor SDK model IDs.
- * They must never appear in VALID_CURSOR_MODELS — if they did, a stale YAML
- * value would bypass all routing and reach the SDK verbatim.
+ * NOTE: claude-sonnet-*, claude-opus-*, openrouter/*, deepseek/*, qwen/*, and
+ * minimax/* are NOT valid Cursor SDK model IDs. They must never appear in
+ * VALID_CURSOR_MODELS. The legacy remap table below catches any stale YAML
+ * values that slip through and normalises them to composer-2.5.
  *
  * Resolution order:
  *  1. Agent-name PM heuristic — checked FIRST so Lead-PM always wins.
  *  2. Exact approved Cursor model ID (composer-2.5, grok-4.3, composer-2).
- *  3. Legacy model-string keywords (opus → grok-4.3, sonnet/deepseek/etc → composer-2.5).
+ *  3. Legacy / stale model-string keywords → remap to grok-4.3 or composer-2.5.
  *  4. Hard default → composer-2.5.
  */
 
@@ -53,14 +54,16 @@ export function toCursorModelId(model: string, agentName: string = ''): string {
 
   // ── 3. Legacy / stale model-string keywords → remap ──────────────────────
   // Any opus string in a legacy YAML → grok-4.3 (PM-class reasoning).
-  if (m.includes('opus'))   return 'grok-4.3';
-  // Any sonnet, deepseek, qwen, minimax, or other non-Cursor string → composer-2.5.
-  if (m.includes('sonnet'))   return 'composer-2.5';
-  if (m.includes('haiku'))    return 'composer-2.5';
-  if (m.includes('deepseek')) return 'composer-2.5';
-  if (m.includes('qwen'))     return 'composer-2.5';
-  if (m.includes('minimax'))  return 'composer-2.5';
-  if (m.includes('gemini'))   return 'composer-2.5';
+  if (m.includes('opus'))      return 'grok-4.3';
+  // Any OpenRouter provider prefix or stale non-Cursor model string → composer-2.5.
+  // This is a safety net — agent YAMLs should all use composer-2.5 directly now.
+  if (m.includes('openrouter')) return 'composer-2.5';
+  if (m.includes('sonnet'))    return 'composer-2.5';
+  if (m.includes('haiku'))     return 'composer-2.5';
+  if (m.includes('deepseek'))  return 'composer-2.5';
+  if (m.includes('qwen'))      return 'composer-2.5';
+  if (m.includes('minimax'))   return 'composer-2.5';
+  if (m.includes('gemini'))    return 'composer-2.5';
   // Legacy "composer-2.5-fast" / "composer-2.5-standard" → composer-2.5
   if (m.includes('composer-2.5')) return 'composer-2.5';
   if (m.includes('composer-2'))   return 'composer-2';

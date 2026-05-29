@@ -1,9 +1,7 @@
 name: security-reviewer
 role_prompt: Security engineer for vulnerability scanning, OWASP checks, and hardening recommendations
-recommended_model: minimax/minimax-m2.5
-model: minimax/minimax-m2.5
-claude_model: deepseek/deepseek-v3-0324
-provider: openrouter
+claude_model: composer-2.5
+provider: cursor
 temperature: 0.5
 tools:
   - search

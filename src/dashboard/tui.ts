@@ -86,15 +86,53 @@ export class TuiRenderer {
   private readonly stateFilePath: string;
   private active = false;
 
+  // ── Command input state ───────────────────────────────────────────────────
+  private cmdBuffer = '';
+  private cmdFlash  = '';
+  private cmdFlashTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly _onCommand: ((cmd: string) => void) | null;
+
   // Stored as instance properties so they can be passed to removeListener.
   // Arrow functions defined inline in process.on() cannot be removed later.
   private readonly _onExit    = () => this.stop();
   private readonly _onSigint  = () => { this.stop(); process.exit(0); };
   private readonly _onSigterm = () => { this.stop(); process.exit(0); };
   private readonly _onResize  = () => { if (this.lastState) this.draw(this.lastState); };
+  private readonly _onStdinData = (key: string): void => {
+    if (key === '\x03') { this.stop(); process.exit(0); return; }          // Ctrl+C
+    if (key === '\r' || key === '\n') {                                     // Enter
+      const cmd = this.cmdBuffer.trim();
+      this.cmdBuffer = '';
+      if (cmd) this._onCommand?.(cmd);
+      if (this.lastState) this.draw(this.lastState);
+      return;
+    }
+    if (key === '\x7f' || key === '\x08') {                                // Backspace
+      this.cmdBuffer = this.cmdBuffer.slice(0, -1);
+      if (this.lastState) this.draw(this.lastState);
+      return;
+    }
+    if (key.length === 1 && key >= ' ') {                                  // Printable
+      this.cmdBuffer += key;
+      if (this.lastState) this.draw(this.lastState);
+    }
+  };
 
-  constructor(stateFilePath: string) {
+  constructor(stateFilePath: string, opts: { onCommand?: (cmd: string) => void } = {}) {
     this.stateFilePath = stateFilePath;
+    this._onCommand = opts.onCommand ?? null;
+  }
+
+  /** Display a message inside the TUI box for `durationMs` milliseconds. */
+  showMessage(text: string, durationMs = 5000): void {
+    this.cmdFlash = text;
+    if (this.cmdFlashTimer) clearTimeout(this.cmdFlashTimer);
+    this.cmdFlashTimer = setTimeout(() => {
+      this.cmdFlash = '';
+      this.cmdFlashTimer = null;
+      if (this.lastState) this.draw(this.lastState);
+    }, durationMs);
+    if (this.lastState) this.draw(this.lastState);
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -110,6 +148,16 @@ export class TuiRenderer {
       this.spinTick++;
       if (this.lastState) this.draw(this.lastState);
     }, 250);
+
+    // Capture keystrokes for slash-command input (best-effort; skipped when stdin is not a TTY)
+    if ((process.stdin as NodeJS.ReadStream).isTTY) {
+      try {
+        process.stdin.setRawMode(true);
+        process.stdin.resume();
+        process.stdin.setEncoding('utf8');
+        process.stdin.on('data', this._onStdinData);
+      } catch { /* non-TTY or unsupported env — silently skip */ }
+    }
 
     // Handle terminal resize
     process.stdout.on('resize', this._onResize);
@@ -129,6 +177,17 @@ export class TuiRenderer {
     if (!this.active) return;
     this.active = false;
     if (this.timer) { clearInterval(this.timer); this.timer = null; }
+    if (this.cmdFlashTimer) { clearTimeout(this.cmdFlashTimer); this.cmdFlashTimer = null; }
+
+    // Restore stdin to normal cooked mode
+    if ((process.stdin as NodeJS.ReadStream).isTTY) {
+      try {
+        process.stdin.removeListener('data', this._onStdinData);
+        process.stdin.setRawMode(false);
+        process.stdin.pause();
+      } catch { /* ignore */ }
+    }
+
     process.stdout.write('\x1b[?1049l'); // leave alternate screen
     process.stdout.write('\x1b[?25h');   // show cursor
     // Remove all listeners added in start() so they don't accumulate
@@ -170,6 +229,14 @@ export class TuiRenderer {
     const redraw = () => {
       const state = readRunState(stateDir);
       if (state) {
+        // Overlay HITL state from hitl-state.json (updated by CLI immediately
+        // when commands are pushed, even before the orchestrator processes them).
+        try {
+          const hitlStateFile = path.join(stateDir, 'hitl-state.json');
+          const hitlState = JSON.parse(fs.readFileSync(hitlStateFile, 'utf-8')) as { paused?: boolean; abortPending?: boolean };
+          if (hitlState.paused)       state.hitlPaused = true;
+          if (hitlState.abortPending) state.hitlAbortPending = true;
+        } catch { /* no hitl state file — fine */ }
         renderer.lastState = state;
         renderer.draw(state);
         if (state.status === 'done' || state.status === 'error') {
@@ -260,15 +327,44 @@ export class TuiRenderer {
     lines.push(div);
 
     // ── Wave + progress bar ───────────────────────────────────────────────────
-    const barWidth = 16;
-    const bar = progressBar(state.completedTasks, state.totalTasks, barWidth);
+    // Clamp safeDone so completed never visually exceeds total (defense-in-depth;
+    // RunStateWriter now derives counts from the task array, but guard anyway).
+    const barWidth  = 16;
+    const safeDone  = Math.min(state.completedTasks, Math.max(state.totalTasks, 0));
+    const bar       = progressBar(safeDone, state.totalTasks, barWidth);
     const waveLabel = state.currentWave > 0
       ? b(`Wave ${state.currentWave}`) + d('  ·  ')
       : '';
-    const countLabel = d(`  ${state.completedTasks} / ${state.totalTasks} tasks`);
+    const safePct   = state.totalTasks > 0
+      ? Math.min(Math.round((safeDone / state.totalTasks) * 100), 100)
+      : 0;
+    const pctLabel  = state.totalTasks > 0 ? ` ${safePct}%` : '';
+    const countLabel = d(`  ${safeDone} / ${state.totalTasks} tasks${pctLabel}`);
     const barRow = ` ${waveLabel}[${bar}]${countLabel}`;
     lines.push(row(barRow));
     lines.push(div);
+
+    // ── Connection-drop banner ────────────────────────────────────────────────
+    if (state.connectionDropped) {
+      lines.push(row(` ${r('🔴')}  ${b('Connection dropped — run paused')}`));
+      const detail = state.connectionDropMessage
+        ? ` ${d(state.connectionDropMessage.slice(0, C - 4))}`
+        : ` ${d('Cursor API unreachable. Restore connectivity then resume.')}`;
+      lines.push(row(detail));
+      lines.push(row(` ${d('Resume with:')}  ${cy('roland resume')}  ${d('(CLI)')}  ${cy('or')}  ${cy('/resume')}  ${d('(chat)')}`));
+      lines.push(div);
+    }
+
+    // ── HITL state banner ─────────────────────────────────────────────────────
+    if (state.hitlPaused) {
+      const pauseMsg = ` ${y('⏸')}  ${b('PAUSED')} ${d('— send')} ${cy('roland resume')} ${d('to continue')}`;
+      lines.push(row(pauseMsg));
+      lines.push(div);
+    } else if (state.hitlAbortPending) {
+      const abortMsg = ` ${y('⚠️')}  ${b('Abort queued')} ${d('— run will stop after current wave finishes')}`;
+      lines.push(row(abortMsg));
+      lines.push(div);
+    }
 
     // ── Task list ─────────────────────────────────────────────────────────────
     const maxTaskRows = Math.max(3, Math.min(state.tasks.length, Math.floor((process.stdout.rows ?? 30) - 14)));
@@ -308,11 +404,21 @@ export class TuiRenderer {
       }
     }
 
+    // ── Command flash message ─────────────────────────────────────────────────
+    if (this.cmdFlash) {
+      lines.push(div);
+      for (const line of this.cmdFlash.split('\n').slice(0, 6)) {
+        lines.push(row(' ' + cy(line.slice(0, C - 1))));
+      }
+    }
+
     lines.push(bottom);
 
     // ── Footer (outside box) ──────────────────────────────────────────────────
     const footerLeft  = d(`  ${this.stateFilePath}`);
-    const footerRight = d('Ctrl+C to exit  ');
+    const footerRight = this.cmdBuffer
+      ? d('> ') + cy(this.cmdBuffer) + y('█') + d('  Enter↵  ')
+      : d('Type /help  ·  Ctrl+C to exit  ');
     const footerPad   = W - vlen(footerLeft) - vlen(footerRight);
     lines.push(footerLeft + ' '.repeat(Math.max(1, footerPad)) + footerRight);
 

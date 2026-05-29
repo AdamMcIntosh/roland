@@ -41,6 +41,14 @@ export interface RunState {
   activeTaskIds: string[];
   pmNotes?: string;
   errorMessage?: string;
+  /** True while run is paused via `roland pause`. Updated by orchestrator. */
+  hitlPaused?: boolean;
+  /** True after `roland abort` is queued, before it is processed. */
+  hitlAbortPending?: boolean;
+  /** Set when the wave circuit breaker opens due to connection errors. */
+  connectionDropped?: boolean;
+  /** Human-readable detail about the connection drop (wave, agent count, etc.). */
+  connectionDropMessage?: string;
 }
 
 // ── Writer (used by team-cli / orchestrator callbacks) ────────────────────────
@@ -68,7 +76,7 @@ export class RunStateWriter {
   }
 
   planReady(tasks: Array<{ id: string; title: string; agent: string }>): void {
-    this.state.totalTasks = tasks.length;
+    // totalTasks / completedTasks are recomputed from this.state.tasks in flush().
     this.state.tasks = tasks.map((t) => ({
       id: t.id,
       title: t.title,
@@ -113,7 +121,7 @@ export class RunStateWriter {
       task.outputPreview = preview.length > 300 ? '…' + preview.slice(-297) : preview;
     }
     this.state.activeTaskIds = this.state.activeTaskIds.filter((a) => a !== id);
-    this.state.completedTasks++;
+    // completedTasks is recomputed from task statuses in flush() — no manual increment.
     this.flush();
   }
 
@@ -133,7 +141,7 @@ export class RunStateWriter {
     for (const t of tasks) {
       if (!this.state.tasks.find((x) => x.id === t.id)) {
         this.state.tasks.push({ id: t.id, title: t.title, agent: t.agent, wave: 0, status: 'pending' });
-        this.state.totalTasks++;
+        // totalTasks is recomputed from this.state.tasks.length in flush().
       }
     }
     this.flush();
@@ -142,6 +150,33 @@ export class RunStateWriter {
   synthesizing(): void {
     this.state.status = 'synthesizing';
     this.state.activeTaskIds = [];
+    this.flush();
+  }
+
+  setHitlPaused(paused: boolean): void {
+    if (paused) {
+      this.state.hitlPaused = true;
+    } else {
+      delete this.state.hitlPaused;
+      delete this.state.hitlAbortPending;
+    }
+    this.flush();
+  }
+
+  setAbortPending(): void {
+    this.state.hitlAbortPending = true;
+    this.flush();
+  }
+
+  setConnectionDropped(message: string): void {
+    this.state.connectionDropped = true;
+    this.state.connectionDropMessage = message;
+    this.flush();
+  }
+
+  clearConnectionDropped(): void {
+    delete this.state.connectionDropped;
+    delete this.state.connectionDropMessage;
     this.flush();
   }
 
@@ -163,6 +198,15 @@ export class RunStateWriter {
   }
 
   private flush(): void {
+    // ── Single source of truth for task counts ────────────────────────────────
+    // Always recompute from the task array so counts can never drift from the
+    // actual task list, regardless of dynamic spawning, retries, or re-queuing.
+    //   totalTasks     = every task ever added to the plan (including PM-spawned)
+    //   completedTasks = tasks that have been processed (done, blocked, or error)
+    this.state.totalTasks     = this.state.tasks.length;
+    this.state.completedTasks = this.state.tasks.filter(
+      (t) => t.status === 'done' || t.status === 'blocked' || t.status === 'error',
+    ).length;
     this.state.updatedAt = Date.now();
     try {
       fs.writeFileSync(this.filePath, JSON.stringify(this.state, null, 2), 'utf-8');

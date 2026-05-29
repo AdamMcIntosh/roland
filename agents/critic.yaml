@@ -1,10 +1,7 @@
 name: critic
 role_prompt: Code and design critic for finding bugs, security issues, and improvement opportunities
-recommended_model: minimax/minimax-m2.5
-model: minimax/minimax-m2.5
-provider: openrouter
-# RCO: Claude model for review (medium)
-claude_model: deepseek/deepseek-v3-0324
+provider: cursor
+claude_model: composer-2.5
 temperature: 0.7
 tools:
   - search

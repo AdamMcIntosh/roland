@@ -90,8 +90,10 @@ export interface TeamCliArgs {
   notify: boolean;
   clean: boolean;
   background: boolean;
+  noImprove: boolean;
   webhookUrl?: string;
   agentsDir?: string;
+  parallel: boolean;
 }
 
 export function parseTeamArgs(argv: string[]): TeamCliArgs {
@@ -107,6 +109,8 @@ export function parseTeamArgs(argv: string[]): TeamCliArgs {
   let notify = false;
   let clean = false;
   let background = false;
+  let noImprove  = false;
+  let parallel   = process.env.ROLAND_SEQUENTIAL !== '1';
   let webhookUrl: string | undefined;
   let agentsDir: string | undefined;
 
@@ -122,17 +126,20 @@ export function parseTeamArgs(argv: string[]): TeamCliArgs {
     if (a === '--notify' || a === '-n')                  { notify = true; continue; }
     if (a === '--clean' || a === '-c')                   { clean = true; continue; }
     if (a === '--background' || a === '--detach' || a === '-b') { background = true; continue; }
+    if (a === '--no-improve')                               { noImprove = true; continue; }
+    if (a === '--parallel' || a === '-p')              { parallel = true; continue; }
+    if (a === '--sequential')                           { parallel = false; continue; }
     if (a === '--webhook' && args[i + 1])                { webhookUrl = args[++i]; notify = true; continue; }
     if (!a.startsWith('-') && !goal)                     { goal = a; continue; }
   }
 
-  return { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, webhookUrl, agentsDir };
+  return { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, webhookUrl, agentsDir, parallel };
 }
 
 // ── Main CLI logic (exported so index.ts can delegate without re-running main) ─
 
 export async function runTeamCli(argv: string[]): Promise<void> {
-  const { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, webhookUrl, agentsDir } = parseTeamArgs(argv);
+  const { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, webhookUrl, agentsDir, parallel } = parseTeamArgs(argv);
 
   if (!goal) {
     err(c.bold('Roland — PM Team Mode'));
@@ -157,6 +164,24 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     err('    --webhook <url>         POST to URL on complete/error (ntfy.sh, Slack, Discord…)');
     err('    --clean, -c             Delete stale blackboard + messages before starting  ' + c.dim('(preserves memory.md)'));
     err('    --background, --detach  Spawn detached; logs to .roland/logs/  ' + c.dim('(roland bg-status to check)'));
+    err('    --no-improve            Skip the self-improvement retrospective phase');
+    err('    --sequential            One agent at a time  ' + c.dim('(safe mode for unstable connections; overrides ROLAND_SEQUENTIAL=1)'));
+    err('    --parallel              Force parallel even if ROLAND_SEQUENTIAL=1  ' + c.dim('(parallel is the default)'));
+    err('');
+    process.exit(1);
+  }
+
+  // ── CURSOR_API_KEY early check ──────────────────────────────────────────────
+  if (!process.env.CURSOR_API_KEY) {
+    err('');
+    err(`  ${c.bold('❌  CURSOR_API_KEY is not set')}`);
+    err('');
+    err('  Agent execution requires a Cursor API key. Add to your shell profile:');
+    err('');
+    err(`    ${c.cyan('export CURSOR_API_KEY=your_key_here')}    ${c.dim('# .zshrc / .bashrc / PowerShell $PROFILE')}`);
+    err('');
+    err('  Get your key at: https://cursor.com/settings → API Keys');
+    err(`  Or diagnose your install: ${c.cyan('roland doctor')}`);
     err('');
     process.exit(1);
   }
@@ -184,12 +209,24 @@ export async function runTeamCli(argv: string[]): Promise<void> {
   // ── Clean stale state if requested ──────────────────────────────────────────
   if (clean) cleanState(stateDir);
 
-  // ── Quiet mode — no UI, just run and emit synthesis ────────────────────────
+  // ── Quiet mode — no UI, but still write run-state.json for external monitors ─
   if (quiet) {
     const runStart = Date.now();
+    const runState = new RunStateWriter(stateDir, goal);
     try {
       const result = await runTeam({
         goal, stateDir, agentsDir, hitlQueue,
+        noImprove, sequential: !parallel, interactive: false,
+        onPlanReady:    (tasks)         => { runState.planReady(tasks); },
+        onWaveStart:    (w, tasks)      => { runState.waveStart(w, tasks.map((t) => t.id)); },
+        onTaskStart:    (id)            => { runState.taskStart(id); },
+        onTaskComplete: (id, _a, out, bl) => { runState.taskComplete(id, out, bl); },
+        onWaveReview:   ()              => { runState.waveReviewing(); },
+        onWaveComplete: (_w, d)         => { runState.waveComplete(d.pmNotes); },
+        onTasksSpawned: (tasks)         => { runState.addTasks(tasks); },
+        onSynthesizing: ()              => { runState.synthesizing(); },
+        onHitlPause:    (p)             => { runState.setHitlPaused(p); },
+        onAbortPending: ()              => { runState.setAbortPending(); },
         onBlockerDetected: (taskId, agent, description, waveNumber) => {
           void notifier.notify({
             event: 'blocker', goal,
@@ -198,6 +235,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
           });
         },
       });
+      runState.done();
       console.log(result.synthesis);
       await notifier.notify({
         event: 'complete', goal, summary: 'Run complete',
@@ -206,6 +244,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
         durationMs: Date.now() - runStart,
       });
     } catch (e) {
+      runState.error(e instanceof Error ? e.message : String(e));
       await notifier.notify({ event: 'error', goal, summary: String(e), errorMessage: e instanceof Error ? e.message : String(e) });
       throw e;
     } finally {
@@ -222,7 +261,63 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     const runState = new RunStateWriter(stateDir, goal);
     const stateFilePath = path.join(stateDir, 'run-state.json');
     const useSimpleTui = simpleTui || isSimpleTui();
-    const tui = useSimpleTui ? new SimpleTuiRenderer(stateFilePath) : new TuiRenderer(stateFilePath);
+
+    // Command handler: executes /status /pause /resume /abort /help typed inside the TUI.
+    // Uses an indirection object so tui (const) can be referenced after assignment.
+    const cmdDispatch = { fn: (_cmd: string): void => { /* populated after tui is created */ } };
+    const tui = useSimpleTui
+      ? new SimpleTuiRenderer(stateFilePath)
+      : new TuiRenderer(stateFilePath, { onCommand: (cmd) => cmdDispatch.fn(cmd) });
+    if (tui instanceof TuiRenderer) {
+      cmdDispatch.fn = (cmd: string): void => {
+        const state = runState.get();
+        const totalSec = Math.floor((Date.now() - state.startedAt) / 1000);
+        const mm = Math.floor(totalSec / 60);
+        const ss = (totalSec % 60).toString().padStart(2, '0');
+        const verb = cmd.trim().toLowerCase().split(/\s+/)[0];
+
+        switch (verb) {
+          case '/status': {
+            const running = state.tasks.filter((t) => state.activeTaskIds.includes(t.id));
+            const doneCount = state.tasks.filter(
+              (t) => t.status === 'done' || t.status === 'blocked',
+            ).length;
+            const lines = [
+              `${state.status}  ·  Wave ${state.currentWave}  ·  ${doneCount}/${state.totalTasks} tasks  ·  ${mm}m ${ss}s elapsed`,
+              running.length > 0
+                ? `Running: ${running.map((t) => `${t.agent} · ${t.title.slice(0, 36)}`).join('  |  ')}`
+                : 'No agents currently active',
+            ];
+            if (state.pmNotes) lines.push(`PM: ${state.pmNotes.slice(0, 90)}`);
+            tui.showMessage(lines.join('\n'));
+            break;
+          }
+          case '/pause':
+            hitlQueue.push({ cmd: 'pause' });
+            tui.showMessage('⏸  Pause queued — takes effect before the next wave starts');
+            break;
+          case '/resume':
+            hitlQueue.push({ cmd: 'resume' });
+            tui.showMessage('▶  Resume queued — run will continue');
+            break;
+          case '/abort':
+            hitlQueue.push({ cmd: 'abort' });
+            tui.showMessage('🛑  Abort queued — run will stop after current wave finishes');
+            break;
+          case '/help':
+            tui.showMessage([
+              '/status   Wave, task counts, running agents, elapsed time',
+              '/pause    Pause before the next wave starts',
+              '/resume   Continue after a pause',
+              '/abort    Stop cleanly after the current wave',
+            ].join('\n'));
+            break;
+          default:
+            tui.showMessage(`Unknown: ${cmd}  — try /help`);
+        }
+      };
+    }
+
     tui.start();
     tui.update(runState.get());
 
@@ -233,6 +328,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
         stateDir,
         agentsDir,
         hitlQueue,
+        noImprove, sequential: !parallel, interactive: false,
         onBlockerDetected: (taskId, agent, description, waveNumber) => {
           void notifier.notify({
             event: 'blocker', goal,
@@ -270,6 +366,21 @@ export async function runTeamCli(argv: string[]): Promise<void> {
         },
         onSynthesizing: () => {
           runState.synthesizing();
+          tui.update(runState.get());
+        },
+        onHitlPause: (paused) => {
+          runState.setHitlPaused(paused);
+          if (!paused) runState.clearConnectionDropped();
+          tui.update(runState.get());
+        },
+        onAbortPending: () => {
+          runState.setAbortPending();
+          tui.update(runState.get());
+        },
+        onCircuitBreak: (info) => {
+          const agents = info.failedAgents.slice(0, 3).join(', ');
+          const msg = `Wave ${info.waveNumber} · ${info.errorCount} network error${info.errorCount !== 1 ? 's' : ''} (${agents})`;
+          runState.setConnectionDropped(msg);
           tui.update(runState.get());
         },
       });
@@ -318,8 +429,9 @@ export async function runTeamCli(argv: string[]): Promise<void> {
   }
 
   // ── Progress state ─────────────────────────────────────────────────────────
-  let scheduledTotal = 0;   // initial plan count; grows as PM spawns tasks
-  let completedTotal = 0;
+  // Scroll mode also writes run-state.json so external observers (roland status,
+  // bg-status) can monitor progress and HITL pause/abort state without a TUI.
+  const runState = new RunStateWriter(stateDir, goal);
 
   // Per-wave tracking: reset each wave so the wave-complete display is accurate
   const waveEntries = new Map<string, { agent: string; title: string; hadBlocker: boolean }>();
@@ -327,9 +439,10 @@ export async function runTeamCli(argv: string[]): Promise<void> {
   // ── Header ─────────────────────────────────────────────────────────────────
   err('');
   err('  ' + '═'.repeat(COLS - 2));
-  err('  ' + c.bold('🚀  Roland PM Team'));
+  err('  ' + c.bold('🚀  Roland PM Team v1.1'));
   err(`  ${c.dim('Goal:')}   ${goal.slice(0, COLS - 12)}`);
   err(`  ${c.dim('State:')}  ${stateDir}`);
+  err(`  ${c.dim('Mode:')}   ${parallel ? c.green('parallel') + c.dim(' (4 concurrent agents)') : c.yellow('sequential') + c.dim(' (one agent at a time — safe mode)')}`);
   err('  ' + '═'.repeat(COLS - 2));
   err('');
 
@@ -339,6 +452,9 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     stateDir,
     agentsDir,
     hitlQueue,
+    noImprove,
+    sequential: !parallel,
+    interactive: Boolean((process.stderr as NodeJS.WriteStream).isTTY) && !noImprove,
     onBlockerDetected: (taskId, agent, description, waveNumber) => {
       void notifier.notify({
         event: 'blocker', goal,
@@ -349,27 +465,41 @@ export async function runTeamCli(argv: string[]): Promise<void> {
 
     // ── Plan ready ───────────────────────────────────────────────────────────
     onPlanReady: (tasks: TeamTask[]) => {
-      scheduledTotal = tasks.length;
-      err(`  ${c.dim('Plan:')}   ${tasks.length} task${tasks.length !== 1 ? 's' : ''} initially scheduled  ${c.dim('(PM may spawn more during review)')}`);
+      runState.planReady(tasks);
+      err(`  ${c.green('✅')} Plan ready — ${tasks.length} task${tasks.length !== 1 ? 's' : ''} scheduled.  ${c.dim('Run')} ${c.cyan('roland status')} ${c.dim('in another terminal to monitor.')}`);
       err('');
     },
 
     // ── Wave starting ────────────────────────────────────────────────────────
     onWaveStart: (waveNumber: number, tasks: TeamTask[]) => {
+      runState.waveStart(waveNumber, tasks.map((t) => t.id));
       waveEntries.clear();
       for (const t of tasks) waveEntries.set(t.id, { agent: t.agent, title: t.title, hadBlocker: false });
 
+      // Use RunStateWriter as single source of truth — counts are always
+      // derived from the task array so dynamic spawning is reflected correctly.
+      const rs  = runState.get();
+      const bar = progressBar(rs.completedTasks, rs.totalTasks);
       err(rule());
-      const bar = progressBar(completedTotal, scheduledTotal);
-      err(
-        `  ${c.bold(`Wave ${waveNumber}`)}  ${c.dim('·')}  ${tasks.length} task${tasks.length !== 1 ? 's' : ''} in parallel  ` +
-        `${c.dim('[')}${bar}${c.dim(']')}  ${c.dim(completedTotal + '/' + scheduledTotal + ' tasks done')}`,
-      );
+      if (parallel) {
+        err(
+          `  ${c.bold(`Wave ${waveNumber}`)}  ${c.dim('·')}  ${tasks.length} task${tasks.length !== 1 ? 's' : ''} in parallel  ` +
+          `${c.dim('[')}${bar}${c.dim(']')}  ${c.dim(rs.completedTasks + '/' + rs.totalTasks + ' tasks done')}`,
+        );
+      } else {
+        const task = tasks[0];
+        err(
+          `  ${c.bold(`Step ${waveNumber}`)}  ${c.dim('·')}  ${c.cyan(task?.agent ?? '?')}  ${c.dim('·')}  ` +
+          `${c.dim((task?.title ?? '').slice(0, 60))}  ` +
+          `${c.dim('[')}${bar}${c.dim(']')}  ${c.dim(rs.completedTasks + '/' + rs.totalTasks)}`,
+        );
+      }
       err('');
     },
 
     // ── Task starting ────────────────────────────────────────────────────────
     onTaskStart: (id: string, agent: string, title: string) => {
+      runState.taskStart(id);
       err(
         `  ${c.cyan('→')} ${c.dim(rpad('[' + id + ']', 10))} ${rpad(agent, 22)} ${c.dim(title.slice(0, 50))}`,
       );
@@ -377,7 +507,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
 
     // ── Task complete ─────────────────────────────────────────────────────────
     onTaskComplete: (id: string, agent: string, output: string, hadBlocker: boolean) => {
-      completedTotal++;
+      runState.taskComplete(id, output, hadBlocker);
       const entry = waveEntries.get(id);
       if (entry) entry.hadBlocker = hadBlocker;
 
@@ -398,9 +528,43 @@ export async function runTeamCli(argv: string[]): Promise<void> {
       }
     },
 
+    // ── Wave review (PM evaluating) ─────────────────────────────────────────────
+    onWaveReview: () => {
+      runState.waveReviewing();
+    },
+
+    // ── Tasks spawned during adjust ─────────────────────────────────────────────
+    onTasksSpawned: (tasks: TeamTask[]) => {
+      runState.addTasks(tasks);
+    },
+
+    // ── Synthesizing ────────────────────────────────────────────────────────────
+    onSynthesizing: () => {
+      runState.synthesizing();
+    },
+
+    // ── HITL pause / abort (run-state only; no scroll output needed) ─────────────
+    onHitlPause: (paused: boolean) => {
+      runState.setHitlPaused(paused);
+      if (!paused) runState.clearConnectionDropped();
+    },
+    onAbortPending: () => {
+      runState.setAbortPending();
+    },
+    onCircuitBreak: (info) => {
+      const agents = info.failedAgents.slice(0, 3).join(', ');
+      runState.setConnectionDropped(`Wave ${info.waveNumber} · ${info.errorCount} network error${info.errorCount !== 1 ? 's' : ''} (${agents})`);
+      err('');
+      err(`  ${c.red('🔴')}  ${c.bold('Connection dropped — run paused')}`);
+      err(`  ${c.dim('Wave ' + info.waveNumber + ' hit ' + info.errorCount + ' network error' + (info.errorCount !== 1 ? 's' : '') + '.')}`);
+      err(`  ${c.dim('Restore connectivity, then resume with:')}  ${c.cyan('roland resume')}  ${c.dim('or')}  ${c.cyan('/resume')}  ${c.dim('(chat)')}`);
+      err('');
+    },
+
     // ── Wave complete ─────────────────────────────────────────────────────────
     onWaveComplete: (waveNumber: number, decision: ReviewDecision) => {
       void waveNumber;   // available for future use
+      runState.waveComplete(decision.pmNotes);
 
       const blockerCount = [...waveEntries.values()].filter(e => e.hadBlocker).length;
       err('');
@@ -431,7 +595,6 @@ export async function runTeamCli(argv: string[]): Promise<void> {
 
         err('');
         for (const t of (decision.newTasks ?? [])) {
-          scheduledTotal++;
           err(
             `  ${c.green('+')} spawn    ${c.cyan(rpad(t.id, 10))} → ${c.bold(rpad(t.agent, 20))}  ` +
             c.dim('"' + t.title.slice(0, 52) + '"'),
@@ -487,6 +650,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
   err('');
 
   // Notify on completion (rich contextual message)
+  runState.done();
   hitlQueue.cleanup();
   await notifier.notify({
     event: 'complete', goal, summary: 'Run complete',

@@ -1,9 +1,7 @@
 name: designer
 role_prompt: UI/UX designer for component design, user flows, and accessibility audits
-recommended_model: qwen/qwen3-coder-next
-model: qwen/qwen3-coder-next
-claude_model: deepseek/deepseek-v3-0324
-provider: openrouter
+claude_model: composer-2.5
+provider: cursor
 temperature: 0.7
 tools:
   - search

@@ -1,9 +1,7 @@
 name: accessibility-auditor
 role_prompt: Accessibility (a11y) auditor. WCAG compliance, keyboard navigation, screen reader support, and semantic HTML.
-recommended_model: qwen/qwen3-coder-next
-model: qwen/qwen3-coder-next
-provider: openrouter
-claude_model: deepseek/deepseek-v3-0324
+provider: cursor
+claude_model: composer-2.5
 temperature: 0.4
 tools:
   - search

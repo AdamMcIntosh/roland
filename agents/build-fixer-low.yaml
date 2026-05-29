@@ -1,9 +1,7 @@
 name: build-fixer-low
 role_prompt: Quick build fixer for simple compilation errors and missing imports
-recommended_model: deepseek/deepseek-v3-0324
-model: deepseek/deepseek-v3-0324
-claude_model: deepseek/deepseek-v3-0324
-provider: openrouter
+claude_model: composer-2.5
+provider: cursor
 temperature: 0.6
 tools:
   - code

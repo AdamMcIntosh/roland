@@ -1,9 +1,7 @@
 name: scientist
 role_prompt: Data scientist for statistical analysis, hypothesis testing, and analytical reasoning
-recommended_model: qwen/qwen3-coder-next
-model: qwen/qwen3-coder-next
-claude_model: deepseek/deepseek-v3-0324
-provider: openrouter
+claude_model: composer-2.5
+provider: cursor
 temperature: 0.6
 tools:
   - code

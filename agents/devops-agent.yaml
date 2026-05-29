@@ -2,8 +2,8 @@ name: devops-agent
 role_prompt: DevOps and deployment specialist. CI/CD pipelines, containerization, infrastructure as code, and runbook guidance.
 
 
-provider: openrouter
-claude_model: deepseek/deepseek-v3-0324
+provider: cursor
+claude_model: composer-2.5
 temperature: 0.5
 tools:
   - search

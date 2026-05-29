@@ -38,9 +38,38 @@ function sendResult(result: WorkerOutput): void {
 }
 
 
+// ── Network-error helpers (mirrors team-orchestrator.ts) ─────────────────────
+// Kept local so agentWorker.ts stays self-contained as a child-process entry
+// point (no shared state with the orchestrator).
+
+const WORKER_NETWORK_PATTERNS = [
+  'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'EPIPE', 'ENETUNREACH',
+  'ConnectError', 'connect error', 'connection reset', 'connection refused',
+  'connection closed', 'socket hang up', 'network error', 'fetch failed',
+  'aborted', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET',
+];
+
+// Network: 2s → 5s → 10s → 20s → 30s
+const WORKER_NETWORK_DELAYS = [2_000, 5_000, 10_000, 20_000, 30_000];
+// Generic: 5s → 10s → 20s → 30s → 45s
+const WORKER_GENERIC_DELAYS = [5_000, 10_000, 20_000, 30_000, 45_000];
+
 /**
- * Production path: create a real @cursor/sdk Agent, send the prompt, and
- * return the result wrapped in the JSON envelope the rest of the worker expects.
+ * Apply ±30% random jitter to a delay (mirrors withJitter in team-orchestrator.ts).
+ * Prevents all concurrent worker retries from hammering the API simultaneously.
+ */
+function withWorkerJitter(delayMs: number, factor = 0.3): number {
+  const delta = Math.round(delayMs * factor * (Math.random() * 2 - 1));
+  return Math.max(100, delayMs + delta);
+}
+
+function isWorkerNetworkError(err: Error): boolean {
+  const msg = err.message.toLowerCase();
+  return WORKER_NETWORK_PATTERNS.some((p) => msg.includes(p.toLowerCase()));
+}
+
+/**
+ * Single SDK call — no retry.  Retry logic lives in the wrapper below.
  */
 async function getResponseViaCursorSDK(prompt: string, agentName: string, model: string): Promise<string> {
   const apiKey = process.env.CURSOR_API_KEY;
@@ -66,6 +95,45 @@ async function getResponseViaCursorSDK(prompt: string, agentName: string, model:
   return JSON.stringify({ output: runResult.result ?? '', success: true });
 }
 
+/**
+ * Resilient wrapper around getResponseViaCursorSDK.
+ *
+ * Network errors use WORKER_NETWORK_DELAYS (2 s → 5 s → 10 s → 20 s → 30 s).
+ * Other errors use WORKER_GENERIC_DELAYS (5 s → 10 s → 20 s → 30 s → 45 s).
+ * Max 5 total attempts. Throws on final failure so the caller can surface a
+ * clean error envelope.
+ */
+async function getResponseViaCursorSDKWithRetry(prompt: string, agentName: string, model: string): Promise<string> {
+  const maxAttempts = 5;
+  let lastErr: Error = new Error('unknown');
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await getResponseViaCursorSDK(prompt, agentName, model);
+    } catch (err) {
+      lastErr = err instanceof Error ? err : new Error(String(err));
+
+      if (attempt >= maxAttempts) break;
+
+      const netError = isWorkerNetworkError(lastErr);
+      const delayTable = netError ? WORKER_NETWORK_DELAYS : WORKER_GENERIC_DELAYS;
+      const baseDelay = delayTable[attempt - 1] ?? delayTable[delayTable.length - 1];
+      const delay = withWorkerJitter(baseDelay);   // ±30% random jitter
+
+      log(
+        'cursor-sdk',
+        netError
+          ? `Cursor API temporarily unavailable (${lastErr.message.slice(0, 80).trim()}) — retrying in ${(delay / 1000).toFixed(1)}s (attempt ${attempt}/${maxAttempts})`
+          : `Attempt ${attempt} failed: ${lastErr.message.slice(0, 80)} — retrying in ${(delay / 1000).toFixed(1)}s`,
+      );
+
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+
+  throw lastErr;
+}
+
 async function runAsync(input: unknown): Promise<void> {
   const inputParsed = WorkerInputSchema.safeParse(input);
   if (!inputParsed.success) {
@@ -80,7 +148,7 @@ async function runAsync(input: unknown): Promise<void> {
 
   const { agentYaml, state, taskContext, stepInput, tools, workflowSteps, fileBundle } = inputParsed.data;
   const agentName = agentYaml.name ?? 'unknown';
-  const model = agentYaml.claude_model ?? 'deepseek/deepseek-v3-0324';
+  const model = agentYaml.claude_model ?? 'composer-2.5';
 
   log('start', `Agent=${agentName} model=${model}`);
   const prompt = buildClaudeToolCallingPrompt({
@@ -94,9 +162,9 @@ async function runAsync(input: unknown): Promise<void> {
 
   let rawResponse: string;
   if (process.env.CURSOR_API_KEY) {
-    // Production: real Cursor SDK agent
+    // Production: real Cursor SDK agent (with network-aware retry)
     try {
-      rawResponse = await getResponseViaCursorSDK(prompt, agentName, model);
+      rawResponse = await getResponseViaCursorSDKWithRetry(prompt, agentName, model);
       log('cursor-sdk', `Agent "${agentName}" completed`);
     } catch (err) {
       log('cursor-sdk', `Failed: ${(err as Error).message}`);

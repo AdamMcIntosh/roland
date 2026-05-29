@@ -1,9 +1,7 @@
 name: code-reviewer-low
 role_prompt: Quick code reviewer for style consistency and obvious bug detection
-recommended_model: deepseek/deepseek-v3-0324
-model: deepseek/deepseek-v3-0324
-claude_model: deepseek/deepseek-v3-0324
-provider: openrouter
+claude_model: composer-2.5
+provider: cursor
 temperature: 0.5
 tools:
   - search

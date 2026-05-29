@@ -1,322 +1,511 @@
-# Roland — Daily Usage Cheat Sheet
+# Roland — Daily Usage Guide
 
-> One page. Everything you need to use Roland every day.
-
----
-
-## ⚡ The Essentials
-
-```bash
-# Run a team on any goal
-roland "your goal here"
-
-# See what's happening (second terminal)
-roland status
-
-# Check your install
-roland doctor
-```
+> Roland as your AI engineering teammate — practical patterns for real work.
 
 ---
 
-## 🗂 Common Workflows
+## ⚡ The 30-Second Version
 
-### 🟢 New Feature
 ```bash
-roland "add a /health endpoint that returns uptime, version, and memory usage"
-```
-*The team will architect it, implement it, write tests, and review.*
-
-### 🔵 Refactor
-```bash
-roland "refactor the payment service to use the Strategy pattern — no behaviour changes"
-```
-*Be explicit about what must NOT change. The team will respect that.*
-
-### 🔴 Bug Investigation
-```bash
-roland "POST /orders returns 422 for valid payloads — find the root cause and fix it"
-```
-*Include the symptom, not just "fix the bug." More context = better diagnosis.*
-
-### 🟡 PR Review
-```bash
-roland pr 42                    # review only — get a structured critique
-roland pr 42 --fix              # review + implement fixes + commit
-roland pr                       # auto-detect PR from current branch
+roland          # open the chat interface
 ```
 
-### 🟣 Security Audit
-```bash
-roland "audit the authentication flow for security issues — OWASP Top 10, JWT, session management"
+Type a goal. Watch the team work. Read the synthesis. Type another goal.
+
+That's the whole loop.
+
+---
+
+## 🗂 Starting a New Task
+
+Open chat and describe the work the way you'd brief a senior engineer — specific scope, constraints, and what "done" looks like:
+
+```
+❯ add a /metrics endpoint that returns Prometheus-format counters
+  for HTTP requests (method, path, status, duration)
+
+❯ refactor the payment service to use the Strategy pattern —
+  no behaviour changes, all existing tests must still pass
+
+❯ the POST /orders endpoint returns 422 for valid payloads —
+  find the root cause and fix it, add a regression test
+
+❯ audit the authentication flow for OWASP Top 10 issues,
+  JWT misconfigurations, and session management problems
 ```
 
-### 📝 Documentation
+**Specificity matters.** Roland plans based on your goal text. The more context you give — file names, constraints, what must NOT change — the better the plan.
+
 ```bash
-roland "write API documentation for all public routes in src/routes/ — OpenAPI 3.0 format"
-```
+# ✅ Clear goal
+❯ add JWT refresh token rotation — 15 min access token, 7 day refresh,
+  store in Redis with user ID as key prefix
 
-### 🔁 Continuous Review (Background)
-```bash
-# Terminal 1 — runs a team session on every new git commit
-roland watch
-
-# Terminal 1 — fixed task on every commit (e.g. nightly review)
-roland watch --task "review changes, flag issues, suggest improvements"
-
-# Terminal 2 — watch it work
-roland status
+# ⚠️ Vague goal
+❯ fix auth
 ```
 
 ---
 
-## 🏁 Flag Quick Reference
+## 👀 What Happens Next
 
-| Want to… | Flag |
-|----------|------|
-| Get a desktop notification | `--notify` |
-| Get a phone notification (ntfy.sh) | `--webhook https://ntfy.sh/your-topic` |
-| Use in CI / pipe output | `--no-tui --quiet` |
-| Use on mobile SSH / Termius | `--simple-tui` |
-| See agent output as it streams | `--stream` |
-| Watch file changes instead of git | `--pattern "src/**/*.ts"` |
-| Run watch once and exit | `--once` |
-| Create a fix branch for PR | `--branch fix/pr-42` |
-| Change the state directory | `--state-dir /tmp/roland` |
+```
+  ○  Roland  ·  Planning your team…
+  ✓  Roland  ·  5 tasks planned  ·  est. ~8 min
+
+  ──────────────────────────────────────────────
+  Wave 1  ·  3 tasks  ████░░░░░░░░░░  0/5
+
+  →  architect           Design the token rotation scheme
+  →  executor            Implement the refresh token service
+  →  security-reviewer   Audit for token replay and timing attacks
+
+  ✓  architect           Design the token rotation scheme          38s
+  ✓  security-reviewer   Audit for token replay and timing attacks  51s
+  ✓  executor            Implement the refresh token service        2m 14s
+
+  └  Wave done  ·  2m 18s  ·  PM approved
+```
+
+Dim `→` lines = agents working. Bright `✓` lines = tasks done. The wave closes with a single summary line — no noise.
+
+**The Lead PM (grok-4.3)** orchestrates the whole run:
+1. **Planning** — decomposes your goal into parallel tasks
+2. **Review** — after each wave, examines results and decides whether to continue, adjust, or unblock
+3. **Synthesis** — produces the final executive summary when all tasks are done
+
+All **specialist agents (executor, architect, test-author, etc.)** run composer-2.5 — a fast, reasoning-capable model that balances speed with depth.
 
 ---
 
-## 🌍 Global Defaults (shell profile)
+## 🎛 Mid-Run Controls
 
-```bash
-# ~/.zshrc  or  ~/.bashrc  or  PowerShell $PROFILE
-export CURSOR_API_KEY=your_key_here
-export ROLAND_NOTIFY=1          # desktop notification on every run
-export ROLAND_SIMPLE_TUI=1      # add this if you SSH from a phone or use Termius
+You can steer a run while it's in progress, without interrupting it.
+
+### From chat (easiest)
+
+```
+❯ /pause           pauses before the next wave starts
+❯ /resume          resumes a paused run
+❯ /abort           stops cleanly after the current wave
 ```
 
-With `ROLAND_NOTIFY=1` set, you never need `--notify` again.  
-With `ROLAND_SIMPLE_TUI=1` set, the TUI auto-degrades to clean ASCII output everywhere.
+### Inject a directive
+
+If the PM is about to do something you want to redirect:
+
+```
+❯ /inject "focus on the Redis integration, not the HTTP layer"
+```
+
+The Lead PM sees this message on the next wave review and adjusts the plan accordingly.
+
+### Replan
+
+If the work is going in the wrong direction:
+
+```
+❯ /replan
+```
+
+The PM will re-evaluate all remaining tasks on the next review.
+
+### Unblock a stalled task
+
+If an agent reports a BLOCKER:
+
+```
+❯ /unblock task-3 "use REST not gRPC — we don't have proto files set up"
+```
+
+### Check what's happening
+
+```
+❯ /status
+```
+
+Shows the current goal, status, progress bar, and wave number inline.
 
 ---
 
-## 📱 Phone Notifications via ntfy.sh
+## 🔁 Background Jobs
+
+For long-running goals, run detached and get a notification when done:
 
 ```bash
-# 1. Install the ntfy app (iOS / Android) — it's free
-# 2. Subscribe to a unique topic name (e.g. roland-yourname)
-# 3. Run:
-roland watch --webhook https://ntfy.sh/roland-yourname
-# Or add to your profile permanently:
-export ROLAND_NOTIFY=1
-# Then pass --webhook on any command
+# Start detached — returns immediately
+roland team "full refactor of the data access layer" --background
+
+# Check on it later
+roland bg-status
+
+# Tail the log
+roland bg-logs
+
+# Or stream it live:
+roland bg-logs --follow
+
+# Stop it
+roland bg-stop
+```
+
+Inside chat, the same commands work as slash commands:
+
+```
+❯ /bg-status
+❯ /bg-logs
+❯ /bg-stop
+```
+
+**Pair with notifications so you can do other things:**
+
+```bash
+roland team "long refactor" --background --notify --webhook https://ntfy.sh/my-topic
+# → get a phone notification when complete or blocked
 ```
 
 ---
 
-## 🔁 Typical Daily Workflow
+## 📊 Checking Status
 
+### From chat
 ```
-Morning
-  └─ roland watch   (leave running in a terminal — fires on each commit)
-
-During the day
-  ├─ roland "implement the feature from the ticket"
-  ├─ roland pr 55 --fix          (review open PRs)
-  └─ roland status               (check progress from another pane)
-
-End of day
-  └─ roland "review today's changes — anything to clean up before EOD?"
+❯ /status        shows progress bar + task count inline
 ```
 
----
-
-## 🧠 Project Memory
-
-Roland learns your project over time. After every run, it updates `.roland/memory.md` with:
-- Key decisions made
-- Patterns to follow
-- Things to avoid
-
-**To see what it knows:**
+### From another terminal (live TUI)
 ```bash
-cat .roland/memory.md
+roland status    # live updating TUI observer
 ```
 
-**To teach it something immediately:**
+### Web dashboard (richest view)
 ```bash
-# Just run a goal that mentions it:
-roland "note for the team: we use Zod for all input validation, never manual type checks"
-```
-
-**To reset memory** (new project context):
-```bash
-rm .roland/memory.md
-```
-
----
-
-## 🖥 Two-Terminal Setup (Recommended)
-
-```
-┌─────────────────────────────┐  ┌────────────────────────────┐
-│  Terminal 1                 │  │  Terminal 2                │
-│                             │  │                            │
-│  roland "build the feature" │  │  roland status             │
-│                             │  │                            │
-│  (PM plans, agents run)     │  │  (live TUI: wave progress, │
-│                             │  │   task status, blockers)   │
-└─────────────────────────────┘  └────────────────────────────┘
-```
-
-**On mobile SSH or Termius?** Use `--simple-tui` (or set `ROLAND_SIMPLE_TUI=1` in your profile) to avoid garbled output from alternate-screen buffer codes:
-
-```bash
-# Terminal 1 (Termius / SSH)
-roland "build the feature" --simple-tui
-
-# Terminal 2 (Termius / SSH)
-roland status --simple-tui
-```
-
-For a richer view, open the **web dashboard** instead of (or alongside) `roland status`:
-
-```bash
-# Terminal 2 — start the web dashboard
 npm run serve-dashboard
 # → http://127.0.0.1:8081
 ```
 
-The browser dashboard shows the same live progress as `roland status`, plus historical usage and cost data across all your past runs.
+The dashboard shows:
+- **Live run progress** — tasks, waves, blockers, in real time
+- **HITL buttons** — Pause / Resume / Replan / Abort without touching the terminal
+- **History** — every past run, searchable, expandable to full task list
+- **Memory editor** — view and edit `.roland/memory.md` from the browser
+- **Usage charts** — tokens, cost, model breakdown across all runs
+
+```bash
+# Point at a different project:
+node scripts/serve-dashboard.js --state-dir /path/to/project/.roland --port 8082
+```
 
 ---
 
-## 📊 Web Dashboard
+## 🧠 Self-Improvement & Memory
 
-The dashboard is Roland's central hub — available at any time, not just during active runs.
+Roland learns your project. After every run, it proposes updates to `.roland/memory.md` based on what it learned — patterns that worked, things to avoid, new gotchas discovered.
+
+### The retrospective
+
+After synthesis completes, you'll see a short interactive prompt listing proposed memory bullets. It **auto-accepts after 15 seconds** — just watch the countdown if you agree, or reject specific bullets.
+
+```
+  Self-Improvement
+  Proposed 3 new memory bullets:
+  + [Past Mistakes]  Never call token.verify() without catching TokenExpiredError
+  + [Coding Standards]  Redis keys use prefix "auth:refresh:<userId>"
+  + [Project Gotchas]  The test DB doesn't support transactions — use mocks
+
+  Accept all in 12s… (press n to skip, e to edit)
+```
+
+### Disable it when you don't want it
+
+```
+❯ /improve off     turns off for the session
+
+roland team "goal" --no-improve   one-time skip
+```
+
+### What's in memory
 
 ```bash
-# Start from your project root:
-npm run serve-dashboard
-
-# Point at a different project:
-node scripts/serve-dashboard.js --state-dir /path/to/project/.roland
+cat .roland/memory.md             # view directly
 ```
 
-Open **http://127.0.0.1:8081** in your browser.
+Or use the browser dashboard → **Memory** tab to read and edit it with syntax highlighting.
 
-### What you'll see
+### Teaching Roland something immediately
+
+Just mention it in your goal:
 
 ```
-Roland  ● 1 job running                        Today  Week  Month  All Time
-
-  12 Runs      $4.21 Est.    642K Tokens    1 Active
-  ──────────── ──────────── ─────────────  ──────────
-
-  LIVE STATUS
-  ● Running: "Add JWT refresh token rotation..."   Wave 2 · 3/6 tasks
-  ✓ architect     Design auth architecture         40s
-  ✓ executor      Implement JWT service            31s
-  ● test-author   Write unit tests                 12s…
-  ◌ test-executor Pending
-  ◌ writer        Pending
-
-  RECENT RUNS
-  14:32  ✅  Refactor user service — clean arch    6w·7t  $0.81  6m 37s
-  12:15  ✅  Add JWT refresh token rotation        2w·7t  $0.41  4m 12s
-
-  USAGE TRENDS          TOKEN DISTRIBUTION BY MODEL
-  [line chart]          [doughnut: composer-2.5 / grok-4.3]
-
-  AGENT & MODEL BREAKDOWN
-  executor    composer-2.5   45.2K   $0.18   4   31s avg
-  test-author composer-2.5   28.1K   $0.11   2   38s avg
-  Lead-PM     grok-4.3       29.8K   $0.09   3   18s avg
+❯ note for the team: we use Zod for all input validation, never manual
+  typeof checks — this is a hard standard
 ```
 
-### Keyboard shortcut
-- `d` — toggle dark / light mode
+Or use the `/inject` command if a run is active.
 
-### First run on an existing project
+---
 
-Usage data is written automatically from your next run. To populate the dashboard from a previous run:
+## 🔀 Common Workflows
+
+### New feature
+```
+❯ add a /health endpoint returning uptime, version, and memory usage
+```
+The team will architect it, implement it, write tests, review the code.
+
+### Bug investigation
+```
+❯ POST /orders returns 422 for valid payloads — investigate root cause and fix,
+  include a regression test
+```
+
+### Refactor
+```
+❯ refactor the database layer to use the repository pattern —
+  no behaviour changes, all existing tests must still pass
+```
+
+### PR review
+```bash
+roland pr 42                  # structured critique
+roland pr 42 --fix            # critique + implement fixes + commit
+```
+
+### Security audit
+```
+❯ audit the authentication flow for OWASP Top 10, JWT issues,
+  and session management problems
+```
+
+### End-of-day review
+```
+❯ review today's changes — flag anything that should be cleaned up
+  before tomorrow
+```
+
+### Iterating on a result
+
+Use `/refine` after a run to follow up without starting a fresh chat:
+
+```
+❯ /refine "the executor missed the edge case where userId is null — fix that"
+```
+
+---
+
+## 🏁 Typical Daily Flow
+
+```
+Morning
+  └─  roland              open chat, leave it running all day
+
+During the day
+  ├─  ❯ implement the feature from ticket #847
+  ├─  ❯ /status                  check progress mid-run
+  ├─  ❯ /inject "use the v2 API not v1 — we deprecated v1 last week"
+  ├─  ❯ /refine "fix the two failing tests the executor left behind"
+  └─  roland pr 55 --fix         review open PR in a separate terminal
+
+Background
+  └─  roland team "..." --background --notify
+      → phone notification when done, check dashboard later
+
+End of day
+  └─  ❯ review today's changes — anything to clean up?
+```
+
+---
+
+## 🖥 Terminal Setup
+
+### Single terminal (chat mode — simplest)
 
 ```bash
-node scripts/backfill-usage.mjs --state-dir .roland
+roland    # everything in one window
 ```
 
-> Token counts and costs are estimates (chars ÷ 4). Actual Cursor API charges are not exposed by the SDK.
+### Two-terminal setup
+
+```
+┌────────────────────────────┐  ┌────────────────────────────┐
+│  Terminal 1                │  │  Terminal 2                │
+│                            │  │                            │
+│  roland                    │  │  roland status             │
+│  ❯ implement the feature   │  │  (live TUI observer)       │
+└────────────────────────────┘  └────────────────────────────┘
+```
+
+### SSH / Termius / Mobile
+
+Roland auto-detects limited SSH environments and falls back to simple ASCII mode (no alternate-screen codes). If it doesn't detect correctly:
+
+```bash
+export ROLAND_SIMPLE_TUI=1     # add to shell profile — applies everywhere
+```
+
+Simple mode: `=` rules, ASCII progress bars, clean scrolling output on any terminal.
 
 ---
 
 ## 🚫 CI / Non-Interactive Mode
 
 ```bash
-# In CI pipelines, always use --no-tui
-roland team "run the full test suite and report" --no-tui --quiet
+# Always use --no-tui in CI (no interactive terminal)
+roland team "run the full review suite" --no-tui --quiet >> review.md
 
-# Capture synthesis to a file
+# Capture synthesis to a dated file
 roland team "code review" --no-tui --quiet > review-$(date +%Y%m%d).md
 
 # Pre-push hook (.git/hooks/pre-push)
 #!/bin/sh
-roland watch --once --task "check for obvious issues in staged changes" \
+roland watch --once \
+  --task "check staged changes for obvious issues" \
   --no-tui --quiet
 ```
 
 ---
 
-## 💡 Pro Tips
+## ⚙️ Resilience on Unstable Networks
 
-1. **Specificity wins.** The more context in your goal, the better the plan. Include file names, function names, constraints, and what "done" looks like.
+Roland is built for unreliable connections. If you're on SSH, mobile, or an unstable link, these defaults protect you:
 
-2. **Stack the flags you use most.** Put `ROLAND_NOTIFY=1` and your webhook URL in your shell profile and never think about it again.
+### What Roland does automatically
 
-3. **`roland pr` before you merge, not after.** Use it as a final quality gate — it often catches things that reviewers miss.
+- **Staggered worker starts** — 1.5 s between agent launches (not 20 simultaneous TCP connections)
+- **Circuit breaker** — pauses the run after the first wave of network errors, rather than wasting attempts
+- **Smart retries** — network errors retry faster (2s, 5s, 10s…) than SDK errors (5s, 10s, 20s…)
+- **Jitter** — all retry delays include ±30% random variance to prevent thundering herd
 
-4. **Don't clear `.roland/` between runs** on the same project. The memory is the superpower. Clear it only when starting a genuinely new context.
+### When to override
 
-5. **Use `--stream` when you want to follow along.** Great for long runs where you want to see results as each agent finishes.
+```bash
+# Fast, stable connection? Speed up:
+ROLAND_MAX_CONCURRENT=4 roland "goal"
 
-6. **`roland pm-log` after a run** to see the PM's full reasoning trace — useful for understanding why the team made certain decisions.
+# Flaky SSH? Tolerate more errors:
+ROLAND_CIRCUIT_BREAKER=3 roland "goal"
+
+# Mobile/unstable? Fully sequential, maximum stability:
+ROLAND_MAX_CONCURRENT=1 roland "goal"
+```
+
+All settings persist for one command. For permanent changes, export them in your shell profile.
 
 ---
 
 ## 🩺 Troubleshooting
 
+### `CURSOR_API_KEY not set`
+
 ```bash
-roland doctor                   # full diagnostic
-roland --help                   # flag reference
-roland pm-log                   # PM reasoning timeline
-cat .roland/memory.md           # what Roland knows about this project
+export CURSOR_API_KEY=your_key_here    # add to .zshrc / .bashrc / PowerShell $PROFILE
+roland doctor                          # verify the full install
 ```
 
-**Garbled output / `^[[A[[A[[A` on SSH or Termius?**
+Inside chat, Roland shows a yellow warning in the welcome banner and refuses to run until the key is set.
 
-The fancy TUI uses alternate-screen buffer codes that some SSH clients mishandle.
-Switch to simple mode — it scrolls cleanly on any terminal:
+### Garbled output on SSH / Termius (`^[[A[[A` garbage)
+
 ```bash
-# Per-run:
-roland team "goal" --simple-tui
-roland status --simple-tui
-
-# Permanent (add to ~/.zshrc / ~/.bashrc / PowerShell $PROFILE):
-export ROLAND_SIMPLE_TUI=1
-```
-Roland also auto-detects SSH sessions without declared truecolor support and
-falls back to simple mode automatically. If auto-detection doesn't fire, set
-`ROLAND_SIMPLE_TUI=1` explicitly.
-
-**Agents not found?**
-```bash
-npm run build                   # rebuilds and copies agents/ and recipes/
-roland doctor
+export ROLAND_SIMPLE_TUI=1    # permanent fix — add to shell profile
+roland team "goal" --simple-tui   # or per-run
 ```
 
-**Notifications not firing?**
+### Agent timeout — run stalls or never completes
+
 ```bash
-# Check ROLAND_NOTIFY is set
-echo $ROLAND_NOTIFY             # should print 1
-# Test with --notify explicitly
-roland "hello" --notify
+ROLAND_AGENT_TIMEOUT_MS=900000 roland "goal"    # 15-minute timeout
+ROLAND_AGENT_TIMEOUT_MS=60000  roland "goal"    # 1-minute (fast-fail testing)
 ```
+
+### Network errors (ECONNRESET, socket hang up) — run pauses
+
+This is the circuit breaker protecting you from burning through retries. Check what happened:
+
+```bash
+roland bg-logs    # see the error details
+```
+
+Then resume when the network is stable:
+
+```bash
+roland resume
+```
+
+Or increase error tolerance:
+
+```bash
+ROLAND_CIRCUIT_BREAKER=3 roland team "goal"    # tolerate up to 3 waves of errors
+```
+
+### Run shows blockers but no guidance on what to do
+
+Check the synthesis — it has a 🔴 **Release Blockers** section with specifics. Then:
+
+```
+❯ /unblock task-3 "use the mocked DB client — we don't have real DB in CI"
+```
+
+Or start a refinement run:
+
+```
+❯ /refine "resolve the blockers from the last run"
+```
+
+### `roland status` shows "No run state found"
+
+```bash
+roland bg-status                                     # check background run
+roland status --state-dir /path/to/.roland           # custom state dir
+```
+
+### Memory file looks wrong or corrupted
+
+```bash
+# View and edit in browser:
+npm run serve-dashboard    # → http://127.0.0.1:8081  →  Memory tab
+
+# Or edit directly — it's plain Markdown:
+# ## Architecture Decisions
+# - bullet
+# ## Past Mistakes
+# - bullet
+```
+
+### Notifications not firing
+
+```bash
+echo $ROLAND_NOTIFY              # should print 1 if set globally
+roland "hello" --notify          # test explicitly
+```
+
+### Agents not found after an update
+
+```bash
+npm run build     # rebuilds dist/ and copies agents/ and recipes/
+roland doctor     # confirms agents are present
+```
+
+---
+
+## ⌨️ Quick Reference Card
+
+| Action | Chat | CLI |
+|--------|------|-----|
+| Start a goal | type it | `roland "goal"` |
+| Pause run | `/pause` | `roland pause` |
+| Resume run | `/resume` | `roland resume` |
+| Abort run | `/abort` | `roland abort` |
+| Inject directive | `/inject "text"` | `roland inject "text"` |
+| Unblock task | `/unblock <id> [msg]` | `roland unblock <id> [msg]` |
+| Replan | `/replan` | `roland replan` |
+| Check status | `/status` | `roland status` |
+| Background status | `/bg-status` | `roland bg-status` |
+| Tail bg logs | `/bg-logs` | `roland bg-logs` |
+| Stop bg run | `/bg-stop` | `roland bg-stop` |
+| Follow-up goal | `/refine "..."` | `roland "..."` |
+| Toggle stream | `/stream` | `--stream` flag |
+| Toggle notify | `/notify` | `--notify` flag |
+| Full help | `/help` | `roland --help` |
+| Quit | `/exit` or Ctrl+D | — |
+

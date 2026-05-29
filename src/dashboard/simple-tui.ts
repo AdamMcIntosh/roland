@@ -111,6 +111,8 @@ export class SimpleTuiRenderer {
   private readonly printedWaves   = new Set<number>();
   /** Last RunStatus we printed a transition announcement for. */
   private lastStatus = '';
+  /** Last HITL pause state we printed a transition for. */
+  private lastHitlPaused = false;
   /** Path to the state file (used in watch mode). */
   private readonly stateFilePath: string;
   private active = false;
@@ -193,8 +195,16 @@ export class SimpleTuiRenderer {
       const state = readRunState(stateDir);
       if (!state) return;
 
+      // Overlay HITL state from hitl-state.json (updated by CLI immediately).
+      try {
+        const hitlStateFile = path.join(stateDir, 'hitl-state.json');
+        const hitlState = JSON.parse(fs.readFileSync(hitlStateFile, 'utf-8')) as { paused?: boolean; abortPending?: boolean };
+        if (hitlState.paused)       state.hitlPaused = true;
+        if (hitlState.abortPending) state.hitlAbortPending = true;
+      } catch { /* no hitl state file — fine */ }
+
       // Only update when something meaningful changed (avoids duplicate lines)
-      const sig = `${state.status}:${state.currentWave}:${state.completedTasks}:${state.activeTaskIds.join(',')}`;
+      const sig = `${state.status}:${state.currentWave}:${state.completedTasks}:${state.activeTaskIds.join(',')}:${state.hitlPaused ? 'p' : ''}:${state.hitlAbortPending ? 'a' : ''}`;
       if (sig === lastSig) return;
       lastSig = sig;
 
@@ -241,14 +251,29 @@ export class SimpleTuiRenderer {
     // ── Wave header ────────────────────────────────────────────────────────────
     if (state.currentWave > 0 && !this.printedWaves.has(state.currentWave)) {
       this.printedWaves.add(state.currentWave);
-      const bar    = progressBar(state.completedTasks, state.totalTasks, 16);
-      const w      = Math.min(C, 60);
+      // Clamp display values — completed can never visually exceed total.
+      const safeDone = Math.min(state.completedTasks, Math.max(state.totalTasks, 0));
+      const bar      = progressBar(safeDone, state.totalTasks, 16);
+      const w        = Math.min(C, 60);
       process.stderr.write('\n' + '-'.repeat(w) + '\n');
       process.stderr.write(
         c.bold(`Wave ${state.currentWave}`) + '  ' + bar + '  ' +
-        c.dim(`${state.completedTasks}/${state.totalTasks} done`) + '\n',
+        c.dim(`${safeDone}/${state.totalTasks} done`) + '\n',
       );
       process.stderr.write('-'.repeat(w) + '\n');
+    }
+
+    // ── HITL pause / abort transitions ──────────────────────────────────────────
+    if (state.hitlPaused && !this.lastHitlPaused) {
+      this.lastHitlPaused = true;
+      process.stderr.write(`\n  ${c.yellow('[⏸]')} ${c.bold('Run paused')} — send ${c.cyan("'roland resume'")} to continue\n`);
+    } else if (!state.hitlPaused && this.lastHitlPaused) {
+      this.lastHitlPaused = false;
+      process.stderr.write(`\n  ${c.green('[▶]')} ${c.bold('Run resumed')}\n`);
+    }
+    if (state.hitlAbortPending && !this.printedTaskIds.has('abort-pending')) {
+      this.printedTaskIds.add('abort-pending');
+      process.stderr.write(`\n  ${c.yellow('[⚠]')} Abort queued — run will stop after current wave\n`);
     }
 
     // ── Task state changes ─────────────────────────────────────────────────────
@@ -304,13 +329,14 @@ export class SimpleTuiRenderer {
         process.stderr.write(`\n  ${c.cyan('[~]')} ${c.dim('Lead PM synthesizing final deliverable...')}\n`);
 
       } else if (curStatus === 'done') {
-        const bar        = progressBar(state.completedTasks, state.totalTasks, 20);
+        const safeDone   = Math.min(state.completedTasks, Math.max(state.totalTasks, 0));
+        const bar        = progressBar(safeDone, state.totalTasks, 20);
         const elapsedStr = elapsed(now - state.startedAt);
         const w          = Math.min(C, 60);
         process.stderr.write('\n' + '='.repeat(w) + '\n');
         process.stderr.write(
           c.green('[OK]') + '  ' + bar + '  ' +
-          `${state.completedTasks}/${state.totalTasks} tasks  ` +
+          `${safeDone}/${state.totalTasks} tasks  ` +
           c.dim(elapsedStr) + '\n',
         );
         process.stderr.write('='.repeat(w) + '\n\n');
