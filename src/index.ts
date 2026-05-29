@@ -155,7 +155,7 @@ function printHelp(): void {
   const ln = (s = '') => console.error(s);
 
   ln();
-  ln('  ' + b('🚀  Roland') + '  — PM-first AI Engineering Team');
+  ln('  ' + b('🚀  Roland v1.1') + '  — PM-first AI Engineering Team');
   ln();
   ln('  ' + b('CHAT MODE') + '  ' + d('(default — just run: roland)'));
   ln(`    ${cy('roland')}                            Start interactive chat  ${d('(type goals naturally, /help inside)')}`);
@@ -266,7 +266,7 @@ async function main(): Promise<void> {
       const pkgPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json');
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as { version: string };
       console.log(`roland ${pkg.version}`);
-    } catch { console.log('roland 1.0.0'); }
+    } catch { console.log('roland 1.1.0'); }
     process.exit(0);
   }
 

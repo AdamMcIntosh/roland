@@ -158,7 +158,7 @@ inject the following checklist into **every executor task description**, verbati
 
 \`\`\`
 ⚠️ PRODUCTION HARDENING — MANDATORY: Before marking this task done, verify each item that applies:
-- [ ] EF Core migrations: any schema change has a migration file; run \`dotnet ef migrations add <Name>\` and verify \`dotnet ef database update\` completes without error
+- [ ] EF Core migrations: any schema change has a migration file; run \`dotnet ef migrations add <Name>\` and verify \`dotnet ef database update\` completes without error. **Never squash, edit, or delete an existing migration file** — always add a new additive migration.
 - [ ] Secrets/config: no hardcoded secrets or connection strings; all config loaded via IConfiguration / user-secrets / environment variables; validate required config at startup
 - [ ] Input validation: all request inputs validated with FluentValidation or DataAnnotations at the API boundary; invalid inputs return RFC 7807 ProblemDetails with appropriate status code (400/422)
 - [ ] Rate limiting: any public or authenticated endpoint has ASP.NET Core RateLimiter middleware applied (fixed window / sliding window / token bucket as appropriate)
@@ -228,7 +228,7 @@ If the project uses ESM/Node.js, every \`test-author\` task \`description\` MUST
 For .NET projects, replace with:
 
 \`\`\`
-⚠️ .NET TEST CONVENTIONS — MANDATORY: Use xUnit. All test classes must be \`public sealed\`. Use \`[Fact]\` and \`[Theory]\` attributes. Mock dependencies with NSubstitute or Moq. Never use \`Thread.Sleep\` — use \`Task.Delay\` with CancellationToken. Integration tests must use WebApplicationFactory<Program> with a separate test database — never the production database.
+⚠️ .NET TEST CONVENTIONS — MANDATORY: Use xUnit. All test classes must be \`public sealed\`. Use \`[Fact]\` and \`[Theory]\` attributes. Mock dependencies with NSubstitute or Moq. Never use \`Thread.Sleep\` — use \`Task.Delay\` with CancellationToken. Integration tests must use WebApplicationFactory<Program> with a separate test database — never the production database. Rate-limit tests must use composite fixtures with separate high/low PermitLimit factories — never share a single RateLimiter factory across different rate-limiting scenarios.
 \`\`\`
 
 ---
