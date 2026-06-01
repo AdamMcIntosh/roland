@@ -23,13 +23,16 @@ export function ProjectList() {
   const [error, setError] = useState('');
 
   const load = async () => {
-    if (!apiKey) return;
-    const res = await apiFetch('/api/projects', {}, apiKey);
-    if (res.ok) setProjects(await res.json());
-    setLoading(false);
+    try {
+      const res = await apiFetch('/api/projects', {}, apiKey || undefined);
+      if (res.ok) setProjects(await res.json());
+      else if (res.status === 401) setError('Session expired — please sign in again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { load(); }, [apiKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const addProject = async (e: React.FormEvent) => {
     e.preventDefault();
