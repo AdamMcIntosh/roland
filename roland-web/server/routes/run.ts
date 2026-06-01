@@ -9,11 +9,12 @@ import { createRolandBranch } from '../github.js';
 
 export const runRouter = Router();
 
-// Always resolve from cwd (roland-web/) — works in both tsx (dev) and compiled (prod)
-const rolandBin = resolve(process.cwd(), 'node_modules', '.bin', 'roland');
+// Point directly at the JS entry point — avoids execute-permission issues with
+// the node_modules/.bin/roland symlink (EACCES on Railway/Linux when committed from Windows).
+const rolandEntry = resolve(process.cwd(), 'node_modules', '@roland-core', 'dist', 'index.js');
 
-if (!existsSync(rolandBin)) {
-  console.error(`[Roland] FATAL: roland binary not found at ${rolandBin}`);
+if (!existsSync(rolandEntry)) {
+  console.error(`[Roland] FATAL: roland entry not found at ${rolandEntry}`);
   console.error('[Roland] Run: npm run build:core  (from roland-web/) to populate @roland-core/dist/');
 }
 
@@ -36,7 +37,7 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
   const { goal } = (req.body ?? {}) as { goal?: string };
   if (!goal?.trim()) { res.status(400).json({ error: 'goal required' }); return; }
 
-  if (!existsSync(rolandBin)) {
+  if (!existsSync(rolandEntry)) {
     res.status(503).json({ error: 'Roland binary is not installed on this server. Contact your administrator.' });
     return;
   }
@@ -104,7 +105,7 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
   if (engineerModel && VALID_CURSOR_MODELS.has(engineerModel))
     modelEnv.ROLAND_ENGINEER_MODEL = engineerModel;
 
-  const child = spawn(rolandBin, args, {
+  const child = spawn(process.execPath, [rolandEntry, ...args], {
     cwd: project.path,
     env: {
       ...process.env,
