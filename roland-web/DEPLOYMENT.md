@@ -80,23 +80,21 @@ Railway builds and runs the app directly with Node.js using **Railpack**
 
 ### Build pipeline
 
-`railway.json` wires up the full build in one `buildCommand`:
+`railway.json` sets `buildCommand` to a single `npm run build:railway`.
+That script (`scripts/build-railway.mjs`) orchestrates the full pipeline using
+explicit Node.js `cwd` options — no shell `cd` required:
 
-```
-cd ..                             # step into repo root
-npm ci && npm run build           # compile Roland core TypeScript → dist/
-cd roland-web
-node scripts/setup-core.mjs       # sync dist/ + agents/ + recipes/ into @roland-core/
-npm ci                            # reinstall web deps (picks up populated @roland-core)
-npm run build                     # next build + tsc -p tsconfig.server.json
-```
+1. `npm ci && npm run build` — compile Roland core TypeScript → `dist/` (repo root)
+2. `node scripts/setup-core.mjs` — sync `dist/` + `agents/` + `recipes/` into `@roland-core/`
+3. `npm ci` — reinstall roland-web deps so the `roland` binary resolves correctly
+4. `npm run build` — `next build` + `tsc -p tsconfig.server.json`
 
-The start command is `node --experimental-sqlite dist/server/index.js`.
+The start command is `npm start` (`node --experimental-sqlite dist/server/index.js`).
 
 Railpack detects the Node.js project automatically and runs its own install
-phase before the `buildCommand`. The explicit `npm ci` in step 4 above is
-intentional — it reinstalls roland-web deps after `@roland-core/dist` has been
-populated so the `roland` binary resolves correctly at runtime.
+phase before `buildCommand`. The explicit `npm ci` in step 3 above is
+intentional — it reinstalls after `@roland-core/dist/` is populated so the
+`roland` binary at `@roland-core/dist/index.js` resolves correctly at runtime.
 
 ### Setup checklist
 
