@@ -72,23 +72,29 @@ if (process.env.NODE_ENV !== 'test') {
 const dev = process.env.NODE_ENV !== 'production';
 const port = parseInt(process.env.PORT ?? '3000', 10);
 
-// Next.js dir is the package root (one level above server/)
-const nextApp = next({ dev, dir: process.cwd() });
-const handle = nextApp.getRequestHandler();
-
-await nextApp.prepare();
-initDb();
-
 const app = express();
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 
-// Unauthenticated health probe — used by Railway and the Docker HEALTHCHECK
+// Register /health BEFORE nextApp.prepare() so Railway's healthcheck succeeds
+// even while Next.js is still initialising in the background.
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
+
+// Start listening immediately — additional routes are registered after prepare().
+createServer(app).listen(port, () => {
+  console.log(`> Roland Web starting → http://localhost:${port}`);
+});
+
+// Next.js dir is the package root (one level above server/)
+const nextApp = next({ dev, dir: process.cwd() });
+const handle = nextApp.getRequestHandler();
+
+await nextApp.prepare();
+initDb();
 
 app.use('/api/auth', authRouter);
 app.use('/api/github', githubRouter);
@@ -100,6 +106,4 @@ app.all('*', (req, res) => {
   handle(req, res, parse(req.url, true));
 });
 
-createServer(app).listen(port, () => {
-  console.log(`> Roland Web ready → http://localhost:${port}`);
-});
+console.log(`> Roland Web ready → http://localhost:${port}`);
