@@ -2,7 +2,7 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "RAILPACK",
-    "buildCommand": "npm run build"
+    "buildCommand": "if [ ! -d @roland-core/dist ]; then npm ci --prefix .. && npm run build --prefix .. && node scripts/setup-core.mjs && npm install; fi && npm run build"
   },
   "deploy": {
     "startCommand": "npm start",

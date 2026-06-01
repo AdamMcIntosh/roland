@@ -1,5 +1,8 @@
 .next/
-dist/
+/dist/
+!@roland-core/dist/
+!@roland-core/agents/
+!@roland-core/recipes/
 node_modules/
 *.db
 *.db-journal

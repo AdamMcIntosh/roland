@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
+import { existsSync } from 'fs';
 import { resolve } from 'path';
 import { getDb } from '../db.js';
 import { requireAuth } from '../auth.js';
@@ -10,6 +11,11 @@ export const runRouter = Router();
 
 // Always resolve from cwd (roland-web/) — works in both tsx (dev) and compiled (prod)
 const rolandBin = resolve(process.cwd(), 'node_modules', '.bin', 'roland');
+
+if (!existsSync(rolandBin)) {
+  console.error(`[Roland] FATAL: roland binary not found at ${rolandBin}`);
+  console.error('[Roland] Run: npm run build:core  (from roland-web/) to populate @roland-core/dist/');
+}
 
 /** Sanitise a goal string into a safe git branch slug (max 5 words). */
 function goalToBranchSlug(goal: string): string {
@@ -29,6 +35,11 @@ function goalToBranchSlug(goal: string): string {
 runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
   const { goal } = (req.body ?? {}) as { goal?: string };
   if (!goal?.trim()) { res.status(400).json({ error: 'goal required' }); return; }
+
+  if (!existsSync(rolandBin)) {
+    res.status(503).json({ error: 'Roland binary is not installed on this server. Contact your administrator.' });
+    return;
+  }
 
   const project = getDb()
     .prepare('SELECT * FROM projects WHERE id=?')
