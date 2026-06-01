@@ -155,7 +155,7 @@ function printHelp(): void {
   const ln = (s = '') => console.error(s);
 
   ln();
-  ln('  ' + b('🚀  Roland v1.1') + '  — PM-first AI Engineering Team');
+  ln('  ' + b('🚀  Roland v1.2') + '  — PM-first AI Engineering Team');
   ln();
   ln('  ' + b('CHAT MODE') + '  ' + d('(default — just run: roland)'));
   ln(`    ${cy('roland')}                            Start interactive chat  ${d('(type goals naturally, /help inside)')}`);
@@ -218,6 +218,7 @@ function printHelp(): void {
   ln(`    ${b('ROLAND_NOTIFY=1')}            Enable notifications for all commands`);
   ln(`    ${b('ROLAND_SIMPLE_TUI=1')}        Simple ASCII output  ${d('(mobile SSH, Termius, limited terminals)')}`);
   ln(`    ${b('ROLAND_SEQUENTIAL=1')}        Sequential safe mode  ${d('(one agent at a time; use --sequential flag per-run)')}`);
+  ln(`    ${b('ROLAND_WEB=1')}               Clean ANSI-free output for web/chat UI  ${d('(same as --web flag)')}`);
   ln(`    ${b('CURSOR_API_KEY')}             Required for agent execution`);
   ln(`    ${b('ROLAND_AGENT_TIMEOUT_MS')}    Agent timeout  ${d('(default: 25 min)')}`);
   ln(`    ${b('ROLAND_AGENT_RETRIES')}       Max retries per agent  ${d('(default: 5)')}`);
@@ -266,7 +267,7 @@ async function main(): Promise<void> {
       const pkgPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json');
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as { version: string };
       console.log(`roland ${pkg.version}`);
-    } catch { console.log('roland 1.1.0'); }
+    } catch { console.log('roland 1.2.0'); }
     process.exit(0);
   }
 

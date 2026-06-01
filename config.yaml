@@ -20,7 +20,7 @@
 # Cost strategy: Grok 4.3 for the PM brain; composer-2.5 for every engineer.
 # This section is optional; the defaults below are used if it is omitted.
 pm:
-  lead_model: "grok-4.3"                # The Lead PM (Grok 4.3 — cost-optimised orchestration)
+  lead_model: "gpt-5.4-nano"            # The Lead PM (GPT-5.4 Nano — fast, cheap orchestration)
   fast_model: "composer-2.5"            # Interactive / time-sensitive engineers
   standard_model: "composer-2.5"        # Background / execution engineers
   # Override the lane for specific engineers (else inferred from the persona name):

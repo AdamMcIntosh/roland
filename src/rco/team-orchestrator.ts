@@ -540,7 +540,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   // ── Model config banner ───────────────────────────────────────────────────
   console.error('[Team] ─────────────────────────────────────────────────────');
   console.error('[Team] Model config:');
-  console.error('[Team]   Lead PM     → grok-4.3     (orchestration + planning)');
+  console.error('[Team]   Lead PM     → gpt-5.4-nano     (orchestration + planning)');
   console.error('[Team]   All engineers → composer-2.5 (reasoning, execution, tests, docs)');
   console.error('[Team] ─────────────────────────────────────────────────────');
 
@@ -723,8 +723,8 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
 
   const planningPrompt = buildLeadPMPlanningPrompt({ goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined, projectMemory: memorySnapshot || undefined, projectKnowledge: knowledge.injectionBlock || undefined });
   const pmPlanStart = Date.now();
-  const planText = await callCursorAgent('Lead-PM', 'grok-4.3', planningPrompt);
-  allTaskUsage.push(buildTaskUsage('pm-planning', 'Lead PM: Planning', 'Lead-PM', 'grok-4.3', planningPrompt.length, planText.length, Date.now() - pmPlanStart));
+  const planText = await callCursorAgent('Lead-PM', 'gpt-5.4-nano', planningPrompt);
+  allTaskUsage.push(buildTaskUsage('pm-planning', 'Lead PM: Planning', 'Lead-PM', 'gpt-5.4-nano', planningPrompt.length, planText.length, Date.now() - pmPlanStart));
 
   const rawPlan = extractJsonBlock(planText);
   const plan: TeamPlan = isTeamPlan(rawPlan) ? rawPlan : fallbackPlan(goal);
@@ -906,8 +906,8 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
         detectedBlockers: detectedBlockers.length > 0 ? detectedBlockers : undefined,
       });
       const pmReviewStart = Date.now();
-      const reviewText = await callCursorAgent('Lead-PM', 'grok-4.3', reviewPrompt);
-      allTaskUsage.push(buildTaskUsage(`pm-review-${waveNumber}`, `Lead PM: Wave ${waveNumber} Review`, 'Lead-PM', 'grok-4.3', reviewPrompt.length, reviewText.length, Date.now() - pmReviewStart));
+      const reviewText = await callCursorAgent('Lead-PM', 'gpt-5.4-nano', reviewPrompt);
+      allTaskUsage.push(buildTaskUsage(`pm-review-${waveNumber}`, `Lead PM: Wave ${waveNumber} Review`, 'Lead-PM', 'gpt-5.4-nano', reviewPrompt.length, reviewText.length, Date.now() - pmReviewStart));
 
       const rawDecision = extractJsonBlock(reviewText);
       const decision: ReviewDecision = isReviewDecision(rawDecision)
@@ -954,8 +954,8 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   const synthesisCtx = { goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined, taskResults };
   const synthesisPrompt = buildLeadPMSynthesisPrompt(synthesisCtx);
   const pmSynthStart = Date.now();
-  let synthesis = await callCursorAgent('Lead-PM', 'grok-4.3', synthesisPrompt);
-  allTaskUsage.push(buildTaskUsage('pm-synthesis', 'Lead PM: Synthesis', 'Lead-PM', 'grok-4.3', synthesisPrompt.length, synthesis.length, Date.now() - pmSynthStart));
+  let synthesis = await callCursorAgent('Lead-PM', 'gpt-5.4-nano', synthesisPrompt);
+  allTaskUsage.push(buildTaskUsage('pm-synthesis', 'Lead PM: Synthesis', 'Lead-PM', 'gpt-5.4-nano', synthesisPrompt.length, synthesis.length, Date.now() - pmSynthStart));
 
   // "no detail" fallback: empty, too-short, or blocker-string responses mean the full
   // synthesis failed. Retry once with a minimal focused prompt; if that also fails,
@@ -966,8 +966,8 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     console.error('[Team] ⚠️  Run is still alive — use `roland status` to monitor');
     const fallbackPrompt = buildFallbackSynthesisPrompt(synthesisCtx);
     const pmFallbackStart = Date.now();
-    synthesis = await callCursorAgent('Lead-PM', 'grok-4.3', fallbackPrompt);
-    allTaskUsage.push(buildTaskUsage('pm-synthesis-fallback', 'Lead PM: Fallback Synthesis', 'Lead-PM', 'grok-4.3', fallbackPrompt.length, synthesis.length, Date.now() - pmFallbackStart));
+    synthesis = await callCursorAgent('Lead-PM', 'gpt-5.4-nano', fallbackPrompt);
+    allTaskUsage.push(buildTaskUsage('pm-synthesis-fallback', 'Lead PM: Fallback Synthesis', 'Lead-PM', 'gpt-5.4-nano', fallbackPrompt.length, synthesis.length, Date.now() - pmFallbackStart));
 
     if (synthesisFailed(synthesis)) {
       console.error('[Team] ⚠️  Fallback synthesis also failed — auto-generating minimal summary from task outputs');

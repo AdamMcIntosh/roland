@@ -1,14 +1,25 @@
-node_modules/
+# ── Always exclude ────────────────────────────────────────────────────────────
 .git/
 .omc/
-extension/
-*.md
-*.yaml
 .cursor/
 .vscode/
 .github/
+.claude/
+
+# ── Roland core — keep src/ and tsconfig.json; they are needed by Stage 1 ────
+node_modules/
+extension/
 tests/
-src/
-tsconfig.json
 vitest.config.ts
 .eslintrc.*
+
+# ── roland-web — exclude build artifacts and runtime state ───────────────────
+roland-web/node_modules/
+roland-web/.next/
+roland-web/dist/
+roland-web/projects/
+roland-web/.roland/
+roland-web/*.db
+roland-web/*.db-journal
+roland-web/.env
+roland-web/.env.local
