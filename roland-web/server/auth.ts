@@ -41,9 +41,9 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   const payload = verifyToken(token);
   if (!payload) { res.status(401).json({ error: 'Invalid token' }); return; }
 
-  const apiKey = req.headers['x-cursor-api-key'] as string | undefined;
+  const apiKey = (req.headers['x-cursor-api-key'] as string | undefined) || process.env.CURSOR_API_KEY;
   if (!apiKey) {
-    res.status(401).json({ error: 'x-cursor-api-key header required' });
+    res.status(401).json({ error: 'Cursor API key required — set CURSOR_API_KEY on the server or provide x-cursor-api-key header' });
     return;
   }
 

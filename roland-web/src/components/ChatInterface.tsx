@@ -36,7 +36,7 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
   }, [output]);
 
   const run = async () => {
-    if (!goal.trim() || !apiKey || running) return;
+    if (!goal.trim() || running) return;
     setRunning(true);
     setOutput('');
     setError('');
@@ -133,11 +133,6 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
 
   return (
     <div className="flex flex-col gap-4 flex-1">
-      {!apiKey && (
-        <p className="text-amber-700 text-sm bg-amber-50 border border-amber-200 rounded-lg p-3">
-          No API key in session — sign out and sign in again with your Cursor API key.
-        </p>
-      )}
 
       {/* Input area */}
       <div className="flex gap-3">
@@ -153,7 +148,7 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
         <div className="flex flex-col gap-2">
           <button
             onClick={run}
-            disabled={running || !goal.trim() || !apiKey}
+            disabled={running || !goal.trim()}
             className="bg-kelly-600 hover:bg-kelly-700 disabled:opacity-40 text-white rounded-lg px-4 py-2 font-medium transition-colors whitespace-nowrap"
           >
             {running ? 'Running…' : 'Run'}

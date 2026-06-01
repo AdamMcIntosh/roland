@@ -193,16 +193,16 @@ export function LoginForm() {
             value={creds.cursorApiKey}
             onChange={setCred('cursorApiKey')}
             className="field font-mono"
-            placeholder="cursor_…"
+            placeholder="cursor_… (leave blank if configured server-side)"
             autoComplete="off"
             autoCapitalize="none"
             autoCorrect="off"
             spellCheck={false}
-            required
             aria-describedby="apikey-hint"
           />
           <p id="apikey-hint" className="text-xs text-gray-400">
-            Stored in session only — never saved to the server.
+            Optional if <code className="font-mono">CURSOR_API_KEY</code> is set as a server environment variable.
+            Otherwise stored in session only — never saved to the server.
           </p>
         </div>
       </fieldset>
