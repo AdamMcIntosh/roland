@@ -77,10 +77,11 @@ githubRouter.post('/connect', async (req, res) => {
       .run('github_pat', encrypt(pat.trim()));
     res.json({ ok: true, login: user.login, avatarUrl: user.avatarUrl });
   } catch (e) {
-    res.status(401).json({
-      error: classifyGitError(e),
-      ...gitErrorFlags(e),
-    });
+    const raw = e instanceof Error ? e.message : String(e);
+    console.error('[GitHub /connect] error:', raw);
+    const flags = gitErrorFlags(e);
+    const status = flags.needsReconnect ? 401 : 500;
+    res.status(status).json({ error: classifyGitError(e), ...flags });
   }
 });
 

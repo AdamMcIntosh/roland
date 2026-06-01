@@ -52,8 +52,8 @@ for (const [key, badValues] of Object.entries(INSECURE)) {
 // Skip the guard in test environments where real secrets aren't needed.
 if (process.env.NODE_ENV !== 'test') {
   const patKey = process.env.PAT_ENCRYPTION_KEY ?? '';
-  if (patKey.length < 64) {
-    console.error(`\n[Roland Web] FATAL: PAT_ENCRYPTION_KEY must be 64 hex chars (32 bytes). Got length ${patKey.length}.\n`);
+  if (patKey.length !== 64) {
+    console.error(`\n[Roland Web] FATAL: PAT_ENCRYPTION_KEY must be exactly 64 hex chars (32 bytes). Got length ${patKey.length}.\n`);
     process.exit(1);
   }
   const sessionSecret = process.env.SESSION_SECRET ?? '';
