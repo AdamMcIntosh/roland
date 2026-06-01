@@ -82,7 +82,15 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
         accumulated += chunk;
-        setOutput((prev) => prev + chunk);
+        // Strip the internal completion sentinel from what's shown in the terminal
+        const display = chunk.replace(/\n?\[ROLAND_DONE\]\n?/g, '');
+        if (display) setOutput((prev) => prev + display);
+        // Break early when the server signals it's done — guards against Railway's
+        // proxy buffering the final TCP close and leaving the reader loop hanging.
+        if (accumulated.includes('[ROLAND_DONE]')) {
+          try { reader.cancel(); } catch { /* ignore */ }
+          break;
+        }
       }
 
       // Auto-detect PR URL emitted by the server after push + PR creation
