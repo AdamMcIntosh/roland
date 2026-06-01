@@ -9,10 +9,10 @@
 | `CURSOR_API_KEY` | **yes** | — | Cursor / AI provider API key for agent runs |
 | `SESSION_SECRET` | **yes** | — | JWT signing key (min 32 chars) |
 | `PAT_ENCRYPTION_KEY` | **yes** | — | GitHub PAT encryption key (64 hex chars = 32 bytes) |
-| `DATABASE_PATH` | no | `/data/roland-web.db` | SQLite database file path |
-| `PROJECTS_DIR` | no | `/data/projects` | Directory where Roland clones and manages repos |
+| `DATABASE_PATH` | no | `./roland-web.db` | SQLite database file path |
+| `PROJECTS_DIR` | no | `./projects` | Directory where Roland clones and manages repos |
 | `PORT` | no | `3000` | HTTP port the server listens on |
-| `NODE_ENV` | no | `production` | Node environment |
+| `NODE_ENV` | no | `development` | Node environment |
 
 Generate the required secrets:
 
@@ -29,82 +29,84 @@ are missing, too short, or still set to the placeholder values from `.env.exampl
 
 ---
 
-## Local Docker development
+## Local development (plain Node.js)
 
-### 1. Create your `.env`
+### 1. Build the Roland core
 
 ```sh
-cp roland-web/.env.example roland-web/.env
-# Edit roland-web/.env — fill in AUTH_PASSWORD, CURSOR_API_KEY,
+# from repo root
+npm ci
+npm run build
+```
+
+### 2. Set up the web app
+
+```sh
+cd roland-web
+node scripts/setup-core.mjs   # syncs compiled Roland core into @roland-core/
+npm ci
+```
+
+### 3. Configure environment
+
+```sh
+cp .env.example .env
+# Edit .env — fill in AUTH_PASSWORD, CURSOR_API_KEY,
 # SESSION_SECRET, and PAT_ENCRYPTION_KEY with real values.
 ```
 
-### 2. Build the image (build context = repo root)
+### 4. Run in dev mode
 
 ```sh
-docker build -f roland-web/Dockerfile -t roland-web .
+npm run dev    # tsx watch — no build step needed, reloads on change
 ```
 
-### 3. Run with `.env` mounted
+Or run the production build locally:
 
 ```sh
-docker run --rm -p 3000:3000 \
-  -v "$(pwd)/roland-web/.env:/app/.env:ro" \
-  -v roland-web-data:/data \
-  roland-web
+npm run build
+npm start      # node --experimental-sqlite dist/server/index.js
 ```
 
-The container entrypoint (`docker-entrypoint.sh`) detects `/app/.env` and
-sources it before starting the server. Variables already present in the
-container environment (from `docker run -e` or the image `ENV` defaults)
-are overridden by the `.env` file when both are supplied.
-
-### 4. docker compose (recommended for local dev)
-
-```yaml
-# docker-compose.yml (place alongside roland-web/)
-services:
-  roland-web:
-    build:
-      context: .
-      dockerfile: roland-web/Dockerfile
-    ports:
-      - "3000:3000"
-    env_file:
-      - ./roland-web/.env      # sourced by docker compose before container start
-    volumes:
-      - roland-web-data:/data
-
-volumes:
-  roland-web-data:
-```
-
-```sh
-docker compose up --build
-```
-
-With `env_file:`, docker compose injects the variables directly into the
-container environment — the entrypoint skips the `/app/.env` source block
-because the file is not mounted. Both approaches work; `env_file:` is
-slightly cleaner (no file mount, no shell sourcing).
+`server/index.ts` calls `dotenv.config()` at startup, so any `.env` file in
+`roland-web/` is loaded automatically — no extra tooling required.
 
 ---
 
-## Railway deployment
+## Railway deployment (native Node.js)
 
-Railway injects service variables directly into the container environment
-before the process starts. There is no `.env` file in the production image
-(it is excluded by `.dockerignore`), so the entrypoint skips the source
-block and the server uses the Railway-injected values.
+Railway builds and runs the app directly with Node.js using **Railpack**
+(Railway's current default builder) — no Docker required.
+
+### Build pipeline
+
+`railway.json` wires up the full build in one `buildCommand`:
+
+```
+cd ..                             # step into repo root
+npm ci && npm run build           # compile Roland core TypeScript → dist/
+cd roland-web
+node scripts/setup-core.mjs       # sync dist/ + agents/ + recipes/ into @roland-core/
+npm ci                            # reinstall web deps (picks up populated @roland-core)
+npm run build                     # next build + tsc -p tsconfig.server.json
+```
+
+The start command is `node --experimental-sqlite dist/server/index.js`.
+
+Railpack detects the Node.js project automatically and runs its own install
+phase before the `buildCommand`. The explicit `npm ci` in step 4 above is
+intentional — it reinstalls roland-web deps after `@roland-core/dist` has been
+populated so the `roland` binary resolves correctly at runtime.
 
 ### Setup checklist
 
-1. **Build settings** (Settings → Build):
-   - Build Context: `/`
-   - Dockerfile Path: `roland-web/Dockerfile`
+1. **Root directory** (Railway dashboard → Settings → Build):
+   - Root Directory: `roland-web`
 
 2. **Volume** (Railway dashboard → Volumes tab):
    - Mount Path: `/data`
+   - Set `DATABASE_PATH=/data/roland-web.db` and `PROJECTS_DIR=/data/projects`
+     in service variables so the app writes to the persistent volume.
 
 3. **Service variables** (Settings → Variables) — set all required secrets:
 
@@ -115,19 +117,28 @@ block and the server uses the Railway-injected values.
    | `SESSION_SECRET` | Output of the `randomBytes(48)` command above |
    | `PAT_ENCRYPTION_KEY` | Output of the `randomBytes(32)` command above |
    | `DATABASE_PATH` | `/data/roland-web.db` |
-   | `PROJECTS_DIR` | `/data/projects` (default, can omit) |
+   | `PROJECTS_DIR` | `/data/projects` |
+   | `NODE_ENV` | `production` |
 
    `AUTH_USERNAME` defaults to `admin`; override here if desired.
 
-4. **Deploy** — Railway picks up the `railway.json` at repo root automatically.
+4. **Deploy** — Railway picks up `roland-web/railway.json` automatically once
+   the root directory is set to `roland-web`.
 
 ### Variable precedence on Railway
 
+Railway service variables are injected directly into the container environment
+before the process starts. There is no `.env` file on Railway — `dotenv.config()`
+finds nothing and falls through cleanly, leaving all vars as Railway set them.
+
 ```
 Railway service variables   ← highest (set in dashboard)
-        ↓ override
-Image ENV defaults          ← baked into Dockerfile (PORT, AUTH_USERNAME, paths)
+        ↓
+NODE_ENV / PORT defaults    ← baked into railway.json deploy defaults
 ```
 
-No `.env` file is ever present in the Railway container, so there is no
-third tier to reason about.
+### Health check
+
+`GET /health` returns `{"status":"ok"}` with no authentication required.
+Railway uses this endpoint (configured in `railway.json`) to determine
+when the deployment is healthy.
