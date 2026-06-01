@@ -75,12 +75,19 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
 
       const reader  = res.body!.getReader();
       const decoder = new TextDecoder();
+      let accumulated = '';
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        setOutput((prev) => prev + decoder.decode(value, { stream: true }));
+        const chunk = decoder.decode(value, { stream: true });
+        accumulated += chunk;
+        setOutput((prev) => prev + chunk);
       }
+
+      // Auto-detect PR URL emitted by the server after push + PR creation
+      const prMatch = accumulated.match(/\[ROLAND_PR\]: (https:\/\/\S+)/);
+      if (prMatch?.[1]) setPrUrl(prMatch[1]);
     } catch (e: unknown) {
       if ((e as { name?: string })?.name !== 'AbortError') {
         const raw = (e as Error)?.message ?? '';

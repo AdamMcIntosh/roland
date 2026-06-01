@@ -5,7 +5,8 @@ import { existsSync } from 'fs';
 import { resolve } from 'path';
 import { getDb } from '../db.js';
 import { requireAuth } from '../auth.js';
-import { createRolandBranch } from '../github.js';
+import { createRolandBranch, pushBranchAndCreatePR } from '../github.js';
+import { decrypt } from '../crypto.js';
 
 export const runRouter = Router();
 
@@ -116,8 +117,10 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
   });
 
   const append = (text: string) => {
-    res.write(text);
-    (res as any).flush?.();
+    if (!res.writableEnded) {
+      res.write(text);
+      (res as any).flush?.();
+    }
     getDb()
       .prepare('UPDATE runs SET output = output || ? WHERE id = ?')
       .run(text, runId);
@@ -130,11 +133,47 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
     append(`\n[Roland] Failed to start: ${err.message}\n`);
   });
 
-  child.on('close', (code) => {
+  child.on('close', async (code) => {
     getDb()
       .prepare('UPDATE runs SET status=?, finished_at=unixepoch() WHERE id=?')
       .run(code === 0 ? 'success' : 'error', runId);
-    res.end();
+
+    // Auto-commit, push, and open a PR when the run had a prepared branch
+    if (branchName && project.encrypted_pat && project.github_owner && project.github_repo) {
+      try {
+        const pat = decrypt(project.encrypted_pat);
+        const prTitle = `Roland: ${goal.length > 72 ? goal.slice(0, 69) + '…' : goal}`;
+        const prBody = [
+          '## Roland Run',
+          '',
+          `**Goal:** ${goal}`,
+          '',
+          'Changes generated automatically by [Roland](https://github.com/AdamMcIntosh/roland).',
+        ].join('\n');
+
+        const pr = await pushBranchAndCreatePR(
+          project.path,
+          pat,
+          project.github_owner,
+          project.github_repo,
+          branchName,
+          prTitle,
+          prBody,
+        );
+
+        try {
+          getDb().prepare('UPDATE runs SET pr_url=? WHERE id=?').run(pr.url, runId);
+        } catch { /* pr_url column may not exist on older DBs */ }
+
+        append(`\n[ROLAND_PR]: ${pr.url}\n`);
+      } catch (prErr) {
+        const msg = prErr instanceof Error ? prErr.message : String(prErr);
+        console.error(`[Run] auto-PR failed (run=${runId}):`, msg);
+        append(`\n⚠️  Pull request creation failed: ${msg}\n`);
+      }
+    }
+
+    if (!res.writableEnded) res.end();
   });
 
   res.on('close', () => child.kill());
