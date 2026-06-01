@@ -3,14 +3,13 @@
   "compilerOptions": {
     "noEmit": false,
     "outDir": "dist",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
     "target": "ES2022",
-    "jsx": "react",
     "declaration": false,
     "incremental": false,
     "paths": {}
   },
-  "include": ["server/**/*.ts", "core/**/*.ts"],
+  "include": ["next-env.d.ts", "server/**/*.ts", "core/**/*.ts"],
   "exclude": ["node_modules", "src", "dist"]
 }
