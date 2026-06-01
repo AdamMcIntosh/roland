@@ -46,6 +46,8 @@ export function initDb(): void {
 
   // Migration: add branch column for DBs created before this column existed
   try { db.exec('ALTER TABLE runs ADD COLUMN branch TEXT NOT NULL DEFAULT ""'); } catch { /* already exists */ }
+  // Migration: add pr_url column for storing the auto-created pull request URL
+  try { db.exec('ALTER TABLE runs ADD COLUMN pr_url TEXT'); } catch { /* already exists */ }
 
   // Migration: add ON DELETE CASCADE to existing runs FK
   // (SQLite requires recreating the table to change a FK constraint)
