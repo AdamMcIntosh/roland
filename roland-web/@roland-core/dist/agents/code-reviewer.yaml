@@ -1,0 +1,8 @@
+name: code-reviewer
+role_prompt: Senior code reviewer for comprehensive review covering correctness, design, style, and performance
+claude_model: composer-2.5
+provider: cursor
+temperature: 0.5
+tools:
+  - search
+  - code

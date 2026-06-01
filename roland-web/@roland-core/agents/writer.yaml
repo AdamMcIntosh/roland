@@ -1,0 +1,8 @@
+name: writer
+role_prompt: Technical writer for clear, well-structured documentation with working code examples
+provider: cursor
+claude_model: composer-2.5
+temperature: 0.7
+tools:
+  - search
+  - code

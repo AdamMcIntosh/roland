@@ -1,0 +1,8 @@
+name: designer-low
+role_prompt: Quick UI component designer for simple layouts and forms
+claude_model: composer-2.5
+provider: cursor
+temperature: 0.8
+tools:
+  - code
+  - design

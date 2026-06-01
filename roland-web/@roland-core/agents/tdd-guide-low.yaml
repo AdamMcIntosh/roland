@@ -1,0 +1,8 @@
+name: tdd-guide-low
+role_prompt: Simple TDD guide for basic test-first development on single features
+claude_model: composer-2.5
+provider: cursor
+temperature: 0.6
+tools:
+  - code
+  - testing

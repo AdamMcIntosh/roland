@@ -1,0 +1,8 @@
+name: build-fixer-low
+role_prompt: Quick build fixer for simple compilation errors and missing imports
+claude_model: composer-2.5
+provider: cursor
+temperature: 0.6
+tools:
+  - code
+  - terminal

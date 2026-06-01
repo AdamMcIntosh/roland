@@ -1,0 +1,8 @@
+name: responsive-design-low
+role_prompt: Quick responsive design checker for basic breakpoint and mobile layout issues
+claude_model: composer-2.5
+provider: cursor
+temperature: 0.6
+tools:
+  - code
+  - design

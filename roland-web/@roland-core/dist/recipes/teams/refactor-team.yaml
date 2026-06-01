@@ -1,0 +1,72 @@
+name: refactor-team
+description: >
+  Refactor safely without changing behavior: an architect maps the current state
+  and plans the change, an executor applies it, a code-reviewer checks the structure,
+  a test-author writes characterization tests for the refactored code, and a
+  test-executor runs the full suite to prove behavior is unchanged. Use for
+  structural cleanups and migrations.
+tasks:
+  - slug: map
+    title: "Map current state: {{goal}}"
+    assignee: architect
+    description: >
+      Map what {{goal}} touches today: the modules, call sites, and existing test
+      coverage. Identify risk areas and behavior that must be preserved.
+    acceptanceCriteria: >
+      An accurate map of affected code and a list of behaviors that must not change.
+
+  - slug: plan
+    title: "Plan the refactor: {{goal}}"
+    assignee: architect
+    dependsOn: [map]
+    description: >
+      Plan {{goal}} as a sequence of small, safe steps. Call out anything that
+      needs a decision from the PM as a blocker.
+    acceptanceCriteria: >
+      A step-by-step plan that preserves behavior; risky steps flagged explicitly.
+
+  - slug: refactor
+    title: "Execute refactor: {{goal}}"
+    assignee: executor
+    dependsOn: [plan]
+    description: >
+      Execute the planned refactor for {{goal}}. Change structure, not behavior.
+      Keep each step coherent and the build green throughout.
+    acceptanceCriteria: >
+      Refactor applied per plan; public behavior unchanged; builds clean.
+
+  - slug: review
+    title: "Review: {{goal}}"
+    assignee: code-reviewer
+    dependsOn: [refactor]
+    description: >
+      Review the refactor of {{goal}}: confirm behavior is preserved and the new
+      structure is genuinely better. Flag any behavioral drift.
+    acceptanceCriteria: >
+      Review confirms no behavioral change and a real structural improvement.
+
+  - slug: write-characterization
+    title: "Write characterization tests: {{goal}}"
+    assignee: test-author
+    dependsOn: [refactor]
+    description: >
+      Write characterization tests that pin the observable behavior of {{goal}}
+      before and after the refactor. Focus on the boundary behaviors the architect's
+      map identified as must-preserve. Supplement existing tests where coverage gaps
+      exist; do not duplicate what is already covered.
+    acceptanceCriteria: >
+      Characterization tests written targeting identified behavior boundaries;
+      tests are runnable without manual setup.
+
+  - slug: run-suite
+    title: "Run full suite: {{goal}}"
+    assignee: test-executor
+    dependsOn: [write-characterization]
+    description: >
+      Run the complete test suite including the new characterization tests. Confirm
+      all existing tests still pass (no behavioral regressions) and all new tests
+      are green. Report exact counts, coverage delta vs pre-refactor baseline if
+      available, and any failures as blockers.
+    acceptanceCriteria: >
+      Full suite green including characterization tests; no regressions; coverage
+      unchanged or improved.

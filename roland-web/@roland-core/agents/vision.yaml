@@ -1,0 +1,8 @@
+name: vision
+role_prompt: Technical strategist for long-term architecture planning and technology evaluation
+claude_model: composer-2.5
+provider: cursor
+temperature: 0.7
+tools:
+  - search
+  - code

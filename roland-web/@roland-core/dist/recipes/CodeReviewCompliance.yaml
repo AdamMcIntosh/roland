@@ -1,0 +1,343 @@
+# Code Review & Requirements Compliance Recipe
+# Multi-agent workflow for reviewing code against best practices and a requirements document
+
+name: CodeReviewCompliance
+version: "1.0.0"
+description: "Multi-agent workflow that analyzes a requirements document, reviews code for best practices and standards compliance, challenges findings adversarially, and produces a comprehensive compliance report"
+
+metadata:
+  category: "Code Quality"
+  complexity: "high"
+  estimatedCost: 0.10
+  estimatedDuration: "15-25 minutes"
+  tags: ["code-review", "requirements", "compliance", "best-practices", "quality"]
+
+agents: [researcher, code-reviewer, critic, writer]
+
+variables:
+  codebasePath: "."
+  requirementsDoc: ""
+  focusAreas: "all modules"
+  standards: "general best practices"
+
+input_variables:
+  - codebasePath
+  - requirementsDoc
+  - focusAreas
+  - standards
+
+steps:
+  # ── Step 1: Requirements Analysis & Codebase Mapping ───────────────
+  # The researcher reads the requirements document and maps the codebase
+  # to understand what exists and what the requirements demand.
+  - name: requirements-analysis
+    agent: researcher
+    input: |
+      You are a requirements analyst. Your job is to deeply understand both the
+      requirements document and the codebase so downstream agents can review effectively.
+
+      Codebase path: {{codebasePath}}
+      Requirements document: {{requirementsDoc}}
+      Focus areas: {{focusAreas}}
+
+      PHASE 1 — Read the requirements document:
+        1. Use read_file to read the requirements document thoroughly
+        2. Extract every functional requirement, non-functional requirement, and constraint
+        3. Note any acceptance criteria, edge cases, or compliance standards mentioned
+
+      PHASE 2 — Map the codebase:
+        1. Use list_files to explore the project structure
+        2. Read key configuration files (package.json, tsconfig.json, etc.)
+        3. Read entry points and core modules (at least 10-15 source files)
+        4. Identify the architecture: patterns used, module boundaries, dependencies
+
+      PHASE 3 — Create a requirements traceability matrix:
+        For each requirement, identify:
+        - Requirement ID/name
+        - Description (from the requirements doc)
+        - Implementing file(s) and function(s) in the codebase
+        - Status: IMPLEMENTED / PARTIALLY IMPLEMENTED / NOT FOUND / UNCLEAR
+
+      PHASE 4 — Produce a structured report:
+
+        REQUIREMENTS SUMMARY:
+        - Total requirements identified (functional + non-functional)
+        - Categorized list of all requirements
+
+        CODEBASE OVERVIEW:
+        - Architecture summary
+        - Key modules and their responsibilities
+        - Technology stack and dependencies
+
+        TRACEABILITY MATRIX:
+        - Table mapping each requirement → code location → implementation status
+
+        GAPS IDENTIFIED:
+        - Requirements with no apparent implementation
+        - Code that doesn't map to any requirement (potential scope creep)
+        - Ambiguous requirements that need clarification
+
+      RULES:
+      - Every claim must cite a specific file path and line range as evidence
+      - Do NOT describe files you did not actually read
+      - Be precise: quote code snippets when linking requirements to implementation
+      - Flag any assumptions you had to make
+    output_to: requirements_analysis
+
+  # ── Step 2: Code Review Against Best Practices & Requirements ──────
+  # The code-reviewer performs a comprehensive review, checking both
+  # best practices and requirements compliance.
+  - name: code-review
+    agent: code-reviewer
+    input: |
+      You are a senior code reviewer. Perform a comprehensive code review of the
+      codebase, checking both best practices adherence AND requirements compliance.
+
+      Here is the requirements analysis and traceability matrix:
+      {{requirements_analysis}}
+
+      Codebase path: {{codebasePath}}
+      Coding standards to enforce: {{standards}}
+      Focus areas: {{focusAreas}}
+
+      PHASE 1 — Read the code:
+        Use read_file to read ALL source files identified in the requirements analysis.
+        Also read test files, configuration files, and any build scripts.
+
+      PHASE 2 — Best practices review. For each module/file, evaluate:
+
+        CODE QUALITY:
+        - Naming conventions (variables, functions, classes, files)
+        - Code organization and module structure
+        - Function/method length and complexity
+        - DRY principle — duplicated logic
+        - Single Responsibility Principle
+        - Error handling patterns (try/catch, error propagation, graceful degradation)
+        - Edge case handling
+
+        DESIGN PATTERNS:
+        - Appropriate use of design patterns
+        - Separation of concerns
+        - Dependency injection / loose coupling
+        - Interface/contract design
+
+        SECURITY:
+        - Input validation and sanitization
+        - Authentication/authorization patterns
+        - Secrets management
+        - SQL injection, XSS, CSRF protection (if applicable)
+
+        PERFORMANCE:
+        - Algorithmic efficiency
+        - Memory management / potential leaks
+        - Async/await usage and concurrency patterns
+        - Caching strategies
+
+        TESTING:
+        - Test coverage adequacy
+        - Test quality (meaningful assertions, edge cases)
+        - Test organization and naming
+
+        MAINTAINABILITY:
+        - Documentation (inline comments, JSDoc/TSDoc)
+        - Type safety (TypeScript strictness, any usage)
+        - Configuration management
+        - Logging and observability
+
+      PHASE 3 — Requirements compliance review:
+        For each requirement from the traceability matrix:
+        1. Read the implementing code carefully
+        2. Verify it correctly fulfills the requirement
+        3. Check for edge cases the requirement implies but code doesn't handle
+        4. Verify acceptance criteria are met (if specified)
+        5. Rate compliance: COMPLIANT / PARTIALLY COMPLIANT / NON-COMPLIANT / NOT IMPLEMENTED
+
+      OUTPUT FORMAT:
+
+        BEST PRACTICES FINDINGS:
+        For each finding:
+          - Severity: CRITICAL / HIGH / MEDIUM / LOW / INFO
+          - Category: (from the categories above)
+          - File: (path and line range)
+          - Issue: (what's wrong)
+          - Recommendation: (how to fix it)
+          - Code snippet: (relevant code)
+
+        REQUIREMENTS COMPLIANCE:
+        For each requirement:
+          - Requirement: (ID/name)
+          - Status: COMPLIANT / PARTIALLY COMPLIANT / NON-COMPLIANT / NOT IMPLEMENTED
+          - Evidence: (file, line, code snippet)
+          - Gaps: (what's missing, if any)
+          - Recommendations: (how to achieve full compliance)
+
+        SUMMARY METRICS:
+          - Total findings by severity
+          - Requirements compliance percentage
+          - Overall code health score (1-10)
+          - Top 5 priority improvements
+    output_to: code_review_findings
+
+  # ── Step 3: Adversarial Critique & Validation ──────────────────────
+  # The critic challenges the code-reviewer's findings, catches missed
+  # issues, and validates the severity assessments.
+  - name: critique-review
+    agent: critic
+    input: |
+      You are an adversarial code critic. Your job is to challenge and validate the
+      code review findings, catch issues the reviewer missed, and ensure nothing
+      was overlooked or mischaracterized.
+
+      Requirements analysis:
+      {{requirements_analysis}}
+
+      Code review findings:
+      {{code_review_findings}}
+
+      Codebase path: {{codebasePath}}
+
+      PHASE 1 — Validate existing findings:
+        For each finding in the code review:
+        1. Use read_file to read the cited code yourself
+        2. Verify the issue actually exists (not a false positive)
+        3. Challenge the severity — is it over/under-rated?
+        4. Check if the recommendation is correct and complete
+
+      PHASE 2 — Find missed issues:
+        Read source files the code reviewer may have under-examined:
+        1. Look for subtle bugs (off-by-one, race conditions, null handling)
+        2. Check for security issues the reviewer missed
+        3. Look for architectural problems (circular dependencies, god objects)
+        4. Check error handling paths — what happens when things fail?
+        5. Review test quality — do tests actually test the right things?
+        6. Check for configuration and environment issues
+
+      PHASE 3 — Validate requirements compliance:
+        For each requirement marked as COMPLIANT:
+        1. Read the code yourself and verify it truly meets the requirement
+        2. Think adversarially: how could this requirement be considered unmet?
+        3. Check edge cases and error scenarios
+        For each requirement marked as NOT IMPLEMENTED:
+        1. Double-check — is it perhaps implemented elsewhere?
+
+      PHASE 4 — Challenge overall assessment:
+        - Is the code health score accurate?
+        - Are the top priority items correct?
+        - What critical risks are being underestimated?
+
+      OUTPUT FORMAT:
+
+        VALIDATED FINDINGS:
+        - Findings confirmed as accurate (with any severity adjustments)
+        - False positives identified (with evidence)
+
+        ADDITIONAL FINDINGS:
+        - New issues not caught by the code reviewer
+        - Same format: Severity, Category, File, Issue, Recommendation
+
+        REQUIREMENTS COMPLIANCE ADJUSTMENTS:
+        - Any requirement status changes (with justification)
+
+        RISK ASSESSMENT:
+        - Critical risks that need immediate attention
+        - Technical debt hotspots
+        - Potential future problems
+
+        FINAL VERDICT:
+        - Adjusted code health score
+        - Adjusted compliance percentage
+        - Prioritized action items (top 10)
+        - Overall assessment: APPROVED / APPROVED WITH CONDITIONS / NEEDS REWORK
+    output_to: critique_findings
+
+  # ── Step 4: Compliance Report Generation ───────────────────────────
+  # The writer consolidates all findings into a polished, actionable
+  # compliance report.
+  - name: compliance-report
+    agent: writer
+    input: |
+      You are a technical writer. Produce a comprehensive, polished Code Review
+      & Requirements Compliance Report based on all previous agent outputs.
+
+      Requirements analysis:
+      {{requirements_analysis}}
+
+      Code review findings:
+      {{code_review_findings}}
+
+      Critique and validation:
+      {{critique_findings}}
+
+      CREATE A REPORT WITH THESE SECTIONS:
+
+      # Code Review & Requirements Compliance Report
+
+      ## 1. Executive Summary
+      - Overall compliance status (percentage)
+      - Code health score (1-10)
+      - Critical issues count
+      - Final verdict (from critic)
+      - Key recommendations (top 3-5)
+
+      ## 2. Requirements Compliance Matrix
+      Table format with columns:
+      | Req ID | Description | Status | Evidence | Notes |
+      Use the final adjusted statuses from the critic's review.
+
+      ## 3. Best Practices Assessment
+      Group findings by category (Code Quality, Security, Performance, etc.)
+      For each category:
+      - Score (1-10)
+      - Key findings (sorted by severity)
+      - Recommendations
+
+      ## 4. Critical Issues
+      Detailed breakdown of all CRITICAL and HIGH severity issues:
+      - Issue description
+      - Location (file + line)
+      - Impact
+      - Recommended fix
+      - Priority
+
+      ## 5. Code Quality Metrics
+      - Overall health score with breakdown
+      - Compliance percentage
+      - Findings by severity (counts)
+      - Category scores
+
+      ## 6. Prioritized Action Plan
+      Numbered list of recommended actions, ordered by impact:
+      1. Action, file(s), effort estimate, expected improvement
+
+      ## 7. Appendix
+      - Full findings list (all severities)
+      - Files reviewed
+      - Requirements not covered
+      - Assumptions made
+
+      WRITING RULES:
+      - Be precise and actionable — every finding must have a clear fix
+      - Use the final validated findings from the critic, not just the code reviewer
+      - Include code snippets for critical issues
+      - Use tables and structured formatting for readability
+      - Write for a technical audience (developers + tech leads)
+      - Mark disputed findings (where reviewer and critic disagreed)
+    output_to: compliance_report
+
+outputs:
+  requirements_analysis: requirements_analysis
+  code_review_findings: code_review_findings
+  critique_findings: critique_findings
+  compliance_report: compliance_report
+
+success_criteria:
+  - "All requirements are traced to code or explicitly marked as unimplemented"
+  - "Best practices findings are validated by adversarial review"
+  - "No false positives in final report"
+  - "Every finding has an actionable recommendation"
+  - "Final compliance percentage accurately reflects codebase state"
+  - "Critical issues are prioritized with clear remediation steps"
+
+settings:
+  max_loops: 2
+  require_documentation: true

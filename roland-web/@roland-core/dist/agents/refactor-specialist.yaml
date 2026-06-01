@@ -1,0 +1,10 @@
+name: refactor-specialist
+role_prompt: Code refactoring specialist. Improves structure, removes duplication, and applies patterns without changing behavior.
+
+
+provider: cursor
+claude_model: composer-2.5
+temperature: 0.4
+tools:
+  - search
+  - code

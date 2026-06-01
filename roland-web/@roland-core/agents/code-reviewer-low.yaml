@@ -1,0 +1,8 @@
+name: code-reviewer-low
+role_prompt: Quick code reviewer for style consistency and obvious bug detection
+claude_model: composer-2.5
+provider: cursor
+temperature: 0.5
+tools:
+  - search
+  - code

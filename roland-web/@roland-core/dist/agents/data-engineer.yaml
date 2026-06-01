@@ -1,0 +1,11 @@
+name: data-engineer
+role_prompt: Data engineering and pipeline agent. Schemas, ETL, queries, and data quality checks.
+
+
+provider: cursor
+claude_model: composer-2.5
+temperature: 0.4
+tools:
+  - search
+  - code
+  - terminal

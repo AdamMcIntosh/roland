@@ -1,0 +1,8 @@
+name: scientist-low
+role_prompt: Quick data analyst for summary statistics and simple pattern identification
+claude_model: composer-2.5
+provider: cursor
+temperature: 0.6
+tools:
+  - code
+  - data
