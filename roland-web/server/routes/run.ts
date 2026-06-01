@@ -151,15 +151,21 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
           'Changes generated automatically by [Roland](https://github.com/AdamMcIntosh/roland).',
         ].join('\n');
 
-        const pr = await pushBranchAndCreatePR(
-          project.path,
-          pat,
-          project.github_owner,
-          project.github_repo,
-          branchName,
-          prTitle,
-          prBody,
-        );
+        // Race against a 90 s hard timeout — a hung git push must never freeze the stream.
+        const pr = await Promise.race([
+          pushBranchAndCreatePR(
+            project.path,
+            pat,
+            project.github_owner,
+            project.github_repo,
+            branchName,
+            prTitle,
+            prBody,
+          ),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('PR creation timed out after 90 s')), 90_000),
+          ),
+        ]);
 
         try {
           getDb().prepare('UPDATE runs SET pr_url=? WHERE id=?').run(pr.url, runId);
@@ -173,6 +179,9 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
       }
     }
 
+    // Always emit a completion sentinel before closing. The client uses this as a
+    // belt-and-suspenders signal in case Railway's proxy swallows the final TCP chunk.
+    append('\n[ROLAND_DONE]\n');
     if (!res.writableEnded) res.end();
   });
 
