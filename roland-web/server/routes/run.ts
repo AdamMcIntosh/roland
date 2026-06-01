@@ -58,10 +58,17 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
 
   res.setHeader('Content-Type', 'text/plain; charset=utf-8');
   res.setHeader('Transfer-Encoding', 'chunked');
-  res.setHeader('X-Accel-Buffering', 'no');   // disable nginx proxy buffering
+  res.setHeader('X-Accel-Buffering', 'no');   // disable nginx/Railway proxy buffering
   res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
   if (branchName) res.setHeader('X-Roland-Branch', branchName);
   res.flushHeaders();
+
+  // Write a single byte immediately so Railway's proxy forwards this chunk
+  // without waiting to accumulate a larger buffer. X-Accel-Buffering: no
+  // should disable Nginx buffering, but the explicit write guarantees it.
+  res.write('\n');
+  (res as any).flush?.();
 
   const cursorApiKey = (req as any).cursorApiKey as string;
 
@@ -98,6 +105,7 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
 
   const append = (text: string) => {
     res.write(text);
+    (res as any).flush?.();
     getDb()
       .prepare('UPDATE runs SET output = output || ? WHERE id = ?')
       .run(text, runId);
@@ -105,6 +113,10 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
 
   child.stdout.on('data', (chunk: Buffer) => append(chunk.toString()));
   child.stderr.on('data', (chunk: Buffer) => append(chunk.toString()));
+
+  child.on('error', (err) => {
+    append(`\n[Roland] Failed to start: ${err.message}\n`);
+  });
 
   child.on('close', (code) => {
     getDb()
