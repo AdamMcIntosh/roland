@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
-import { resolve } from 'path';
+import { mkdirSync } from 'node:fs';
+import { resolve, dirname } from 'path';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -88,6 +89,8 @@ function openDb(): DatabaseSync {
     ? '/data/roland-web.db'
     : resolve(process.cwd(), 'roland-web.db');
   const dbPath = process.env.DATABASE_PATH ?? defaultPath;
+  mkdirSync(dirname(dbPath), { recursive: true });
+  console.log(`[DB] Opening database: ${dbPath}`);
   const db = new DatabaseSync(dbPath);
   // Enforce FK constraints on every connection (node:sqlite enables them by default,
   // but setting explicitly makes the intent clear and guards against library changes)
