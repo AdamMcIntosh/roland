@@ -72,14 +72,31 @@ WORKDIR /app
 # git is required by Roland agents (branch creation, commits, push, PR)
 RUN apk add --no-cache git
 
+# ── Environment defaults ──────────────────────────────────────────────────────
+# Override any of these via:
+#   • docker run -e VAR=value  (or docker compose environment:/env_file:)
+#   • Railway service variables  (Settings → Variables)
+#   • /app/.env file mounted at runtime for local dev (see docker-entrypoint.sh)
+#
+# Secrets with no safe default (server refuses to start without them):
+#   AUTH_PASSWORD       — login password, min 8 chars
+#   SESSION_SECRET      — JWT signing key, min 32 chars
+#   PAT_ENCRYPTION_KEY  — 64 hex chars (32 bytes); generate with:
+#                         node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+#   CURSOR_API_KEY      — Cursor / AI provider API key
 ENV NODE_ENV=production \
     PORT=3000 \
+    AUTH_USERNAME=admin \
     DATABASE_PATH=/data/roland-web.db \
     PROJECTS_DIR=/data/projects
 
 # /data is the Railway persistent volume — must be writable by the node user
 RUN mkdir -p /data/projects && chown -R node:node /data
 VOLUME ["/data"]
+
+# Install entrypoint as root so we can chmod, then hand off to node user
+COPY roland-web/docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh && chown node:node /app/docker-entrypoint.sh
 
 USER node
 
@@ -92,10 +109,14 @@ COPY --from=web-builder --chown=node:node /app/.next         ./.next
 COPY --from=web-builder --chown=node:node /app/dist          ./dist
 COPY --from=web-builder --chown=node:node /app/package.json  ./
 
+# .env.example shipped as a reference — see DEPLOYMENT.md for local dev setup
+COPY --from=web-builder --chown=node:node /app/.env.example  ./.env.example
+
 EXPOSE 3000
 
 # Probe the unauthenticated /health endpoint — fast and always available
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
   CMD wget -qO- http://localhost:3000/health | grep -q '"ok"' || exit 1
 
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["node", "--experimental-sqlite", "dist/server/index.js"]
