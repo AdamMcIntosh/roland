@@ -6,8 +6,13 @@ export const authRouter = Router();
 authRouter.post('/login', async (req, res) => {
   const { username, password, cursorApiKey } = req.body ?? {};
 
-  if (!username || !password || !cursorApiKey) {
-    res.status(400).json({ error: 'username, password, and cursorApiKey required' });
+  if (!username || !password) {
+    res.status(400).json({ error: 'username and password required' });
+    return;
+  }
+
+  if (!cursorApiKey && !process.env.CURSOR_API_KEY) {
+    res.status(400).json({ error: 'cursorApiKey required — set CURSOR_API_KEY on the server or provide it at login' });
     return;
   }
 
