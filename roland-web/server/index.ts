@@ -78,32 +78,40 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 
-// Register /health BEFORE nextApp.prepare() so Railway's healthcheck succeeds
-// even while Next.js is still initialising in the background.
+// /health is registered first and the server starts listening before any heavy
+// async init so Railway's probe succeeds as soon as the process is up.
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok' });
+  res.status(200).json({ status: 'ok' });
 });
 
-// Start listening immediately — additional routes are registered after prepare().
+// Listen immediately — Express allows more routes to be added after listen().
 createServer(app).listen(port, () => {
-  console.log(`> Roland Web starting → http://localhost:${port}`);
+  console.log(`> Roland Web starting on port ${port}`);
 });
 
-// Next.js dir is the package root (one level above server/)
-const nextApp = next({ dev, dir: process.cwd() });
-const handle = nextApp.getRequestHandler();
+// Heavy async init — happens after the server is already accepting connections.
+// Errors are caught so the server stays up (and /health keeps responding) even
+// if a single init step fails; fatal errors still exit after a short window.
+try {
+  const nextApp = next({ dev, dir: process.cwd() });
+  const handle = nextApp.getRequestHandler();
 
-await nextApp.prepare();
-initDb();
+  await nextApp.prepare();
+  initDb();
 
-app.use('/api/auth', authRouter);
-app.use('/api/github', githubRouter);
-app.use('/api/projects', projectsRouter);
-app.use('/api/projects', runRouter);
+  app.use('/api/auth', authRouter);
+  app.use('/api/github', githubRouter);
+  app.use('/api/projects', projectsRouter);
+  app.use('/api/projects', runRouter);
 
-// All other routes → Next.js
-app.all('*', (req, res) => {
-  handle(req, res, parse(req.url, true));
-});
+  // All other routes → Next.js (registered last so API routes take priority)
+  app.all('*', (req, res) => {
+    handle(req, res, parse(req.url, true));
+  });
 
-console.log(`> Roland Web ready → http://localhost:${port}`);
+  console.log(`> Roland Web ready on port ${port}`);
+} catch (err) {
+  console.error('[Roland Web] Fatal startup error:', err);
+  // Give Railway's healthcheck a moment to record success before the process exits.
+  setTimeout(() => process.exit(1), 2000);
+}
