@@ -78,8 +78,6 @@ export async function gitPull(
 ): Promise<string> {
   const dirName = `${owner}-${repo}`;
   const clonePath = `${cloneBase}/${dirName}`;
-  // Delete the existing directory so cloneRepo re-downloads a fresh tarball.
-  // We can't git-pull because there's no git binary in the Railway container.
   if (existsSync(clonePath)) {
     rmSync(clonePath, { recursive: true, force: true });
   }
@@ -167,8 +165,17 @@ export async function listUserRepos(
 // ── Clone ─────────────────────────────────────────────────────────────────────
 
 /**
- * Downloads a GitHub repo as a tarball via the REST API and extracts it.
- * Uses no git binary — works in any Railway / Docker environment.
+ * Downloads a GitHub repo as a tarball (fast) then initialises a git repo whose
+ * history is connected to the actual remote commit.
+ *
+ * Why both? Tarball is fast for large repos; branch/push operations need a real
+ * .git dir linked to the actual GitHub HEAD so that PRs only show Roland's changes.
+ *
+ * The trick: `--filter=blob:none` fetches only commit + tree objects (no file blobs).
+ * We then run `git read-tree FETCH_HEAD` to set the index and `git add -A` to hash
+ * every working-tree file (same content as the tarball) into local blob objects.
+ * Because file content is identical, the computed blob SHAs match the remote tree —
+ * so `git status` is clean and commits are properly parented on the real GitHub HEAD.
  */
 export async function cloneRepo(
   pat: string,
@@ -185,6 +192,7 @@ export async function cloneRepo(
     return clonePath;
   }
 
+  // ── Step 1: fast file download via tarball ────────────────────────────────
   console.log(`[GitHub] Downloading tarball for ${owner}/${repo}…`);
   const tarUrl = `https://api.github.com/repos/${owner}/${repo}/tarball/HEAD`;
   const response = await fetch(tarUrl, {
@@ -221,6 +229,36 @@ export async function cloneRepo(
     throw e;
   } finally {
     try { unlinkSync(tmpFile); } catch { /* ignore */ }
+  }
+
+  // ── Step 2: init git and connect to real GitHub history ───────────────────
+  // --filter=blob:none fetches only commit + tree metadata (no file blobs), so
+  // there is no duplicate file download — blobs are supplied by the tarball above.
+  try {
+    const { data } = await (new Octokit({ auth: pat })).repos.get({ owner, repo });
+    const defaultBranch = data.default_branch;
+    const authenticated = `https://${pat}@github.com/${owner}/${repo}.git`;
+
+    await execAsync(
+      [
+        'git init',
+        'git config user.email "roland@roland.ai"',
+        'git config user.name "Roland"',
+        `git symbolic-ref HEAD "refs/heads/${defaultBranch}"`,
+        `git remote add origin "${authenticated}"`,
+        `git fetch --depth=1 --filter=blob:none origin "${defaultBranch}"`,
+        `git update-ref "refs/heads/${defaultBranch}" FETCH_HEAD`,
+        'git read-tree FETCH_HEAD',
+        'git add -A',
+      ].join(' && '),
+      { cwd: clonePath, timeout: 60_000 },
+    );
+    console.log(`[GitHub] git repo initialised on ${defaultBranch} (history connected to remote)`);
+  } catch (gitErr) {
+    // Non-fatal: tarball files are usable; branch/push operations will fail later
+    console.warn(
+      `[GitHub] git init skipped for ${owner}/${repo}: ${gitErr instanceof Error ? gitErr.message : String(gitErr)}`,
+    );
   }
 
   return clonePath;
