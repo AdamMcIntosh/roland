@@ -1,7 +1,7 @@
 import { Octokit } from '@octokit/rest';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync, unlinkSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -155,9 +155,8 @@ export async function listUserRepos(
 // ── Clone ─────────────────────────────────────────────────────────────────────
 
 /**
- * Clone a GitHub repo into `{cloneBase}/{owner}-{repo}`.
- * If the directory already exists, runs git pull instead.
- * Returns the absolute clone path.
+ * Downloads a GitHub repo as a tarball via the REST API and extracts it.
+ * Uses no git binary — works in any Railway / Docker environment.
  */
 export async function cloneRepo(
   pat: string,
@@ -169,21 +168,50 @@ export async function cloneRepo(
   const clonePath = `${cloneBase}/${dirName}`;
   mkdirSync(cloneBase, { recursive: true });
 
-  try {
-    if (existsSync(`${clonePath}/.git`)) {
-      await execAsync('git pull', { cwd: clonePath, timeout: 60_000 });
-      return clonePath;
-    }
-
-    // x-access-token:TOKEN format is the recommended HTTPS auth method for GitHub PATs.
-    const url = `https://x-access-token:${pat}@github.com/${owner}/${repo}.git`;
-    await execAsync(`git clone "${url}" "${clonePath}"`, { timeout: 120_000 });
+  // Already present — return as-is (re-import to refresh)
+  if (existsSync(clonePath)) {
     return clonePath;
+  }
+
+  console.log(`[GitHub] Downloading tarball for ${owner}/${repo}…`);
+  const tarUrl = `https://api.github.com/repos/${owner}/${repo}/tarball/HEAD`;
+  const response = await fetch(tarUrl, {
+    headers: {
+      Authorization: `token ${pat}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'Roland-Web/1.0',
+    },
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    console.error(`[GitHub] tarball HTTP ${response.status} for ${owner}/${repo}: ${body}`);
+    throw new Error(`GitHub API ${response.status}: ${body}`);
+  }
+
+  const tmpFile = join(tmpdir(), `roland-${owner}-${repo}-${Date.now()}.tar.gz`);
+  try {
+    const buf = await response.arrayBuffer();
+    writeFileSync(tmpFile, Buffer.from(buf));
+    console.log(`[GitHub] Downloaded ${buf.byteLength} bytes, extracting…`);
+
+    mkdirSync(clonePath, { recursive: true });
+    // --strip-components=1 drops the top-level "owner-repo-sha/" folder GitHub adds
+    await execAsync(`tar -xzf "${tmpFile}" -C "${clonePath}" --strip-components=1`, {
+      timeout: 120_000,
+    });
+    console.log(`[GitHub] Extracted to ${clonePath}`);
   } catch (e) {
+    try { rmSync(clonePath, { recursive: true, force: true }); } catch { /* ignore */ }
     const raw = e instanceof Error ? e.message : String(e);
     console.error(`[GitHub] cloneRepo failed (${owner}/${repo}):`, raw);
     throw e;
+  } finally {
+    try { unlinkSync(tmpFile); } catch { /* ignore */ }
   }
+
+  return clonePath;
 }
 
 // ── Branch management ─────────────────────────────────────────────────────────
