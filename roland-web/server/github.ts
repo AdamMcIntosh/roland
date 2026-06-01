@@ -70,9 +70,21 @@ export async function validateGithubPat(pat: string, owner: string, repo: string
   }
 }
 
-export async function gitPull(cwd: string): Promise<string> {
-  const { stdout, stderr } = await execAsync('git pull', { cwd });
-  return stdout + stderr;
+export async function gitPull(
+  pat: string,
+  owner: string,
+  repo: string,
+  cloneBase: string,
+): Promise<string> {
+  const dirName = `${owner}-${repo}`;
+  const clonePath = `${cloneBase}/${dirName}`;
+  // Delete the existing directory so cloneRepo re-downloads a fresh tarball.
+  // We can't git-pull because there's no git binary in the Railway container.
+  if (existsSync(clonePath)) {
+    rmSync(clonePath, { recursive: true, force: true });
+  }
+  await cloneRepo(pat, owner, repo, cloneBase);
+  return 'Pulled latest from GitHub';
 }
 
 export async function gitPushBranch(
