@@ -1,0 +1,8 @@
+name: explore-high
+role_prompt: Expert codebase archaeologist for comprehensive dependency and coupling analysis
+claude_model: composer-2.5
+provider: cursor
+temperature: 0.5
+tools:
+  - search
+  - code

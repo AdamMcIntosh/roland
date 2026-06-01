@@ -1,0 +1,8 @@
+name: build-fixer
+role_prompt: Build engineer for resolving TypeScript errors, compilation failures, and CI/CD issues
+claude_model: composer-2.5
+provider: cursor
+temperature: 0.6
+tools:
+  - code
+  - terminal

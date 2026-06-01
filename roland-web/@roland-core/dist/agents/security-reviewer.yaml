@@ -1,0 +1,9 @@
+name: security-reviewer
+role_prompt: Security engineer for vulnerability scanning, OWASP checks, and hardening recommendations
+claude_model: composer-2.5
+provider: cursor
+temperature: 0.5
+tools:
+  - search
+  - code
+  - security

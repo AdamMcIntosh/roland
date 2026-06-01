@@ -1,0 +1,119 @@
+# Roland Model Routing Configuration
+#
+# Hybrid model setup for ~80-95% of Claude Opus quality at 1/10th-1/5th cost.
+# Strategy: Qwen3-Coder-Next as workhorse, MiniMax M2.5 for high-stakes reasoning,
+#           DeepSeek V3.2 for QA/simple tasks, Claude Haiku for dispatch.
+#
+# Estimated monthly cost at moderate usage (~15M tokens):
+#   Critic/Architect (minimax-m2.5):  ~15% → ~$5/mo  (near-Opus reasoning)
+#   Executor/Coder (qwen3-coder-next): ~55% → ~$8/mo  (best coding balance)
+#   QA/Simple (deepseek-v3-0324):     ~20% → ~$2/mo  (light tasks, testing)
+#   Main session (claude-haiku-4.5):        → ~$4/mo  (routing + file I/O)
+#   Total estimate:                         → ~$19/mo at moderate usage
+
+# PM team (Phase 3) — Cursor-native model routing. The PM team does NOT use
+# OpenRouter; it runs on your Cursor subscription. Routing is lane-based:
+#   Lead PM   → lead_model      (grok-4.3: orchestration + planning only)
+#   reasoning → fast_model      (composer-2.5: architect, reviewer, critic…)
+#   coding    → standard_model  (composer-2.5: executor — cost-efficient default)
+#   light     → standard_model  (composer-2.5: docs, tests, research)
+# Cost strategy: Grok 4.3 for the PM brain; composer-2.5 for every engineer.
+# This section is optional; the defaults below are used if it is omitted.
+pm:
+  lead_model: "gpt-5.4-nano"            # The Lead PM (GPT-5.4 Nano — fast, cheap orchestration)
+  fast_model: "composer-2.5"            # Interactive / time-sensitive engineers
+  standard_model: "composer-2.5"        # Background / execution engineers
+  # Override the lane for specific engineers (else inferred from the persona name):
+  lane_overrides: {}                     # e.g. { designer: reasoning }
+
+classifier:
+  semantic_enabled: true                 # Use free OpenRouter model for classification; falls back to keyword heuristic
+  semantic_model: "qwen/qwen3-coder:free"  # Free model with 262K context
+  semantic_timeout_ms: 3000             # Hard timeout — falls back to heuristic on timeout
+  cache_ttl_ms: 300000                  # 5-minute cache to avoid redundant calls
+
+ollama:
+  enabled: false                         # Set to true to enable local model routing
+  base_url: "http://localhost:11434"
+  model: "codellama:7b"
+  fallback_to: "simple"                  # Tier to use when Ollama is unavailable
+
+routing:
+  local:
+    - codellama:7b                       # Local Ollama model — zero cost
+  simple:
+    - deepseek/deepseek-v3-0324          # DeepSeek V3.2 — cheap, capable for light tasks
+    - google/gemini-2.5-flash            # Free fallback
+  medium:
+    - qwen/qwen3-coder-next             # Qwen3-Coder-Next — best coding quality/cost balance
+    - deepseek/deepseek-v3-0324          # Fallback
+  complex:
+    - minimax/minimax-m2.5              # MiniMax M2.5 — near-Opus reasoning for architecture/security
+    - qwen/qwen3-coder-next             # Strong coding fallback
+  explain:
+    - deepseek/deepseek-v3-0324          # Fast explanations
+    - qwen/qwen3-coder-next             # More detailed if needed
+  prototype:
+    - qwen/qwen3-coder-next             # Fast iteration, scaffolding
+    - deepseek/deepseek-v3-0324          # Fallback
+
+roland:
+  mcp_defaults:
+    temperature: 0.7
+    max_tokens: 2000
+
+# Goose integration — smart dispatcher model routing via OpenRouter
+goose:
+  dispatcher_model: anthropic/claude-haiku-4.5  # Main session: routing + execution (~$4/mo)
+  dispatcher_provider: openrouter
+  known_free_models:                              # All support tool calling, 128K+ context
+    - qwen/qwen3-coder:free                      # Best free coder, 262K, agentic focus
+    - nvidia/nemotron-3-super-120b-a12b:free      # Top SWE-Bench, multi-step planning
+    - minimax/minimax-m2.5:free                   # 197K, strong SWE-Bench
+    - arcee-ai/trinity-large-preview:free         # Complex toolchains
+    - mistralai/mistral-small-3.1-24b-instruct:free  # Fast structured output
+    - z-ai/glm-4.5-air:free                      # Thinking mode, agent-centric
+  fallback_model: google/gemini-2.5-flash         # Budget-safe paid fallback
+  budget_degradation_threshold: 0.8               # Switch to free models at 80%
+  monthly_budget: 85                              # Monthly budget in USD
+  billing_cycle_day: 1                            # Day of month to auto-reset spending
+  free_model_coding: qwen/qwen3-coder:free        # Primary free model for coding
+  free_model_reasoning: minimax/minimax-m2.5:free  # Primary free for reasoning (near-Opus quality)
+
+# Roland Code Orchestrator (RCO) — Claude-centric multi-agent orchestration
+rco:
+  claude_models:
+    complex: deepseek/deepseek-v3-0324
+    medium:  deepseek/deepseek-v3-0324
+    simple:  claude-haiku-4-5-20251001
+    explain: deepseek/deepseek-v3-0324
+  eco_mode: true
+  task_routing:
+    - pattern: "plan|architecture|design|break down"
+      agents: [planner, architect]
+    - pattern: "implement|build|code|fix"
+      agents: [executor, executor-high]
+    - pattern: "review|audit|security|test"
+      agents: [critic, code-reviewer, test-author, test-executor]
+    - pattern: "explain|document|readme"
+      agents: [writer, explainer]
+  dashboard_port: 8080
+  state_file: .rco-state.json
+
+context_gathering:
+  enabled: true
+  max_files: 15                          # Max files to include in context bundle
+  max_bytes: 204800                      # 200KB total cap — fits in 262K-token models
+  llm_model: "qwen/qwen3-coder:free"    # Free model for smart file selection
+  llm_timeout_ms: 5000                   # Falls back to heuristic on timeout
+  exclude_patterns:
+    - "*.lock"
+    - "*.min.js"
+    - "*.min.css"
+    - "dist/**"
+    - "node_modules/**"
+    - "*.map"
+
+diff_stream:
+  enabled: true
+  port: 8089

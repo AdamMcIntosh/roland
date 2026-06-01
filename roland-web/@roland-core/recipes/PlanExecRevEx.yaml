@@ -1,0 +1,57 @@
+name: 4-Agent Coding Team with Grok Explanation
+description: "Autonomous loop: Claude plans → GPT executes → Gemini reviews → Grok explains"
+lead_model: claude-4-sonnet
+subagents:
+  - name: Planner
+    provider: openrouter
+    model: claude-4-sonnet
+    claude_model: deepseek/deepseek-v3-0324
+    prompt: |
+      You are the planning agent. For the task: {{user_task}}.
+      Break it down into detailed steps, required files, dependencies, best practices (e.g., security, efficiency), potential risks, and a high-level architecture.
+      Output only structured Markdown: Overview, Steps, Files, Best Practices, Risks.
+
+  - name: Executor
+    provider: openrouter
+    model: gpt-4o
+    claude_model: deepseek/deepseek-v3-0324
+    prompt: |
+      You are the execution agent. Use the plan from @Planner.
+      Implement changes: Edit/create files, install deps if needed, run tests/commands.
+      Handle errors autonomously. Output: Code diffs, execution logs, updated files.
+
+  - name: Reviewer
+    provider: openrouter
+    model: gemini-2.5-flash
+    claude_model: deepseek/deepseek-v3-0324
+    prompt: |
+      You are the review agent. Analyze diffs/code from @Executor.
+      Check for: Bugs, performance issues, security vulnerabilities, code smells, adherence to best practices.
+      Suggest fixes or approve. If issues, flag for loop back. Output: Summary, Flagged Items, Suggestions.
+
+  - name: Explainer
+    provider: openrouter
+    model: grok-4-1-fast-reasoning
+    claude_model: deepseek/deepseek-v3-0324
+    prompt: |
+      You are the explanation agent (Grok style: clear, witty, step-by-step like Hitchhiker's Guide).
+      Take final changes from @Reviewer/@Executor.
+      Explain each key edit: What it does, why it's optimal/best practice, trade-offs, how it fits the plan.
+      Use bullet points, simple language, and Mermaid diagrams for architecture if changed.
+
+workflow:
+  steps:
+    - agent: Planner
+      input: "{{user_task}}"
+      output_to: Executor
+    - agent: Executor
+      output_to: Reviewer
+    - agent: Reviewer
+      loop_if: "issues found"
+      output_to: Explainer
+    - agent: Explainer
+      final_output: true
+
+options:
+  cache_messages: true
+  max_loops: 3

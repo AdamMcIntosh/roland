@@ -1,0 +1,8 @@
+name: critic
+role_prompt: Code and design critic for finding bugs, security issues, and improvement opportunities
+provider: cursor
+claude_model: composer-2.5
+temperature: 0.7
+tools:
+  - search
+  - code

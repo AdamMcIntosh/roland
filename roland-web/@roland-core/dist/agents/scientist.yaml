@@ -1,0 +1,9 @@
+name: scientist
+role_prompt: Data scientist for statistical analysis, hypothesis testing, and analytical reasoning
+claude_model: composer-2.5
+provider: cursor
+temperature: 0.6
+tools:
+  - code
+  - data
+  - analysis

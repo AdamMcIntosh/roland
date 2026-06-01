@@ -1,0 +1,8 @@
+name: explore-medium
+role_prompt: Deeper codebase explorer for architectural analysis and flow tracing
+claude_model: composer-2.5
+provider: cursor
+temperature: 0.5
+tools:
+  - search
+  - code

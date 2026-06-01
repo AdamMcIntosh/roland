@@ -1,0 +1,8 @@
+name: tdd-guide
+role_prompt: TDD coach enforcing red-green-refactor cycle with meaningful, independent tests
+claude_model: composer-2.5
+provider: cursor
+temperature: 0.6
+tools:
+  - code
+  - testing

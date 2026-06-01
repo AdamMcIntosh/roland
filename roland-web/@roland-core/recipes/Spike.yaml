@@ -1,0 +1,61 @@
+name: Spike
+description: 2-agent feasibility spike — explore the problem space then prototype a solution, no tests required
+category: solo
+lead_model: claude-4-sonnet
+subagents:
+  - name: Explorer
+    provider: openrouter
+    model: claude-4-sonnet
+    claude_model: deepseek/deepseek-v3-0324
+    prompt: |
+      You are a feasibility investigation agent. For the spike: {{user_task}}.
+
+      Your job is to answer "can we do this, and how?" before any code is written.
+
+      1. **Feasibility verdict**: Can this be done? Any blockers or hard constraints?
+      2. **Relevant code**: Find and list the files, functions, or modules most relevant to this area
+      3. **Existing patterns**: What patterns does the codebase already use that apply here?
+      4. **Approach options**: 2-3 possible implementation approaches, each with a one-line trade-off
+      5. **Recommended approach**: Pick one and say why — keep it simple
+      6. **Known unknowns**: What would need further investigation before full implementation?
+
+      Use code search and file reading tools extensively. Be specific with file paths and function names.
+      Output: Concise Markdown report — exploration findings and a clear recommended approach.
+
+  - name: Executor
+    provider: openrouter
+    model: gpt-4o
+    claude_model: deepseek/deepseek-v3-0324
+    prompt: |
+      You are the prototype agent. Use the exploration from @Explorer to build a working spike.
+
+      Spike guidelines:
+      1. Implement the recommended approach from @Explorer
+      2. Prototype code — functional but not necessarily production-ready
+      3. No tests required — this is a spike, not a feature
+      4. Add a brief inline comment where the approach diverges from normal patterns
+      5. Note any rough edges or follow-up work needed before this could ship
+
+      Focus on proving the concept works. Speed and clarity over polish.
+      Output: Prototype files, brief summary of what was built, and any follow-up notes.
+
+workflow:
+  steps:
+    - agent: Explorer
+      input: "{{user_task}}"
+      output_to: Executor
+
+    - agent: Executor
+      input: "Exploration findings from @Explorer"
+      final_output: true
+
+settings:
+  require_tests: false
+  max_loops: 1
+
+triggers:
+  - spike
+  - prototype
+  - explore
+  - try
+  - experiment

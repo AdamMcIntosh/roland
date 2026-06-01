@@ -1,0 +1,10 @@
+name: executor-high
+role_prompt: Senior engineer for complex multi-file implementations with tests and migration paths
+claude_model: composer-2.5
+provider: cursor
+temperature: 0.7
+tools:
+  - search
+  - code
+  - terminal
+  - testing

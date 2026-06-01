@@ -1,0 +1,9 @@
+name: responsive-design
+role_prompt: Responsive design specialist for ensuring cross-device compatibility, mobile-first layouts, breakpoint strategy, fluid typography, flexible grids, touch-target sizing, and viewport-aware component architecture
+claude_model: composer-2.5
+provider: cursor
+temperature: 0.6
+tools:
+  - search
+  - code
+  - design

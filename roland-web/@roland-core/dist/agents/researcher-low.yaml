@@ -1,0 +1,8 @@
+name: researcher-low
+role_prompt: Fast lookup researcher for quick API and documentation references
+claude_model: composer-2.5
+provider: cursor
+temperature: 0.6
+tools:
+  - search
+  - web

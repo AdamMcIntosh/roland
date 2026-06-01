@@ -1,0 +1,203 @@
+name: DocumentationRefactor
+version: "3.0.0"
+description: "Multi-agent workflow that reads source code and existing documentation, identifies gaps and inaccuracies, and makes targeted improvements directly to files on disk"
+
+metadata:
+  category: "Documentation"
+  complexity: "high"
+  estimatedCost: 0.08
+  estimatedDuration: "10-20 minutes"
+  tags: ["documentation", "codebase-analysis", "refactoring", "quality"]
+
+agents: [analyst, architect, writer, critic]
+
+variables:
+  codebasePath: "."
+  focusAreas: "all modules and features"
+  targetAudience: "developers"
+
+input_variables:
+  - codebasePath
+  - focusAreas
+  - targetAudience
+
+steps:
+  # ── Step 1: Audit ──────────────────────────────────────────────────
+  # The analyst reads source code AND existing docs, then produces a
+  # concise gap/accuracy report. Output is small — just a structured list.
+  - name: audit-docs
+    agent: analyst
+    input: |
+      You are auditing a project's documentation against its actual source code.
+      Codebase path: {{codebasePath}}
+      Focus areas: {{focusAreas}}
+      Target audience: {{targetAudience}}
+
+      PHASE 1 — Read the project structure (do this BEFORE writing anything):
+        1. Use list_files to list the root directory
+        2. Use list_files on "src" (and its subdirectories)
+        3. Use list_files on "docs" (if it exists)
+        4. Use read_file to read: package.json, tsconfig.json (or equivalent configs)
+        5. Use read_file to read the main README
+
+      PHASE 2 — Read existing documentation files:
+        Read EVERY .md file you found in the root directory and docs/ folder.
+        For each one, note: file path, what it covers, how long it is.
+
+      PHASE 3 — Read key source files:
+        Read entry points (src/index.ts or similar) and key module files to understand
+        what the code actually does. Read at least 8-10 source files across different modules.
+
+      PHASE 4 — Produce a structured audit report with these sections:
+
+        PROJECT IDENTITY:
+        - Name, language, runtime, package manager (cite the config file)
+
+        DOCUMENTATION INVENTORY:
+        - List every existing .md file with: path, purpose, approximate line count
+
+        GAP ANALYSIS (most important):
+        For each documentation file, list:
+        - ACCURATE: things the doc gets right (with source file evidence)
+        - INACCURATE: things the doc gets wrong vs. actual source code
+        - OUTDATED: things that have changed in code but not in docs
+        - MISSING: features/modules in source code not mentioned in docs
+
+        MISSING DOCUMENTATION:
+        - Source modules/features that have NO documentation at all
+
+        PRIORITY FIXES (ranked):
+        - Numbered list of specific changes needed, most important first
+        - Each item: which file, what change, why
+
+      RULES:
+      - Every claim must cite a source file path as evidence
+      - Do NOT describe files you did not actually read
+      - Keep the report concise — bullet points, not paragraphs
+      - Focus on ACTIONABLE findings, not general observations
+    output_to: audit_report
+
+  # ── Step 2: Plan targeted changes ──────────────────────────────────
+  # The architect reads the audit and creates a specific, file-by-file
+  # action plan. Output is small — just a structured change list.
+  - name: plan-changes
+    agent: architect
+    input: |
+      Create a specific action plan for documentation improvements.
+
+      Here is the documentation audit report:
+      {{audit_report}}
+
+      Focus areas: {{focusAreas}}
+      Audience: {{targetAudience}}
+
+      INSTRUCTIONS:
+      You must create a CONCRETE action plan. For each documentation file that needs changes:
+
+      FILE-BY-FILE PLAN:
+      For each file (existing or new), specify:
+        - File path (e.g., ReadMe.MD, docs/api.md, INSTALLATION.md)
+        - Action: UPDATE (modify existing) or CREATE (new file)
+        - Specific changes: exactly what sections to add, remove, or rewrite
+        - Source files to reference: which source files the writer should read for accuracy
+
+      RULES:
+      - Prefer UPDATE over CREATE — preserve existing good content
+      - Only plan changes supported by evidence in the audit report
+      - Do NOT plan changes for issues not found in the audit
+      - Be specific: "Add a section about the workflow engine citing src/workflows/engine.ts"
+        not "improve documentation"
+      - Limit to the most impactful changes — quality over quantity
+      - Maximum 6 files to change (focus on highest priority)
+    output_to: change_plan
+
+  # ── Step 3: Execute changes ────────────────────────────────────────
+  # The writer reads the plan, reads current file contents from disk,
+  # and writes updated files directly. No content passes through variables.
+  - name: execute-changes
+    agent: writer
+    allow_file_writes: true
+    input: |
+      You are a technical writer. You must UPDATE documentation files on disk NOW.
+      Do NOT just output text. Use read_file and write_file tools directly.
+      START IMMEDIATELY. Do not ask questions or describe what you will do.
+
+      Here is the change plan to execute:
+      {{change_plan}}
+
+      Here is the audit report for context:
+      {{audit_report}}
+
+      Target audience: {{targetAudience}}
+
+      FOR EACH FILE IN THE PLAN:
+        1. Use read_file to read the CURRENT contents of the file (if it exists)
+        2. Make the specific changes described in the plan
+        3. Use write_file to save the updated file to disk
+        4. Move to the next file
+
+      WRITING RULES:
+      - When UPDATING: preserve all existing content that is accurate. Only change/add
+        what the plan specifies. Do not rewrite sections that are already correct.
+      - When CREATING: write a complete, well-structured document.
+      - Use read_file on source files referenced in the plan to ensure accuracy.
+      - All code examples must use the project's actual language and package manager.
+      - If unsure about a detail, use read_file on the relevant source file to check.
+      - If still unsure, write "[NEEDS VERIFICATION]" rather than guessing.
+      - Write clear, concise documentation appropriate for the target audience.
+
+      After writing ALL files, output a summary listing:
+      - Each file path you wrote
+      - What changes you made to it (1-2 sentences each)
+    output_to: changes_summary
+
+  # ── Step 4: Verify changes ────────────────────────────────────────
+  # The critic reads the ACTUAL files from disk (not from variables)
+  # and verifies them against source code.
+  - name: verify-changes
+    agent: critic
+    input: |
+      You must verify the documentation changes that were just written to disk.
+      Do NOT rely on the summary below — read the ACTUAL files yourself.
+
+      Changes that were made:
+      {{changes_summary}}
+
+      Original audit report (what was supposed to be fixed):
+      {{audit_report}}
+
+      VERIFICATION PROCESS:
+        1. Use read_file to read EACH documentation file that was changed
+        2. Use read_file to read relevant source files to cross-check accuracy
+        3. For each changed document, verify:
+           - Technical accuracy: do code examples, commands, and paths match source?
+           - Completeness: were the planned changes actually made?
+           - Consistency: does the document read well with the changes?
+           - No regressions: was existing good content preserved?
+
+      OUTPUT FORMAT:
+      For each verified file:
+        - File: (path)
+        - Status: PASS / NEEDS-FIXES
+        - Issues found: (list any remaining problems, or "None")
+
+      FINAL SUMMARY:
+        - Files verified: (count)
+        - All passing: YES/NO
+        - Overall quality: (1-10 score)
+        - Remaining issues: (list, if any)
+    output_to: verification_report
+
+outputs:
+  audit_report: audit_report
+  change_plan: change_plan
+  changes_summary: changes_summary
+  verification_report: verification_report
+
+success_criteria:
+  - "Documentation accurately reflects actual source code"
+  - "Existing good content is preserved, not rewritten"
+  - "No hallucinated features or incorrect references"
+  - "Code examples use the correct language and package manager"
+  - "Gaps identified in audit are addressed in the changes"
+  - "Verification confirms changes are accurate"
