@@ -28,12 +28,11 @@ export function GitHubStatus() {
   const [error, setError]         = useState('');
 
   const load = async () => {
-    if (!apiKey) return;
-    const res = await apiFetch('/api/github/status', {}, apiKey);
+    const res = await apiFetch('/api/github/status', {}, apiKey || undefined);
     if (res.ok) setGh(await res.json());
   };
 
-  useEffect(() => { load(); }, [apiKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const connect = async (e: React.FormEvent) => {
     e.preventDefault();
