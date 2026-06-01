@@ -16,13 +16,17 @@ function run(cmd, cwd) {
 }
 
 // 1. Compile Roland core TypeScript → dist/
-run('npm ci',        repoRoot);
+// `npm install` (not `npm ci`) because the repo root package-lock.json may not
+// be committed — install generates it if missing; ci would error without it.
+run('npm install',   repoRoot);
 run('npm run build', repoRoot);
 
 // 2. Sync dist/ + agents/ + recipes/ into roland-web/@roland-core/
 run('node scripts/setup-core.mjs', webRoot);
 
-// 3. Reinstall roland-web deps so the @roland/core binary resolves correctly
+// 3. Reinstall roland-web deps so the @roland/core binary resolves correctly.
+// `npm ci` (not `npm install`) because roland-web has a committed lockfile and
+// we want a clean, reproducible install — not an accidental upgrade.
 run('npm ci', webRoot);
 
 // 4. Build Next.js app + compile server TypeScript
