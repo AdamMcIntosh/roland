@@ -74,7 +74,11 @@ const port = parseInt(process.env.PORT ?? '3000', 10);
 
 const app = express();
 
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors({
+  origin: true,
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Cursor-Api-Key', 'X-Pm-Model', 'X-Engineer-Model'],
+}));
 app.use(express.json());
 app.use(cookieParser());
 

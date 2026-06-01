@@ -41,8 +41,11 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   const payload = verifyToken(token);
   if (!payload) { res.status(401).json({ error: 'Invalid token' }); return; }
 
+  // Node.js normalises all incoming headers to lowercase, so 'x-cursor-api-key'
+  // matches regardless of what case the client sends.
   const apiKey = (req.headers['x-cursor-api-key'] as string | undefined) || process.env.CURSOR_API_KEY;
   if (!apiKey) {
+    console.warn('[auth] 401 — no x-cursor-api-key header and CURSOR_API_KEY env var not set. Headers:', Object.keys(req.headers).join(', '));
     res.status(401).json({ error: 'Cursor API key required — set CURSOR_API_KEY on the server or provide x-cursor-api-key header' });
     return;
   }
