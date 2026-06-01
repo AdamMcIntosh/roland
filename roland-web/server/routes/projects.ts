@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
-import { existsSync } from 'fs';
+import { existsSync, mkdirSync } from 'fs';
+import { dirname } from 'path';
 import { getDb } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { encrypt, decrypt } from '../crypto.js';
@@ -30,7 +31,7 @@ projectsRouter.get('/', (_req, res) => {
 projectsRouter.post('/', (req, res) => {
   const { name, path } = req.body ?? {};
   if (!name || !path) { res.status(400).json({ error: 'name and path required' }); return; }
-  if (!existsSync(path)) { res.status(400).json({ error: `Directory not found: ${path}` }); return; }
+  mkdirSync(path, { recursive: true });
   const id = randomUUID();
   getDb().prepare('INSERT INTO projects (id, name, path) VALUES (?, ?, ?)').run(id, name, path);
   res.json({ id });
@@ -88,8 +89,15 @@ projectsRouter.post('/:id/github/pull', async (req, res) => {
   const project = getDb().prepare('SELECT * FROM projects WHERE id=?').get(req.params.id) as any;
   if (!project?.encrypted_pat) { res.status(400).json({ error: 'GitHub not connected' }); return; }
 
+  const pat = safeDecrypt(project.encrypted_pat);
+  if (!pat) {
+    res.status(400).json({ error: 'GitHub PAT is invalid or corrupted. Please reconnect your GitHub account.', needsReconnect: true });
+    return;
+  }
+
   try {
-    const output = await gitPull(project.path);
+    const cloneBase = dirname(project.path);
+    const output = await gitPull(pat, project.github_owner, project.github_repo, cloneBase);
     res.json({ ok: true, output });
   } catch (e) {
     res.status(500).json({ error: classifyGitError(e), ...gitErrorFlags(e) });
