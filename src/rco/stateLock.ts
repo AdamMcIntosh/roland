@@ -5,6 +5,10 @@
 import fs from 'fs';
 import path from 'path';
 
+function ensureDir(filePath: string): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+}
+
 const LOCK_SUFFIX = '.rco-state.lock';
 const RETRY_MS = 50;
 const MAX_WAIT_MS = 5000;
@@ -14,6 +18,7 @@ export function acquireLock(stateFilePath: string): () => void {
   const start = Date.now();
   while (true) {
     try {
+      ensureDir(lockPath);
       fs.writeFileSync(lockPath, String(process.pid), { flag: 'wx' });
       return () => {
         try {
@@ -44,5 +49,6 @@ export function readStateUnlocked<T>(stateFilePath: string): T | null {
 }
 
 export function writeStateUnlocked(stateFilePath: string, state: unknown): void {
+  ensureDir(stateFilePath);
   fs.writeFileSync(stateFilePath, JSON.stringify(state, null, 2), 'utf-8');
 }

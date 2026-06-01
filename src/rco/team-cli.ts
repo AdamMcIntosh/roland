@@ -91,6 +91,7 @@ export interface TeamCliArgs {
   clean: boolean;
   background: boolean;
   noImprove: boolean;
+  web: boolean;
   webhookUrl?: string;
   agentsDir?: string;
   parallel: boolean;
@@ -110,6 +111,7 @@ export function parseTeamArgs(argv: string[]): TeamCliArgs {
   let clean = false;
   let background = false;
   let noImprove  = false;
+  let web        = process.env.ROLAND_WEB === '1' || process.env.ROLAND_WEB === 'true';
   let parallel   = process.env.ROLAND_SEQUENTIAL !== '1';
   let webhookUrl: string | undefined;
   let agentsDir: string | undefined;
@@ -127,19 +129,58 @@ export function parseTeamArgs(argv: string[]): TeamCliArgs {
     if (a === '--clean' || a === '-c')                   { clean = true; continue; }
     if (a === '--background' || a === '--detach' || a === '-b') { background = true; continue; }
     if (a === '--no-improve')                               { noImprove = true; continue; }
+    if (a === '--web' || a === '--stream-web')               { web = true; continue; }
     if (a === '--parallel' || a === '-p')              { parallel = true; continue; }
     if (a === '--sequential')                           { parallel = false; continue; }
     if (a === '--webhook' && args[i + 1])                { webhookUrl = args[++i]; notify = true; continue; }
     if (!a.startsWith('-') && !goal)                     { goal = a; continue; }
   }
 
-  return { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, webhookUrl, agentsDir, parallel };
+  return { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel };
+}
+
+// ── Web-mode helpers ──────────────────────────────────────────────────────────
+
+/** Strip ANSI escape sequences from a string. */
+function stripAnsi(text: string): string {
+  return text.replace(/\x1b\[[0-9;]*[mGKHFABCDJsuhl]/g, '');
+}
+
+/** Return the body of the first markdown section whose title contains needle. */
+function getSection(text: string, needle: string): string | null {
+  const lines = text.split('\n');
+  let inSection = false;
+  const body: string[] = [];
+  for (const line of lines) {
+    const m = line.match(/^#{1,3}\s+(.+)$/);
+    if (m) {
+      if (inSection) break;
+      if (m[1].toLowerCase().includes(needle)) { inSection = true; continue; }
+    } else if (inSection) {
+      body.push(line);
+    }
+  }
+  return inSection ? (body.join('\n').trim() || null) : null;
+}
+
+/** First 1–2 sentences of body, capped at maxChars. */
+function firstSentences(body: string, maxChars = 200): string {
+  const flat = body.replace(/\n+/g, ' ').trim();
+  if (flat.length <= maxChars) return flat;
+  const slice = flat.slice(0, maxChars);
+  for (let i = slice.length - 1; i > Math.floor(slice.length * 0.4); i--) {
+    if ('.!?'.includes(slice[i]) && (i === slice.length - 1 || slice[i + 1] === ' ')) {
+      return slice.slice(0, i + 1);
+    }
+  }
+  const sp = slice.lastIndexOf(' ');
+  return (sp > 0 ? slice.slice(0, sp) : slice) + '…';
 }
 
 // ── Main CLI logic (exported so index.ts can delegate without re-running main) ─
 
 export async function runTeamCli(argv: string[]): Promise<void> {
-  const { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, webhookUrl, agentsDir, parallel } = parseTeamArgs(argv);
+  const { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel } = parseTeamArgs(argv);
 
   if (!goal) {
     err(c.bold('Roland — PM Team Mode'));
@@ -165,6 +206,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     err('    --clean, -c             Delete stale blackboard + messages before starting  ' + c.dim('(preserves memory.md)'));
     err('    --background, --detach  Spawn detached; logs to .roland/logs/  ' + c.dim('(roland bg-status to check)'));
     err('    --no-improve            Skip the self-improvement retrospective phase');
+    err('    --web                   Streaming terminal-style output for web/chat — live progress, no ANSI');
     err('    --sequential            One agent at a time  ' + c.dim('(safe mode for unstable connections; overrides ROLAND_SEQUENTIAL=1)'));
     err('    --parallel              Force parallel even if ROLAND_SEQUENTIAL=1  ' + c.dim('(parallel is the default)'));
     err('');
@@ -173,16 +215,20 @@ export async function runTeamCli(argv: string[]): Promise<void> {
 
   // ── CURSOR_API_KEY early check ──────────────────────────────────────────────
   if (!process.env.CURSOR_API_KEY) {
-    err('');
-    err(`  ${c.bold('❌  CURSOR_API_KEY is not set')}`);
-    err('');
-    err('  Agent execution requires a Cursor API key. Add to your shell profile:');
-    err('');
-    err(`    ${c.cyan('export CURSOR_API_KEY=your_key_here')}    ${c.dim('# .zshrc / .bashrc / PowerShell $PROFILE')}`);
-    err('');
-    err('  Get your key at: https://cursor.com/settings → API Keys');
-    err(`  Or diagnose your install: ${c.cyan('roland doctor')}`);
-    err('');
+    if (web) {
+      process.stdout.write('❌ Roland failed — CURSOR_API_KEY is not set.\n\nGet your key at https://cursor.com/settings → API Keys, then set it in your environment.\n');
+    } else {
+      err('');
+      err(`  ${c.bold('❌  CURSOR_API_KEY is not set')}`);
+      err('');
+      err('  Agent execution requires a Cursor API key. Add to your shell profile:');
+      err('');
+      err(`    ${c.cyan('export CURSOR_API_KEY=your_key_here')}    ${c.dim('# .zshrc / .bashrc / PowerShell $PROFILE')}`);
+      err('');
+      err('  Get your key at: https://cursor.com/settings → API Keys');
+      err(`  Or diagnose your install: ${c.cyan('roland doctor')}`);
+      err('');
+    }
     process.exit(1);
   }
 
@@ -190,6 +236,165 @@ export async function runTeamCli(argv: string[]): Promise<void> {
   if (background) {
     await spawnBackground(goal, argv, stateDir);
     return; // parent exits immediately
+  }
+
+  // ── Web mode — streaming terminal-style output for browser / chat UI ────────
+  if (web) {
+    const out = (line: string) => process.stdout.write(line + '\n');
+    const hitlQueue = new HitlQueue(stateDir);
+    if (clean) cleanState(stateDir);
+    const runState = new RunStateWriter(stateDir, goal);
+
+    // Silence internal stderr noise — clients receive only our curated stdout
+    const origConsoleError = console.error.bind(console);
+    const origStderrWrite  = process.stderr.write.bind(process.stderr);
+    console.error = () => {};
+    (process.stderr as NodeJS.WriteStream).write = (): boolean => true;
+
+    const webWaveEntries = new Map<string, { agent: string; title: string; hadBlocker: boolean }>();
+    const webStartTime = Date.now();
+
+    out(`🎯 ${goal}`);
+    out('');
+    out('Planning…');
+
+    let result;
+    try {
+      result = await runTeam({
+        goal, stateDir, agentsDir, hitlQueue,
+        noImprove: true,
+        sequential: !parallel, interactive: false,
+
+        onPlanReady: (tasks) => {
+          runState.planReady(tasks);
+          out(`Plan ready — ${tasks.length} task${tasks.length !== 1 ? 's' : ''}`);
+        },
+
+        onWaveStart: (waveNumber, tasks) => {
+          runState.waveStart(waveNumber, tasks.map((t) => t.id));
+          webWaveEntries.clear();
+          for (const t of tasks) webWaveEntries.set(t.id, { agent: t.agent, title: t.title, hadBlocker: false });
+          out('');
+          out(parallel && tasks.length > 1
+            ? `Wave ${waveNumber} — ${tasks.length} tasks`
+            : `Wave ${waveNumber} — ${tasks[0]?.title ?? ''}`);
+        },
+
+        onTaskStart: (id, agent, title) => {
+          runState.taskStart(id);
+          out(`  → ${agent}: ${title}`);
+        },
+
+        onTaskComplete: (id, agent, output, hadBlocker) => {
+          runState.taskComplete(id, output, hadBlocker);
+          const entry = webWaveEntries.get(id);
+          if (entry) entry.hadBlocker = hadBlocker;
+          out(`  ${hadBlocker ? '⚠️' : '✓'} ${agent}: ${entry?.title ?? ''}`);
+        },
+
+        onWaveReview: () => { runState.waveReviewing(); },
+
+        onWaveComplete: (_w, decision) => {
+          runState.waveComplete(decision.pmNotes);
+          if (decision.decision !== 'continue') {
+            out('');
+            out(`🔄 Adjusted${decision.pmNotes ? ' — ' + decision.pmNotes : ''}`);
+            for (const t of (decision.newTasks ?? [])) out(`  + ${t.agent}: ${t.title}`);
+            for (const u of (decision.unblocks ?? [])) out(`  ↑ Unblock ${u.forAgent}: ${u.message}`);
+          }
+        },
+
+        onTasksSpawned: (tasks) => { runState.addTasks(tasks); },
+
+        onSynthesizing: () => {
+          runState.synthesizing();
+          out('');
+          out('Synthesizing…');
+          out('');
+        },
+
+        onHitlPause: (p) => {
+          runState.setHitlPaused(p);
+          if (!p) runState.clearConnectionDropped();
+          if (p) out('⏸  Paused — send `roland resume` to continue.');
+        },
+        onAbortPending: () => { runState.setAbortPending(); },
+        onCircuitBreak: (info) => {
+          const agents = info.failedAgents.slice(0, 3).join(', ');
+          runState.setConnectionDropped(`Wave ${info.waveNumber} • ${info.errorCount} network error${info.errorCount !== 1 ? 's' : ''} (${agents})`);
+          out(`⚡ Connection issue in wave ${info.waveNumber} (${agents}) — retrying`);
+        },
+
+        onBlockerDetected: (taskId, agent, description) => {
+          out(`  ⚠️  BLOCKER [${taskId}/${agent}]: ${description}`);
+        },
+      });
+    } catch (e) {
+      console.error = origConsoleError;
+      (process.stderr as NodeJS.WriteStream).write = origStderrWrite as typeof process.stderr.write;
+      runState.error(e instanceof Error ? e.message : String(e));
+      hitlQueue.cleanup();
+      out(`❌ Roland failed — ${e instanceof Error ? e.message : String(e)}`);
+      process.exit(1);
+    }
+
+    console.error = origConsoleError;
+    (process.stderr as NodeJS.WriteStream).write = origStderrWrite as typeof process.stderr.write;
+    runState.done();
+    hitlQueue.cleanup();
+
+    const total    = Object.keys(result.taskResults).length;
+    const blockers = result.blockersEncountered;
+    const text     = stripAnsi(result.synthesis);
+
+    // Elapsed time
+    const elapsedMs   = Date.now() - webStartTime;
+    const elapsedMins = Math.floor(elapsedMs / 60000);
+    const elapsedSecs = Math.floor((elapsedMs % 60000) / 1000);
+    const elapsedStr  = elapsedMins > 0 ? `${elapsedMins}m ${elapsedSecs}s` : `${elapsedSecs}s`;
+
+    // Banner
+    const parts = [
+      `${total} task${total !== 1 ? 's' : ''}`,
+      `${result.wavesRun} wave${result.wavesRun !== 1 ? 's' : ''}`,
+      elapsedStr,
+      ...(blockers > 0 ? [`⚠️ ${blockers} blocker${blockers !== 1 ? 's' : ''}`] : []),
+    ];
+    out(`✅ Complete — ${parts.join(' • ')}`);
+    out('');
+
+    // 1–2 sentence summary — no header
+    const summaryBody = getSection(text, 'executive summary');
+    if (summaryBody) { out(firstSentences(summaryBody)); out(''); }
+
+    // Blockers — only when present
+    if (blockers > 0) {
+      const blockerBody = getSection(text, 'release blocker');
+      if (blockerBody) {
+        out('⚠️  Blockers:');
+        for (const line of blockerBody.split('\n')) {
+          const t = line.trim();
+          if (t) out(t);
+        }
+        out('');
+      }
+    }
+
+    // Next steps — strip "Verb: " prefixes so "1. Run: npm test" → "1. npm test"
+    const nextBody = getSection(text, 'next steps');
+    if (nextBody) {
+      out('Next steps:');
+      for (const line of nextBody.split('\n')) {
+        const t = line.trim();
+        if (!t) continue;
+        out(t.replace(
+          /^(\d+\.\s+)(Run|Start|Deploy|Commit|Check|Open|Review|Execute|Install|Configure|Push|Test|Verify|Launch):\s+/i,
+          '$1',
+        ));
+      }
+    }
+
+    return;
   }
 
   // ── Notifier (shared across all modes) ─────────────────────────────────────

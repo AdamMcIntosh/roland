@@ -120,7 +120,21 @@ export function buildClaudeToolCallingPrompt(input: ToolCallingPromptInput): str
   const toolsList = p.tools && p.tools.length > 0 ? p.tools : [];
   if (toolsList.length > 0) {
     sections.push(
-      `## Capabilities\n\nApply these skills as appropriate: ${toolsList.join(', ')}.`
+      `## Capabilities\n\nApply these skills as appropriate: ${toolsList.join(', ')}.\n\n` +
+      `**Directory rule:** Before writing any file, ensure its parent directory exists:\n` +
+      `- Shell/bash: \`mkdir -p <parent-dir>\`\n` +
+      `- Node.js: \`fs.mkdirSync(path.dirname(filePath), { recursive: true })\`\n` +
+      `- Python: \`os.makedirs(os.path.dirname(file_path), exist_ok=True)\`\n\n` +
+      `Never assume \`src/\`, \`tests/\`, or any subdirectory already exists.`
+    );
+  } else {
+    sections.push(
+      `## Capabilities\n\n` +
+      `**Directory rule:** Before writing any file, ensure its parent directory exists:\n` +
+      `- Shell/bash: \`mkdir -p <parent-dir>\`\n` +
+      `- Node.js: \`fs.mkdirSync(path.dirname(filePath), { recursive: true })\`\n` +
+      `- Python: \`os.makedirs(os.path.dirname(file_path), exist_ok=True)\`\n\n` +
+      `Never assume \`src/\`, \`tests/\`, or any subdirectory already exists.`
     );
   }
 

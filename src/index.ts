@@ -218,6 +218,7 @@ function printHelp(): void {
   ln(`    ${b('ROLAND_NOTIFY=1')}            Enable notifications for all commands`);
   ln(`    ${b('ROLAND_SIMPLE_TUI=1')}        Simple ASCII output  ${d('(mobile SSH, Termius, limited terminals)')}`);
   ln(`    ${b('ROLAND_SEQUENTIAL=1')}        Sequential safe mode  ${d('(one agent at a time; use --sequential flag per-run)')}`);
+  ln(`    ${b('ROLAND_WEB=1')}               Clean ANSI-free output for web/chat UI  ${d('(same as --web flag)')}`);
   ln(`    ${b('CURSOR_API_KEY')}             Required for agent execution`);
   ln(`    ${b('ROLAND_AGENT_TIMEOUT_MS')}    Agent timeout  ${d('(default: 25 min)')}`);
   ln(`    ${b('ROLAND_AGENT_RETRIES')}       Max retries per agent  ${d('(default: 5)')}`);

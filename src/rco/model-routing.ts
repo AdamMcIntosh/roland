@@ -45,12 +45,21 @@ const VALID_CURSOR_MODELS = new Set([
 export function toCursorModelId(model: string, agentName: string = ''): string {
   const m = model.toLowerCase().trim();
   const n = agentName.toLowerCase();
+  const isPM = n.includes('pm') || n.includes('lead') || n.includes('manager');
 
   // ── 1. Agent-name PM heuristic (always checked first) ────────────────────
   // Ensures Lead-PM always gets gpt-5.4-nano regardless of YAML model field.
-  if (n.includes('pm') || n.includes('lead') || n.includes('manager')) {
+  // Env var ROLAND_PM_MODEL overrides the default (must be a valid Cursor model ID).
+  if (isPM) {
+    const pmOverride = process.env.ROLAND_PM_MODEL;
+    if (pmOverride && VALID_CURSOR_MODELS.has(pmOverride)) return pmOverride;
     return 'gpt-5.4-nano';
   }
+
+  // ── 1b. Engineer env var override ────────────────────────────────────────
+  // Env var ROLAND_ENGINEER_MODEL overrides the default for all non-PM agents.
+  const engOverride = process.env.ROLAND_ENGINEER_MODEL;
+  if (engOverride && VALID_CURSOR_MODELS.has(engOverride)) return engOverride;
 
   // ── 2. Exact approved Cursor model ID ────────────────────────────────────
   // claude-sonnet-* / claude-opus-* are intentionally excluded — they are

@@ -255,6 +255,7 @@ export function appendDecisions(
     '',
   ].join('\n');
 
+  fs.mkdirSync(path.dirname(filepath), { recursive: true });
   if (!existing.trim()) {
     const header =
       `# Architecture Decision Records\n\n` +
