@@ -171,15 +171,18 @@ export async function cloneRepo(
 
   try {
     if (existsSync(`${clonePath}/.git`)) {
-      await execAsync('git pull', { cwd: clonePath });
+      await execAsync('git pull', { cwd: clonePath, timeout: 60_000 });
       return clonePath;
     }
 
-    const url = `https://${pat}@github.com/${owner}/${repo}.git`;
-    await execAsync(`git clone "${url}" "${clonePath}"`);
+    // x-access-token:TOKEN format is the recommended HTTPS auth method for GitHub PATs.
+    const url = `https://x-access-token:${pat}@github.com/${owner}/${repo}.git`;
+    await execAsync(`git clone "${url}" "${clonePath}"`, { timeout: 120_000 });
     return clonePath;
   } catch (e) {
-    throw new Error(classifyGitError(e));
+    const raw = e instanceof Error ? e.message : String(e);
+    console.error(`[GitHub] cloneRepo failed (${owner}/${repo}):`, raw);
+    throw e;
   }
 }
 

@@ -172,6 +172,8 @@ githubRouter.post('/clone', async (req, res) => {
 
     res.json({ projectId, path: clonePath, alreadyExists: false });
   } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e);
+    console.error(`[GitHub /clone] ${owner}/${repo} failed:`, raw);
     res.status(500).json({ error: classifyGitError(e), ...gitErrorFlags(e) });
   }
 });
