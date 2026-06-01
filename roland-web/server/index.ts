@@ -85,6 +85,11 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 
+// Unauthenticated health probe — used by Railway and the Docker HEALTHCHECK
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok' });
+});
+
 app.use('/api/auth', authRouter);
 app.use('/api/github', githubRouter);
 app.use('/api/projects', projectsRouter);
