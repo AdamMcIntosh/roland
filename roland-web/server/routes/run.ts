@@ -11,7 +11,7 @@ export const runRouter = Router();
 
 // Point directly at the JS entry point — avoids execute-permission issues with
 // the node_modules/.bin/roland symlink (EACCES on Railway/Linux when committed from Windows).
-const rolandEntry = resolve(process.cwd(), 'node_modules', '@roland-core', 'dist', 'index.js');
+const rolandEntry = resolve(process.cwd(), 'node_modules', '@roland', 'core', 'dist', 'index.js');
 
 if (!existsSync(rolandEntry)) {
   console.error(`[Roland] FATAL: roland entry not found at ${rolandEntry}`);
