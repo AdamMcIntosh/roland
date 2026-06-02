@@ -15,6 +15,7 @@ interface PollData {
   output: string;
   branch: string;
   prUrl: string | null;
+  finishedAt: number | null;
 }
 
 export function ChatInterface({ projectId, onBranchCreated }: Props) {
@@ -98,27 +99,35 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
       // Closure over runId, apiKey, and the state setters — all stable refs.
       const doPoll = async () => {
         try {
-          const pr = await apiFetch(`/api/projects/runs/${runId}`, {}, apiKey);
-          if (!pr.ok) return; // network blip — keep polling
-          const data = await pr.json() as PollData;
+          const resp = await apiFetch(`/api/projects/runs/${runId}`, {}, apiKey);
+          if (!resp.ok) {
+            console.warn('[Poll] non-OK status:', resp.status);
+            return; // network blip — keep polling
+          }
+          const data = await resp.json() as PollData;
+          console.log('[Poll] response:', data.status, 'outputLen:', data.output?.length ?? 0, 'prUrl:', data.prUrl);
 
           // Append only the bytes we haven't shown yet
-          const newChunk = data.output.slice(lastLenRef.current);
-          // Strip internal markers that are only meaningful server-side
+          const newChunk = (data.output ?? '').slice(lastLenRef.current);
           const display = newChunk
             .replace(/\n?\[ROLAND_DONE\]\n?/g, '')
             .replace(/\n?\[ROLAND_PR\]: https?:\/\/\S+\n?/g, '');
           if (display) setOutput((prev) => prev + display);
-          lastLenRef.current = data.output.length;
+          lastLenRef.current = (data.output ?? '').length;
 
           if (data.prUrl) setPrUrl(data.prUrl);
 
-          if (data.status !== 'running') {
+          // Stop when the server marks the run done — use finishedAt as a
+          // belt-and-suspenders fallback in case status update races the poll.
+          const isDone = data.status !== 'running' || data.finishedAt != null;
+          if (isDone) {
+            console.log('[Poll] run finished, status:', data.status);
             stopPolling();
             setRunning(false);
           }
-        } catch {
-          // Network hiccup — keep polling; don't surface transient errors
+        } catch (err) {
+          // Log but keep polling — transient network errors shouldn't stop the UI
+          console.warn('[Poll] error (will retry):', err);
         }
       };
 
