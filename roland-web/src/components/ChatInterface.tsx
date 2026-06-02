@@ -142,8 +142,7 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
   const [prNeedsReconnect, setPrNeedsReconnect] = useState(false);
 
   const outputScrollRef = useRef<HTMLDivElement>(null);
-  const abortRef        = useRef<AbortController | null>(null);
-  const stoppedRef      = useRef(false);
+  const userStoppedRef    = useRef(false);
 
   const elapsedSec = useElapsedSeconds(running);
 
@@ -153,19 +152,22 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
   }, [output, running]);
 
   const stop = useCallback(async () => {
-    stoppedRef.current = true;
-    abortRef.current?.abort();
-    setRunning(false);
-    await apiFetch(`/api/projects/${projectId}/run/cancel`, { method: 'POST' }, apiKey).catch(() => {});
-    setOutput((prev) => prev || '');
-    setError('Run stopped.');
+    console.log('[Run UI] user clicked Stop — requesting server cancel');
+    userStoppedRef.current = true;
+    setError('Stopping run…');
+    try {
+      const res = await apiFetch(`/api/projects/${projectId}/run/cancel`, { method: 'POST' }, apiKey);
+      console.log('[Run UI] cancel endpoint responded:', res.status);
+    } catch (err) {
+      console.warn('[Run UI] cancel request failed:', err);
+    }
+    // Keep running=true — wait for the original /run fetch to return with result.
   }, [projectId, apiKey]);
 
   const run = async () => {
     if (!goal.trim() || running) return;
 
-    stoppedRef.current = false;
-    abortRef.current = new AbortController();
+    userStoppedRef.current = false;
     setRunning(true);
     setOutput('');
     setError('');
@@ -176,32 +178,40 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
     setPrNeedsReconnect(false);
     setLastGoal(goal);
 
+    const startedAt = Date.now();
+    console.log('[Run UI] starting run for project', projectId);
+
     try {
+      // No AbortSignal — aborting the fetch closes the connection and must NOT
+      // be tied to server-side cancellation (Stop uses /run/cancel only).
       const res = await apiFetch(`/api/projects/${projectId}/run`, {
         method: 'POST',
         body: JSON.stringify({ goal }),
-        signal: abortRef.current.signal,
         headers: {
           'x-pm-model': pmModel,
           'x-engineer-model': engineerModel,
         },
       }, apiKey);
 
-      if (stoppedRef.current) return;
+      const elapsed = Math.round((Date.now() - startedAt) / 1000);
+      console.log('[Run UI] /run responded:', res.status, `after ${elapsed}s`);
 
       const data = await res.json().catch(() => ({})) as Partial<RunResult> & { error?: string };
 
       if (!res.ok) {
+        console.error('[Run UI] run failed:', data.error ?? res.status);
         setError(data.error ?? 'Run failed');
         return;
       }
 
       if (data.cancelled) {
+        console.log('[Run UI] run cancelled (server confirmed)');
         setOutput(data.output ?? '');
         setError('Run stopped.');
         return;
       }
 
+      console.log('[Run UI] run complete, status:', data.status, 'outputLen:', data.output?.length ?? 0);
       setOutput(data.output ?? '');
 
       if (data.branch) {
@@ -213,17 +223,17 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
         setPrUrl(data.prUrl);
       }
     } catch (e: unknown) {
-      if (stoppedRef.current) return;
-      if (e instanceof DOMException && e.name === 'AbortError') return;
+      const elapsed = Math.round((Date.now() - startedAt) / 1000);
+      const raw = (e as Error)?.message ?? String(e);
+      console.error('[Run UI] fetch error after', elapsed + 's:', raw);
 
-      const raw = (e as Error)?.message ?? '';
       const isNetwork = /fetch|network|failed to fetch|load failed/i.test(raw);
       setError(isNetwork
-        ? 'Could not reach the server. Check your connection and try again.'
+        ? 'Connection lost while waiting for results. The run may still be completing on the server — refresh and check run history.'
         : 'Something went wrong. Please try again.');
     } finally {
-      if (!stoppedRef.current) setRunning(false);
-      abortRef.current = null;
+      setRunning(false);
+      userStoppedRef.current = false;
     }
   };
 
