@@ -89,8 +89,13 @@ app.get('/health', (_req, res) => {
 });
 
 // Listen immediately — Express allows more routes to be added after listen().
-createServer(app).listen(port, () => {
-  console.log(`> Roland Web starting on port ${port}`);
+const httpServer = createServer(app);
+// Long-running /run requests must not be cut off by default Node socket timeouts.
+httpServer.timeout = 0;
+httpServer.requestTimeout = 0;
+httpServer.headersTimeout = 0;
+httpServer.listen(port, () => {
+  console.log(`> Roland Web starting on port ${port} (no HTTP socket timeout)`);
 });
 
 // Heavy async init — happens after the server is already accepting connections.
