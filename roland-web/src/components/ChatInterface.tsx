@@ -10,6 +10,13 @@ interface Props {
   onBranchCreated?: (branch: string) => void;
 }
 
+interface PollData {
+  status: string;
+  output: string;
+  branch: string;
+  prUrl: string | null;
+}
+
 export function ChatInterface({ projectId, onBranchCreated }: Props) {
   const { apiKey, pmModel, engineerModel } = useApiKey();
   const [goal, setGoal]       = useState('');
@@ -26,7 +33,11 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
   const [prIsTransient, setPrIsTransient]     = useState(false);
   const [prNeedsReconnect, setPrNeedsReconnect] = useState(false);
 
-  const abortRef  = useRef<AbortController | null>(null);
+  // Polling refs — not state because changing them must not trigger re-renders
+  const runIdRef   = useRef<string>('');
+  const lastLenRef = useRef<number>(0);
+  const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const outputRef = useRef<HTMLPreElement>(null);
 
   useEffect(() => {
@@ -34,6 +45,15 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
       outputRef.current.scrollTop = outputRef.current.scrollHeight;
     }
   }, [output]);
+
+  // Clear the polling interval on unmount so we don't leak timers.
+  useEffect(() => {
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
+  const stopPolling = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  };
 
   const run = async () => {
     if (!goal.trim() || running) return;
@@ -46,13 +66,13 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
     setPrIsTransient(false);
     setPrNeedsReconnect(false);
     setLastGoal(goal);
-    abortRef.current = new AbortController();
+    runIdRef.current  = '';
+    lastLenRef.current = 0;
 
     try {
       const res = await apiFetch(`/api/projects/${projectId}/run`, {
         method: 'POST',
         body: JSON.stringify({ goal }),
-        signal: abortRef.current.signal,
         headers: {
           'x-pm-model': pmModel,
           'x-engineer-model': engineerModel,
@@ -66,52 +86,61 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
         return;
       }
 
-      // Pick up the auto-created branch from the response header
-      const branchHeader = res.headers.get('X-Roland-Branch') ?? '';
-      if (branchHeader) {
-        setBranch(branchHeader);
-        onBranchCreated?.(branchHeader);
+      const { runId, branch: branchName } = await res.json() as { runId: string; branch: string };
+      runIdRef.current = runId;
+
+      if (branchName) {
+        setBranch(branchName);
+        onBranchCreated?.(branchName);
       }
 
-      const reader  = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let accumulated = '';
+      // Poll every 1.5 s for new output and run status.
+      // Closure over runId, apiKey, and the state setters — all stable refs.
+      const doPoll = async () => {
+        try {
+          const pr = await apiFetch(`/api/projects/runs/${runId}`, {}, apiKey);
+          if (!pr.ok) return; // network blip — keep polling
+          const data = await pr.json() as PollData;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        accumulated += chunk;
-        // Strip the internal completion sentinel from what's shown in the terminal
-        const display = chunk.replace(/\n?\[ROLAND_DONE\]\n?/g, '');
-        if (display) setOutput((prev) => prev + display);
-        // Break early when the server signals it's done — guards against Railway's
-        // proxy buffering the final TCP close and leaving the reader loop hanging.
-        if (accumulated.includes('[ROLAND_DONE]')) {
-          try { reader.cancel(); } catch { /* ignore */ }
-          break;
+          // Append only the bytes we haven't shown yet
+          const newChunk = data.output.slice(lastLenRef.current);
+          // Strip internal markers that are only meaningful server-side
+          const display = newChunk
+            .replace(/\n?\[ROLAND_DONE\]\n?/g, '')
+            .replace(/\n?\[ROLAND_PR\]: https?:\/\/\S+\n?/g, '');
+          if (display) setOutput((prev) => prev + display);
+          lastLenRef.current = data.output.length;
+
+          if (data.prUrl) setPrUrl(data.prUrl);
+
+          if (data.status !== 'running') {
+            stopPolling();
+            setRunning(false);
+          }
+        } catch {
+          // Network hiccup — keep polling; don't surface transient errors
         }
-      }
+      };
 
-      // Auto-detect PR URL emitted by the server after push + PR creation
-      const prMatch = accumulated.match(/\[ROLAND_PR\]: (https:\/\/\S+)/);
-      if (prMatch?.[1]) setPrUrl(prMatch[1]);
+      pollRef.current = setInterval(doPoll, 1500);
     } catch (e: unknown) {
-      if ((e as { name?: string })?.name !== 'AbortError') {
-        const raw = (e as Error)?.message ?? '';
-        const isNetwork = /fetch|network|failed to fetch|load failed/i.test(raw);
-        setError(isNetwork
-          ? 'Could not reach the server. Check your connection and try again.'
-          : 'Something went wrong. Please try again.');
-      }
+      const raw = (e as Error)?.message ?? '';
+      const isNetwork = /fetch|network|failed to fetch|load failed/i.test(raw);
+      setError(isNetwork
+        ? 'Could not reach the server. Check your connection and try again.'
+        : 'Something went wrong. Please try again.');
+      setRunning(false);
     }
-
-    setRunning(false);
   };
 
-  const stop = () => {
-    abortRef.current?.abort();
+  const stop = async () => {
+    stopPolling();
     setRunning(false);
+    const runId = runIdRef.current;
+    if (runId) {
+      // Best-effort cancel — kill the child process server-side
+      apiFetch(`/api/projects/runs/${runId}/cancel`, { method: 'POST' }, apiKey).catch(() => {});
+    }
   };
 
   const createPR = async () => {
@@ -203,7 +232,7 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
         )}
       </pre>
 
-      {/* Push & PR banner — shown after a run with an auto-created branch */}
+      {/* Push & PR banner — fallback if auto-PR failed or no PAT configured */}
       {showPRBanner && (
         <div className="bg-kelly-50 border border-kelly-200 rounded-xl p-4 flex flex-col gap-3">
           <div className="flex items-start justify-between gap-4">
