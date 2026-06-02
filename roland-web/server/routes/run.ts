@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { spawn } from 'child_process';
+import { spawn, type ChildProcess } from 'child_process';
 import { randomUUID } from 'crypto';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
@@ -42,28 +42,56 @@ function sanitizeOutput(text: string): string {
 interface RolandRunResult {
   exitCode: number | null;
   output: string;
+  cancelled: boolean;
 }
+
+// Single-replica deployment — one active Roland process per project at a time.
+const activeRunsByProject = new Map<string, ChildProcess>();
 
 /** Run Roland to completion and return captured stdout + stderr. */
 function runRolandSync(
   args: string[],
   cwd: string,
   env: Record<string, string | undefined>,
+  projectId: string,
 ): Promise<RolandRunResult> {
   return new Promise((resolvePromise, reject) => {
     let output = '';
+    let cancelled = false;
 
     const child = spawn(process.execPath, [rolandEntry, ...args], {
       cwd,
       env: { ...process.env, ...env },
     });
 
+    activeRunsByProject.set(projectId, child);
+
     child.stdout.on('data', (chunk: Buffer) => { output += chunk.toString(); });
     child.stderr.on('data', (chunk: Buffer) => { output += chunk.toString(); });
-    child.on('error', (err) => reject(err));
-    child.on('close', (exitCode) => resolvePromise({ exitCode, output }));
+    child.on('error', (err) => {
+      activeRunsByProject.delete(projectId);
+      reject(err);
+    });
+    child.on('close', (exitCode, signal) => {
+      activeRunsByProject.delete(projectId);
+      if (signal === 'SIGTERM' || signal === 'SIGKILL') cancelled = true;
+      resolvePromise({ exitCode, output, cancelled });
+    });
   });
 }
+
+// POST /api/projects/:projectId/run/cancel — stop the active run for this project
+runRouter.post('/:projectId/run/cancel', requireAuth, (req, res) => {
+  const child = activeRunsByProject.get(req.params.projectId as string);
+  if (child) {
+    child.kill('SIGTERM');
+    activeRunsByProject.delete(req.params.projectId as string);
+  }
+  getDb()
+    .prepare("UPDATE runs SET status='error', finished_at=unixepoch() WHERE project_id=? AND status='running'")
+    .run(req.params.projectId as string);
+  res.json({ ok: true });
+});
 
 // POST /api/projects/:projectId/run
 // Runs Roland synchronously and returns the full result when done.
@@ -131,18 +159,34 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
 
   console.log(`[Run] starting run=${runId} project=${project.id} branch=${branchName || '(none)'}`);
 
+  // If the client disconnects (tab closed, fetch aborted), stop the child process.
+  req.on('close', () => {
+    if (res.writableEnded) return;
+    const child = activeRunsByProject.get(project.id as string);
+    if (child) {
+      console.log(`[Run] client disconnected — stopping run=${runId}`);
+      child.kill('SIGTERM');
+    }
+  });
+
   let rawOutput = '';
   let exitCode: number | null = 1;
+  let cancelled = false;
   let prUrl: string | null = null;
 
   try {
-    const result = await runRolandSync(args, project.path, modelEnv);
+    const result = await runRolandSync(args, project.path, modelEnv, project.id as string);
     exitCode = result.exitCode;
     rawOutput = result.output;
+    cancelled = result.cancelled;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     rawOutput = `[Roland] Failed to start: ${msg}\n`;
     exitCode = 1;
+  }
+
+  if (cancelled) {
+    rawOutput += '\n⏹ Run stopped.\n';
   }
 
   // Auto-commit, push, and open a PR when the run succeeded and had a prepared branch.
@@ -182,7 +226,7 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
     }
   }
 
-  const status = exitCode === 0 ? 'success' : 'error';
+  const status = cancelled ? 'error' : (exitCode === 0 ? 'success' : 'error');
   const output = sanitizeOutput(rawOutput);
 
   getDb()
@@ -203,6 +247,7 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
     output,
     branch: branchName,
     prUrl,
+    cancelled,
   });
 });
 

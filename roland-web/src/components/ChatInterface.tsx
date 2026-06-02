@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useApiKey } from '@/lib/ApiKeyContext';
 import { apiFetch } from '@/lib/api';
 
@@ -16,6 +16,113 @@ interface RunResult {
   output: string;
   branch: string;
   prUrl: string | null;
+  cancelled?: boolean;
+}
+
+/** Roland team-mode phases — estimated client-side, no polling. */
+const RUN_STAGES = [
+  { label: 'Planning tasks', detail: 'Lead PM is breaking down your goal' },
+  { label: 'Running agents', detail: 'Engineers are working in parallel' },
+  { label: 'Reviewing progress', detail: 'PM is checking wave outputs' },
+  { label: 'Finishing up', detail: 'Synthesizing results and wrapping up' },
+] as const;
+
+const STAGE_INTERVAL_SEC = 45;
+
+function formatElapsed(totalSec: number): string {
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function useElapsedSeconds(active: boolean): number {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!active) {
+      setElapsed(0);
+      return;
+    }
+    const started = Date.now();
+    const tick = () => setElapsed(Math.floor((Date.now() - started) / 1000));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [active]);
+
+  return elapsed;
+}
+
+function useAnimatedDots(active: boolean, intervalMs = 450): string {
+  const [frame, setFrame] = useState(0);
+
+  useEffect(() => {
+    if (!active) {
+      setFrame(0);
+      return;
+    }
+    const id = setInterval(() => setFrame((f) => (f + 1) % 4), intervalMs);
+    return () => clearInterval(id);
+  }, [active, intervalMs]);
+
+  return '.'.repeat(frame);
+}
+
+function RunProgress({ elapsedSec }: { elapsedSec: number }) {
+  const dots = useAnimatedDots(true);
+  const stageIndex = Math.min(
+    Math.floor(elapsedSec / STAGE_INTERVAL_SEC),
+    RUN_STAGES.length - 1,
+  );
+  const stage = RUN_STAGES[stageIndex];
+  const progressPct = Math.min(
+    100,
+    ((stageIndex + 1) / RUN_STAGES.length) * 100,
+  );
+
+  return (
+    <div className="flex flex-col items-center justify-center gap-5 py-10 px-6 text-center min-h-[12rem]">
+      {/* Spinner + headline */}
+      <div className="flex items-center gap-3">
+        <span
+          className="inline-block h-5 w-5 rounded-full border-2 border-kelly-200 border-t-kelly-600 animate-spin"
+          aria-hidden="true"
+        />
+        <p className="text-sm font-medium text-gray-800">
+          Running<span className="inline-block w-6 text-left text-kelly-600">{dots}</span>
+        </p>
+      </div>
+
+      {/* Stage indicator */}
+      <div className="space-y-1.5 max-w-sm">
+        <p className="text-xs font-medium uppercase tracking-wide text-kelly-700">
+          Step {stageIndex + 1} of {RUN_STAGES.length}
+        </p>
+        <p className="text-base font-semibold text-gray-900">{stage.label}</p>
+        <p className="text-sm text-gray-500">{stage.detail}{dots}</p>
+      </div>
+
+      {/* Progress bar — stage-based, not real-time */}
+      <div className="w-full max-w-xs space-y-1.5">
+        <div
+          className="h-1.5 w-full rounded-full bg-gray-100 overflow-hidden"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={progressPct}
+          aria-label={`Estimated progress: step ${stageIndex + 1} of ${RUN_STAGES.length}`}
+        >
+          <div
+            className="h-full rounded-full bg-kelly-500 transition-all duration-700 ease-out"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+        <p className="text-xs text-gray-400 tabular-nums">
+          Elapsed {formatElapsed(elapsedSec)} · results appear when complete
+        </p>
+      </div>
+    </div>
+  );
 }
 
 export function ChatInterface({ projectId, onBranchCreated }: Props) {
@@ -35,15 +142,30 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
   const [prNeedsReconnect, setPrNeedsReconnect] = useState(false);
 
   const outputScrollRef = useRef<HTMLDivElement>(null);
+  const abortRef        = useRef<AbortController | null>(null);
+  const stoppedRef      = useRef(false);
+
+  const elapsedSec = useElapsedSeconds(running);
 
   useEffect(() => {
     const el = outputScrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [output, running]);
 
+  const stop = useCallback(async () => {
+    stoppedRef.current = true;
+    abortRef.current?.abort();
+    setRunning(false);
+    await apiFetch(`/api/projects/${projectId}/run/cancel`, { method: 'POST' }, apiKey).catch(() => {});
+    setOutput((prev) => prev || '');
+    setError('Run stopped.');
+  }, [projectId, apiKey]);
+
   const run = async () => {
     if (!goal.trim() || running) return;
 
+    stoppedRef.current = false;
+    abortRef.current = new AbortController();
     setRunning(true);
     setOutput('');
     setError('');
@@ -58,16 +180,25 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
       const res = await apiFetch(`/api/projects/${projectId}/run`, {
         method: 'POST',
         body: JSON.stringify({ goal }),
+        signal: abortRef.current.signal,
         headers: {
           'x-pm-model': pmModel,
           'x-engineer-model': engineerModel,
         },
       }, apiKey);
 
+      if (stoppedRef.current) return;
+
       const data = await res.json().catch(() => ({})) as Partial<RunResult> & { error?: string };
 
       if (!res.ok) {
         setError(data.error ?? 'Run failed');
+        return;
+      }
+
+      if (data.cancelled) {
+        setOutput(data.output ?? '');
+        setError('Run stopped.');
         return;
       }
 
@@ -82,13 +213,17 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
         setPrUrl(data.prUrl);
       }
     } catch (e: unknown) {
+      if (stoppedRef.current) return;
+      if (e instanceof DOMException && e.name === 'AbortError') return;
+
       const raw = (e as Error)?.message ?? '';
       const isNetwork = /fetch|network|failed to fetch|load failed/i.test(raw);
       setError(isNetwork
         ? 'Could not reach the server. Check your connection and try again.'
         : 'Something went wrong. Please try again.');
     } finally {
-      setRunning(false);
+      if (!stoppedRef.current) setRunning(false);
+      abortRef.current = null;
     }
   };
 
@@ -123,9 +258,6 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
   };
 
   const showPRBanner = !running && branch && !prUrl;
-  const placeholder = running
-    ? 'Running… Roland is working on your goal. This may take several minutes.'
-    : 'Output will appear here.';
 
   return (
     <div className="flex flex-col gap-4 flex-1">
@@ -142,13 +274,22 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
           disabled={running}
         />
         <div className="flex flex-col gap-2">
-          <button
-            onClick={run}
-            disabled={running || !goal.trim()}
-            className="bg-kelly-600 hover:bg-kelly-700 disabled:opacity-40 text-white rounded-lg px-4 py-2 font-medium transition-colors whitespace-nowrap"
-          >
-            {running ? 'Running…' : 'Run'}
-          </button>
+          {running ? (
+            <button
+              onClick={stop}
+              className="rounded-lg px-4 py-2 text-sm font-medium transition-colors whitespace-nowrap bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200"
+            >
+              Stop
+            </button>
+          ) : (
+            <button
+              onClick={run}
+              disabled={!goal.trim()}
+              className="bg-kelly-600 hover:bg-kelly-700 disabled:opacity-40 text-white rounded-lg px-4 py-2 font-medium transition-colors whitespace-nowrap"
+            >
+              Run
+            </button>
+          )}
         </div>
       </div>
 
@@ -165,18 +306,23 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
             </svg>
             {branch}
           </span>
-          {running && <span className="text-gray-400 animate-pulse">Roland is working…</span>}
         </div>
       )}
 
-      {/* Output — plain React state, no streaming or polling */}
+      {/* Output panel */}
       <div
         ref={outputScrollRef}
         className="flex-1 min-h-64 bg-white border border-gray-200 rounded-xl overflow-auto shadow-inner"
+        aria-busy={running}
+        aria-live="polite"
       >
-        <pre className="p-4 text-sm font-mono whitespace-pre-wrap break-words m-0 min-h-[12rem] text-gray-700">
-          {output || (running ? placeholder : 'Output will appear here.')}
-        </pre>
+        {running && !output ? (
+          <RunProgress elapsedSec={elapsedSec} />
+        ) : (
+          <pre className="p-4 text-sm font-mono whitespace-pre-wrap break-words m-0 min-h-[12rem] text-gray-700">
+            {output || 'Output will appear here.'}
+          </pre>
+        )}
       </div>
 
       {/* Push & PR banner — fallback if auto-PR failed or no PAT configured */}
