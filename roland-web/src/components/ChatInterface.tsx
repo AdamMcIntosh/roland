@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useApiKey } from '@/lib/ApiKeyContext';
 import { apiFetch } from '@/lib/api';
 
@@ -18,9 +19,10 @@ interface PollData {
   finishedAt: number | null;
 }
 
-/** Strip internal Roland markers before displaying streamed output. */
-function stripMarkers(text: string): string {
+/** Strip ANSI escape codes and internal Roland markers before display. */
+function sanitizeOutput(text: string): string {
   return text
+    .replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
     .replace(/\n?\[ROLAND_DONE\]\n?/g, '')
     .replace(/\n?\[ROLAND_PR\]: https?:\/\/\S+\n?/g, '');
 }
@@ -29,6 +31,8 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
   const { apiKey, pmModel, engineerModel } = useApiKey();
   const [goal, setGoal]       = useState('');
   const [output, setOutput]   = useState('');
+  /** Bumped on every output write to force the output node to re-render. */
+  const [outputVersion, setOutputVersion] = useState(0);
   const [running, setRunning] = useState(false);
   const [error, setError]     = useState('');
 
@@ -47,13 +51,30 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
   const pollRef         = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollInFlightRef = useRef<boolean>(false);
 
-  const outputRef = useRef<HTMLPreElement>(null);
+  const outputScrollRef = useRef<HTMLDivElement>(null);
+  const outputTextRef   = useRef<HTMLSpanElement>(null);
 
-  useEffect(() => {
-    if (outputRef.current) {
-      outputRef.current.scrollTop = outputRef.current.scrollHeight;
+  /** Commit output to React state and force a synchronous paint (poll callbacks run outside React events). */
+  const commitOutput = useCallback((updater: string | ((prev: string) => string)) => {
+    flushSync(() => {
+      setOutput(updater);
+      setOutputVersion((v) => v + 1);
+    });
+  }, []);
+
+  // Scroll to bottom + imperative fallback if React didn't apply the latest text.
+  useLayoutEffect(() => {
+    const textEl = outputTextRef.current;
+    const scrollEl = outputScrollRef.current;
+
+    if (textEl && output.length > 0 && textEl.textContent !== output) {
+      textEl.textContent = output;
     }
-  }, [output]);
+
+    if (scrollEl) {
+      scrollEl.scrollTop = scrollEl.scrollHeight;
+    }
+  }, [output, outputVersion]);
 
   // Clear the polling interval on unmount so we don't leak timers.
   useEffect(() => {
@@ -68,7 +89,7 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
     if (!goal.trim() || running) return;
     stopPolling();
     setRunning(true);
-    setOutput('');
+    commitOutput('');
     setError('');
     setBranch('');
     setPrUrl('');
@@ -139,7 +160,7 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
 
           if (isDone) {
             console.log('[Poll] run finished, status:', data.status);
-            setOutput(stripMarkers(rawOutput));
+            commitOutput(sanitizeOutput(rawOutput));
             lastLenRef.current = totalLen;
             stopPolling();
             setRunning(false);
@@ -151,9 +172,9 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
           console.log('[UI] newChunk length:', newChunk.length);
 
           if (newChunk.length > 0) {
-            const display = stripMarkers(newChunk);
+            const display = sanitizeOutput(newChunk);
             console.log('[UI] Appending output length:', display.length);
-            setOutput((prev) => prev + display);
+            commitOutput((prev) => prev + display);
             lastLenRef.current = totalLen;
           }
         } catch (err) {
@@ -263,17 +284,24 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
         </div>
       )}
 
-      {/* Output */}
-      <pre
-        ref={outputRef}
-        className="flex-1 min-h-64 bg-white border border-gray-200 rounded-xl p-4 text-sm text-gray-700 font-mono overflow-auto whitespace-pre-wrap shadow-inner"
+      {/* Output — scroll container + keyed text node so streaming updates always paint */}
+      <div
+        ref={outputScrollRef}
+        className="flex-1 min-h-64 bg-white border border-gray-200 rounded-xl overflow-auto shadow-inner"
       >
-        {output.length > 0 ? output : (
-          <span className="text-gray-400">
-            {running ? 'Starting Roland…' : 'Output will appear here.'}
+        <pre className="p-4 text-sm font-mono whitespace-pre-wrap m-0">
+          <span
+            ref={outputTextRef}
+            key={outputVersion}
+            data-output-text
+            className={output.length > 0 ? 'text-gray-700' : 'text-gray-400'}
+          >
+            {output.length > 0
+              ? output
+              : (running ? 'Starting Roland…' : 'Output will appear here.')}
           </span>
-        )}
-      </pre>
+        </pre>
+      </div>
 
       {/* Push & PR banner — fallback if auto-PR failed or no PAT configured */}
       {showPRBanner && (
