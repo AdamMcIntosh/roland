@@ -52,29 +52,83 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
   const pollInFlightRef = useRef<boolean>(false);
 
   const outputScrollRef = useRef<HTMLDivElement>(null);
-  const outputTextRef   = useRef<HTMLSpanElement>(null);
+  const outputPreRef    = useRef<HTMLPreElement>(null);
+  /** Canonical accumulated output — ref avoids stale closures in poll callbacks. */
+  const outputBufferRef = useRef('');
+  const runningRef      = useRef(false);
 
-  /** Commit output to React state and force a synchronous paint (poll callbacks run outside React events). */
-  const commitOutput = useCallback((updater: string | ((prev: string) => string)) => {
-    flushSync(() => {
-      setOutput(updater);
-      setOutputVersion((v) => v + 1);
-    });
+  const scrollOutputToBottom = useCallback(() => {
+    const scrollEl = outputScrollRef.current;
+    if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
   }, []);
 
-  // Scroll to bottom + imperative fallback if React didn't apply the latest text.
+  /** Write text directly to the DOM — bypasses React reconciliation for streaming output. */
+  const paintOutputDom = useCallback((text: string) => {
+    const pre = outputPreRef.current;
+    if (!pre) return;
+
+    if (text.length > 0) {
+      pre.textContent = text;
+      pre.classList.remove('text-gray-400');
+      pre.classList.add('text-gray-700');
+    } else {
+      pre.textContent = runningRef.current
+        ? 'Starting Roland…'
+        : 'Output will appear here.';
+      pre.classList.remove('text-gray-700');
+      pre.classList.add('text-gray-400');
+    }
+
+    scrollOutputToBottom();
+  }, [scrollOutputToBottom]);
+
+  /**
+   * Commit output: ref is source of truth → paint DOM immediately → sync React state.
+   * Poll callbacks run outside React events, so imperative paint is the primary path.
+   */
+  const commitOutput = useCallback((updater: string | ((prev: string) => string)) => {
+    const next = typeof updater === 'function'
+      ? updater(outputBufferRef.current)
+      : updater;
+
+    outputBufferRef.current = next;
+
+    // 1. Imperative paint — always visible even if React batching defers the re-render
+    paintOutputDom(next);
+
+    // 2. Sync React state for consistency / devtools
+    try {
+      flushSync(() => {
+        setOutput(next);
+        setOutputVersion((v) => v + 1);
+      });
+    } catch {
+      // flushSync throws if called during render — DOM is already correct
+    }
+
+    // 3. Fallback after paint: re-apply if React overwrote or skipped the text node
+    requestAnimationFrame(() => {
+      const pre = outputPreRef.current;
+      if (!pre) return;
+      const expected = outputBufferRef.current;
+      if (expected.length > 0 && pre.textContent !== expected) {
+        pre.textContent = expected;
+        pre.classList.remove('text-gray-400');
+        pre.classList.add('text-gray-700');
+      }
+      scrollOutputToBottom();
+    });
+  }, [paintOutputDom, scrollOutputToBottom]);
+
+  // Keep runningRef in sync for placeholder text inside paintOutputDom
+  useEffect(() => {
+    runningRef.current = running;
+  }, [running]);
+
+  // Safety net: re-paint from buffer whenever React re-renders the output panel
   useLayoutEffect(() => {
-    const textEl = outputTextRef.current;
-    const scrollEl = outputScrollRef.current;
-
-    if (textEl && output.length > 0 && textEl.textContent !== output) {
-      textEl.textContent = output;
-    }
-
-    if (scrollEl) {
-      scrollEl.scrollTop = scrollEl.scrollHeight;
-    }
-  }, [output, outputVersion]);
+    paintOutputDom(outputBufferRef.current);
+  }, [output, outputVersion, paintOutputDom]);
 
   // Clear the polling interval on unmount so we don't leak timers.
   useEffect(() => {
@@ -88,6 +142,7 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
   const run = async () => {
     if (!goal.trim() || running) return;
     stopPolling();
+    runningRef.current = true;
     setRunning(true);
     commitOutput('');
     setError('');
@@ -160,9 +215,11 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
 
           if (isDone) {
             console.log('[Poll] run finished, status:', data.status);
-            commitOutput(sanitizeOutput(rawOutput));
+            const full = sanitizeOutput(rawOutput);
+            commitOutput(full);
             lastLenRef.current = totalLen;
             stopPolling();
+            runningRef.current = false;
             setRunning(false);
             return;
           }
@@ -199,6 +256,7 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
 
   const stop = async () => {
     stopPolling();
+    runningRef.current = false;
     setRunning(false);
     const runId = runIdRef.current;
     if (runId) {
@@ -284,23 +342,16 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
         </div>
       )}
 
-      {/* Output — scroll container + keyed text node so streaming updates always paint */}
+      {/* Output — imperative textContent via outputPreRef; React state is secondary */}
       <div
         ref={outputScrollRef}
         className="flex-1 min-h-64 bg-white border border-gray-200 rounded-xl overflow-auto shadow-inner"
       >
-        <pre className="p-4 text-sm font-mono whitespace-pre-wrap m-0">
-          <span
-            ref={outputTextRef}
-            key={outputVersion}
-            data-output-text
-            className={output.length > 0 ? 'text-gray-700' : 'text-gray-400'}
-          >
-            {output.length > 0
-              ? output
-              : (running ? 'Starting Roland…' : 'Output will appear here.')}
-          </span>
-        </pre>
+        <pre
+          ref={outputPreRef}
+          data-output-panel
+          className="p-4 text-sm font-mono whitespace-pre-wrap m-0 text-gray-400"
+        />
       </div>
 
       {/* Push & PR banner — fallback if auto-PR failed or no PAT configured */}
