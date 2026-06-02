@@ -18,6 +18,13 @@ interface PollData {
   finishedAt: number | null;
 }
 
+/** Strip internal Roland markers before displaying streamed output. */
+function stripMarkers(text: string): string {
+  return text
+    .replace(/\n?\[ROLAND_DONE\]\n?/g, '')
+    .replace(/\n?\[ROLAND_PR\]: https?:\/\/\S+\n?/g, '');
+}
+
 export function ChatInterface({ projectId, onBranchCreated }: Props) {
   const { apiKey, pmModel, engineerModel } = useApiKey();
   const [goal, setGoal]       = useState('');
@@ -35,9 +42,10 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
   const [prNeedsReconnect, setPrNeedsReconnect] = useState(false);
 
   // Polling refs — not state because changing them must not trigger re-renders
-  const runIdRef   = useRef<string>('');
-  const lastLenRef = useRef<number>(0);
-  const pollRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+  const runIdRef        = useRef<string>('');
+  const lastLenRef      = useRef<number>(0);
+  const pollRef         = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollInFlightRef = useRef<boolean>(false);
 
   const outputRef = useRef<HTMLPreElement>(null);
 
@@ -58,6 +66,7 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
 
   const run = async () => {
     if (!goal.trim() || running) return;
+    stopPolling();
     setRunning(true);
     setOutput('');
     setError('');
@@ -69,6 +78,7 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
     setLastGoal(goal);
     runIdRef.current  = '';
     lastLenRef.current = 0;
+    pollInFlightRef.current = false;
 
     try {
       const res = await apiFetch(`/api/projects/${projectId}/run`, {
@@ -96,54 +106,66 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
       }
 
       // Poll every 1.5 s for new output and run status.
-      // Closure over runId, apiKey, and the state setters — all stable refs.
       const doPoll = async () => {
+        if (pollInFlightRef.current) return;
+        pollInFlightRef.current = true;
+
         try {
-          const resp = await apiFetch(`/api/projects/runs/${runId}`, {}, apiKey);
+          const activeRunId = runIdRef.current;
+          if (!activeRunId) return;
+
+          const resp = await apiFetch(`/api/projects/runs/${activeRunId}`, {}, apiKey);
           if (!resp.ok) {
             console.warn('[Poll] non-OK status:', resp.status);
             return; // network blip — keep polling
           }
           const data = await resp.json() as PollData;
-          const totalLen = (data.output ?? '').length;
+          const rawOutput = data.output ?? '';
+          const totalLen = rawOutput.length;
           console.log('[Poll] response:', data.status, 'totalOutputLen:', totalLen, 'lastLen:', lastLenRef.current, 'prUrl:', data.prUrl);
 
-          // Append only the bytes we haven't shown yet
-          const newChunk = (data.output ?? '').slice(lastLenRef.current);
-          console.log('[UI] newChunk length:', newChunk.length);
-
-          const display = newChunk
-            .replace(/\n?\[ROLAND_DONE\]\n?/g, '')
-            .replace(/\n?\[ROLAND_PR\]: https?:\/\/\S+\n?/g, '');
-
-          if (display) {
-            console.log('[UI] Appending output length:', display.length);
-            setOutput((prev) => prev + display);
-          } else if (newChunk.length > 0) {
-            // newChunk existed but was stripped entirely by the regex — still advance the pointer
-            console.log('[UI] newChunk was all markers, advancing pointer only');
+          // Ignore out-of-order poll responses that would rewind the read pointer.
+          if (totalLen < lastLenRef.current) {
+            console.warn('[Poll] stale response ignored');
+            return;
           }
 
-          // Always advance pointer to the full DB output length, even if display was empty
-          lastLenRef.current = totalLen;
+          const isDone =
+            data.status === 'success' ||
+            data.status === 'error' ||
+            data.finishedAt != null;
 
           if (data.prUrl) setPrUrl(data.prUrl);
 
-          // Stop when the server marks the run done — use finishedAt as a
-          // belt-and-suspenders fallback in case status update races the poll.
-          const isDone = data.status !== 'running' || data.finishedAt != null;
           if (isDone) {
             console.log('[Poll] run finished, status:', data.status);
+            setOutput(stripMarkers(rawOutput));
+            lastLenRef.current = totalLen;
             stopPolling();
             setRunning(false);
+            return;
+          }
+
+          // Append only the bytes we haven't shown yet
+          const newChunk = rawOutput.slice(lastLenRef.current);
+          console.log('[UI] newChunk length:', newChunk.length);
+
+          if (newChunk.length > 0) {
+            const display = stripMarkers(newChunk);
+            console.log('[UI] Appending output length:', display.length);
+            setOutput((prev) => prev + display);
+            lastLenRef.current = totalLen;
           }
         } catch (err) {
           // Log but keep polling — transient network errors shouldn't stop the UI
           console.warn('[Poll] error (will retry):', err);
+        } finally {
+          pollInFlightRef.current = false;
         }
       };
 
-      pollRef.current = setInterval(doPoll, 1500);
+      void doPoll();
+      pollRef.current = setInterval(() => void doPoll(), 1500);
     } catch (e: unknown) {
       const raw = (e as Error)?.message ?? '';
       const isNetwork = /fetch|network|failed to fetch|load failed/i.test(raw);
@@ -246,7 +268,7 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
         ref={outputRef}
         className="flex-1 min-h-64 bg-white border border-gray-200 rounded-xl p-4 text-sm text-gray-700 font-mono overflow-auto whitespace-pre-wrap shadow-inner"
       >
-        {output || (
+        {output.length > 0 ? output : (
           <span className="text-gray-400">
             {running ? 'Starting Roland…' : 'Output will appear here.'}
           </span>
