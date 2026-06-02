@@ -5,7 +5,7 @@ import { existsSync } from 'fs';
 import { resolve } from 'path';
 import { getDb } from '../db.js';
 import { requireAuth } from '../auth.js';
-import { createRolandBranch, pushBranchAndCreatePR } from '../github.js';
+import { createRolandBranch, pushBranchAndCreatePR, ensureGitRepo } from '../github.js';
 import { decrypt } from '../crypto.js';
 
 export const runRouter = Router();
@@ -50,17 +50,21 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
 
   // ── Auto-create branch (best-effort — run proceeds even on failure) ─────────
   let branchName = '';
-  if (project.encrypted_pat && project.github_owner) {
+  if (project.encrypted_pat && project.github_owner && project.github_repo) {
+    const pat = decrypt(project.encrypted_pat);
     const slug = goalToBranchSlug(goal);
     const candidate = `roland/${slug}`;
     try {
+      // Repair missing .git — happens for projects cloned before git-init was added
+      // or when a previous init attempt failed on a network hiccup.
+      await ensureGitRepo(project.path, pat, project.github_owner, project.github_repo);
       await createRolandBranch(project.path, candidate);
       branchName = candidate;
       console.log(`[Run] branch ready: ${branchName}`);
     } catch (e) {
       const raw = e instanceof Error ? e.message : String(e);
-      console.error(`[Run] branch creation failed for project ${project.id} (${project.path}): ${raw}`);
-      // Run continues on main — branch header will be absent from the response
+      console.error(`[Run] branch/git-init failed for project ${project.id} (${project.path}): ${raw}`);
+      // Run continues without a branch — no PR will be created
     }
   }
 

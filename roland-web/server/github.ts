@@ -165,6 +165,58 @@ export async function listUserRepos(
 // ── Clone ─────────────────────────────────────────────────────────────────────
 
 /**
+ * Initialise (or re-initialise) git inside an already-extracted working tree and
+ * connect it to the real GitHub history so that branch/push/PR operations work.
+ *
+ * Safe to call on an existing .git dir — `git init` is idempotent and
+ * `git remote set-url` replaces a stale PAT in origin.
+ */
+async function initGitInWorkdir(
+  pat: string,
+  owner: string,
+  repo: string,
+  clonePath: string,
+): Promise<void> {
+  const { data } = await (new Octokit({ auth: pat })).repos.get({ owner, repo });
+  const defaultBranch = data.default_branch;
+  const authenticated = `https://${pat}@github.com/${owner}/${repo}.git`;
+
+  // git init is idempotent; remote add vs set-url handles both fresh and existing repos
+  await execAsync(
+    [
+      'git init',
+      'git config user.email "roland@roland.ai"',
+      'git config user.name "Roland"',
+      `git symbolic-ref HEAD "refs/heads/${defaultBranch}"`,
+      `git remote set-url origin "${authenticated}" 2>/dev/null || git remote add origin "${authenticated}"`,
+      `git fetch --depth=1 --filter=blob:none origin "${defaultBranch}"`,
+      `git update-ref "refs/heads/${defaultBranch}" FETCH_HEAD`,
+      'git read-tree FETCH_HEAD',
+      'git add -A',
+    ].join(' && '),
+    { cwd: clonePath, timeout: 60_000 },
+  );
+  console.log(`[GitHub] git repo initialised on ${defaultBranch} (history connected to remote)`);
+}
+
+/**
+ * Ensure the working directory at `cwd` has a properly initialised git repo.
+ * Repairs projects cloned before the git-init step was added (tarball-only clones
+ * that have no .git) or where a previous init attempt failed.
+ */
+export async function ensureGitRepo(
+  cwd: string,
+  pat: string,
+  owner: string,
+  repo: string,
+): Promise<void> {
+  if (!existsSync(join(cwd, '.git'))) {
+    console.log(`[GitHub] .git missing at ${cwd} — initialising git repo`);
+    await initGitInWorkdir(pat, owner, repo, cwd);
+  }
+}
+
+/**
  * Downloads a GitHub repo as a tarball (fast) then initialises a git repo whose
  * history is connected to the actual remote commit.
  *
@@ -187,8 +239,18 @@ export async function cloneRepo(
   const clonePath = `${cloneBase}/${dirName}`;
   mkdirSync(cloneBase, { recursive: true });
 
-  // Already present — return as-is (re-import to refresh)
+  // Already present — ensure git is initialised (may be missing for old tarball-only clones
+  // or when a previous init attempt failed).
   if (existsSync(clonePath)) {
+    if (!existsSync(join(clonePath, '.git'))) {
+      try {
+        await initGitInWorkdir(pat, owner, repo, clonePath);
+      } catch (e) {
+        console.warn(
+          `[GitHub] git init (repair) failed for ${owner}/${repo}: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+    }
     return clonePath;
   }
 
@@ -232,28 +294,8 @@ export async function cloneRepo(
   }
 
   // ── Step 2: init git and connect to real GitHub history ───────────────────
-  // --filter=blob:none fetches only commit + tree metadata (no file blobs), so
-  // there is no duplicate file download — blobs are supplied by the tarball above.
   try {
-    const { data } = await (new Octokit({ auth: pat })).repos.get({ owner, repo });
-    const defaultBranch = data.default_branch;
-    const authenticated = `https://${pat}@github.com/${owner}/${repo}.git`;
-
-    await execAsync(
-      [
-        'git init',
-        'git config user.email "roland@roland.ai"',
-        'git config user.name "Roland"',
-        `git symbolic-ref HEAD "refs/heads/${defaultBranch}"`,
-        `git remote add origin "${authenticated}"`,
-        `git fetch --depth=1 --filter=blob:none origin "${defaultBranch}"`,
-        `git update-ref "refs/heads/${defaultBranch}" FETCH_HEAD`,
-        'git read-tree FETCH_HEAD',
-        'git add -A',
-      ].join(' && '),
-      { cwd: clonePath, timeout: 60_000 },
-    );
-    console.log(`[GitHub] git repo initialised on ${defaultBranch} (history connected to remote)`);
+    await initGitInWorkdir(pat, owner, repo, clonePath);
   } catch (gitErr) {
     // Non-fatal: tarball files are usable; branch/push operations will fail later
     console.warn(
@@ -421,9 +463,14 @@ export async function pushBranchAndCreatePR(
     try { unlinkSync(msgFile); } catch { /* ignore */ }
   }
 
-  // Push branch to remote using authenticated URL
-  const origin = `https://${pat}@github.com/${owner}/${repo}.git`;
-  await execAsync(`git push "${origin}" "${branch}" --set-upstream --force-with-lease`, { cwd });
+  // Refresh origin with the current PAT (may have rotated since the initial clone),
+  // then push via named remote so --set-upstream wires tracking refs correctly.
+  const originUrl = `https://${pat}@github.com/${owner}/${repo}.git`;
+  await execAsync(
+    `git remote set-url origin "${originUrl}" 2>/dev/null || git remote add origin "${originUrl}"`,
+    { cwd },
+  );
+  await execAsync(`git push -u origin "${branch}"`, { cwd });
 
   const defaultBranch = await getDefaultBranch(cwd);
   const octokit = new Octokit({ auth: pat });
