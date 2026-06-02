@@ -1,7 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { flushSync } from 'react-dom';
+import { useEffect, useRef, useState } from 'react';
 import { useApiKey } from '@/lib/ApiKeyContext';
 import { apiFetch } from '@/lib/api';
 
@@ -11,28 +10,18 @@ interface Props {
   onBranchCreated?: (branch: string) => void;
 }
 
-interface PollData {
-  status: string;
+interface RunResult {
+  runId: string;
+  status: 'success' | 'error';
   output: string;
   branch: string;
   prUrl: string | null;
-  finishedAt: number | null;
-}
-
-/** Strip ANSI escape codes and internal Roland markers before display. */
-function sanitizeOutput(text: string): string {
-  return text
-    .replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
-    .replace(/\n?\[ROLAND_DONE\]\n?/g, '')
-    .replace(/\n?\[ROLAND_PR\]: https?:\/\/\S+\n?/g, '');
 }
 
 export function ChatInterface({ projectId, onBranchCreated }: Props) {
   const { apiKey, pmModel, engineerModel } = useApiKey();
   const [goal, setGoal]       = useState('');
   const [output, setOutput]   = useState('');
-  /** Bumped on every output write to force the output node to re-render. */
-  const [outputVersion, setOutputVersion] = useState(0);
   const [running, setRunning] = useState(false);
   const [error, setError]     = useState('');
 
@@ -45,106 +34,18 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
   const [prIsTransient, setPrIsTransient]     = useState(false);
   const [prNeedsReconnect, setPrNeedsReconnect] = useState(false);
 
-  // Polling refs — not state because changing them must not trigger re-renders
-  const runIdRef        = useRef<string>('');
-  const lastLenRef      = useRef<number>(0);
-  const pollRef         = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pollInFlightRef = useRef<boolean>(false);
-
   const outputScrollRef = useRef<HTMLDivElement>(null);
-  const outputPreRef    = useRef<HTMLPreElement>(null);
-  /** Canonical accumulated output — ref avoids stale closures in poll callbacks. */
-  const outputBufferRef = useRef('');
-  const runningRef      = useRef(false);
 
-  const scrollOutputToBottom = useCallback(() => {
-    const scrollEl = outputScrollRef.current;
-    if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
-  }, []);
-
-  /** Write text directly to the DOM — bypasses React reconciliation for streaming output. */
-  const paintOutputDom = useCallback((text: string) => {
-    const pre = outputPreRef.current;
-    if (!pre) return;
-
-    if (text.length > 0) {
-      pre.textContent = text;
-      pre.classList.remove('text-gray-400');
-      pre.classList.add('text-gray-700');
-    } else {
-      pre.textContent = runningRef.current
-        ? 'Starting Roland…'
-        : 'Output will appear here.';
-      pre.classList.remove('text-gray-700');
-      pre.classList.add('text-gray-400');
-    }
-
-    scrollOutputToBottom();
-  }, [scrollOutputToBottom]);
-
-  /**
-   * Commit output: ref is source of truth → paint DOM immediately → sync React state.
-   * Poll callbacks run outside React events, so imperative paint is the primary path.
-   */
-  const commitOutput = useCallback((updater: string | ((prev: string) => string)) => {
-    const next = typeof updater === 'function'
-      ? updater(outputBufferRef.current)
-      : updater;
-
-    outputBufferRef.current = next;
-
-    // 1. Imperative paint — always visible even if React batching defers the re-render
-    paintOutputDom(next);
-
-    // 2. Sync React state for consistency / devtools
-    try {
-      flushSync(() => {
-        setOutput(next);
-        setOutputVersion((v) => v + 1);
-      });
-    } catch {
-      // flushSync throws if called during render — DOM is already correct
-    }
-
-    // 3. Fallback after paint: re-apply if React overwrote or skipped the text node
-    requestAnimationFrame(() => {
-      const pre = outputPreRef.current;
-      if (!pre) return;
-      const expected = outputBufferRef.current;
-      if (expected.length > 0 && pre.textContent !== expected) {
-        pre.textContent = expected;
-        pre.classList.remove('text-gray-400');
-        pre.classList.add('text-gray-700');
-      }
-      scrollOutputToBottom();
-    });
-  }, [paintOutputDom, scrollOutputToBottom]);
-
-  // Keep runningRef in sync for placeholder text inside paintOutputDom
   useEffect(() => {
-    runningRef.current = running;
-  }, [running]);
-
-  // Safety net: re-paint from buffer whenever React re-renders the output panel
-  useLayoutEffect(() => {
-    paintOutputDom(outputBufferRef.current);
-  }, [output, outputVersion, paintOutputDom]);
-
-  // Clear the polling interval on unmount so we don't leak timers.
-  useEffect(() => {
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, []);
-
-  const stopPolling = () => {
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-  };
+    const el = outputScrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [output, running]);
 
   const run = async () => {
     if (!goal.trim() || running) return;
-    stopPolling();
-    runningRef.current = true;
+
     setRunning(true);
-    commitOutput('');
+    setOutput('');
     setError('');
     setBranch('');
     setPrUrl('');
@@ -152,9 +53,6 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
     setPrIsTransient(false);
     setPrNeedsReconnect(false);
     setLastGoal(goal);
-    runIdRef.current  = '';
-    lastLenRef.current = 0;
-    pollInFlightRef.current = false;
 
     try {
       const res = await apiFetch(`/api/projects/${projectId}/run`, {
@@ -166,102 +64,31 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
         },
       }, apiKey);
 
+      const data = await res.json().catch(() => ({})) as Partial<RunResult> & { error?: string };
+
       if (!res.ok) {
-        const d = await res.json().catch(() => ({})) as { error?: string };
-        setError(d.error ?? 'Run failed');
-        setRunning(false);
+        setError(data.error ?? 'Run failed');
         return;
       }
 
-      const { runId, branch: branchName } = await res.json() as { runId: string; branch: string };
-      runIdRef.current = runId;
+      setOutput(data.output ?? '');
 
-      if (branchName) {
-        setBranch(branchName);
-        onBranchCreated?.(branchName);
+      if (data.branch) {
+        setBranch(data.branch);
+        onBranchCreated?.(data.branch);
       }
 
-      // Poll every 1.5 s for new output and run status.
-      const doPoll = async () => {
-        if (pollInFlightRef.current) return;
-        pollInFlightRef.current = true;
-
-        try {
-          const activeRunId = runIdRef.current;
-          if (!activeRunId) return;
-
-          const resp = await apiFetch(`/api/projects/runs/${activeRunId}`, {}, apiKey);
-          if (!resp.ok) {
-            console.warn('[Poll] non-OK status:', resp.status);
-            return; // network blip — keep polling
-          }
-          const data = await resp.json() as PollData;
-          const rawOutput = data.output ?? '';
-          const totalLen = rawOutput.length;
-          console.log('[Poll] response:', data.status, 'totalOutputLen:', totalLen, 'lastLen:', lastLenRef.current, 'prUrl:', data.prUrl);
-
-          // Ignore out-of-order poll responses that would rewind the read pointer.
-          if (totalLen < lastLenRef.current) {
-            console.warn('[Poll] stale response ignored');
-            return;
-          }
-
-          const isDone =
-            data.status === 'success' ||
-            data.status === 'error' ||
-            data.finishedAt != null;
-
-          if (data.prUrl) setPrUrl(data.prUrl);
-
-          if (isDone) {
-            console.log('[Poll] run finished, status:', data.status);
-            const full = sanitizeOutput(rawOutput);
-            commitOutput(full);
-            lastLenRef.current = totalLen;
-            stopPolling();
-            runningRef.current = false;
-            setRunning(false);
-            return;
-          }
-
-          // Append only the bytes we haven't shown yet
-          const newChunk = rawOutput.slice(lastLenRef.current);
-          console.log('[UI] newChunk length:', newChunk.length);
-
-          if (newChunk.length > 0) {
-            const display = sanitizeOutput(newChunk);
-            console.log('[UI] Appending output length:', display.length);
-            commitOutput((prev) => prev + display);
-            lastLenRef.current = totalLen;
-          }
-        } catch (err) {
-          // Log but keep polling — transient network errors shouldn't stop the UI
-          console.warn('[Poll] error (will retry):', err);
-        } finally {
-          pollInFlightRef.current = false;
-        }
-      };
-
-      void doPoll();
-      pollRef.current = setInterval(() => void doPoll(), 1500);
+      if (data.prUrl) {
+        setPrUrl(data.prUrl);
+      }
     } catch (e: unknown) {
       const raw = (e as Error)?.message ?? '';
       const isNetwork = /fetch|network|failed to fetch|load failed/i.test(raw);
       setError(isNetwork
         ? 'Could not reach the server. Check your connection and try again.'
         : 'Something went wrong. Please try again.');
+    } finally {
       setRunning(false);
-    }
-  };
-
-  const stop = async () => {
-    stopPolling();
-    runningRef.current = false;
-    setRunning(false);
-    const runId = runIdRef.current;
-    if (runId) {
-      // Best-effort cancel — kill the child process server-side
-      apiFetch(`/api/projects/runs/${runId}/cancel`, { method: 'POST' }, apiKey).catch(() => {});
     }
   };
 
@@ -296,6 +123,9 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
   };
 
   const showPRBanner = !running && branch && !prUrl;
+  const placeholder = running
+    ? 'Running… Roland is working on your goal. This may take several minutes.'
+    : 'Output will appear here.';
 
   return (
     <div className="flex flex-col gap-4 flex-1">
@@ -319,9 +149,6 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
           >
             {running ? 'Running…' : 'Run'}
           </button>
-          {running && (
-            <button onClick={stop} className="btn-sm text-xs">Stop</button>
-          )}
         </div>
       </div>
 
@@ -342,16 +169,14 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
         </div>
       )}
 
-      {/* Output — imperative textContent via outputPreRef; React state is secondary */}
+      {/* Output — plain React state, no streaming or polling */}
       <div
         ref={outputScrollRef}
         className="flex-1 min-h-64 bg-white border border-gray-200 rounded-xl overflow-auto shadow-inner"
       >
-        <pre
-          ref={outputPreRef}
-          data-output-panel
-          className="p-4 text-sm font-mono whitespace-pre-wrap m-0 text-gray-400"
-        />
+        <pre className="p-4 text-sm font-mono whitespace-pre-wrap break-words m-0 min-h-[12rem] text-gray-700">
+          {output || (running ? placeholder : 'Output will appear here.')}
+        </pre>
       </div>
 
       {/* Push & PR banner — fallback if auto-PR failed or no PAT configured */}
