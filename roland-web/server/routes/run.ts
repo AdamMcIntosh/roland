@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { spawn } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
 import { randomUUID } from 'crypto';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
@@ -24,16 +24,54 @@ function goalToBranchSlug(goal: string): string {
   return goal
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9 ]/g, '')   // strip non-alphanumeric except spaces
+    .replace(/[^a-z0-9 ]/g, '')
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 5)
     .join('-') || 'run';
 }
 
+// In-memory registry of active child processes — used by the cancel endpoint.
+// Single-replica Railway deployment, so in-process state is safe.
+const activeRuns = new Map<string, ChildProcess>();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTE: /runs/:runId and /runs/:runId/cancel MUST be registered before
+// /:projectId/runs — Express matches routes in order, and both patterns have
+// two path segments. Registering the specific literal "runs" first prevents
+// /:projectId/runs from greedily consuming poll/cancel requests.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GET /api/projects/runs/:runId — poll a run's current status and output
+runRouter.get('/runs/:runId', requireAuth, (req, res) => {
+  const run = getDb()
+    .prepare('SELECT id, status, output, branch, pr_url, finished_at FROM runs WHERE id=?')
+    .get(req.params.runId as string) as any;
+  if (!run) { res.status(404).json({ error: 'Run not found' }); return; }
+  res.json({
+    status:     run.status     as string,
+    output:     run.output     as string,
+    branch:     run.branch     as string,
+    prUrl:      (run.pr_url ?? null) as string | null,
+    finishedAt: run.finished_at ?? null,
+  });
+});
+
+// POST /api/projects/runs/:runId/cancel — stop a running job
+runRouter.post('/runs/:runId/cancel', requireAuth, (req, res) => {
+  const child = activeRuns.get(req.params.runId as string);
+  if (child) {
+    child.kill('SIGTERM');
+    activeRuns.delete(req.params.runId as string);
+  }
+  getDb()
+    .prepare("UPDATE runs SET status='error', finished_at=unixepoch() WHERE id=? AND status='running'")
+    .run(req.params.runId as string);
+  res.json({ ok: true });
+});
+
 // POST /api/projects/:projectId/run
-// Body: { goal: string }
-// Response: chunked text stream; header X-Roland-Branch carries the branch name when set.
+// Returns { runId, branch } immediately; client polls /runs/:runId for progress.
 runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
   const { goal } = (req.body ?? {}) as { goal?: string };
   if (!goal?.trim()) { res.status(400).json({ error: 'goal required' }); return; }
@@ -73,20 +111,6 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
     .prepare('INSERT INTO runs (id, project_id, goal, branch) VALUES (?, ?, ?, ?)')
     .run(runId, project.id, goal, branchName);
 
-  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-  res.setHeader('Transfer-Encoding', 'chunked');
-  res.setHeader('X-Accel-Buffering', 'no');   // disable nginx/Railway proxy buffering
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  if (branchName) res.setHeader('X-Roland-Branch', branchName);
-  res.flushHeaders();
-
-  // Write a single byte immediately so Railway's proxy forwards this chunk
-  // without waiting to accumulate a larger buffer. X-Accel-Buffering: no
-  // should disable Nginx buffering, but the explicit write guarantees it.
-  res.write('\n');
-  (res as any).flush?.();
-
   const cursorApiKey = (req as any).cursorApiKey as string;
 
   const stateDir = process.env.NODE_ENV === 'production'
@@ -120,11 +144,10 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
     },
   });
 
+  activeRuns.set(runId, child);
+
+  // Append text to the DB-backed output log (no HTTP response involved).
   const append = (text: string) => {
-    if (!res.writableEnded) {
-      res.write(text);
-      (res as any).flush?.();
-    }
     getDb()
       .prepare('UPDATE runs SET output = output || ? WHERE id = ?')
       .run(text, runId);
@@ -132,18 +155,15 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
 
   child.stdout.on('data', (chunk: Buffer) => append(chunk.toString()));
   child.stderr.on('data', (chunk: Buffer) => append(chunk.toString()));
-
-  child.on('error', (err) => {
-    append(`\n[Roland] Failed to start: ${err.message}\n`);
-  });
+  child.on('error', (err) => append(`\n[Roland] Failed to start: ${err.message}\n`));
 
   child.on('close', async (code) => {
-    getDb()
-      .prepare('UPDATE runs SET status=?, finished_at=unixepoch() WHERE id=?')
-      .run(code === 0 ? 'success' : 'error', runId);
+    activeRuns.delete(runId);
 
-    // Auto-commit, push, and open a PR when the run had a prepared branch
-    if (branchName && project.encrypted_pat && project.github_owner && project.github_repo) {
+    // Auto-commit, push, and open a PR when the run had a prepared branch.
+    // Status stays 'running' during this phase so the client keeps polling
+    // and picks up pr_url before the run is marked complete.
+    if (code === 0 && branchName && project.encrypted_pat && project.github_owner && project.github_repo) {
       try {
         const pat = decrypt(project.encrypted_pat);
         const prTitle = `Roland: ${goal.length > 72 ? goal.slice(0, 69) + '…' : goal}`;
@@ -155,7 +175,7 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
           'Changes generated automatically by [Roland](https://github.com/AdamMcIntosh/roland).',
         ].join('\n');
 
-        // Race against a 90 s hard timeout — a hung git push must never freeze the stream.
+        // Race against a 90 s hard timeout — a hung git push must never freeze the run.
         const pr = await Promise.race([
           pushBranchAndCreatePR(
             project.path,
@@ -175,7 +195,7 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
           getDb().prepare('UPDATE runs SET pr_url=? WHERE id=?').run(pr.url, runId);
         } catch { /* pr_url column may not exist on older DBs */ }
 
-        append(`\n[ROLAND_PR]: ${pr.url}\n`);
+        append(`\n✅ Pull request created: ${pr.url}\n`);
       } catch (prErr) {
         const msg = prErr instanceof Error ? prErr.message : String(prErr);
         console.error(`[Run] auto-PR failed (run=${runId}):`, msg);
@@ -183,13 +203,15 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
       }
     }
 
-    // Always emit a completion sentinel before closing. The client uses this as a
-    // belt-and-suspenders signal in case Railway's proxy swallows the final TCP chunk.
-    append('\n[ROLAND_DONE]\n');
-    if (!res.writableEnded) res.end();
+    // Mark complete only after the PR workflow — ensures pr_url is in the DB
+    // before the client's next poll sees status !== 'running'.
+    getDb()
+      .prepare('UPDATE runs SET status=?, finished_at=unixepoch() WHERE id=?')
+      .run(code === 0 ? 'success' : 'error', runId);
   });
 
-  res.on('close', () => child.kill());
+  // Respond immediately — client polls for updates via GET /api/projects/runs/:runId
+  res.json({ runId, branch: branchName });
 });
 
 // GET /api/projects/:projectId/runs — recent run history (last 50)
