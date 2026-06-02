@@ -105,15 +105,27 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
             return; // network blip — keep polling
           }
           const data = await resp.json() as PollData;
-          console.log('[Poll] response:', data.status, 'outputLen:', data.output?.length ?? 0, 'prUrl:', data.prUrl);
+          const totalLen = (data.output ?? '').length;
+          console.log('[Poll] response:', data.status, 'totalOutputLen:', totalLen, 'lastLen:', lastLenRef.current, 'prUrl:', data.prUrl);
 
           // Append only the bytes we haven't shown yet
           const newChunk = (data.output ?? '').slice(lastLenRef.current);
+          console.log('[UI] newChunk length:', newChunk.length);
+
           const display = newChunk
             .replace(/\n?\[ROLAND_DONE\]\n?/g, '')
             .replace(/\n?\[ROLAND_PR\]: https?:\/\/\S+\n?/g, '');
-          if (display) setOutput((prev) => prev + display);
-          lastLenRef.current = (data.output ?? '').length;
+
+          if (display) {
+            console.log('[UI] Appending output length:', display.length);
+            setOutput((prev) => prev + display);
+          } else if (newChunk.length > 0) {
+            // newChunk existed but was stripped entirely by the regex — still advance the pointer
+            console.log('[UI] newChunk was all markers, advancing pointer only');
+          }
+
+          // Always advance pointer to the full DB output length, even if display was empty
+          lastLenRef.current = totalLen;
 
           if (data.prUrl) setPrUrl(data.prUrl);
 
