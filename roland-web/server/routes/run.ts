@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { spawn, ChildProcess } from 'child_process';
+import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
@@ -31,47 +31,42 @@ function goalToBranchSlug(goal: string): string {
     .join('-') || 'run';
 }
 
-// In-memory registry of active child processes — used by the cancel endpoint.
-// Single-replica Railway deployment, so in-process state is safe.
-const activeRuns = new Map<string, ChildProcess>();
+/** Strip ANSI escape codes and internal Roland markers before display. */
+function sanitizeOutput(text: string): string {
+  return text
+    .replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
+    .replace(/\n?\[ROLAND_DONE\]\n?/g, '')
+    .replace(/\n?\[ROLAND_PR\]: https?:\/\/\S+\n?/g, '');
+}
 
-// ─────────────────────────────────────────────────────────────────────────────
-// NOTE: /runs/:runId and /runs/:runId/cancel MUST be registered before
-// /:projectId/runs — Express matches routes in order, and both patterns have
-// two path segments. Registering the specific literal "runs" first prevents
-// /:projectId/runs from greedily consuming poll/cancel requests.
-// ─────────────────────────────────────────────────────────────────────────────
+interface RolandRunResult {
+  exitCode: number | null;
+  output: string;
+}
 
-// GET /api/projects/runs/:runId — poll a run's current status and output
-runRouter.get('/runs/:runId', requireAuth, (req, res) => {
-  const run = getDb()
-    .prepare('SELECT id, status, output, branch, pr_url, finished_at FROM runs WHERE id=?')
-    .get(req.params.runId as string) as any;
-  if (!run) { res.status(404).json({ error: 'Run not found' }); return; }
-  res.json({
-    status:     run.status     as string,
-    output:     run.output     as string,
-    branch:     run.branch     as string,
-    prUrl:      (run.pr_url ?? null) as string | null,
-    finishedAt: run.finished_at ?? null,
+/** Run Roland to completion and return captured stdout + stderr. */
+function runRolandSync(
+  args: string[],
+  cwd: string,
+  env: Record<string, string | undefined>,
+): Promise<RolandRunResult> {
+  return new Promise((resolvePromise, reject) => {
+    let output = '';
+
+    const child = spawn(process.execPath, [rolandEntry, ...args], {
+      cwd,
+      env: { ...process.env, ...env },
+    });
+
+    child.stdout.on('data', (chunk: Buffer) => { output += chunk.toString(); });
+    child.stderr.on('data', (chunk: Buffer) => { output += chunk.toString(); });
+    child.on('error', (err) => reject(err));
+    child.on('close', (exitCode) => resolvePromise({ exitCode, output }));
   });
-});
-
-// POST /api/projects/runs/:runId/cancel — stop a running job
-runRouter.post('/runs/:runId/cancel', requireAuth, (req, res) => {
-  const child = activeRuns.get(req.params.runId as string);
-  if (child) {
-    child.kill('SIGTERM');
-    activeRuns.delete(req.params.runId as string);
-  }
-  getDb()
-    .prepare("UPDATE runs SET status='error', finished_at=unixepoch() WHERE id=? AND status='running'")
-    .run(req.params.runId as string);
-  res.json({ ok: true });
-});
+}
 
 // POST /api/projects/:projectId/run
-// Returns { runId, branch } immediately; client polls /runs/:runId for progress.
+// Runs Roland synchronously and returns the full result when done.
 runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
   const { goal } = (req.body ?? {}) as { goal?: string };
   if (!goal?.trim()) { res.status(400).json({ error: 'goal required' }); return; }
@@ -93,8 +88,6 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
     const slug = goalToBranchSlug(goal);
     const candidate = `roland/${slug}`;
     try {
-      // Repair missing .git — happens for projects cloned before git-init was added
-      // or when a previous init attempt failed on a network hiccup.
       await ensureGitRepo(project.path, pat, project.github_owner, project.github_repo);
       await createRolandBranch(project.path, candidate);
       branchName = candidate;
@@ -102,7 +95,6 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
     } catch (e) {
       const raw = e instanceof Error ? e.message : String(e);
       console.error(`[Run] branch/git-init failed for project ${project.id} (${project.path}): ${raw}`);
-      // Run continues without a branch — no PR will be created
     }
   }
 
@@ -128,90 +120,90 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
     'gemini-2.5-flash', 'composer-2.5', 'composer-2',
   ]);
 
-  const modelEnv: Record<string, string> = {};
+  const modelEnv: Record<string, string> = {
+    CURSOR_API_KEY: cursorApiKey,
+    ROLAND_SIMPLE_TUI: '1',
+  };
   if (pmModel && VALID_CURSOR_MODELS.has(pmModel))
     modelEnv.ROLAND_PM_MODEL = pmModel;
   if (engineerModel && VALID_CURSOR_MODELS.has(engineerModel))
     modelEnv.ROLAND_ENGINEER_MODEL = engineerModel;
 
-  const child = spawn(process.execPath, [rolandEntry, ...args], {
-    cwd: project.path,
-    env: {
-      ...process.env,
-      CURSOR_API_KEY: cursorApiKey,
-      ROLAND_SIMPLE_TUI: '1',
-      ...modelEnv,
-    },
-  });
+  console.log(`[Run] starting run=${runId} project=${project.id} branch=${branchName || '(none)'}`);
 
-  activeRuns.set(runId, child);
+  let rawOutput = '';
+  let exitCode: number | null = 1;
+  let prUrl: string | null = null;
 
-  // Append text to the DB-backed output log (no HTTP response involved).
-  const append = (text: string) => {
-    getDb()
-      .prepare('UPDATE runs SET output = output || ? WHERE id = ?')
-      .run(text, runId);
-  };
+  try {
+    const result = await runRolandSync(args, project.path, modelEnv);
+    exitCode = result.exitCode;
+    rawOutput = result.output;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    rawOutput = `[Roland] Failed to start: ${msg}\n`;
+    exitCode = 1;
+  }
 
-  child.stdout.on('data', (chunk: Buffer) => append(chunk.toString()));
-  child.stderr.on('data', (chunk: Buffer) => append(chunk.toString()));
-  child.on('error', (err) => append(`\n[Roland] Failed to start: ${err.message}\n`));
+  // Auto-commit, push, and open a PR when the run succeeded and had a prepared branch.
+  if (exitCode === 0 && branchName && project.encrypted_pat && project.github_owner && project.github_repo) {
+    try {
+      const pat = decrypt(project.encrypted_pat);
+      const prTitle = `Roland: ${goal.length > 72 ? goal.slice(0, 69) + '…' : goal}`;
+      const prBody = [
+        '## Roland Run',
+        '',
+        `**Goal:** ${goal}`,
+        '',
+        'Changes generated automatically by [Roland](https://github.com/AdamMcIntosh/roland).',
+      ].join('\n');
 
-  child.on('close', async (code) => {
-    activeRuns.delete(runId);
+      const pr = await Promise.race([
+        pushBranchAndCreatePR(
+          project.path,
+          pat,
+          project.github_owner,
+          project.github_repo,
+          branchName,
+          prTitle,
+          prBody,
+        ),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('PR creation timed out after 90 s')), 90_000),
+        ),
+      ]);
 
-    // Auto-commit, push, and open a PR when the run had a prepared branch.
-    // Status stays 'running' during this phase so the client keeps polling
-    // and picks up pr_url before the run is marked complete.
-    if (code === 0 && branchName && project.encrypted_pat && project.github_owner && project.github_repo) {
-      try {
-        const pat = decrypt(project.encrypted_pat);
-        const prTitle = `Roland: ${goal.length > 72 ? goal.slice(0, 69) + '…' : goal}`;
-        const prBody = [
-          '## Roland Run',
-          '',
-          `**Goal:** ${goal}`,
-          '',
-          'Changes generated automatically by [Roland](https://github.com/AdamMcIntosh/roland).',
-        ].join('\n');
-
-        // Race against a 90 s hard timeout — a hung git push must never freeze the run.
-        const pr = await Promise.race([
-          pushBranchAndCreatePR(
-            project.path,
-            pat,
-            project.github_owner,
-            project.github_repo,
-            branchName,
-            prTitle,
-            prBody,
-          ),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('PR creation timed out after 90 s')), 90_000),
-          ),
-        ]);
-
-        try {
-          getDb().prepare('UPDATE runs SET pr_url=? WHERE id=?').run(pr.url, runId);
-        } catch { /* pr_url column may not exist on older DBs */ }
-
-        append(`\n✅ Pull request created: ${pr.url}\n`);
-      } catch (prErr) {
-        const msg = prErr instanceof Error ? prErr.message : String(prErr);
-        console.error(`[Run] auto-PR failed (run=${runId}):`, msg);
-        append(`\n⚠️  Pull request creation failed: ${msg}\n`);
-      }
+      prUrl = pr.url;
+      rawOutput += `\n✅ Pull request created: ${pr.url}\n`;
+    } catch (prErr) {
+      const msg = prErr instanceof Error ? prErr.message : String(prErr);
+      console.error(`[Run] auto-PR failed (run=${runId}):`, msg);
+      rawOutput += `\n⚠️  Pull request creation failed: ${msg}\n`;
     }
+  }
 
-    // Mark complete only after the PR workflow — ensures pr_url is in the DB
-    // before the client's next poll sees status !== 'running'.
-    getDb()
-      .prepare('UPDATE runs SET status=?, finished_at=unixepoch() WHERE id=?')
-      .run(code === 0 ? 'success' : 'error', runId);
+  const status = exitCode === 0 ? 'success' : 'error';
+  const output = sanitizeOutput(rawOutput);
+
+  getDb()
+    .prepare('UPDATE runs SET status=?, output=?, finished_at=unixepoch() WHERE id=?')
+    .run(status, output, runId);
+
+  if (prUrl) {
+    try {
+      getDb().prepare('UPDATE runs SET pr_url=? WHERE id=?').run(prUrl, runId);
+    } catch { /* pr_url column may not exist on older DBs */ }
+  }
+
+  console.log(`[Run] finished run=${runId} status=${status} outputLen=${output.length}`);
+
+  res.json({
+    runId,
+    status,
+    output,
+    branch: branchName,
+    prUrl,
   });
-
-  // Respond immediately — client polls for updates via GET /api/projects/runs/:runId
-  res.json({ runId, branch: branchName });
 });
 
 // GET /api/projects/:projectId/runs — recent run history (last 50)
