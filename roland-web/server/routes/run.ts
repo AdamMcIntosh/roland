@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { spawn } from 'child_process';
+import { spawn, type ChildProcess } from 'child_process';
 import { randomUUID } from 'crypto';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
@@ -44,6 +44,20 @@ function sanitizeOutput(text: string): string {
 interface RolandRunResult {
   exitCode: number | null;
   output: string;
+  cancelled: boolean;
+}
+
+// Single-replica deployment — one active Roland process per project at a time.
+const activeRunsByProject = new Map<string, ChildProcess>();
+
+/** Projects explicitly cancelled via POST /run/cancel — not inferred from signals. */
+const explicitlyCancelledProjects = new Set<string>();
+
+/** Disable socket timeouts for a long-running request/response cycle. */
+function disableSocketTimeout(req: { socket?: { setTimeout?: (ms: number) => void; setKeepAlive?: (v: boolean) => void } }, res: { setTimeout?: (ms: number) => void }): void {
+  req.socket?.setTimeout?.(0);
+  req.socket?.setKeepAlive?.(true);
+  res.setTimeout?.(0);
 }
 
 /** Run Roland to completion and return captured stdout + stderr. */
@@ -51,6 +65,7 @@ function runRolandSync(
   args: string[],
   cwd: string,
   env: Record<string, string | undefined>,
+  projectId: string,
 ): Promise<RolandRunResult> {
   return new Promise((resolvePromise, reject) => {
     let output = '';
@@ -60,16 +75,57 @@ function runRolandSync(
       env: { ...process.env, ...env },
     });
 
+    activeRunsByProject.set(projectId, child);
+    logger.info('Run child spawned', { pid: child.pid, projectId });
+
     child.stdout.on('data', (chunk: Buffer) => { output += chunk.toString(); });
     child.stderr.on('data', (chunk: Buffer) => { output += chunk.toString(); });
-    child.on('error', (err) => reject(err));
-    child.on('close', (exitCode) => resolvePromise({ exitCode, output }));
+    child.on('error', (err) => {
+      activeRunsByProject.delete(projectId);
+      logger.error('Run child error', { projectId, error: err.message });
+      reject(err);
+    });
+    child.on('close', (exitCode, signal) => {
+      activeRunsByProject.delete(projectId);
+      const cancelled = explicitlyCancelledProjects.delete(projectId);
+      logger.info('Run child closed', {
+        projectId,
+        pid: child.pid,
+        exitCode,
+        signal: signal ?? 'none',
+        cancelled,
+      });
+      resolvePromise({ exitCode, output, cancelled });
+    });
   });
 }
+
+// POST /api/projects/:projectId/run/cancel — stop the active run (user-initiated only)
+runRouter.post('/:projectId/run/cancel', requireAuth, (req, res) => {
+  const projectId = req.params.projectId as string;
+  logger.info('Run cancel requested', { projectId });
+
+  explicitlyCancelledProjects.add(projectId);
+
+  const child = activeRunsByProject.get(projectId);
+  if (child) {
+    logger.info('Run sending SIGTERM', { pid: child.pid, projectId });
+    child.kill('SIGTERM');
+  } else {
+    logger.info('Run cancel: no active child', { projectId });
+  }
+
+  getDb()
+    .prepare("UPDATE runs SET status='error', finished_at=unixepoch() WHERE project_id=? AND status='running'")
+    .run(projectId);
+  res.json({ ok: true });
+});
 
 // POST /api/projects/:projectId/run
 // Runs Roland synchronously and returns the full result when done.
 runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
+  disableSocketTimeout(req, res);
+
   const { goal } = (req.body ?? {}) as { goal?: string };
   if (!goal?.trim()) { res.status(400).json({ error: 'goal required' }); return; }
 
@@ -83,6 +139,9 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
     .get(req.params.projectId as string) as any;
   if (!project) { res.status(404).json({ error: 'Project not found' }); return; }
 
+  const projectId = project.id as string;
+  const startedAt = Date.now();
+
   // ── Auto-create branch (best-effort — run proceeds even on failure) ─────────
   let branchName = '';
   if (project.encrypted_pat && project.github_owner && project.github_repo) {
@@ -93,23 +152,23 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
       await ensureGitRepo(project.path, pat, project.github_owner, project.github_repo);
       await createRolandBranch(project.path, candidate);
       branchName = candidate;
-      logger.info('Run branch ready', { branchName, projectId: project.id });
+      logger.info('Run branch ready', { branchName, projectId });
     } catch (e) {
       const raw = e instanceof Error ? e.message : String(e);
-      logger.error('Branch setup failed', { projectId: project.id, path: project.path, error: raw });
+      logger.error('Branch setup failed', { projectId, path: project.path, error: raw });
     }
   }
 
   const runId = randomUUID();
   getDb()
     .prepare('INSERT INTO runs (id, project_id, goal, branch) VALUES (?, ?, ?, ?)')
-    .run(runId, project.id, goal, branchName);
+    .run(runId, projectId, goal, branchName);
 
   const cursorApiKey = (req as any).cursorApiKey as string;
 
   const { rolandStateDir, nodeEnv } = getConfig();
   const stateDir = nodeEnv === 'production'
-    ? `${rolandStateDir}/${project.id}`
+    ? `${rolandStateDir}/${projectId}`
     : undefined;
 
   const args = ['team', goal, '--web'];
@@ -132,24 +191,37 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
   if (engineerModel && VALID_CURSOR_MODELS.has(engineerModel))
     modelEnv.ROLAND_ENGINEER_MODEL = engineerModel;
 
-  logger.info('Run starting', { runId, projectId: project.id, branch: branchName || null });
+  logger.info('Run starting', { runId, projectId, branch: branchName || null });
+
+  // NOTE: Do NOT kill the child on req.on('close'). That event fires when the
+  // request body stream ends (immediately after POST body is read), not when the
+  // client disconnects — it was causing every run to be SIGTERM'd on startup.
+  // Runs only stop via POST /run/cancel (user clicks Stop) or natural completion.
 
   let rawOutput = '';
   let exitCode: number | null = 1;
+  let cancelled = false;
   let prUrl: string | null = null;
 
   try {
-    const result = await runRolandSync(args, project.path, modelEnv);
+    const result = await runRolandSync(args, project.path, modelEnv, projectId);
     exitCode = result.exitCode;
     rawOutput = result.output;
+    cancelled = result.cancelled;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    logger.error('Run spawn failed', { runId, error: msg });
     rawOutput = `[Roland] Failed to start: ${msg}\n`;
     exitCode = 1;
   }
 
+  if (cancelled) {
+    logger.info('Run explicitly cancelled', { runId });
+    rawOutput += '\n⏹ Run stopped.\n';
+  }
+
   // Auto-commit, push, and open a PR when the run succeeded and had a prepared branch.
-  if (exitCode === 0 && branchName && project.encrypted_pat && project.github_owner && project.github_repo) {
+  if (!cancelled && exitCode === 0 && branchName && project.encrypted_pat && project.github_owner && project.github_repo) {
     try {
       const pat = decrypt(project.encrypted_pat);
       const prTitle = `Roland: ${goal.length > 72 ? goal.slice(0, 69) + '…' : goal}`;
@@ -185,8 +257,9 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
     }
   }
 
-  const status = exitCode === 0 ? 'success' : 'error';
+  const status = cancelled ? 'error' : (exitCode === 0 ? 'success' : 'error');
   const output = sanitizeOutput(rawOutput);
+  const durationSec = Math.round((Date.now() - startedAt) / 1000);
 
   getDb()
     .prepare('UPDATE runs SET status=?, output=?, finished_at=unixepoch() WHERE id=?')
@@ -198,15 +271,27 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
     } catch { /* pr_url column may not exist on older DBs */ }
   }
 
-  logger.info('Run finished', { runId, status, outputLen: output.length });
-
-  res.json({
+  logger.info('Run finished', {
     runId,
     status,
-    output,
-    branch: branchName,
-    prUrl,
+    cancelled,
+    exitCode,
+    durationSec,
+    outputLen: output.length,
   });
+
+  if (!res.writableEnded) {
+    res.json({
+      runId,
+      status,
+      output,
+      branch: branchName,
+      prUrl,
+      cancelled,
+    });
+  } else {
+    logger.warn('Run response already closed', { runId });
+  }
 });
 
 // GET /api/projects/:projectId/runs — recent run history (last 50)

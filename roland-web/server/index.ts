@@ -61,9 +61,13 @@ app.get('/api/version', (_req, res) => {
 });
 
 const httpServer = createServer(app);
+// Long-running /run requests must not be cut off by default Node socket timeouts.
+httpServer.timeout = 0;
+httpServer.requestTimeout = 0;
+httpServer.headersTimeout = 0;
 
 httpServer.listen(port, host, () => {
-  logger.info('HTTP server listening', { port, host });
+  logger.info('HTTP server listening', { port, host, socketTimeout: 'disabled' });
 });
 
 // Graceful shutdown for systemd
