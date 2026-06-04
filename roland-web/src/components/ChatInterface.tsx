@@ -142,7 +142,6 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
   const [prNeedsReconnect, setPrNeedsReconnect] = useState(false);
 
   const outputScrollRef = useRef<HTMLDivElement>(null);
-  const userStoppedRef    = useRef(false);
 
   const elapsedSec = useElapsedSeconds(running);
 
@@ -152,14 +151,11 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
   }, [output, running]);
 
   const stop = useCallback(async () => {
-    console.log('[Run UI] user clicked Stop — requesting server cancel');
-    userStoppedRef.current = true;
     setError('Stopping run…');
     try {
-      const res = await apiFetch(`/api/projects/${projectId}/run/cancel`, { method: 'POST' }, apiKey);
-      console.log('[Run UI] cancel endpoint responded:', res.status);
-    } catch (err) {
-      console.warn('[Run UI] cancel request failed:', err);
+      await apiFetch(`/api/projects/${projectId}/run/cancel`, { method: 'POST' }, apiKey);
+    } catch {
+      // Cancel is best-effort — the original /run fetch will return the final state.
     }
     // Keep running=true — wait for the original /run fetch to return with result.
   }, [projectId, apiKey]);
@@ -167,7 +163,6 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
   const run = async () => {
     if (!goal.trim() || running) return;
 
-    userStoppedRef.current = false;
     setRunning(true);
     setOutput('');
     setError('');
@@ -177,9 +172,6 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
     setPrIsTransient(false);
     setPrNeedsReconnect(false);
     setLastGoal(goal);
-
-    const startedAt = Date.now();
-    console.log('[Run UI] starting run for project', projectId);
 
     try {
       // No AbortSignal — aborting the fetch closes the connection and must NOT
@@ -193,25 +185,19 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
         },
       }, apiKey);
 
-      const elapsed = Math.round((Date.now() - startedAt) / 1000);
-      console.log('[Run UI] /run responded:', res.status, `after ${elapsed}s`);
-
       const data = await res.json().catch(() => ({})) as Partial<RunResult> & { error?: string };
 
       if (!res.ok) {
-        console.error('[Run UI] run failed:', data.error ?? res.status);
         setError(data.error ?? 'Run failed');
         return;
       }
 
       if (data.cancelled) {
-        console.log('[Run UI] run cancelled (server confirmed)');
         setOutput(data.output ?? '');
         setError('Run stopped.');
         return;
       }
 
-      console.log('[Run UI] run complete, status:', data.status, 'outputLen:', data.output?.length ?? 0);
       setOutput(data.output ?? '');
 
       if (data.branch) {
@@ -223,17 +209,13 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
         setPrUrl(data.prUrl);
       }
     } catch (e: unknown) {
-      const elapsed = Math.round((Date.now() - startedAt) / 1000);
       const raw = (e as Error)?.message ?? String(e);
-      console.error('[Run UI] fetch error after', elapsed + 's:', raw);
-
       const isNetwork = /fetch|network|failed to fetch|load failed/i.test(raw);
       setError(isNetwork
         ? 'Connection lost while waiting for results. The run may still be completing on the server — refresh and check run history.'
         : 'Something went wrong. Please try again.');
     } finally {
       setRunning(false);
-      userStoppedRef.current = false;
     }
   };
 

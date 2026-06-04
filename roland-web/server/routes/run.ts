@@ -13,7 +13,7 @@ import { logger } from '../logger.js';
 export const runRouter = Router();
 
 // Point directly at the JS entry point — avoids execute-permission issues with
-// the node_modules/.bin/roland symlink (EACCES on Railway/Linux when committed from Windows).
+// the node_modules/.bin/roland symlink on Linux (e.g. when installed from Windows).
 const rolandEntry = resolve(process.cwd(), 'node_modules', '@roland', 'core', 'dist', 'index.js');
 
 if (!existsSync(rolandEntry)) {

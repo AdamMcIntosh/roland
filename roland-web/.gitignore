@@ -18,5 +18,5 @@ projects/
 # Roland run state — runtime files, may contain goal/output text
 .roland/
 
-# @roland-core/dist, agents, recipes are committed so Railway needs no root-level build.
+# @roland-core/dist, agents, recipes are committed so install.sh needs no root-level build.
 # Rebuild locally with: npm run build:core

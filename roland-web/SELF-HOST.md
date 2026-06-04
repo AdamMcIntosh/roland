@@ -182,13 +182,6 @@ No public internet exposure required — your tailnet is the VPN.
 
 ---
 
-## Railway vs self-host
+## Environment reference
 
-| | Railway | Self-host |
-|---|---|---|
-| Data path | `/data` volume | `/var/lib/roland-web` |
-| Process manager | Railway | systemd |
-| Logs | Platform logs | journald + file logs + logrotate |
-| Updates | Git push deploy | `scripts/update.sh` |
-
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for Railway-specific instructions.
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for the full variables table and local development setup.
