@@ -1,9 +1,8 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
-import { resolve, dirname } from 'path';
-import dotenv from 'dotenv';
-
-dotenv.config();
+import { dirname } from 'path';
+import { getConfig } from './config.js';
+import { logger } from './logger.js';
 
 let _db: DatabaseSync | null = null;
 
@@ -44,13 +43,9 @@ export function initDb(): void {
     );
   `);
 
-  // Migration: add branch column for DBs created before this column existed
   try { db.exec('ALTER TABLE runs ADD COLUMN branch TEXT NOT NULL DEFAULT ""'); } catch { /* already exists */ }
-  // Migration: add pr_url column for storing the auto-created pull request URL
   try { db.exec('ALTER TABLE runs ADD COLUMN pr_url TEXT'); } catch { /* already exists */ }
 
-  // Migration: add ON DELETE CASCADE to existing runs FK
-  // (SQLite requires recreating the table to change a FK constraint)
   const schemaRow = db
     .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='runs'")
     .get() as { sql: string } | undefined;
@@ -78,24 +73,21 @@ export function initDb(): void {
       db.exec('DROP TABLE runs');
       db.exec('ALTER TABLE runs_new RENAME TO runs');
       db.exec('COMMIT');
-      console.log('[DB] Migrated runs table → ON DELETE CASCADE');
+      logger.info('Migrated runs table to ON DELETE CASCADE');
     } catch (e) {
       db.exec('ROLLBACK');
-      console.error('[DB] Migration failed (runs cascade):', e);
+      logger.error('Migration failed (runs cascade)', {
+        error: e instanceof Error ? e.message : String(e),
+      });
     }
   }
 }
 
 function openDb(): DatabaseSync {
-  const defaultPath = process.env.NODE_ENV === 'production'
-    ? '/data/roland-web.db'
-    : resolve(process.cwd(), 'roland-web.db');
-  const dbPath = process.env.DATABASE_PATH ?? defaultPath;
-  mkdirSync(dirname(dbPath), { recursive: true });
-  console.log(`[DB] Opening database: ${dbPath}`);
-  const db = new DatabaseSync(dbPath);
-  // Enforce FK constraints on every connection (node:sqlite enables them by default,
-  // but setting explicitly makes the intent clear and guards against library changes)
+  const { databasePath } = getConfig();
+  mkdirSync(dirname(databasePath), { recursive: true });
+  logger.info('Opening database', { path: databasePath });
+  const db = new DatabaseSync(databasePath);
   db.exec('PRAGMA foreign_keys = ON');
   return db;
 }

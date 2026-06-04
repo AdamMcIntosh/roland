@@ -2,7 +2,8 @@ import { Octokit } from '@octokit/rest';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { existsSync, mkdirSync, writeFileSync, unlinkSync, rmSync } from 'fs';
-import { join } from 'path';
+import { join, dirname, basename } from 'path';
+import { logger } from './logger.js';
 import { tmpdir } from 'os';
 
 const execAsync = promisify(exec);
@@ -164,45 +165,31 @@ export async function listUserRepos(
 
 // ── Clone ─────────────────────────────────────────────────────────────────────
 
-/**
- * Initialise (or re-initialise) git inside an already-extracted working tree and
- * connect it to the real GitHub history so that branch/push/PR operations work.
- *
- * Safe to call on an existing .git dir — `git init` is idempotent and
- * `git remote set-url` replaces a stale PAT in origin.
- */
-async function initGitInWorkdir(
+function authenticatedOrigin(pat: string, owner: string, repo: string): string {
+  return `https://${pat}@github.com/${owner}/${repo}.git`;
+}
+
+/** Set Roland commit identity and refresh origin with the current PAT. */
+async function configureLocalGit(
+  cwd: string,
   pat: string,
   owner: string,
   repo: string,
-  clonePath: string,
 ): Promise<void> {
-  const { data } = await (new Octokit({ auth: pat })).repos.get({ owner, repo });
-  const defaultBranch = data.default_branch;
-  const authenticated = `https://${pat}@github.com/${owner}/${repo}.git`;
-
-  // git init is idempotent; remote add vs set-url handles both fresh and existing repos
+  const origin = authenticatedOrigin(pat, owner, repo);
   await execAsync(
     [
-      'git init',
       'git config user.email "roland@roland.ai"',
       'git config user.name "Roland"',
-      `git symbolic-ref HEAD "refs/heads/${defaultBranch}"`,
-      `git remote set-url origin "${authenticated}" 2>/dev/null || git remote add origin "${authenticated}"`,
-      `git fetch --depth=1 --filter=blob:none origin "${defaultBranch}"`,
-      `git update-ref "refs/heads/${defaultBranch}" FETCH_HEAD`,
-      'git read-tree FETCH_HEAD',
-      'git add -A',
+      `git remote set-url origin "${origin}" 2>/dev/null || git remote add origin "${origin}"`,
     ].join(' && '),
-    { cwd: clonePath, timeout: 60_000 },
+    { cwd },
   );
-  console.log(`[GitHub] git repo initialised on ${defaultBranch} (history connected to remote)`);
 }
 
 /**
- * Ensure the working directory at `cwd` has a properly initialised git repo.
- * Repairs projects cloned before the git-init step was added (tarball-only clones
- * that have no .git) or where a previous init attempt failed.
+ * Ensure the project directory is a normal git clone linked to GitHub.
+ * Refreshes origin when `.git` exists; re-clones when metadata is missing.
  */
 export async function ensureGitRepo(
   cwd: string,
@@ -210,25 +197,31 @@ export async function ensureGitRepo(
   owner: string,
   repo: string,
 ): Promise<void> {
-  if (!existsSync(join(cwd, '.git'))) {
-    console.log(`[GitHub] .git missing at ${cwd} — initialising git repo`);
-    await initGitInWorkdir(pat, owner, repo, cwd);
+  if (existsSync(join(cwd, '.git'))) {
+    await configureLocalGit(cwd, pat, owner, repo);
+    return;
   }
+
+  logger.info('Git repo missing — re-cloning', { cwd });
+  const parent = dirname(cwd);
+  const dirName = basename(cwd);
+  if (existsSync(cwd)) {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+  mkdirSync(parent, { recursive: true });
+
+  const origin = authenticatedOrigin(pat, owner, repo);
+  await execAsync(`git clone "${origin}" "${dirName}"`, {
+    cwd: parent,
+    timeout: 300_000,
+  });
+  await configureLocalGit(cwd, pat, owner, repo);
+  try {
+    await execAsync('git remote set-head origin --auto', { cwd });
+  } catch { /* best-effort */ }
 }
 
-/**
- * Downloads a GitHub repo as a tarball (fast) then initialises a git repo whose
- * history is connected to the actual remote commit.
- *
- * Why both? Tarball is fast for large repos; branch/push operations need a real
- * .git dir linked to the actual GitHub HEAD so that PRs only show Roland's changes.
- *
- * The trick: `--filter=blob:none` fetches only commit + tree objects (no file blobs).
- * We then run `git read-tree FETCH_HEAD` to set the index and `git add -A` to hash
- * every working-tree file (same content as the tarball) into local blob objects.
- * Because file content is identical, the computed blob SHAs match the remote tree —
- * so `git status` is clean and commits are properly parented on the real GitHub HEAD.
- */
+/** Clone a GitHub repo with standard `git clone`. Returns the clone path. */
 export async function cloneRepo(
   pat: string,
   owner: string,
@@ -239,68 +232,31 @@ export async function cloneRepo(
   const clonePath = `${cloneBase}/${dirName}`;
   mkdirSync(cloneBase, { recursive: true });
 
-  // Already present — ensure git is initialised (may be missing for old tarball-only clones
-  // or when a previous init attempt failed).
   if (existsSync(clonePath)) {
-    if (!existsSync(join(clonePath, '.git'))) {
-      try {
-        await initGitInWorkdir(pat, owner, repo, clonePath);
-      } catch (e) {
-        console.warn(
-          `[GitHub] git init (repair) failed for ${owner}/${repo}: ${e instanceof Error ? e.message : String(e)}`,
-        );
-      }
+    if (existsSync(join(clonePath, '.git'))) {
+      await configureLocalGit(clonePath, pat, owner, repo);
+      return clonePath;
     }
-    return clonePath;
+    rmSync(clonePath, { recursive: true, force: true });
   }
 
-  // ── Step 1: fast file download via tarball ────────────────────────────────
-  console.log(`[GitHub] Downloading tarball for ${owner}/${repo}…`);
-  const tarUrl = `https://api.github.com/repos/${owner}/${repo}/tarball/HEAD`;
-  const response = await fetch(tarUrl, {
-    headers: {
-      Authorization: `token ${pat}`,
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      'User-Agent': 'Roland-Web/1.0',
-    },
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    console.error(`[GitHub] tarball HTTP ${response.status} for ${owner}/${repo}: ${body}`);
-    throw new Error(`GitHub API ${response.status}: ${body}`);
-  }
-
-  const tmpFile = join(tmpdir(), `roland-${owner}-${repo}-${Date.now()}.tar.gz`);
+  const origin = authenticatedOrigin(pat, owner, repo);
+  logger.info('Cloning GitHub repo', { owner, repo });
   try {
-    const buf = await response.arrayBuffer();
-    writeFileSync(tmpFile, Buffer.from(buf));
-    console.log(`[GitHub] Downloaded ${buf.byteLength} bytes, extracting…`);
-
-    mkdirSync(clonePath, { recursive: true });
-    // --strip-components=1 drops the top-level "owner-repo-sha/" folder GitHub adds
-    await execAsync(`tar -xzf "${tmpFile}" -C "${clonePath}" --strip-components=1`, {
-      timeout: 120_000,
+    await execAsync(`git clone "${origin}" "${dirName}"`, {
+      cwd: cloneBase,
+      timeout: 300_000,
     });
-    console.log(`[GitHub] Extracted to ${clonePath}`);
+    await configureLocalGit(clonePath, pat, owner, repo);
+    try {
+      await execAsync('git remote set-head origin --auto', { cwd: clonePath });
+    } catch { /* best-effort */ }
+    logger.info('Repo cloned', { clonePath });
   } catch (e) {
     try { rmSync(clonePath, { recursive: true, force: true }); } catch { /* ignore */ }
     const raw = e instanceof Error ? e.message : String(e);
-    console.error(`[GitHub] cloneRepo failed (${owner}/${repo}):`, raw);
+    logger.error('cloneRepo failed', { owner, repo, error: raw });
     throw e;
-  } finally {
-    try { unlinkSync(tmpFile); } catch { /* ignore */ }
-  }
-
-  // ── Step 2: init git and connect to real GitHub history ───────────────────
-  try {
-    await initGitInWorkdir(pat, owner, repo, clonePath);
-  } catch (gitErr) {
-    // Non-fatal: tarball files are usable; branch/push operations will fail later
-    console.warn(
-      `[GitHub] git init skipped for ${owner}/${repo}: ${gitErr instanceof Error ? gitErr.message : String(gitErr)}`,
-    );
   }
 
   return clonePath;
@@ -318,7 +274,7 @@ export async function getDefaultBranch(cwd: string): Promise<string> {
     );
     const branch = stdout.trim().replace(/^origin\//, '');
     if (branch) {
-      console.log(`[Roland] default branch (symbolic-ref): ${branch}`);
+      logger.debug('Default branch detected (symbolic-ref)', { branch });
       return branch;
     }
   } catch { /* not set yet */ }
@@ -332,7 +288,7 @@ export async function getDefaultBranch(cwd: string): Promise<string> {
     );
     const branch = stdout.trim().replace(/^origin\//, '');
     if (branch) {
-      console.log(`[Roland] default branch (set-head --auto): ${branch}`);
+      logger.debug('Default branch detected (set-head --auto)', { branch });
       return branch;
     }
   } catch { /* no network or no remote */ }
@@ -341,7 +297,7 @@ export async function getDefaultBranch(cwd: string): Promise<string> {
   for (const candidate of ['main', 'master', 'develop', 'trunk']) {
     try {
       await execAsync(`git show-ref --verify refs/remotes/origin/${candidate}`, { cwd });
-      console.log(`[Roland] default branch (probe): ${candidate}`);
+      logger.debug('Default branch detected (probe)', { branch: candidate });
       return candidate;
     } catch { /* not this one */ }
   }
@@ -354,19 +310,19 @@ export async function getDefaultBranch(cwd: string): Promise<string> {
     if (headLine) {
       const branch = headLine.split('->').pop()?.trim().replace(/^origin\//, '');
       if (branch) {
-        console.log(`[Roland] default branch (branch -r HEAD): ${branch}`);
+        logger.debug('Default branch detected (branch -r HEAD)', { branch });
         return branch;
       }
     }
     const first = lines.find((l) => !l.includes('HEAD') && l.startsWith('origin/'));
     if (first) {
       const branch = first.replace(/^origin\//, '').trim();
-      console.log(`[Roland] default branch (first remote): ${branch}`);
+      logger.debug('Default branch detected (first remote)', { branch });
       return branch;
     }
   } catch { /* ignore */ }
 
-  console.warn('[Roland] Could not detect default branch; falling back to "main"');
+  logger.warn('Could not detect default branch; falling back to main');
   return 'main';
 }
 
@@ -377,7 +333,7 @@ export async function getDefaultBranch(cwd: string): Promise<string> {
  */
 export async function createRolandBranch(cwd: string, branchName: string): Promise<void> {
   const defaultBranch = await getDefaultBranch(cwd);
-  console.log(`[Roland] createRolandBranch: base=${defaultBranch} new=${branchName} cwd=${cwd}`);
+  logger.info('Creating Roland branch', { defaultBranch, branchName, cwd });
 
   // Step 1: switch to default branch (tolerate "already on it")
   try {
@@ -387,7 +343,7 @@ export async function createRolandBranch(cwd: string, branchName: string): Promi
     // "Already on 'main'" or "Switched to branch 'main'" both come via stderr on success;
     // only a genuine failure (dirty index, unknown branch) actually throws here.
     if (!raw.toLowerCase().includes('already on')) {
-      console.warn(`[Roland] checkout ${defaultBranch} failed (${raw}); proceeding from current HEAD`);
+      logger.warn('Checkout default branch failed; proceeding from current HEAD', { defaultBranch, error: raw });
     }
   }
 
@@ -396,23 +352,23 @@ export async function createRolandBranch(cwd: string, branchName: string): Promi
     await execAsync('git pull', { cwd });
   } catch (e) {
     const raw = (e instanceof Error ? e.message : String(e));
-    console.warn(`[Roland] git pull failed (proceeding without latest): ${raw}`);
+    logger.warn('Git pull failed; proceeding without latest', { error: raw });
   }
 
   // Step 3: create branch (hard requirement — surface the real error if this fails)
   try {
     await execAsync(`git checkout -b "${branchName}"`, { cwd });
-    console.log(`[Roland] branch created: ${branchName}`);
+    logger.info('Branch created', { branchName });
   } catch (e) {
     const raw = (e instanceof Error ? e.message : String(e));
     // Branch already exists — just switch to it
     if (raw.toLowerCase().includes('already exists')) {
-      console.log(`[Roland] branch already exists, switching to: ${branchName}`);
+      logger.info('Branch already exists; switching', { branchName });
       await execAsync(`git checkout "${branchName}"`, { cwd });
       return;
     }
     // Genuine failure — log raw error then throw a user-friendly one
-    console.error(`[Roland] git checkout -b "${branchName}" failed: ${raw}`);
+    logger.error('Branch creation failed', { branchName, error: raw });
     throw new Error(`Branch creation failed: ${classifyGitError(e)}`);
   }
 }

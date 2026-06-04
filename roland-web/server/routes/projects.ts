@@ -5,6 +5,7 @@ import { dirname } from 'path';
 import { getDb } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { encrypt, decrypt } from '../crypto.js';
+import { logger } from '../logger.js';
 import { validateGithubPat, gitPull, gitPushBranch, pushBranchAndCreatePR, classifyGitError, gitErrorFlags } from '../github.js';
 
 function isPatCorrupted(e: unknown): boolean {
@@ -57,7 +58,7 @@ projectsRouter.delete('/:id', (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     try { db.exec('ROLLBACK'); } catch { /* ignore rollback error */ }
-    console.error('[Projects] Delete failed:', e);
+    logger.error('Project delete failed', { error: e instanceof Error ? e.message : String(e) });
     res.status(500).json({ error: 'Could not delete project. Please try again.' });
   }
 });

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import { logger } from './logger.js';
 
 interface JwtPayload {
   userId: string;
@@ -45,7 +46,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
   // matches regardless of what case the client sends.
   const apiKey = (req.headers['x-cursor-api-key'] as string | undefined) || process.env.CURSOR_API_KEY;
   if (!apiKey) {
-    console.warn('[auth] 401 — no x-cursor-api-key header and CURSOR_API_KEY env var not set. Headers:', Object.keys(req.headers).join(', '));
+    logger.warn('Auth rejected — missing Cursor API key', { headers: Object.keys(req.headers) });
     res.status(401).json({ error: 'Cursor API key required — set CURSOR_API_KEY on the server or provide x-cursor-api-key header' });
     return;
   }
