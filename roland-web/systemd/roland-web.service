@@ -1,0 +1,41 @@
+[Unit]
+Description=Roland Web — AI PM orchestration UI
+Documentation=https://github.com/AdamMcIntosh/roland/blob/main/roland-web/SELF-HOST.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=roland
+Group=roland
+
+# Adjust paths if you installed elsewhere (see scripts/install.sh)
+WorkingDirectory=/opt/roland/roland-web
+EnvironmentFile=/opt/roland/roland-web/.env
+Environment=NODE_ENV=production
+
+ExecStart=/usr/bin/node --experimental-sqlite /opt/roland/roland-web/dist/server/index.js
+
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Logging: app writes JSON to stdout/stderr (journald) + files under LOG_DIR
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=roland-web
+
+# Hardening — ReadWritePaths must include DATA_DIR and LOG_DIR from .env
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/roland-web /var/log/roland-web
+
+# Graceful shutdown (matches server SIGTERM handler)
+TimeoutStopSec=20
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target

@@ -1,5 +1,9 @@
 # Roland Web — Deployment Guide
 
+See [SELF-HOST.md](./SELF-HOST.md) for systemd, Tailscale, logging, and `scripts/update.sh`.
+
+---
+
 ## Variables reference
 
 | Variable | Required | Default | Purpose |
@@ -9,8 +13,13 @@
 | `CURSOR_API_KEY` | **yes** | — | Cursor / AI provider API key for agent runs |
 | `SESSION_SECRET` | **yes** | — | JWT signing key (min 32 chars) |
 | `PAT_ENCRYPTION_KEY` | **yes** | — | GitHub PAT encryption key (64 hex chars = 32 bytes) |
-| `DATABASE_PATH` | no | `./roland-web.db` | SQLite database file path |
-| `PROJECTS_DIR` | no | `./projects` | Directory where Roland clones and manages repos |
+| `DATABASE_PATH` | no | `./roland-web.db` (dev) / `$DATA_DIR/roland-web.db` (prod) | SQLite database file path |
+| `DATA_DIR` | no | `./data` (dev) / `/var/lib/roland-web` (prod) | Base directory for DB, projects, state |
+| `PROJECTS_DIR` | no | `$DATA_DIR/projects` | Directory where Roland clones and manages repos |
+| `ROLAND_STATE_DIR` | no | `$DATA_DIR/state` | Per-project Roland run state |
+| `LOG_DIR` | no | `./logs` (dev) / `/var/log/roland-web` (prod) | Access and error log files |
+| `LOG_LEVEL` | no | `info` | Minimum log level: debug, info, warn, error |
+| `HOST` | no | `0.0.0.0` | HTTP bind address |
 | `PORT` | no | `3000` | HTTP port the server listens on |
 | `NODE_ENV` | no | `development` | Node environment |
 

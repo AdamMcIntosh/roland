@@ -15,6 +15,8 @@ import { resolve } from 'path';
 import { getDb } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { encrypt, decrypt } from '../crypto.js';
+import { getConfig } from '../config.js';
+import { logger } from '../logger.js';
 import { getGitHubUser, listUserRepos, cloneRepo, classifyGitError, gitErrorFlags } from '../github.js';
 
 export const githubRouter = Router();
@@ -35,11 +37,7 @@ function isPatCorrupted(e: unknown): boolean {
   return (e as { code?: string })?.code === 'PAT_CORRUPTED';
 }
 
-const projectsBase = (): string =>
-  process.env.PROJECTS_DIR ??
-  (process.env.NODE_ENV === 'production'
-    ? '/data/projects'
-    : resolve(process.cwd(), 'projects'));
+const projectsBase = (): string => getConfig().projectsDir;
 
 // ── Status ────────────────────────────────────────────────────────────────────
 
@@ -78,7 +76,7 @@ githubRouter.post('/connect', async (req, res) => {
     res.json({ ok: true, login: user.login, avatarUrl: user.avatarUrl });
   } catch (e) {
     const raw = e instanceof Error ? e.message : String(e);
-    console.error('[GitHub /connect] error:', raw);
+    logger.error('GitHub connect failed', { error: raw });
     const flags = gitErrorFlags(e);
     const status = flags.needsReconnect ? 401 : 500;
     res.status(status).json({ error: classifyGitError(e), ...flags });
@@ -173,7 +171,7 @@ githubRouter.post('/clone', async (req, res) => {
     res.json({ projectId, path: clonePath, alreadyExists: false });
   } catch (e) {
     const raw = e instanceof Error ? e.message : String(e);
-    console.error(`[GitHub /clone] ${owner}/${repo} failed:`, raw);
+    logger.error('GitHub clone failed', { owner, repo, error: raw });
     res.status(500).json({ error: classifyGitError(e), ...gitErrorFlags(e) });
   }
 });

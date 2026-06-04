@@ -7,6 +7,8 @@ import { getDb } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { createRolandBranch, pushBranchAndCreatePR, ensureGitRepo } from '../github.js';
 import { decrypt } from '../crypto.js';
+import { getConfig } from '../config.js';
+import { logger } from '../logger.js';
 
 export const runRouter = Router();
 
@@ -15,8 +17,8 @@ export const runRouter = Router();
 const rolandEntry = resolve(process.cwd(), 'node_modules', '@roland', 'core', 'dist', 'index.js');
 
 if (!existsSync(rolandEntry)) {
-  console.error(`[Roland] FATAL: roland entry not found at ${rolandEntry}`);
-  console.error('[Roland] Run: npm run build:core  (from roland-web/) to populate @roland-core/dist/');
+  logger.error('Roland entry not found', { path: rolandEntry });
+  logger.error('Run npm run build:core from roland-web/ to populate @roland-core/dist/');
 }
 
 /** Sanitise a goal string into a safe git branch slug (max 5 words). */
@@ -91,10 +93,10 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
       await ensureGitRepo(project.path, pat, project.github_owner, project.github_repo);
       await createRolandBranch(project.path, candidate);
       branchName = candidate;
-      console.log(`[Run] branch ready: ${branchName}`);
+      logger.info('Run branch ready', { branchName, projectId: project.id });
     } catch (e) {
       const raw = e instanceof Error ? e.message : String(e);
-      console.error(`[Run] branch/git-init failed for project ${project.id} (${project.path}): ${raw}`);
+      logger.error('Branch setup failed', { projectId: project.id, path: project.path, error: raw });
     }
   }
 
@@ -105,8 +107,9 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
 
   const cursorApiKey = (req as any).cursorApiKey as string;
 
-  const stateDir = process.env.NODE_ENV === 'production'
-    ? `/data/roland-state/${project.id}`
+  const { rolandStateDir, nodeEnv } = getConfig();
+  const stateDir = nodeEnv === 'production'
+    ? `${rolandStateDir}/${project.id}`
     : undefined;
 
   const args = ['team', goal, '--web'];
@@ -129,7 +132,7 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
   if (engineerModel && VALID_CURSOR_MODELS.has(engineerModel))
     modelEnv.ROLAND_ENGINEER_MODEL = engineerModel;
 
-  console.log(`[Run] starting run=${runId} project=${project.id} branch=${branchName || '(none)'}`);
+  logger.info('Run starting', { runId, projectId: project.id, branch: branchName || null });
 
   let rawOutput = '';
   let exitCode: number | null = 1;
@@ -177,7 +180,7 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
       rawOutput += `\n✅ Pull request created: ${pr.url}\n`;
     } catch (prErr) {
       const msg = prErr instanceof Error ? prErr.message : String(prErr);
-      console.error(`[Run] auto-PR failed (run=${runId}):`, msg);
+      logger.error('Auto-PR failed', { runId, error: msg });
       rawOutput += `\n⚠️  Pull request creation failed: ${msg}\n`;
     }
   }
@@ -195,7 +198,7 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
     } catch { /* pr_url column may not exist on older DBs */ }
   }
 
-  console.log(`[Run] finished run=${runId} status=${status} outputLen=${output.length}`);
+  logger.info('Run finished', { runId, status, outputLen: output.length });
 
   res.json({
     runId,

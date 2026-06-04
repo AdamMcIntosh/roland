@@ -8,6 +8,8 @@ node_modules/
 *.db-journal
 .env
 .env.local
+logs/
+data/
 .DS_Store
 
 # Cloned project repos — never commit user workspaces
