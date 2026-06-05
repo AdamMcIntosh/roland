@@ -27,7 +27,7 @@ import path             from 'path';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT      = path.resolve(__dirname, '..');
-const ENTRY     = path.join(ROOT, 'dist', 'index.js');
+const ENTRY     = path.join(ROOT, 'dist', 'server', 'mcp-server.js');
 const TIMEOUT_MS = 20_000;
 
 // ── Colour helpers ────────────────────────────────────────────────────────────
@@ -130,7 +130,7 @@ async function main() {
   console.log(`\n${b('Roland MCP Tools — smoke test')}\n`);
 
   // Spawn the MCP server
-  const proc = spawn(process.execPath, [ENTRY, 'serve'], {
+  const proc = spawn(process.execPath, [ENTRY], {
     cwd:   ROOT,
     stdio: ['pipe', 'pipe', 'pipe'],
     env:   { ...process.env, ROLAND_QUIET: '1' },

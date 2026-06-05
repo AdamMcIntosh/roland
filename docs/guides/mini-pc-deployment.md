@@ -13,18 +13,68 @@ Reference for running Roland as a headless orchestration node (Intel NUC, Beelin
 
 ## Install
 
+### Global CLI (recommended)
+
+Roland is designed to run from any directory after a one-time install:
+
 ```bash
 git clone <repo> && cd roland
 npm ci
 npm run build
-npm link   # optional — global `roland` CLI
+npm link              # development — symlinks `roland` onto your PATH
+# — or —
+npm install -g .      # production — copies package into global node_modules
 ```
 
-Verify:
+From any project directory:
 
 ```bash
+cd /path/to/myapp
 roland doctor
 roland board-status --concise
+roland team "Test task"
+roland orchestrate "SDK supervisor smoke test"
+```
+
+`roland` resolves two roots automatically:
+
+| Root | How it is found |
+|------|-----------------|
+| **Install** (agents, recipes, `dist/`) | npm package dir via `bin/roland.js` → `package.json` name `"roland"` |
+| **Project** (`.roland/`, git, blackboard) | Walk up from `cwd` for `.roland/` or `.git/`; env overrides below |
+
+Override when `cwd` is not your repo (systemd, MCP, headless):
+
+```bash
+export ROLAND_PROJECT_ROOT=/home/ops/projects/myapp   # primary
+export ROLAND_ROOT=/home/ops/projects/myapp           # alias
+export ROLAND_STATE_DIR=/home/ops/projects/myapp/.roland
+```
+
+Verify install:
+
+```bash
+which roland
+roland --version
+roland doctor
+```
+
+### MCP shortcut
+
+```bash
+npm run mcp          # from Roland repo: node dist/server/mcp-server.js
+roland-mcp           # after global install / npm link
+roland mcp-config --write
+```
+
+Restart Cursor after updating `~/.cursor/mcp.json`.
+
+### Local-only (no global link)
+
+```bash
+npm run build
+node bin/roland.js doctor
+node bin/roland.js board-status --concise
 ```
 
 ## Environment Variables (mini PC defaults)
@@ -143,7 +193,7 @@ WorkingDirectory=/home/ops/projects/myapp
 Environment=CURSOR_API_KEY=...
 Environment=ROLAND_MAX_CONCURRENT=2
 Environment=ROLAND_PROJECT_ROOT=/home/ops/projects/myapp
-ExecStart=/usr/bin/node /home/ops/roland/dist/index.js team "%i" --background --no-tui --quiet
+ExecStart=/usr/bin/env roland team "%i" --background --no-tui --quiet
 Restart=on-failure
 RestartSec=30
 
@@ -160,6 +210,108 @@ Invoke: `systemctl start 'roland-team@Add rate limiting to API.service'`
 3. Dashboard → **Command Board** panel
 4. `.roland/usage-history.json` — cost/token trends
 5. `.roland/logs/bg-*.log` — agent stderr
+
+## Roland as a Cursor MCP Server
+
+Roland ships a dedicated stdio MCP entry at `dist/server/mcp-server.js`. Cursor spawns it as a child process and communicates over stdin/stdout using the MCP JSON-RPC protocol.
+
+### 1. Build Roland
+
+```bash
+cd /path/to/roland
+npm ci
+npm run build
+```
+
+Verify the MCP entry exists:
+
+```bash
+node dist/server/mcp-server.js   # blocks waiting for stdio — Ctrl+C to exit
+npm run test:mcp                 # smoke test (8 tool checks)
+```
+
+### 2. Add to `~/.cursor/mcp.json`
+
+Merge this block into your existing `mcpServers` (create the file if missing). Replace paths with your actual Roland install and project root:
+
+```json
+{
+  "mcpServers": {
+    "roland": {
+      "command": "node",
+      "args": ["/home/ops/roland/dist/server/mcp-server.js"],
+      "env": {
+        "ROLAND_PROJECT_ROOT": "/home/ops/projects/myapp",
+        "ROLAND_QUIET": "1",
+        "CURSOR_API_KEY": "your_key_here"
+      },
+      "autoApprove": [
+        "health_check",
+        "roland_hello",
+        "board_status",
+        "pm_standup",
+        "triage",
+        "list_team",
+        "list_team_recipes",
+        "list_recipes",
+        "get_team_context",
+        "get_pm_playbook",
+        "get_team_usage",
+        "get_pm_events",
+        "get_analytics",
+        "suggest_mode",
+        "route_model",
+        "blackboard_read",
+        "bus_poll",
+        "git_status",
+        "git_diff",
+        "git_log",
+        "read_context"
+      ]
+    }
+  }
+}
+```
+
+**Notes:**
+
+| Setting | Purpose |
+|---------|---------|
+| `ROLAND_PROJECT_ROOT` | Project whose `.roland/` state the MCP tools read/write. Required when Cursor's cwd is not your repo. |
+| `ROLAND_QUIET` | Suppresses info logs on stderr (keeps MCP stdio clean). |
+| `CURSOR_API_KEY` | Required for `roland_run_team` and SDK-backed team runs. Can also live in your shell profile instead of mcp.json. |
+| `autoApprove` | Read-only / low-risk tools Cursor can call without prompting each time. Mutating tools (`git_commit`, `roland_run_team`, `spawn_task`, etc.) always require approval. |
+
+Or generate the config automatically from the Roland repo:
+
+```bash
+roland mcp-config              # print recommended block
+roland mcp-config --write      # merge into ~/.cursor/mcp.json
+```
+
+Restart Cursor after editing `mcp.json`.
+
+### 3. Key MCP tools in Cursor chat
+
+| Tool | When to use |
+|------|-------------|
+| `roland_hello` | First @roland mention in a session |
+| `pm_standup` | Start of each turn; blockers-first board digest |
+| `board_status` | End of major tasks; concise UNSC summary |
+| `triage` | Route a user goal to the best agent/recipe |
+| `roland_run_team` | Launch a background PM team run for complex goals |
+| `git_status` / `git_diff` / `git_log` | Read-only git context before edits |
+| `list_team` | See available engineer personas |
+
+All 47 tools are registered — see `npm run test:mcp` for a smoke test of the core set.
+
+### 4. npm script shortcut
+
+From the Roland repo:
+
+```bash
+npm run mcp    # same as: node dist/server/mcp-server.js
+```
 
 ## Related
 

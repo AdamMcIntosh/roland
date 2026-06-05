@@ -14,7 +14,10 @@ import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const distRoot = resolve(__dirname, '..', 'dist');
+const installRoot = process.env.ROLAND_INSTALL_ROOT?.trim()
+  ? resolve(process.env.ROLAND_INSTALL_ROOT.trim())
+  : resolve(__dirname, '..');
+const distRoot = resolve(installRoot, 'dist');
 
 if (!existsSync(distRoot)) {
   console.error('Run npm run build first — dist/ not found.');

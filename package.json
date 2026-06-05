@@ -5,16 +5,22 @@
   "main": "dist/index.js",
   "type": "module",
   "bin": {
-    "roland": "./dist/index.js",
-    "roland-mcp": "./dist/index.js"
+    "roland": "./bin/roland.js",
+    "roland-mcp": "./bin/roland-mcp.js"
   },
+  "files": [
+    "bin/",
+    "dist/",
+    "config.yaml",
+    "scripts/roland-orchestrate.mjs"
+  ],
   "scripts": {
     "build": "tsc && node scripts/copy-assets.js",
     "build-npm": "npm run clean && tsc && node scripts/copy-assets.js",
     "iterate": "node scripts/iterate.js",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
-    "mcp": "node dist/index.js",
+    "mcp": "node dist/server/mcp-server.js",
     "export-configs": "npx tsx scripts/export-ide-configs.ts",
     "init": "npx tsx scripts/init.ts",
     "lint": "eslint src/**/*.ts",
@@ -29,7 +35,9 @@
     "clean": "node scripts/clean-dist.mjs",
     "serve-dashboard": "node scripts/serve-dashboard.js",
     "test:mcp": "node scripts/test-mcp-tools.mjs",
-    "orchestrate": "node scripts/roland-orchestrate.mjs"
+    "orchestrate": "node scripts/roland-orchestrate.mjs",
+    "postinstall": "node scripts/check-build.mjs",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "agent-orchestration",

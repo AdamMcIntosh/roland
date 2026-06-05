@@ -64,6 +64,73 @@ import { fileURLToPath } from 'url';
 import YAML from 'yaml';
 
 // ============================================================================
+// Cursor MCP configuration helpers
+// ============================================================================
+
+/** Read-only / low-risk tools safe for Cursor autoApprove in ~/.cursor/mcp.json */
+export const MCP_AUTO_APPROVE_TOOLS = [
+  'health_check',
+  'roland_hello',
+  'board_status',
+  'pm_standup',
+  'triage',
+  'list_team',
+  'list_team_recipes',
+  'list_recipes',
+  'get_team_context',
+  'get_pm_playbook',
+  'get_team_usage',
+  'get_pm_events',
+  'get_analytics',
+  'suggest_mode',
+  'route_model',
+  'blackboard_read',
+  'bus_poll',
+  'git_status',
+  'git_diff',
+  'git_log',
+  'read_context',
+] as const;
+
+/** Resolve the built MCP server entry (dist/server/mcp-server.js). */
+export function resolveMcpServerEntry(): string {
+  try {
+    const thisFile = fileURLToPath(import.meta.url);
+    return path.resolve(path.dirname(thisFile), 'mcp-server.js');
+  } catch {
+    return path.join(process.cwd(), 'dist', 'server', 'mcp-server.js');
+  }
+}
+
+/** Build the `mcpServers.roland` block for ~/.cursor/mcp.json */
+export function buildCursorMcpServerEntry(options?: {
+  rolandRoot?: string;
+  projectRoot?: string;
+  includeAutoApprove?: boolean;
+}): Record<string, unknown> {
+  const entry = options?.rolandRoot
+    ? path.join(options.rolandRoot, 'dist', 'server', 'mcp-server.js').replace(/\\/g, '/')
+    : resolveMcpServerEntry().replace(/\\/g, '/');
+  const env: Record<string, string> = { ROLAND_QUIET: '1' };
+  if (options?.projectRoot) {
+    env.ROLAND_PROJECT_ROOT = options.projectRoot.replace(/\\/g, '/');
+  }
+  const block: Record<string, unknown> = {
+    command: 'node',
+    args: [entry],
+    env,
+  };
+  if (options?.includeAutoApprove !== false) {
+    block.autoApprove = [...MCP_AUTO_APPROVE_TOOLS];
+  }
+  return block;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ============================================================================
 // OpenRouter Model Mapping
 // ============================================================================
 
@@ -184,6 +251,9 @@ export class McpServer {
   private coordination: CoordinationManager;
   private leadPm: LeadPM;
   private recipesDir: string;
+  private transport: StdioServerTransport | null = null;
+  private shuttingDown = false;
+  private connected = false;
 
   constructor(config: AppConfig) {
     this.config = config;
@@ -297,7 +367,7 @@ export class McpServer {
   private registerHealthCheck(): void {
     this.registerTool(
       'health_check',
-      'Check the health status of the Roland MCP server',
+      'Verify Roland MCP is running. Returns server version, uptime, registered tool count, and optional Ollama/classifier status. Call this first if MCP tools are not responding.',
       async () => {
         const result: Record<string, unknown> = {
           status: 'healthy',
@@ -2044,7 +2114,8 @@ export class McpServer {
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        logger.error(`❌ Tool error (${toolName}):`, message);
+        const stack = error instanceof Error ? error.stack : undefined;
+        logger.error(`Tool "${toolName}" failed: ${message}`, stack ? { stack } : undefined);
 
         return {
           content: [
@@ -2059,11 +2130,19 @@ export class McpServer {
     });
 
     this.server.onerror = (error) => {
-      logger.error('❌ MCP Server error:', error);
+      const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+      logger.error(`MCP protocol error: ${message}`, stack ? { stack } : undefined);
     };
 
     this.server.onclose = () => {
-      logger.info('🔌 MCP Server closed');
+      this.connected = false;
+      logger.info('MCP stdio transport closed');
+      if (!this.shuttingDown) {
+        // Stdio cannot reconnect in-process — exit cleanly so Cursor respawns us.
+        logger.warn('Client disconnected — exiting for Cursor to restart the MCP server');
+        process.exit(0);
+      }
     };
   }
 
@@ -2449,25 +2528,60 @@ export class McpServer {
   // Lifecycle
   // ==========================================================================
 
-  async start(): Promise<void> {
-    try {
-      logger.info('🚀 Starting Roland MCP Server v2...');
-      const transport = new StdioServerTransport();
-      await this.server.connect(transport);
-      logger.success('✅ MCP Server connected and ready');
-      logger.info(`📦 Tools: ${this.getTools().join(', ')}`);
+  async start(options: { maxConnectRetries?: number } = {}): Promise<void> {
+    const maxRetries = options.maxConnectRetries ?? 5;
+    let lastError: unknown;
 
-      // Start the diff stream WebSocket server
-      const diffStreamPort = this.config.diff_stream?.port ?? 8089;
-      const diffStreamEnabled = this.config.diff_stream?.enabled !== false;
-      if (diffStreamEnabled) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await this.connectTransport();
+        return;
+      } catch (error) {
+        lastError = error;
+        const message = error instanceof Error ? error.message : String(error);
+        const stack = error instanceof Error ? error.stack : undefined;
+        logger.error(`MCP stdio connect failed (attempt ${attempt}/${maxRetries}): ${message}`, stack ? { stack } : undefined);
+
+        if (attempt < maxRetries) {
+          const delay = Math.min(500 * 2 ** (attempt - 1), 8000);
+          logger.warn(`Retrying MCP connection in ${delay}ms…`);
+          await sleep(delay);
+        }
+      }
+    }
+
+    const message = lastError instanceof Error ? lastError.message : String(lastError);
+    throw new McpServerError(`Failed to start MCP server after ${maxRetries} attempts: ${message}`);
+  }
+
+  private async connectTransport(): Promise<void> {
+    logger.info('Connecting Roland MCP server via stdio transport…');
+    this.transport = new StdioServerTransport();
+    await this.server.connect(this.transport);
+    this.connected = true;
+    logger.success(`MCP server connected (${this.getTools().length} tools)`);
+    logger.info(`Tools: ${this.getTools().join(', ')}`);
+
+    // Start the diff stream WebSocket server (optional sidecar)
+    const diffStreamPort = this.config.diff_stream?.port ?? 8089;
+    const diffStreamEnabled = this.config.diff_stream?.enabled !== false;
+    if (diffStreamEnabled) {
+      try {
         const diffServer = initDiffStreamServer(diffStreamPort);
         diffServer.start();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn(`Diff stream server unavailable (non-fatal): ${message}`);
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new McpServerError(`Failed to start MCP server: ${message}`);
     }
+  }
+
+  isShuttingDown(): boolean {
+    return this.shuttingDown;
+  }
+
+  isConnected(): boolean {
+    return this.connected;
   }
 
   // --------------------------------------------------------------------------
@@ -2476,7 +2590,7 @@ export class McpServer {
   private registerGitTools(): void {
     this.registerTool(
       'git_status',
-      'Return the current git status (staged, unstaged, untracked files). Useful before planning file edits or commits.',
+      'Read-only: current git status (staged, unstaged, untracked). Use before planning edits or commits. Pass project_root to target a repo other than ROLAND_PROJECT_ROOT/cwd.',
       async (args: Record<string, unknown>) => {
         const cwd = typeof args.project_root === 'string' && args.project_root
           ? args.project_root
@@ -2494,7 +2608,7 @@ export class McpServer {
 
     this.registerTool(
       'git_diff',
-      'Return a unified diff of current changes. Pass staged=true for staged-only diff, file_path to limit to one file.',
+      'Read-only: unified diff of working-tree changes. Pass staged:true for index-only, file_path to limit scope, max_lines to cap output.',
       async (args: Record<string, unknown>) => {
         const cwd = typeof args.project_root === 'string' && args.project_root
           ? args.project_root
@@ -2509,7 +2623,7 @@ export class McpServer {
 
     this.registerTool(
       'git_log',
-      'Return the last N commits from git log (one-line format). Defaults to 10.',
+      'Read-only: recent commit history (one-line format). Defaults to 10 commits. Use to understand recent changes before editing.',
       async (args: Record<string, unknown>) => {
         const cwd = typeof args.project_root === 'string' && args.project_root
           ? args.project_root
@@ -2522,7 +2636,7 @@ export class McpServer {
 
     this.registerTool(
       'git_commit',
-      'Stage files and create a git commit. Pass files[] to stage specific paths, or omit to stage all changes (git add -A).',
+      'Create a git commit (mutating). Stages files[] or all changes (git add -A) then commits with message. Requires explicit user approval in Cursor.',
       async (args: Record<string, unknown>) => {
         const cwd = typeof args.project_root === 'string' && args.project_root
           ? args.project_root
@@ -2635,16 +2749,28 @@ export class McpServer {
   }
 
   async stop(): Promise<void> {
+    if (this.shuttingDown) return;
+    this.shuttingDown = true;
+
     try {
-      logger.info('🛑 Stopping MCP Server...');
-      // Stop the diff stream WebSocket server
+      logger.info('Stopping MCP server…');
       const diffServer = getDiffStreamServer();
-      if (diffServer) diffServer.stop();
+      if (diffServer) {
+        try {
+          diffServer.stop();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          logger.warn(`Error stopping diff stream server: ${message}`);
+        }
+      }
       await this.server.close();
-      logger.success('✅ MCP Server stopped');
+      this.connected = false;
+      this.transport = null;
+      logger.success('MCP server stopped cleanly');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      logger.error(`⚠️ Error stopping server: ${message}`);
+      const stack = error instanceof Error ? error.stack : undefined;
+      logger.error(`Error during MCP shutdown: ${message}`, stack ? { stack } : undefined);
     }
   }
 
@@ -2850,7 +2976,7 @@ export class McpServer {
     // pm_standup — the rendered, daily-driver heartbeat (Phase 4)
     this.registerTool(
       'pm_standup',
-      'The recommended top-of-turn call. Returns a rendered Markdown standup (board, blockers-first triage with the exact unblock calls, usage, UNSC mission summary, and your next 3 actions) plus the structured context. Read the markdown, then act — unblock before starting new work.',
+      'Cursor daily-driver: rendered Markdown standup with blockers first, board state, usage, UNSC mission summary, and your next 3 actions. Call at the start of each chat turn when @roland is active, or after roland_run_team to track progress.',
       async () => {
         const standup = this.leadPm.getStandup();
         try {
@@ -2872,7 +2998,7 @@ export class McpServer {
     // board_status — concise UNSC summary for end-of-task reporting
     this.registerTool(
       'board_status',
-      'Concise UNSC mission status from blackboard.json + command-blackboard.md. Use at the end of major tasks and after team runs. Blockers first, then callsign roster. Pass format:"json" for structured output.',
+      'Concise UNSC mission status from .roland/blackboard.json and command-blackboard.md. Use after team runs or at end of major tasks. Blockers listed first. Pass format:"json" for structured output, format:"verbose" for full report.',
       async (args: Record<string, unknown>) => {
         const projectRoot = process.env['ROLAND_PROJECT_ROOT']?.trim() || process.cwd();
         const stateDir = typeof args.state_dir === 'string' && args.state_dir
@@ -2921,7 +3047,7 @@ export class McpServer {
     // list_team — the roster of engineers
     this.registerTool(
       'list_team',
-      'List the available engineer personas you can assign tasks to, with each one\'s specialty and recommended model.',
+      'List Roland engineer personas (executor, architect, test-author, etc.) with specialties and recommended models. Use before spawn_task or assign_task.',
       async () => ({ engineers: this.leadPm.listTeam() }),
       { type: 'object', properties: {}, required: [] }
     );
@@ -3197,7 +3323,7 @@ export class McpServer {
     // ── roland_hello ──────────────────────────────────────────────────────────
     this.registerTool(
       'roland_hello',
-      'Get a welcome message with Roland\'s capabilities and current project state. Call this at the start of a Cursor chat session when @roland is first mentioned in conversation.',
+      'Start-of-session handshake for @roland in Cursor chat. Returns a welcome banner, capabilities table, current board/memory state, and quick-start hints. Call when the user first mentions @roland.',
       async (args: Record<string, unknown>) => {
         const projectRoot = process.env['ROLAND_PROJECT_ROOT']?.trim() || process.cwd();
         const stateDir = typeof args.state_dir === 'string' && args.state_dir
@@ -3483,4 +3609,64 @@ What would you like to work on?`;
       return process.cwd();
     }
   }
+}
+
+// ============================================================================
+// Standalone MCP entry (node dist/server/mcp-server.js)
+// ============================================================================
+
+function isMcpMainModule(): boolean {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return path.resolve(entry) === path.resolve(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+/** Run Roland as a stdio MCP server — used by `npm run mcp`, Cursor, and `roland serve`. */
+export async function runMcpServer(): Promise<void> {
+  const { loadConfig } = await import('../config/config-loader.js');
+
+  if (process.env.ROLAND_QUIET === '1' || process.env.ROLAND_QUIET === 'true') {
+    logger.setLevel('warn');
+  }
+
+  process.on('uncaughtException', (err) => {
+    logger.error(`Uncaught exception: ${err.message}`, err.stack ? { stack: err.stack } : undefined);
+    process.exit(1);
+  });
+
+  process.on('unhandledRejection', (reason) => {
+    const message = reason instanceof Error ? reason.message : String(reason);
+    const stack = reason instanceof Error ? reason.stack : undefined;
+    logger.error(`Unhandled rejection: ${message}`, stack ? { stack } : undefined);
+  });
+
+  logger.info('Starting Roland MCP server…');
+  const config = await loadConfig();
+  const server = new McpServer(config);
+
+  let shutdownPromise: Promise<void> | null = null;
+  const shutdown = (signal: string) => {
+    if (shutdownPromise) return;
+    logger.info(`Received ${signal} — shutting down gracefully`);
+    shutdownPromise = server.stop().finally(() => process.exit(0));
+  };
+
+  process.once('SIGINT', () => shutdown('SIGINT'));
+  process.once('SIGTERM', () => shutdown('SIGTERM'));
+
+  await server.start();
+  logger.info('Waiting for MCP client on stdio…');
+}
+
+if (isMcpMainModule()) {
+  runMcpServer().catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error ? error.stack : undefined;
+    logger.error(`Fatal MCP startup error: ${message}`, stack ? { stack } : undefined);
+    process.exit(1);
+  });
 }
