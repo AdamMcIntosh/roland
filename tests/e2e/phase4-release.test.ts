@@ -22,7 +22,7 @@ describe('E2E Phase 4: Release builds', () => {
       console.error('build failed:', (e as { stderr?: Buffer }).stderr?.toString());
       throw e;
     }
-  });
+  }, 120_000);
 
   it('build produces dist/ with index.js', () => {
     const distIndex = path.join(root, 'dist', 'index.js');

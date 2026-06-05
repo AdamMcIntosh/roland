@@ -18,6 +18,9 @@ import { runTool } from './tools.js';
 import { buildClaudeToolCallingPrompt } from './prompts.js';
 import { parseClaudeResponseText } from '../schemas.js';
 import { toCursorModelId } from './model-routing.js';
+import { cleanupSdkSession, configureSdkProcessLimits } from '../utils/sdk-lifecycle.js';
+
+configureSdkProcessLimits();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -78,21 +81,31 @@ async function getResponseViaCursorSDK(prompt: string, agentName: string, model:
   // Dynamic import keeps the mock paths working without the SDK installed.
   const { Agent } = await import('@cursor/sdk') as typeof import('@cursor/sdk');
 
-  const agent = await Agent.create({
-    apiKey,
-    model: { id: toCursorModelId(model, agentName) },
-    name: agentName,
-    local: { cwd: process.cwd() },
-  });
+  type SdkAgent = Awaited<ReturnType<typeof Agent.create>>;
+  type SdkRun = Awaited<ReturnType<SdkAgent['send']>>;
 
-  const run = await agent.send(prompt);
-  const runResult = await run.wait();
+  let agent: SdkAgent | undefined;
+  let run: SdkRun | undefined;
 
-  if (runResult.status === 'error' || runResult.status === 'cancelled') {
-    throw new Error(`Cursor agent "${agentName}" ${runResult.status}: ${runResult.result ?? 'no detail'}`);
+  try {
+    agent = await Agent.create({
+      apiKey,
+      model: { id: toCursorModelId(model, agentName) },
+      name: agentName,
+      local: { cwd: process.cwd() },
+    });
+
+    run = await agent.send(prompt);
+    const runResult = await run.wait();
+
+    if (runResult.status === 'error' || runResult.status === 'cancelled') {
+      throw new Error(`Cursor agent "${agentName}" ${runResult.status}: ${runResult.result ?? 'no detail'}`);
+    }
+
+    return JSON.stringify({ output: runResult.result ?? '', success: true });
+  } finally {
+    await cleanupSdkSession(agent, run);
   }
-
-  return JSON.stringify({ output: runResult.result ?? '', success: true });
 }
 
 /**

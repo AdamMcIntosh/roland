@@ -2,8 +2,32 @@
   "mcpServers": {
     "roland": {
       "command": "node",
-      "args": [
-        "dist/index.js"
+      "args": ["dist/server/mcp-server.js"],
+      "env": {
+        "ROLAND_QUIET": "1"
+      },
+      "autoApprove": [
+        "health_check",
+        "roland_hello",
+        "board_status",
+        "pm_standup",
+        "triage",
+        "list_team",
+        "list_team_recipes",
+        "list_recipes",
+        "get_team_context",
+        "get_pm_playbook",
+        "get_team_usage",
+        "get_pm_events",
+        "get_analytics",
+        "suggest_mode",
+        "route_model",
+        "blackboard_read",
+        "bus_poll",
+        "git_status",
+        "git_diff",
+        "git_log",
+        "read_context"
       ]
     }
   }

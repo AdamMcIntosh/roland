@@ -674,49 +674,56 @@ function generateRecipeHandoffs(recipe: Recipe): HandoffAgent[] {
 
 function generateVscodeMcpJson(rolandRoot: string, isExternal: boolean): string {
   if (isExternal) {
-    // Absolute path to roland dist — works from any project
-    const distIndex = path.join(rolandRoot, 'dist', 'index.js').replace(/\\/g, '/');
+    const distMcp = path.join(rolandRoot, 'dist', 'server', 'mcp-server.js').replace(/\\/g, '/');
     return JSON.stringify({
       servers: {
         roland: {
           type: 'stdio',
           command: 'node',
-          args: [distIndex],
+          args: [distMcp],
         },
       },
     }, null, 2);
   }
-  // Self-referencing — use workspace-relative path
   return JSON.stringify({
     servers: {
       roland: {
         type: 'stdio',
         command: 'node',
-        args: ['${workspaceFolder}/dist/index.js'],
+        args: ['${workspaceFolder}/dist/server/mcp-server.js'],
       },
     },
   }, null, 2);
 }
 
 function generateCursorMcpJson(rolandRoot: string, isExternal: boolean): string {
+  const distMcp = path.join(rolandRoot, 'dist', 'server', 'mcp-server.js').replace(/\\/g, '/');
+  const autoApprove = [
+    'health_check', 'roland_hello', 'board_status', 'pm_standup', 'triage',
+    'list_team', 'list_team_recipes', 'list_recipes', 'get_team_context',
+    'get_pm_playbook', 'get_team_usage', 'get_pm_events', 'get_analytics',
+    'suggest_mode', 'route_model', 'blackboard_read', 'bus_poll',
+    'git_status', 'git_diff', 'git_log', 'read_context',
+  ];
   if (isExternal) {
-    // Absolute path to roland dist — works from any project
-    const distIndex = path.join(rolandRoot, 'dist', 'index.js').replace(/\\/g, '/');
     return JSON.stringify({
       mcpServers: {
         roland: {
           command: 'node',
-          args: [distIndex],
+          args: [distMcp],
+          env: { ROLAND_QUIET: '1' },
+          autoApprove,
         },
       },
     }, null, 2);
   }
-  // Self-referencing
   return JSON.stringify({
     mcpServers: {
       roland: {
         command: 'node',
-        args: ['dist/index.js'],
+        args: ['dist/server/mcp-server.js'],
+        env: { ROLAND_QUIET: '1' },
+        autoApprove,
       },
     },
   }, null, 2);
@@ -885,7 +892,7 @@ async function main() {
   console.log(`  .vscode/mcp.json    — VS Code MCP config`);
   console.log(`  .cursor/mcp.json    — Cursor MCP config`);
   if (isExternal) {
-    console.log(`\n🔗 MCP configs point to: ${rolandRoot}/dist/index.js`);
+    console.log(`\n🔗 MCP configs point to: ${rolandRoot}/dist/server/mcp-server.js`);
     console.log(`   Make sure Roland is built: cd ${rolandRoot} && npm run build`);
   }
 }

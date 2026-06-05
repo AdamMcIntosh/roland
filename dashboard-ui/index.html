@@ -258,6 +258,24 @@
     .hitl-state-banner.paused { background: rgba(245,158,11,.1); color: var(--amber); border: 1px solid rgba(245,158,11,.22); }
     .hitl-state-banner.abort  { background: rgba(239,68,68,.1);  color: var(--red);   border: 1px solid rgba(239,68,68,.22); }
 
+    /* Command Board panel */
+    .board-panel { padding: 1rem; font-size: .78rem; line-height: 1.55; }
+    .board-panel pre {
+      margin: 0; white-space: pre-wrap; word-break: break-word;
+      font-family: ui-monospace, 'Cascadia Code', monospace; font-size: .72rem;
+      color: var(--fg); background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 8px; padding: .75rem;
+    }
+    .board-roster { display: flex; flex-wrap: wrap; gap: .35rem; margin: .5rem 0; }
+    .board-callsign {
+      padding: .15rem .45rem; border-radius: 4px; font-size: .68rem;
+      background: var(--card-bg); border: 1px solid var(--border);
+    }
+    .board-callsign.complete { border-color: rgba(16,185,129,.35); color: var(--emerald); }
+    .board-callsign.active   { border-color: rgba(99,102,241,.4);  color: var(--indigo); }
+    .board-callsign.blocked  { border-color: rgba(245,158,11,.4);  color: var(--amber); }
+    .board-blocker-list { margin: .5rem 0 0; padding-left: 1rem; color: var(--amber); }
+
     /* ═══════════════════════════════════════════════════════
        Recent Runs (Overview)
     ═══════════════════════════════════════════════════════ */
@@ -684,6 +702,19 @@
         </div>
       </section>
 
+      <!-- UNSC Command Board -->
+      <section class="section">
+        <div class="section-box" id="board-section-box">
+          <div class="section-header" style="display:flex;align-items:center;justify-content:space-between;padding-right:.65rem">
+            <h2 style="margin:0">🎖 Command Board</h2>
+            <button class="btn-icon" id="btn-refresh-board" title="Refresh board status">↻</button>
+          </div>
+          <div class="board-panel" id="board-panel">
+            <div class="idle-state"><span>○</span><span>Loading command board…</span></div>
+          </div>
+        </div>
+      </section>
+
       <!-- Recent Runs -->
       <section class="section">
         <div class="section-box">
@@ -899,6 +930,7 @@
   let usageData    = [];
   let runState     = null;
   let hitlState    = null;
+  let boardStatus  = null;
   let memoryContent = '';
   let memoryEditMode = false;
   let period       = 'today';
@@ -1036,6 +1068,7 @@
           if (msg.type === 'state-update') {
             if (msg.runState  !== undefined) runState  = msg.runState;
             if (msg.hitlState !== undefined) hitlState = msg.hitlState;
+            if (msg.boardStatus !== undefined) boardStatus = msg.boardStatus;
             // Overlay hitl-state.json values into runState for TUI accuracy
             if (runState && hitlState) {
               if (hitlState.paused)       runState.hitlPaused        = true;
@@ -1047,6 +1080,7 @@
             renderLiveIndicator();
             renderCards();
             renderLiveStatus();
+            renderBoardPanel();
             renderRecentRuns();
             if (activeTab === 'actions') renderHitlActionsPanel();
             updateLastUpdated();
@@ -1094,6 +1128,17 @@
         else                        delete runState.hitlAbortPending;
       }
     } catch { runState = null; }
+  }
+
+  async function fetchBoardStatus() {
+    try {
+      const res = await fetch('/api/board-status');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      boardStatus = await res.json();
+    } catch (e) {
+      console.warn('Board status fetch failed:', e.message);
+      boardStatus = null;
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1512,6 +1557,63 @@
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  //  Command Board panel
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  function renderBoardPanel() {
+    const el = document.getElementById('board-panel');
+    if (!el) return;
+
+    const markdown = boardStatus?.markdown || boardStatus?.concise;
+    if (markdown && !markdown.startsWith('(Run npm')) {
+      // Simple markdown-ish render: preserve line breaks
+      const html = markdown
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/^### (.+)$/gm, '<div style="font-weight:700;margin-bottom:.4rem;color:var(--indigo)">$1</div>')
+        .replace(/^- (.+)$/gm, '<div style="padding-left:.5rem;margin:.15rem 0">• $1</div>')
+        .replace(/_\(([^)]+)\)_/g, '<em style="color:var(--muted)">($1)</em>')
+        .replace(/_([^_]+)_/g, '<em style="color:var(--muted)">$1</em>');
+      el.innerHTML = '<div class="board-md">' + html + '</div>';
+      return;
+    }
+
+    const report = boardStatus?.report;
+    if (report) {
+      const roster = (report.roster || []).map(r => {
+        const cls = r.state === 'complete' ? 'complete' : r.state === 'active' ? 'active' : r.state === 'blocked' ? 'blocked' : '';
+        const icon = r.state === 'complete' ? '✓' : r.state === 'active' ? '●' : r.state === 'blocked' ? '⚠' : '○';
+        return `<span class="board-callsign ${cls}">${r.callsign} ${icon}</span>`;
+      }).join('');
+      const blockers = (report.blockers || []).map(b =>
+        `<li>${b.title}${b.content ? ' — ' + b.content.slice(0, 80) : ''}</li>`
+      ).join('');
+      el.innerHTML = `
+        <div><strong>Mission:</strong> ${(report.goal || report.missionObjective || '—').slice(0, 120)}</div>
+        <div style="margin-top:.35rem;color:var(--muted)">Run: ${report.runActive ? 'ACTIVE' : 'idle'} · ${report.counts?.total ?? 0} entries · ${report.counts?.blockers ?? 0} blockers</div>
+        <div class="board-roster">${roster || '<span class="board-callsign">Roster unavailable</span>'}</div>
+        ${blockers ? `<ul class="board-blocker-list">${blockers}</ul>` : '<div style="color:var(--muted);margin-top:.35rem">No blockers</div>'}
+      `;
+      return;
+    }
+
+    const fb = boardStatus?.fallback;
+    if (fb) {
+      el.innerHTML = `<div style="color:var(--muted)">${fb.counts?.total ?? 0} entries · ${fb.counts?.blockers ?? 0} blockers</div>
+        <pre style="margin-top:.5rem">${(fb.commandExcerpt || 'Command board not initialized').slice(0, 800)}</pre>`;
+      return;
+    }
+
+    el.innerHTML = '<div class="idle-state"><span>○</span><span>No command board data — run a team mission first</span></div>';
+  }
+
+  document.getElementById('btn-refresh-board')?.addEventListener('click', async () => {
+    await fetchBoardStatus();
+    renderBoardPanel();
+    updateLastUpdated();
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
   //  Full render
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1520,6 +1622,7 @@
     renderLiveIndicator();
     renderCards();
     renderLiveStatus();
+    renderBoardPanel();
     renderRecentRuns();
     renderTokensChart(filtered);
     renderModelChart(filtered);
@@ -1911,10 +2014,11 @@
   // ═══════════════════════════════════════════════════════════════════════════
 
   async function pollRunState() {
-    await fetchRunState();
+    await Promise.all([fetchRunState(), fetchBoardStatus()]);
     renderLiveIndicator();
     renderCards();
     renderLiveStatus();
+    renderBoardPanel();
     renderRecentRuns();
     if (activeTab === 'actions') renderHitlActionsPanel();
     if (activeTab === 'history') renderHistory();
@@ -2017,7 +2121,7 @@
 
   // Initial load
   (async () => {
-    await Promise.all([fetchUsage(), fetchRunState()]);
+    await Promise.all([fetchUsage(), fetchRunState(), fetchBoardStatus()]);
     renderAll();
   })();
 

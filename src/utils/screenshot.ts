@@ -104,7 +104,7 @@ export async function analyzeImageWithVision(
   };
   const mimeType = mimeMap[ext] ?? 'image/png';
 
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+  const response = (await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
@@ -130,7 +130,7 @@ export async function analyzeImageWithVision(
       ],
       max_tokens: 2048,
     }),
-  });
+  })) as { ok: boolean; status: number; text(): Promise<string>; json(): Promise<unknown> };
 
   if (!response.ok) {
     const err = await response.text();

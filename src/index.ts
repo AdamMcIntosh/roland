@@ -25,9 +25,9 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { setMaxListeners } from 'events';
-import { McpServer } from './server/mcp-server.js';
-import { loadConfig } from './config/config-loader.js';
+import { buildCursorMcpServerEntry, runMcpServer } from './server/mcp-server.js';
+import { bootstrapRolandEnv, resolveRolandInstallRoot } from './utils/project-root.js';
+import { configureSdkProcessLimits } from './utils/sdk-lifecycle.js';
 import { logger } from './utils/logger.js';
 import { Roster } from './pm/roster.js';
 import { TeamRecipes } from './pm/team-recipes.js';
@@ -35,34 +35,27 @@ import { PMEventLog } from './pm/event-log.js';
 import { renderTimeline } from './pm/render.js';
 
 // Raise the global EventEmitter/EventTarget default before any SDK code runs.
-// The Cursor SDK adds one internal abort listener per parallel agent call; on a
-// wave with 10+ tasks the default limit of 10 fires MaxListenersExceededWarning.
-// setMaxListeners(n) with no target sets the process-wide default for all new
-// EventEmitter *and* EventTarget instances (including AbortSignal) — Node 15.4+.
-setMaxListeners(30);
+configureSdkProcessLimits();
+
+// When invoked via `node dist/index.js` (not bin/roland.js), still bootstrap env.
+bootstrapRolandEnv({ binUrl: import.meta.url, cwd: process.cwd() });
 
 const CURSOR_CONFIG = path.join(os.homedir(), '.cursor', 'mcp.json');
-const ROLAND_ENTRY = { command: 'roland', args: ['serve'] };
+
+function rolandMcpEntry(): Record<string, unknown> {
+  const rolandRoot = resolveRolandInstallRoot(import.meta.url);
+  return buildCursorMcpServerEntry({
+    rolandRoot,
+    projectRoot: process.env.ROLAND_PROJECT_ROOT?.trim() || process.cwd(),
+  });
+}
 
 async function serve(): Promise<void> {
-  logger.info('🚀 Starting Roland MCP Server v2...');
-  const config = await loadConfig();
-  logger.info('✅ Configuration loaded');
-  const server = new McpServer(config);
-  await server.start();
-  logger.info('🔗 Waiting for client connection...');
-
-  const shutdown = async () => {
-    logger.info('\n📡 Shutting down gracefully...');
-    await server.stop();
-    process.exit(0);
-  };
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  await runMcpServer();
 }
 
 function mcpConfig(write: boolean): void {
-  const block = { mcpServers: { roland: ROLAND_ENTRY } };
+  const block = { mcpServers: { roland: rolandMcpEntry() } };
   if (!write) {
     console.log('Add this to ~/.cursor/mcp.json (merge into any existing mcpServers):\n');
     console.log(JSON.stringify(block, null, 2));
@@ -76,7 +69,7 @@ function mcpConfig(write: boolean): void {
     // No config yet — create one.
   }
   const servers = (existing.mcpServers as Record<string, unknown>) ?? {};
-  servers.roland = ROLAND_ENTRY;
+  servers.roland = rolandMcpEntry();
   existing.mcpServers = servers;
   fs.mkdirSync(path.dirname(CURSOR_CONFIG), { recursive: true });
   fs.writeFileSync(CURSOR_CONFIG, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
@@ -87,9 +80,15 @@ function doctor(): void {
   const checks: Array<{ ok: boolean; label: string; hint?: string }> = [];
   const add = (ok: boolean, label: string, hint?: string) => checks.push({ ok, label, hint });
 
-  // dist build present (this file is running, so the dir it lives in exists)
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  add(fs.existsSync(here), `Build present (${here})`);
+  const installRoot = resolveRolandInstallRoot(import.meta.url);
+  const distDir = path.join(installRoot, 'dist');
+  add(fs.existsSync(distDir), `Build present (${distDir})`, fs.existsSync(distDir) ? undefined : 'Run npm run build.');
+  const mcpEntry = path.join(distDir, 'server', 'mcp-server.js');
+  add(fs.existsSync(mcpEntry), `MCP server entry (${mcpEntry})`, fs.existsSync(mcpEntry) ? undefined : 'Run npm run build.');
+  const binEntry = path.join(installRoot, 'bin', 'roland.js');
+  add(fs.existsSync(binEntry), `Global CLI shim (${binEntry})`, fs.existsSync(binEntry) ? undefined : 'Missing bin/roland.js — reinstall or npm link from repo.');
+  add(true, `Install root: ${installRoot}`);
+  add(true, `Project root: ${process.env.ROLAND_PROJECT_ROOT ?? process.cwd()}`);
 
   // agents/
   const agentsDir = Roster.resolveAgentsDir();
@@ -131,7 +130,26 @@ function doctor(): void {
   }
   add(canWrite, `Writable .roland/ in ${process.cwd()}`, canWrite ? undefined : 'Check directory permissions.');
 
-  console.log('🩺 Roland doctor\n');
+  // @cursor/sdk → sqlite3 native binding (orchestrate + team mode)
+  const pkgRoot = installRoot;
+  const sqliteBinding = path.join(
+    pkgRoot,
+    'node_modules',
+    'sqlite3',
+    'lib',
+    'binding',
+    `node-v${process.versions.modules}-${process.platform}-${process.arch}`,
+    'node_sqlite3.node',
+  );
+  const sqliteRelease = path.join(pkgRoot, 'node_modules', 'sqlite3', 'build', 'Release', 'node_sqlite3.node');
+  const sqliteOk = fs.existsSync(sqliteBinding) || fs.existsSync(sqliteRelease);
+  add(
+    sqliteOk,
+    `@cursor/sdk sqlite3 binding (${process.platform}/${process.arch}, Node ABI ${process.versions.modules})`,
+    sqliteOk
+      ? undefined
+      : 'Required for `roland team` and orchestrate. From repo root: install VS "Desktop development with C++", then `npm rebuild sqlite3`. See docs/guides/mini-pc-deployment.md.',
+  );
   for (const c of checks) {
     console.log(`${c.ok ? '✅' : '❌'} ${c.label}`);
     if (!c.ok && c.hint) console.log(`   → ${c.hint}`);
@@ -167,6 +185,8 @@ function printHelp(): void {
   ln(`    ${cy('roland')} ${b('watch')}                      Watch git commits, auto-run on change`);
   ln(`    ${cy('roland')} ${b('pr')} [number]               Review (and optionally fix) a GitHub PR`);
   ln(`    ${cy('roland')} ${b('status')}                     Live dashboard for a running job`);
+  ln(`    ${cy('roland')} ${b('board-status')}              UNSC summary (add --concise for chat-friendly)`);
+  ln(`    ${cy('roland')} ${b('orchestrate')} "goal"       SDK supervisor + UNSC sub-agents`);
   ln();
   ln('  ' + b('OPTIONS') + '  ' + d('(team / watch / pr)'));
   ln(`    ${b('--notify')}, -n               Desktop notification on complete`);
@@ -222,6 +242,9 @@ function printHelp(): void {
   ln(`    ${b('CURSOR_API_KEY')}             Required for agent execution`);
   ln(`    ${b('ROLAND_AGENT_TIMEOUT_MS')}    Agent timeout  ${d('(default: 25 min)')}`);
   ln(`    ${b('ROLAND_AGENT_RETRIES')}       Max retries per agent  ${d('(default: 5)')}`);
+  ln(`    ${b('ROLAND_PROJECT_ROOT')}        Target project when cwd is not the repo`);
+  ln(`    ${b('ROLAND_ROOT')}                Alias for ROLAND_PROJECT_ROOT`);
+  ln(`    ${b('ROLAND_STATE_DIR')}           Persistence dir  ${d('(default: .roland under project)')}`);
   ln();
   ln('  ' + b('EXAMPLES'));
   ln(`    ${d('# Run a team session')}`);
@@ -245,6 +268,7 @@ const KNOWN_CMDS = new Set([
   'team', 'run', 'goal', 'start', 'status', 'watch', 'pr', 'chat',
   // HITL controls
   'pause', 'resume', 'unblock', 'inject', 'replan', 'abort', 'hitl-status',
+  'board-status', 'orchestrate',
   // Background supervisor
   'bg-status', 'bg-logs', 'bg-stop',
   '--help', '-h', '--version',
@@ -347,6 +371,38 @@ async function main(): Promise<void> {
           const { TuiRenderer } = await import('./dashboard/tui.js');
           await TuiRenderer.watch(stateDir);
         }
+        break;
+      }
+      case 'board-status': {
+        const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const jsonMode = rest.includes('--json');
+        const concise = rest.includes('--concise') || rest.includes('-c');
+        const goalArgIdx = rest.indexOf('--goal');
+        const goal = goalArgIdx >= 0 ? rest[goalArgIdx + 1] : undefined;
+        const { printBoardStatus } = await import('./rco/board-report.js');
+        printBoardStatus(stateDir, { json: jsonMode, goal, concise });
+        break;
+      }
+      case 'orchestrate': {
+        const installRoot = resolveRolandInstallRoot(import.meta.url);
+        const script = path.join(installRoot, 'scripts', 'roland-orchestrate.mjs');
+        if (!fs.existsSync(script)) {
+          console.error(`Orchestrate script not found: ${script}`);
+          process.exit(1);
+        }
+        const { spawnSync } = await import('child_process');
+        const goal = rest.join(' ').trim();
+        if (!goal) {
+          console.error('Usage: roland orchestrate "<mission goal>"');
+          process.exit(1);
+        }
+        const projectRoot = process.env.ROLAND_PROJECT_ROOT?.trim() || process.cwd();
+        const result = spawnSync(process.execPath, [script, goal], {
+          stdio: 'inherit',
+          cwd: projectRoot,
+          env: process.env,
+        });
+        process.exit(result.status ?? 1);
         break;
       }
       case 'watch': {
