@@ -19,7 +19,12 @@ import { buildClaudeToolCallingPrompt } from './prompts.js';
 import { parseClaudeResponseText } from '../schemas.js';
 import { toCursorModelId } from './model-routing.js';
 import { AGENT_TIMEOUT_MS } from './constants.js';
-import { cleanupSdkSession, configureSdkProcessLimits, waitForSdkRun } from '../utils/sdk-lifecycle.js';
+import {
+  cleanupSdkSession,
+  configureSdkProcessLimits,
+  resolveSdkSettleMs,
+  waitForSdkRun,
+} from '../utils/sdk-lifecycle.js';
 
 configureSdkProcessLimits();
 
@@ -108,7 +113,11 @@ async function getResponseViaCursorSDK(prompt: string, agentName: string, model:
 
     return JSON.stringify({ output: runResult.result ?? '', success: true });
   } finally {
-    await cleanupSdkSession(agent, run);
+    const settleMs = resolveSdkSettleMs(agentName, prompt);
+    const { forced } = await cleanupSdkSession(agent, run, { settleMs, agentName });
+    if (forced) {
+      log('cursor-sdk', `Force cleanup after settle (${settleMs}ms) for ${agentName}`);
+    }
   }
 }
 

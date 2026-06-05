@@ -21,7 +21,12 @@
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { cleanupSdkSession, configureSdkProcessLimits, waitForSdkRun } from '../utils/sdk-lifecycle.js';
+import {
+  cleanupSdkSession,
+  configureSdkProcessLimits,
+  resolveSdkSettleMs,
+  waitForSdkRun,
+} from '../utils/sdk-lifecycle.js';
 
 // Team CLI and supervisor import this module directly (not via index.ts).
 configureSdkProcessLimits();
@@ -468,7 +473,11 @@ async function callCursorAgentOnce(
     }
     return result.result ?? '';
   } finally {
-    await cleanupSdkSession(agent, run);
+    const settleMs = resolveSdkSettleMs(agentName, prompt);
+    const { forced } = await cleanupSdkSession(agent, run, { settleMs, agentName });
+    if (forced) {
+      console.error(`[Team]   🧹 ${agentName} — force cleanup applied after settle (${settleMs}ms)`);
+    }
   }
 }
 

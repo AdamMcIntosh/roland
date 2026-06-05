@@ -20,9 +20,18 @@ const RUN_TERMINAL_WAIT_MS = Number(process.env.ROLAND_SDK_TERMINAL_WAIT_MS) || 
 /**
  * Pause after a run reaches a terminal state so shell-exec can emit
  * "close" (exit→close gap) before the local executor is disposed.
- * Override with ROLAND_SDK_SETTLE_MS (ms); default 750.
+ * Override with ROLAND_SDK_SETTLE_MS (ms); default 2000.
  */
-const SDK_SETTLE_MS = Number(process.env.ROLAND_SDK_SETTLE_MS) || 750;
+const SDK_SETTLE_MS = Number(process.env.ROLAND_SDK_SETTLE_MS) || 2_000;
+
+/**
+ * Longer settle for agents/tasks that spawn many shell children (tests, builds).
+ * Override with ROLAND_SDK_HEAVY_SETTLE_MS (ms); default 4000.
+ */
+const SDK_HEAVY_SETTLE_MS = Number(process.env.ROLAND_SDK_HEAVY_SETTLE_MS) || 4_000;
+
+/** Extra drain window when wait() is called on an already-terminal run. */
+const TERMINAL_DRAIN_MS = Number(process.env.ROLAND_SDK_TERMINAL_DRAIN_MS) || 2_000;
 
 /** Raise the process-wide EventTarget default before any SDK code runs. */
 export function configureSdkProcessLimits(): void {
@@ -34,6 +43,34 @@ export function configureSdkProcessLimits(): void {
   if (typeof process.setMaxListeners === 'function') {
     process.setMaxListeners(0);
   }
+}
+
+/** Default settle ms (env-overridable). */
+export function getDefaultSdkSettleMs(): number {
+  return SDK_SETTLE_MS;
+}
+
+/** Default heavy-task settle ms (env-overridable). */
+export function getHeavySdkSettleMs(): number {
+  return SDK_HEAVY_SETTLE_MS;
+}
+
+const SHELL_EXEC_HEAVY_AGENTS =
+  /test-author|test-executor|tdd-guide|build-fixer|test-executor|qa-tester/i;
+
+const SHELL_EXEC_HEAVY_CONTEXT =
+  /\b(npm test|npm run test|vitest|jest|pytest|cargo test|go test|make test|shell|exec|compile|build)\b/i;
+
+/**
+ * Pick settle duration — longer for test runners and shell-heavy task text.
+ */
+export function resolveSdkSettleMs(agentName: string, taskContext?: string): number {
+  const agentHeavy = SHELL_EXEC_HEAVY_AGENTS.test(agentName);
+  const contextHeavy = Boolean(taskContext && SHELL_EXEC_HEAVY_CONTEXT.test(taskContext));
+  if (agentHeavy || contextHeavy) {
+    return Math.max(SDK_SETTLE_MS, SDK_HEAVY_SETTLE_MS);
+  }
+  return SDK_SETTLE_MS;
 }
 
 /** Minimal run handle for cancel-on-cleanup without importing @cursor/sdk types. */
@@ -54,6 +91,16 @@ export interface SdkAgentHandle {
   [Symbol.asyncDispose]?: () => Promise<void>;
 }
 
+export interface CleanupSdkSessionOptions {
+  settleMs?: number;
+  agentName?: string;
+}
+
+export interface ForceKillResult {
+  forced: boolean;
+  killedPids: number[];
+}
+
 export class SdkAgentTimeoutError extends Error {
   readonly timeoutMs: number;
 
@@ -71,27 +118,135 @@ function isTerminalRunStatus(status: string | undefined): boolean {
   return status === 'finished' || status === 'error' || status === 'cancelled';
 }
 
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Wait until the run is no longer "running" (poll + optional wait() drain).
+ * Walk an SDK agent/run object graph and collect live child PIDs (best-effort).
+ */
+function collectChildPids(root: unknown, seen = new Set<object>(), depth = 0): number[] {
+  if (!root || typeof root !== 'object' || depth > 8) return [];
+  if (seen.has(root as object)) return [];
+  seen.add(root as object);
+
+  const pids: number[] = [];
+  const obj = root as Record<string, unknown>;
+
+  const childProcess = obj.childProcess;
+  if (childProcess && typeof childProcess === 'object') {
+    const cp = childProcess as { pid?: number; killed?: boolean };
+    if (typeof cp.pid === 'number' && cp.pid > 0 && cp.pid !== process.pid && !cp.killed) {
+      pids.push(cp.pid);
+    }
+    pids.push(...collectChildPids(childProcess, seen, depth + 1));
+  }
+
+  // Only collect bare `pid` fields on objects that look like ChildProcess handles.
+  if (
+    typeof obj.pid === 'number' &&
+    obj.pid > 0 &&
+    obj.pid !== process.pid &&
+    ('killed' in obj || 'stdin' in obj || 'stdout' in obj || 'stderr' in obj)
+  ) {
+    const killed = (obj as { killed?: boolean }).killed;
+    if (!killed) pids.push(obj.pid);
+  }
+
+  for (const value of Object.values(obj)) {
+    if (value && typeof value === 'object') {
+      pids.push(...collectChildPids(value, seen, depth + 1));
+    }
+  }
+
+  return [...new Set(pids)];
+}
+
+/**
+ * After settle, SIGKILL any lingering shell child processes still referenced by the agent.
+ */
+export async function forceKillAfterSettle(
+  agent: SdkAgentHandle | unknown | undefined | null,
+  opts?: { agentName?: string },
+): Promise<ForceKillResult> {
+  if (!agent) return { forced: false, killedPids: [] };
+
+  const candidates = collectChildPids(agent);
+  const killedPids: number[] = [];
+
+  for (const pid of candidates) {
+    if (!isProcessAlive(pid)) continue;
+    try {
+      process.kill(pid, 'SIGKILL');
+      killedPids.push(pid);
+    } catch {
+      // Process exited between liveness check and kill.
+    }
+  }
+
+  if (killedPids.length > 0) {
+    const who = opts?.agentName ? ` (${opts.agentName})` : '';
+    console.error(
+      `[Roland] Force cleanup${who}: SIGKILL on ${killedPids.length} lingering shell child process(es) — pids=${killedPids.join(', ')}`,
+    );
+    // Brief pause so the SDK shell-exec layer can observe the kill.
+    await new Promise((r) => setTimeout(r, 100));
+  }
+
+  return { forced: killedPids.length > 0, killedPids };
+}
+
+/**
+ * Wait until the run is no longer "running" (poll + aggressive wait() drain).
+ * Returns true when the run reached a terminal status before the deadline.
  */
 export async function waitForRunTerminal(
   run: SdkRunHandle | undefined | null,
   timeoutMs = RUN_TERMINAL_WAIT_MS,
-): Promise<void> {
-  if (!run) return;
+): Promise<boolean> {
+  if (!run) return true;
 
   const deadline = Date.now() + timeoutMs;
+  let drained = false;
+
   while (run.status === 'running' && Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, RUN_TERMINAL_POLL_MS));
   }
 
-  if (run.status === 'running' && run.wait) {
+  const drainWithTimeout = async (budgetMs: number): Promise<void> => {
+    if (!run.wait || budgetMs <= 0) return;
     try {
-      await run.wait();
+      await Promise.race([
+        run.wait().then(() => {
+          drained = true;
+        }),
+        new Promise<void>((r) => setTimeout(r, budgetMs)),
+      ]);
     } catch {
-      // Cancelled or aborted while draining — terminal enough for cleanup.
+      drained = true;
     }
+  };
+
+  if (run.status === 'running') {
+    await drainWithTimeout(Math.max(100, deadline - Date.now()));
   }
+
+  // Terminal status but wait() may still be draining shell-exec teardown.
+  if (!drained && run.wait && isTerminalRunStatus(run.status)) {
+    await drainWithTimeout(TERMINAL_DRAIN_MS);
+  }
+
+  // Last resort: one more short wait() race if status flipped during drain.
+  if (run.status === 'running' && run.wait && Date.now() < deadline) {
+    await drainWithTimeout(Math.max(50, deadline - Date.now()));
+  }
+
+  return run.status !== 'running';
 }
 
 /**
@@ -115,14 +270,18 @@ export async function cancelSdkRun(
 }
 
 /**
- * Yield briefly after a terminal run so shell-exec child "close" handlers can
+ * Yield after a terminal run so shell-exec child "close" handlers can
  * finish before the local executor lease is released.
  */
-export async function settleSdkRun(run: SdkRunHandle | undefined | null): Promise<void> {
+export async function settleSdkRun(
+  run: SdkRunHandle | undefined | null,
+  opts?: { settleMs?: number },
+): Promise<void> {
   if (!run) return;
   await waitForRunTerminal(run);
-  if (SDK_SETTLE_MS > 0) {
-    await new Promise((r) => setTimeout(r, SDK_SETTLE_MS));
+  const settleMs = opts?.settleMs ?? SDK_SETTLE_MS;
+  if (settleMs > 0) {
+    await new Promise((r) => setTimeout(r, settleMs));
   }
 }
 
@@ -206,12 +365,15 @@ export async function disposeSdkAgent(agent: SdkAgentHandle | undefined | null):
   }
 }
 
-/** Cancel / settle an in-flight run, then dispose its agent. */
+/** Cancel / settle / force-kill lingering children / dispose. */
 export async function cleanupSdkSession(
   agent: SdkAgentHandle | undefined | null,
   run: SdkRunHandle | undefined | null,
-): Promise<void> {
+  opts?: CleanupSdkSessionOptions,
+): Promise<ForceKillResult> {
   await cancelSdkRun(run);
-  await settleSdkRun(run);
+  await settleSdkRun(run, { settleMs: opts?.settleMs });
+  const killResult = await forceKillAfterSettle(agent, { agentName: opts?.agentName });
   await disposeSdkAgent(agent);
+  return killResult;
 }

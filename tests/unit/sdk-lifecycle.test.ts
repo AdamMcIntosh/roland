@@ -5,6 +5,8 @@ import {
   cleanupSdkSession,
   configureSdkProcessLimits,
   disposeSdkAgent,
+  forceKillAfterSettle,
+  resolveSdkSettleMs,
   settleSdkRun,
   waitForRunTerminal,
   waitForSdkRun,
@@ -59,14 +61,15 @@ describe('waitForRunTerminal', () => {
     vi.useRealTimers();
   });
 
-  it('polls until status leaves running', async () => {
-    const run = { status: 'running' as string, wait: vi.fn() };
+  it('polls until status leaves running then drains terminal wait', async () => {
+    const wait = vi.fn(async () => ({ status: 'finished' }));
+    const run = { status: 'running' as string, wait };
     const promise = waitForRunTerminal(run, 500);
     await vi.advanceTimersByTimeAsync(60);
     run.status = 'finished';
-    await vi.advanceTimersByTimeAsync(60);
+    await vi.advanceTimersByTimeAsync(2_500);
     await promise;
-    expect(run.wait).not.toHaveBeenCalled();
+    expect(wait).toHaveBeenCalled();
   });
 
   it('drains wait() when still running at deadline', async () => {
@@ -91,8 +94,37 @@ describe('settleSdkRun', () => {
   it('waits for terminal status then settles', async () => {
     const run = { status: 'finished' as const };
     const promise = settleSdkRun(run);
-    await vi.advanceTimersByTimeAsync(800);
+    await vi.advanceTimersByTimeAsync(2_100);
     await promise;
+  });
+});
+
+describe('resolveSdkSettleMs', () => {
+  it('uses heavy settle for test-author', () => {
+    expect(resolveSdkSettleMs('test-author')).toBeGreaterThanOrEqual(4_000);
+  });
+
+  it('uses heavy settle when task mentions vitest', () => {
+    expect(resolveSdkSettleMs('executor', 'run npm test and vitest')).toBeGreaterThanOrEqual(4_000);
+  });
+
+  it('uses default settle for ordinary tasks', () => {
+    expect(resolveSdkSettleMs('executor', 'add a route handler')).toBe(2_000);
+  });
+});
+
+describe('forceKillAfterSettle', () => {
+  it('returns forced=false when no childProcess handles', async () => {
+    const result = await forceKillAfterSettle({ nested: { pid: process.pid } });
+    expect(result.forced).toBe(false);
+    expect(result.killedPids).toEqual([]);
+  });
+
+  it('skips the current process pid even on childProcess-shaped objects', async () => {
+    const result = await forceKillAfterSettle({
+      childProcess: { pid: process.pid, killed: false, stdin: null },
+    });
+    expect(result.forced).toBe(false);
   });
 });
 
@@ -185,7 +217,7 @@ describe('cleanupSdkSession', () => {
       }),
     };
     const promise = cleanupSdkSession({ [Symbol.asyncDispose]: async () => { order.push('dispose'); } }, run);
-    await vi.advanceTimersByTimeAsync(800);
+    await vi.advanceTimersByTimeAsync(2_100);
     await promise;
     expect(order).toEqual(['cancel', 'dispose']);
   });

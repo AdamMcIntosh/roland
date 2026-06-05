@@ -9,6 +9,8 @@ import {
   cancelSdkRun,
   cleanupSdkSession,
   configureSdkProcessLimits,
+  forceKillAfterSettle,
+  resolveSdkSettleMs,
   settleSdkRun,
   waitForRunTerminal,
   waitForSdkRun,
@@ -136,6 +138,19 @@ console.log('\n\x1b[1mTest 7: cleanupSdkSession settles before dispose\x1b[0m');
   await settleSdkRun({ status: 'finished' });
   assert('dispose ran', order.includes('dispose'));
   assert('cancel skipped for finished run', !order.includes('cancel'));
+}
+
+console.log('\n\x1b[1mTest 8: resolveSdkSettleMs heavy vs default\x1b[0m');
+{
+  assert('test-author gets heavy settle', resolveSdkSettleMs('test-author') >= 4_000);
+  assert('vitest context gets heavy settle', resolveSdkSettleMs('executor', 'run vitest') >= 4_000);
+  assert('ordinary task uses default settle', resolveSdkSettleMs('executor', 'add handler') === 2_000);
+}
+
+console.log('\n\x1b[1mTest 9: forceKillAfterSettle no-op without children\x1b[0m');
+{
+  const result = await forceKillAfterSettle(null);
+  assert('forced=false when agent null', result.forced === false);
 }
 
 console.log(`\n\x1b[1mResults: ${passed} passed, ${failed} failed\x1b[0m\n`);

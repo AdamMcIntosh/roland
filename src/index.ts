@@ -150,6 +150,21 @@ function doctor(): void {
       ? undefined
       : 'Required for `roland team` and orchestrate. From repo root: install VS "Desktop development with C++", then `npm rebuild sqlite3`. See docs/guides/mini-pc-deployment.md.',
   );
+
+  // SDK shell-exec cleanup tuning (optional env overrides)
+  const settleMs = process.env.ROLAND_SDK_SETTLE_MS ?? '2000 (default)';
+  const heavySettleMs = process.env.ROLAND_SDK_HEAVY_SETTLE_MS ?? '4000 (default)';
+  const terminalWaitMs = process.env.ROLAND_SDK_TERMINAL_WAIT_MS ?? '30000 (default)';
+  add(
+    true,
+    `SDK cleanup: ROLAND_SDK_SETTLE_MS=${settleMs}, ROLAND_SDK_HEAVY_SETTLE_MS=${heavySettleMs}`,
+  );
+  add(
+    true,
+    `SDK cleanup: ROLAND_SDK_TERMINAL_WAIT_MS=${terminalWaitMs}`,
+    'Raise settle if you see [shell-exec] Close event warnings during team runs.',
+  );
+
   for (const c of checks) {
     console.log(`${c.ok ? '✅' : '❌'} ${c.label}`);
     if (!c.ok && c.hint) console.log(`   → ${c.hint}`);
