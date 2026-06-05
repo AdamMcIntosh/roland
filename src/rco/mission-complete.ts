@@ -11,8 +11,21 @@ export interface MissionCompleteContext {
   taskCount: number;
 }
 
+const MISSION_COMPLETE_HEADING = /###\s+(🎖\s+)?(UNSC\s+)?Mission Complete/i;
+
+/** Footer block preceded by --- (canonical orchestrator format). */
 const MISSION_COMPLETE_BLOCK =
-  /\n---\n+\s*###\s+(🎖\s+)?(UNSC\s+)?Mission Complete[\s\S]*?(?=\n##\s|$)/i;
+  /\n---\n+\s*###\s+(🎖\s+)?(UNSC\s+)?Mission Complete[\s\S]*$/i;
+
+/** Strip any prior Mission Complete footer the PM may have written despite instructions. */
+export function stripMissionCompleteFooter(synthesis: string): string {
+  let body = synthesis.replace(MISSION_COMPLETE_BLOCK, '').trimEnd();
+  const match = body.match(MISSION_COMPLETE_HEADING);
+  if (match?.index != null && match.index >= 0) {
+    body = body.slice(0, match.index).trimEnd();
+  }
+  return body;
+}
 
 /** Section headers whose body is extracted and moved to the Mission Complete footer. */
 const NEXT_STEPS_SECTION =
@@ -118,7 +131,8 @@ export function formatMissionCompleteFooter(ctx: MissionCompleteContext, nextSte
  */
 export function finalizeSynthesisOutput(synthesis: string, ctx: MissionCompleteContext): string {
   const { body: withStepsRemoved, nextSteps } = extractNextStepsSection(synthesis);
-  const body = withStepsRemoved.replace(MISSION_COMPLETE_BLOCK, '').trimEnd();
+  const body = stripMissionCompleteFooter(withStepsRemoved);
   const footer = formatMissionCompleteFooter(ctx, nextSteps);
-  return `${body.trimEnd()}\n\n${footer}\n`;
+  const trimmedBody = body.trimEnd();
+  return trimmedBody ? `${trimmedBody}\n\n${footer}\n` : `${footer}\n`;
 }

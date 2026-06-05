@@ -91,7 +91,7 @@ describe('settleSdkRun', () => {
   it('waits for terminal status then settles', async () => {
     const run = { status: 'finished' as const };
     const promise = settleSdkRun(run);
-    await vi.advanceTimersByTimeAsync(300);
+    await vi.advanceTimersByTimeAsync(800);
     await promise;
   });
 });
@@ -185,7 +185,7 @@ describe('cleanupSdkSession', () => {
       }),
     };
     const promise = cleanupSdkSession({ [Symbol.asyncDispose]: async () => { order.push('dispose'); } }, run);
-    await vi.advanceTimersByTimeAsync(300);
+    await vi.advanceTimersByTimeAsync(800);
     await promise;
     expect(order).toEqual(['cancel', 'dispose']);
   });

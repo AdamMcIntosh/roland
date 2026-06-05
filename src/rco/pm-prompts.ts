@@ -498,7 +498,7 @@ Architectural, design, and process decisions the team reached, with brief ration
 
 ## Memory Extract
 
-After completing the sections above, write this final section so Roland can update its long-term project memory.
+After completing the sections above, write this section so Roland can update its long-term project memory.
 Use **exactly** the section headers below — this is machine-parsed. Keep it tight: 2–5 bullets per section, only what is new or changed this run. Omit a section entirely if you have nothing new for it.
 
 **Architecture Decisions:**

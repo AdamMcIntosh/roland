@@ -7,7 +7,7 @@
  * "[shell-exec] Close event did not fire within 5000ms".
  */
 
-import { setMaxListeners } from 'events';
+import { EventEmitter, setMaxListeners } from 'events';
 
 let processLimitsConfigured = false;
 
@@ -18,17 +18,22 @@ const RUN_TERMINAL_POLL_MS = 50;
 const RUN_TERMINAL_WAIT_MS = Number(process.env.ROLAND_SDK_TERMINAL_WAIT_MS) || 30_000;
 
 /**
- * Brief pause after a run reaches a terminal state so shell-exec can emit
+ * Pause after a run reaches a terminal state so shell-exec can emit
  * "close" (exit→close gap) before the local executor is disposed.
+ * Override with ROLAND_SDK_SETTLE_MS (ms); default 750.
  */
-const SDK_SETTLE_MS = Number(process.env.ROLAND_SDK_SETTLE_MS) || 250;
+const SDK_SETTLE_MS = Number(process.env.ROLAND_SDK_SETTLE_MS) || 750;
 
 /** Raise the process-wide EventTarget default before any SDK code runs. */
 export function configureSdkProcessLimits(): void {
   if (processLimitsConfigured) return;
   processLimitsConfigured = true;
-  // 0 = unlimited — final guard against MaxListenersExceededWarning during long team runs.
+  // 0 = unlimited — guard against MaxListenersExceededWarning during long team runs.
   setMaxListeners(0);
+  EventEmitter.defaultMaxListeners = 0;
+  if (typeof process.setMaxListeners === 'function') {
+    process.setMaxListeners(0);
+  }
 }
 
 /** Minimal run handle for cancel-on-cleanup without importing @cursor/sdk types. */
