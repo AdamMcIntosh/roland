@@ -22,6 +22,7 @@ import { AGENT_TIMEOUT_MS } from './constants.js';
 import {
   cleanupSdkSession,
   configureSdkProcessLimits,
+  resolveSdkAgentLocalOptions,
   resolveSdkSettleMs,
   waitForSdkRun,
 } from '../utils/sdk-lifecycle.js';
@@ -98,7 +99,7 @@ async function getResponseViaCursorSDK(prompt: string, agentName: string, model:
       apiKey,
       model: { id: toCursorModelId(model, agentName) },
       name: agentName,
-      local: { cwd: process.cwd() },
+      local: resolveSdkAgentLocalOptions(agentName, { cwd: process.cwd() }) as import('@cursor/sdk').LocalAgentOptions,
     });
 
     run = await agent.send(prompt);

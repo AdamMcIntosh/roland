@@ -20,18 +20,99 @@ const RUN_TERMINAL_WAIT_MS = Number(process.env.ROLAND_SDK_TERMINAL_WAIT_MS) || 
 /**
  * Pause after a run reaches a terminal state so shell-exec can emit
  * "close" (exit→close gap) before the local executor is disposed.
- * Override with ROLAND_SDK_SETTLE_MS (ms); default 2000.
+ * Override with ROLAND_SDK_SETTLE_MS (ms); default 3500.
  */
-const SDK_SETTLE_MS = Number(process.env.ROLAND_SDK_SETTLE_MS) || 2_000;
+const SDK_SETTLE_MS = Number(process.env.ROLAND_SDK_SETTLE_MS) || 3_500;
 
 /**
  * Longer settle for agents/tasks that spawn many shell children (tests, builds).
- * Override with ROLAND_SDK_HEAVY_SETTLE_MS (ms); default 4000.
+ * Override with ROLAND_SDK_HEAVY_SETTLE_MS (ms); default 8000.
  */
-const SDK_HEAVY_SETTLE_MS = Number(process.env.ROLAND_SDK_HEAVY_SETTLE_MS) || 4_000;
+const SDK_HEAVY_SETTLE_MS = Number(process.env.ROLAND_SDK_HEAVY_SETTLE_MS) || 8_000;
 
 /** Extra drain window when wait() is called on an already-terminal run. */
 const TERMINAL_DRAIN_MS = Number(process.env.ROLAND_SDK_TERMINAL_DRAIN_MS) || 2_000;
+
+/** SDK shell-exec teardown warning — noisy during dotnet/vitest runs; safe to suppress. */
+export const SHELL_EXEC_CLOSE_WARNING_RE =
+  /\[shell-exec\]\s*Close event did not fire within \d+ms/i;
+
+export function isShellExecCloseWarning(text: string): boolean {
+  return SHELL_EXEC_CLOSE_WARNING_RE.test(text);
+}
+
+function chunkToText(chunk: unknown): string {
+  if (typeof chunk === 'string') return chunk;
+  if (Buffer.isBuffer(chunk)) return chunk.toString('utf8');
+  return String(chunk);
+}
+
+function argsToText(args: unknown[]): string {
+  return args.map((a) => chunkToText(a)).join(' ');
+}
+
+let shellExecSilencerInstalled = false;
+
+/** Suppress the SDK shell-exec close-timeout warning on console + stderr. */
+export function installShellExecWarningSilencer(): void {
+  if (shellExecSilencerInstalled) return;
+  shellExecSilencerInstalled = true;
+
+  const origWarn = console.warn.bind(console);
+  const origError = console.error.bind(console);
+  const origStderrWrite = process.stderr.write.bind(process.stderr);
+
+  console.warn = (...args: unknown[]) => {
+    if (isShellExecCloseWarning(argsToText(args))) return;
+    origWarn(...args);
+  };
+
+  console.error = (...args: unknown[]) => {
+    if (isShellExecCloseWarning(argsToText(args))) return;
+    origError(...args);
+  };
+
+  (process.stderr as NodeJS.WriteStream).write = (
+    chunk: unknown,
+    encodingOrCb?: unknown,
+    cb?: unknown,
+  ): boolean => {
+    if (isShellExecCloseWarning(chunkToText(chunk))) {
+      if (typeof encodingOrCb === 'function') (encodingOrCb as () => void)();
+      else if (typeof cb === 'function') (cb as () => void)();
+      return true;
+    }
+    return (origStderrWrite as (c: unknown, e?: unknown, c2?: unknown) => boolean)(
+      chunk,
+      encodingOrCb,
+      cb,
+    );
+  };
+}
+
+/** Scoped stderr filter for team runs — returns a restore function. */
+export function createShellExecStderrFilter(): () => void {
+  const origWrite = process.stderr.write.bind(process.stderr);
+  (process.stderr as NodeJS.WriteStream).write = (
+    chunk: unknown,
+    encodingOrCb?: unknown,
+    cb?: unknown,
+  ): boolean => {
+    if (isShellExecCloseWarning(chunkToText(chunk))) {
+      if (typeof encodingOrCb === 'function') (encodingOrCb as () => void)();
+      else if (typeof cb === 'function') (cb as () => void)();
+      return true;
+    }
+    return (origWrite as (c: unknown, e?: unknown, c2?: unknown) => boolean)(
+      chunk,
+      encodingOrCb,
+      cb,
+    );
+  };
+  return () => {
+    (process.stderr as NodeJS.WriteStream).write = origWrite as typeof process.stderr.write;
+  };
+}
 
 /** Raise the process-wide EventTarget default before any SDK code runs. */
 export function configureSdkProcessLimits(): void {
@@ -43,6 +124,7 @@ export function configureSdkProcessLimits(): void {
   if (typeof process.setMaxListeners === 'function') {
     process.setMaxListeners(0);
   }
+  installShellExecWarningSilencer();
 }
 
 /** Default settle ms (env-overridable). */
@@ -59,7 +141,26 @@ const SHELL_EXEC_HEAVY_AGENTS =
   /test-author|test-executor|tdd-guide|build-fixer|test-executor|qa-tester/i;
 
 const SHELL_EXEC_HEAVY_CONTEXT =
-  /\b(npm test|npm run test|vitest|jest|pytest|cargo test|go test|make test|shell|exec|compile|build)\b/i;
+  /\b(npm test|npm run test|vitest|jest|pytest|cargo test|go test|dotnet test|make test|shell|exec|compile|build)\b/i;
+
+export interface SdkAgentLocalOptions {
+  cwd: string;
+  settingSources?: readonly ('project' | 'user')[];
+  /** When set, prefer detached shell children with ignored stdio (test runners). */
+  shellExec?: { stdio?: 'ignore' | 'pipe'; detached?: boolean };
+}
+
+/** Local Agent.create options — shell-heavy agents get detached/ignore stdio when supported. */
+export function resolveSdkAgentLocalOptions(
+  agentName: string,
+  base: SdkAgentLocalOptions,
+): SdkAgentLocalOptions {
+  if (!SHELL_EXEC_HEAVY_AGENTS.test(agentName)) return base;
+  return {
+    ...base,
+    shellExec: { stdio: 'ignore', detached: true },
+  };
+}
 
 /**
  * Pick settle duration — longer for test runners and shell-heavy task text.
@@ -127,6 +228,27 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
+/** SIGKILL a pid; on Unix also attempt the entire process group (-pid). */
+function killProcessAggressive(pid: number): boolean {
+  if (!isProcessAlive(pid)) return false;
+
+  if (process.platform !== 'win32') {
+    try {
+      process.kill(-pid, 'SIGKILL');
+      return true;
+    } catch {
+      // pid may not be a group leader — fall through to direct kill.
+    }
+  }
+
+  try {
+    process.kill(pid, 'SIGKILL');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Walk an SDK agent/run object graph and collect live child PIDs (best-effort).
  */
@@ -180,22 +302,19 @@ export async function forceKillAfterSettle(
   const killedPids: number[] = [];
 
   for (const pid of candidates) {
-    if (!isProcessAlive(pid)) continue;
-    try {
-      process.kill(pid, 'SIGKILL');
+    if (killProcessAggressive(pid)) {
       killedPids.push(pid);
-    } catch {
-      // Process exited between liveness check and kill.
     }
   }
 
   if (killedPids.length > 0) {
     const who = opts?.agentName ? ` (${opts.agentName})` : '';
+    const groupNote = process.platform !== 'win32' ? ' (process group when possible)' : '';
     console.error(
-      `[Roland] Force cleanup${who}: SIGKILL on ${killedPids.length} lingering shell child process(es) — pids=${killedPids.join(', ')}`,
+      `[Roland] Force cleanup${who}: SIGKILL${groupNote} on ${killedPids.length} lingering shell child process(es) — pids=${killedPids.join(', ')}`,
     );
     // Brief pause so the SDK shell-exec layer can observe the kill.
-    await new Promise((r) => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, 250));
   }
 
   return { forced: killedPids.length > 0, killedPids };

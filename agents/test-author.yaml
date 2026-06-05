@@ -91,6 +91,10 @@ role_prompt: >
   external infrastructure (database, queue, etc.), note the setup requirements in
   a comment block at the top of each file.
 
+  When naming test commands for test-executor (in comments or PM messages), prefer
+  scoped runs: `dotnet test --filter "FullyQualifiedName~MyClass" --no-build`,
+  `npx vitest run test/unit/foo.test.ts` — never bare `dotnet test` or `npm test`.
+
   Focus on:
     - Full happy-path coverage
     - Every documented edge case and boundary condition

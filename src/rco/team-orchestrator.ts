@@ -24,6 +24,8 @@ import { fileURLToPath } from 'url';
 import {
   cleanupSdkSession,
   configureSdkProcessLimits,
+  createShellExecStderrFilter,
+  resolveSdkAgentLocalOptions,
   resolveSdkSettleMs,
   waitForSdkRun,
 } from '../utils/sdk-lifecycle.js';
@@ -245,6 +247,8 @@ export interface TeamOrchestratorOptions {
    * ROLAND_PARALLEL=1.
    */
   sequential?: boolean;
+  /** When true, suppress SDK shell-exec close-timeout noise on stderr. */
+  quiet?: boolean;
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -452,7 +456,10 @@ async function callCursorAgentOnce(
       apiKey,
       model: { id: modelId },
       name: callOptions?.isSupervisor ? 'Roland' : agentName,
-      local: { cwd: process.cwd(), settingSources: hasSubAgents ? ['project'] : [] },
+      local: resolveSdkAgentLocalOptions(agentName, {
+        cwd: process.cwd(),
+        settingSources: hasSubAgents ? (['project'] as const) : [],
+      }) as import('@cursor/sdk').LocalAgentOptions,
       ...(hasSubAgents ? { agents: sdkAgents } : {}),
     });
 
@@ -593,6 +600,37 @@ async function callCursorAgent(
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult> {
+  const {
+    goal, stateDir = '.roland', agentsDir: agentsDirOverride,
+    onPlanReady, onWaveStart, onTaskStart, onTaskComplete, onWaveComplete,
+    onWaveReview, onTasksSpawned, onSynthesizing,
+    onBlockerDetected, hitlQueue,
+    onHitlPause, onAbortPending,
+    noImprove = false, interactive = false, rl,
+    onCircuitBreak,
+    sequential = false,
+    quiet = false,
+  } = opts;
+
+  const restoreStderr = quiet ? createShellExecStderrFilter() : undefined;
+  try {
+    return await runTeamInner({
+      goal, stateDir, agentsDir: agentsDirOverride,
+      onPlanReady, onWaveStart, onTaskStart, onTaskComplete, onWaveComplete,
+      onWaveReview, onTasksSpawned, onSynthesizing,
+      onBlockerDetected, hitlQueue,
+      onHitlPause, onAbortPending,
+      noImprove, interactive, rl,
+      onCircuitBreak,
+      sequential,
+      quiet,
+    });
+  } finally {
+    restoreStderr?.();
+  }
+}
+
+async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> {
   const {
     goal, stateDir = '.roland', agentsDir: agentsDirOverride,
     onPlanReady, onWaveStart, onTaskStart, onTaskComplete, onWaveComplete,

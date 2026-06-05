@@ -421,7 +421,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     try {
       const result = await runTeam({
         goal, stateDir, agentsDir, hitlQueue,
-        noImprove, sequential: !parallel, interactive: false,
+        noImprove, sequential: !parallel, interactive: false, quiet: true,
         onPlanReady:    (tasks)         => { runState.planReady(tasks); },
         onWaveStart:    (w, tasks)      => { runState.waveStart(w, tasks.map((t) => t.id)); },
         onTaskStart:    (id)            => { runState.taskStart(id); },

@@ -152,8 +152,8 @@ function doctor(): void {
   );
 
   // SDK shell-exec cleanup tuning (optional env overrides)
-  const settleMs = process.env.ROLAND_SDK_SETTLE_MS ?? '2000 (default)';
-  const heavySettleMs = process.env.ROLAND_SDK_HEAVY_SETTLE_MS ?? '4000 (default)';
+  const settleMs = process.env.ROLAND_SDK_SETTLE_MS ?? '3500 (default)';
+  const heavySettleMs = process.env.ROLAND_SDK_HEAVY_SETTLE_MS ?? '8000 (default)';
   const terminalWaitMs = process.env.ROLAND_SDK_TERMINAL_WAIT_MS ?? '30000 (default)';
   add(
     true,

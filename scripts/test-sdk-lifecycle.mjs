@@ -142,15 +142,26 @@ console.log('\n\x1b[1mTest 7: cleanupSdkSession settles before dispose\x1b[0m');
 
 console.log('\n\x1b[1mTest 8: resolveSdkSettleMs heavy vs default\x1b[0m');
 {
-  assert('test-author gets heavy settle', resolveSdkSettleMs('test-author') >= 4_000);
-  assert('vitest context gets heavy settle', resolveSdkSettleMs('executor', 'run vitest') >= 4_000);
-  assert('ordinary task uses default settle', resolveSdkSettleMs('executor', 'add handler') === 2_000);
+  assert('test-author gets heavy settle', resolveSdkSettleMs('test-author') >= 8_000);
+  assert('vitest context gets heavy settle', resolveSdkSettleMs('executor', 'run vitest') >= 8_000);
+  assert('dotnet test context gets heavy settle', resolveSdkSettleMs('test-executor', 'dotnet test --no-build') >= 8_000);
+  assert('ordinary task uses default settle', resolveSdkSettleMs('executor', 'add handler') === 3_500);
 }
 
 console.log('\n\x1b[1mTest 9: forceKillAfterSettle no-op without children\x1b[0m');
 {
   const result = await forceKillAfterSettle(null);
   assert('forced=false when agent null', result.forced === false);
+}
+
+console.log('\n\x1b[1mTest 10: isShellExecCloseWarning pattern\x1b[0m');
+{
+  const { isShellExecCloseWarning } = await import('../dist/utils/sdk-lifecycle.js');
+  assert(
+    'matches shell-exec close warning',
+    isShellExecCloseWarning('[shell-exec] Close event did not fire within 5000ms'),
+  );
+  assert('ignores normal stderr', !isShellExecCloseWarning('[Team] wave complete'));
 }
 
 console.log(`\n\x1b[1mResults: ${passed} passed, ${failed} failed\x1b[0m\n`);

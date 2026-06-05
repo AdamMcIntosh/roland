@@ -4,8 +4,11 @@ import {
   cancelSdkRun,
   cleanupSdkSession,
   configureSdkProcessLimits,
+  createShellExecStderrFilter,
   disposeSdkAgent,
   forceKillAfterSettle,
+  isShellExecCloseWarning,
+  resolveSdkAgentLocalOptions,
   resolveSdkSettleMs,
   settleSdkRun,
   waitForRunTerminal,
@@ -94,22 +97,62 @@ describe('settleSdkRun', () => {
   it('waits for terminal status then settles', async () => {
     const run = { status: 'finished' as const };
     const promise = settleSdkRun(run);
-    await vi.advanceTimersByTimeAsync(2_100);
+    await vi.advanceTimersByTimeAsync(3_600);
     await promise;
   });
 });
 
 describe('resolveSdkSettleMs', () => {
   it('uses heavy settle for test-author', () => {
-    expect(resolveSdkSettleMs('test-author')).toBeGreaterThanOrEqual(4_000);
+    expect(resolveSdkSettleMs('test-author')).toBeGreaterThanOrEqual(8_000);
   });
 
   it('uses heavy settle when task mentions vitest', () => {
-    expect(resolveSdkSettleMs('executor', 'run npm test and vitest')).toBeGreaterThanOrEqual(4_000);
+    expect(resolveSdkSettleMs('executor', 'run npm test and vitest')).toBeGreaterThanOrEqual(8_000);
+  });
+
+  it('uses heavy settle when task mentions dotnet test', () => {
+    expect(resolveSdkSettleMs('test-executor', 'dotnet test --no-build')).toBeGreaterThanOrEqual(8_000);
   });
 
   it('uses default settle for ordinary tasks', () => {
-    expect(resolveSdkSettleMs('executor', 'add a route handler')).toBe(2_000);
+    expect(resolveSdkSettleMs('executor', 'add a route handler')).toBe(3_500);
+  });
+});
+
+describe('resolveSdkAgentLocalOptions', () => {
+  it('adds shellExec ignore/detached for test-executor', () => {
+    const opts = resolveSdkAgentLocalOptions('test-executor', { cwd: '/tmp' });
+    expect(opts.shellExec).toEqual({ stdio: 'ignore', detached: true });
+  });
+
+  it('leaves ordinary agents unchanged', () => {
+    const opts = resolveSdkAgentLocalOptions('executor', { cwd: '/tmp' });
+    expect(opts.shellExec).toBeUndefined();
+  });
+});
+
+describe('shell-exec warning silencer', () => {
+  it('detects the close-event warning pattern', () => {
+    expect(isShellExecCloseWarning('[shell-exec] Close event did not fire within 5000ms')).toBe(true);
+    expect(isShellExecCloseWarning('[Team] wave complete')).toBe(false);
+  });
+
+  it('filters shell-exec warnings from stderr.write when scoped', () => {
+    const captured: string[] = [];
+    const orig = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string) => {
+      captured.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write;
+
+    const restore = createShellExecStderrFilter();
+    process.stderr.write('[shell-exec] Close event did not fire within 5000ms\n');
+    process.stderr.write('[Team] normal progress\n');
+    restore();
+    process.stderr.write = orig;
+
+    expect(captured).toEqual(['[Team] normal progress\n']);
   });
 });
 
@@ -217,7 +260,7 @@ describe('cleanupSdkSession', () => {
       }),
     };
     const promise = cleanupSdkSession({ [Symbol.asyncDispose]: async () => { order.push('dispose'); } }, run);
-    await vi.advanceTimersByTimeAsync(2_100);
+    await vi.advanceTimersByTimeAsync(3_600);
     await promise;
     expect(order).toEqual(['cancel', 'dispose']);
   });
