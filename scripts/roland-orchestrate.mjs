@@ -25,6 +25,10 @@ if (!existsSync(distRoot)) {
 }
 
 const { Agent, CursorAgentError } = await import('@cursor/sdk');
+const { configureSdkProcessLimits } = await import(
+  resolve(distRoot, 'utils/sdk-lifecycle.js')
+);
+configureSdkProcessLimits();
 const { loadUnscAgents, toSdkAgentDefinitions } = await import(
   resolve(distRoot, 'rco/unsc-agents.js')
 );
@@ -139,7 +143,6 @@ try {
   board.appendBullet('Open Intel', `[ESCALATION] Unexpected error: ${String(err).slice(0, 120)}`);
   throw err;
 } finally {
-  if (typeof roland[Symbol.asyncDispose] === 'function') {
-    await roland[Symbol.asyncDispose]();
-  }
+  const { disposeSdkAgent } = await import(resolve(distRoot, 'utils/sdk-lifecycle.js'));
+  await disposeSdkAgent(roland);
 }

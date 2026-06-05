@@ -21,6 +21,10 @@
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { cleanupSdkSession, configureSdkProcessLimits } from '../utils/sdk-lifecycle.js';
+
+// Team CLI and supervisor import this module directly (not via index.ts).
+configureSdkProcessLimits();
 import { Blackboard } from './blackboard.js';
 import { CommandBlackboard } from './command-blackboard.js';
 import type { Callsign } from './command-blackboard.js';
@@ -431,43 +435,51 @@ async function callCursorAgentOnce(
   const sdkAgents = callOptions?.sdkAgents;
   const hasSubAgents = sdkAgents && Object.keys(sdkAgents).length > 0;
 
-  const agent = await Agent.create({
-    apiKey,
-    model: { id: modelId },
-    name: callOptions?.isSupervisor ? 'Roland' : agentName,
-    local: { cwd: process.cwd(), settingSources: hasSubAgents ? ['project'] : [] },
-    ...(hasSubAgents ? { agents: sdkAgents } : {}),
-  });
+  type SdkAgent = Awaited<ReturnType<typeof Agent.create>>;
+  type SdkRun = Awaited<ReturnType<SdkAgent['send']>>;
 
-  const run   = await agent.send(prompt);
-  const start = Date.now();
-
-  // Heartbeat: lets users see long-running agents are alive, not hung.
-  const heartbeat = setInterval(() => {
-    const m = ((Date.now() - start) / 60_000).toFixed(1);
-    console.error(`[Team]   ⏳ ${agentName} still running… (${m}m elapsed)`);
-  }, 60_000);
-
-  // Hard timeout — cleared in the finally block whether we win or lose the race.
+  let agent: SdkAgent | undefined;
+  let run: SdkRun | undefined;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(new Error(
-        `Agent "${agentName}" timed out after ${(AGENT_TIMEOUT_MS / 60_000).toFixed(0)} min. ` +
-        `Raise the limit with ROLAND_AGENT_TIMEOUT_MS (ms).`,
-      ));
-    }, AGENT_TIMEOUT_MS);
-  });
 
   try {
+    agent = await Agent.create({
+      apiKey,
+      model: { id: modelId },
+      name: callOptions?.isSupervisor ? 'Roland' : agentName,
+      local: { cwd: process.cwd(), settingSources: hasSubAgents ? ['project'] : [] },
+      ...(hasSubAgents ? { agents: sdkAgents } : {}),
+    });
+
+    run = await agent.send(prompt);
+    const start = Date.now();
+
+    // Heartbeat: lets users see long-running agents are alive, not hung.
+    heartbeat = setInterval(() => {
+      const m = ((Date.now() - start) / 60_000).toFixed(1);
+      console.error(`[Team]   ⏳ ${agentName} still running… (${m}m elapsed)`);
+    }, 60_000);
+
+    // Hard timeout — on fire, cancel the run so shell child processes are torn down.
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(
+          `Agent "${agentName}" timed out after ${(AGENT_TIMEOUT_MS / 60_000).toFixed(0)} min. ` +
+          `Raise the limit with ROLAND_AGENT_TIMEOUT_MS (ms).`,
+        ));
+      }, AGENT_TIMEOUT_MS);
+    });
+
     const result = await Promise.race([run.wait(), timeoutPromise]);
     if (result.status === 'error' || result.status === 'cancelled') {
       throw new Error(`Agent "${agentName}" ${result.status}: ${result.result ?? 'no detail'}`);
     }
     return result.result ?? '';
   } finally {
-    clearInterval(heartbeat);
-    clearTimeout(timeoutId);
+    if (heartbeat) clearInterval(heartbeat);
+    if (timeoutId) clearTimeout(timeoutId);
+    await cleanupSdkSession(agent, run);
   }
 }
 
