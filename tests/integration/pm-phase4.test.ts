@@ -49,7 +49,7 @@ describe('Phase 4 tools', () => {
       assignee: 'executor',
     });
     expect(spawned.dispatch.cursorLaunch).toContain('Launch in Cursor');
-    expect(spawned.dispatch.cursorLaunch).toContain('composer-2.5-standard');
+    expect(spawned.dispatch.cursorLaunch).toContain('composer-2.5');
     expect(spawned.dispatch.cursorLaunch).toContain('--- BRIEF ---');
   });
 

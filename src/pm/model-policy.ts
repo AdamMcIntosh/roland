@@ -66,6 +66,6 @@ export function laneForEngineer(name: string, overrides: Record<string, Lane> = 
   if (overrides[name]) return overrides[name];
   if (name === 'lead-pm') return 'pm';
   if (/architect|planner|critic|review|security|tdd|strateg/.test(name)) return 'reasoning';
-  if (/test-executor|test-author|writer|doc|explore|research|analyst|accessibilit/.test(name)) return 'light';
+  if (/test-executor|test-author|qa-tester|writer|doc|explore|research|analyst|accessibilit/.test(name)) return 'light';
   return 'coding';
 }

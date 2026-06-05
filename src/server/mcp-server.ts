@@ -224,9 +224,9 @@ export class McpServer {
     this.leadPm = new LeadPM(this.coordination, {
       policy: pmCfg
         ? {
-            pm: pmCfg.lead_model ?? 'claude-opus-4-7',
-            fast: pmCfg.fast_model ?? 'composer-2.5-fast',
-            standard: pmCfg.standard_model ?? 'composer-2.5-standard',
+            pm: pmCfg.lead_model ?? 'gpt-5.4-nano',
+            fast: pmCfg.fast_model ?? 'composer-2.5',
+            standard: pmCfg.standard_model ?? 'composer-2.5',
           }
         : undefined,
       laneOverrides: pmCfg?.lane_overrides,
@@ -2850,9 +2850,55 @@ export class McpServer {
     // pm_standup — the rendered, daily-driver heartbeat (Phase 4)
     this.registerTool(
       'pm_standup',
-      'The recommended top-of-turn call. Returns a rendered Markdown standup (board, blockers-first triage with the exact unblock calls, usage, and your next 3 actions) plus the structured context. Read the markdown, then act — unblock before starting new work.',
-      async () => this.leadPm.getStandup(),
+      'The recommended top-of-turn call. Returns a rendered Markdown standup (board, blockers-first triage with the exact unblock calls, usage, UNSC mission summary, and your next 3 actions) plus the structured context. Read the markdown, then act — unblock before starting new work.',
+      async () => {
+        const standup = this.leadPm.getStandup();
+        try {
+          const { coordDir } = await import('../coordination/paths.js');
+          const { buildBoardStatusReport, formatConciseUnscSummary } = await import('../rco/board-report.js');
+          const unsc = formatConciseUnscSummary(buildBoardStatusReport(coordDir()));
+          return {
+            ...standup,
+            markdown: `${standup.markdown}\n\n---\n\n${unsc}`,
+            unscSummary: unsc,
+          };
+        } catch {
+          return standup;
+        }
+      },
       { type: 'object', properties: {}, required: [] }
+    );
+
+    // board_status — concise UNSC summary for end-of-task reporting
+    this.registerTool(
+      'board_status',
+      'Concise UNSC mission status from blackboard.json + command-blackboard.md. Use at the end of major tasks and after team runs. Blockers first, then callsign roster. Pass format:"json" for structured output.',
+      async (args: Record<string, unknown>) => {
+        const projectRoot = process.env['ROLAND_PROJECT_ROOT']?.trim() || process.cwd();
+        const stateDir = typeof args.state_dir === 'string' && args.state_dir
+          ? args.state_dir
+          : path.join(projectRoot, '.roland');
+        const { buildBoardStatusReport, formatConciseUnscSummary, formatBoardStatusReport } =
+          await import('../rco/board-report.js');
+        const report = buildBoardStatusReport(stateDir, typeof args.goal === 'string' ? args.goal : undefined);
+        const concise = formatConciseUnscSummary(report);
+        if (args.format === 'json') {
+          return { ...report, concise };
+        }
+        if (args.format === 'verbose') {
+          return { markdown: formatBoardStatusReport(report), report, concise };
+        }
+        return { markdown: concise, report, concise };
+      },
+      {
+        type: 'object',
+        properties: {
+          state_dir: { type: 'string', description: 'Path to .roland state directory' },
+          goal: { type: 'string', description: 'Optional goal hint for smart command-board recall' },
+          format: { type: 'string', enum: ['markdown', 'json', 'verbose'], description: 'Output shape (default: markdown concise summary)' },
+        },
+        required: [],
+      }
     );
 
     // get_team_context — THE HEARTBEAT (structured; pass format:"markdown" for a rendered standup)
@@ -3172,19 +3218,24 @@ export class McpServer {
         // ── Board summary ────────────────────────────────────────────────────
         let boardStatus = 'No active tasks.';
         let blockerCount = 0;
+        let unscSnippet = '';
         try {
-          const bb = JSON.parse(fs.readFileSync(path.join(stateDir, 'blackboard.json'), 'utf-8'));
-          const tasks = Object.entries(bb).filter(([k]) => k.startsWith('task:'));
-          if (tasks.length > 0) {
-            const counts: Record<string, number> = {};
-            for (const [, v] of tasks) {
-              const s = (v as Record<string, unknown>).status as string ?? 'unknown';
-              counts[s] = (counts[s] ?? 0) + 1;
-            }
-            boardStatus = Object.entries(counts).map(([s, n]) => `${n} ${s}`).join(' · ');
-            blockerCount = counts['blocked'] ?? 0;
+          const { buildBoardStatusReport, formatConciseUnscSummary } = await import('../rco/board-report.js');
+          const report = buildBoardStatusReport(stateDir);
+          blockerCount = report.counts.blockers;
+          if (report.counts.total > 0) {
+            boardStatus = `${report.counts.total} entries · ${report.counts.blockers} blockers · ${report.counts.done} done`;
           }
-        } catch { /* no board yet */ }
+          unscSnippet = formatConciseUnscSummary(report);
+        } catch {
+          try {
+            const bb = JSON.parse(fs.readFileSync(path.join(stateDir, 'blackboard.json'), 'utf-8'));
+            const entries = Array.isArray(bb) ? bb : [];
+            if (entries.length > 0) {
+              boardStatus = `${entries.length} entries`;
+            }
+          } catch { /* no board yet */ }
+        }
 
         // ── Background run status ────────────────────────────────────────────
         let bgStatus = '';
@@ -3241,7 +3292,7 @@ roland status              # live TUI observer
 roland doctor              # verify install
 npm run serve-dashboard    # usage dashboard → http://127.0.0.1:8081
 \`\`\`
-
+${unscSnippet ? `\n---\n\n${unscSnippet}\n` : ''}
 What would you like to work on?`;
 
         return {

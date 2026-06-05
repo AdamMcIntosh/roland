@@ -52,7 +52,7 @@ describe('Phase 3 PM tools', () => {
       description: 'Implement the core service logic',
       assignee: 'executor',
     });
-    expect(spawned.dispatch.recommendedModel).toBe('composer-2.5-standard');
+    expect(spawned.dispatch.recommendedModel).toBe('composer-2.5');
     expect(spawned.dispatch.routing.provider).toBe('cursor');
     expect(spawned.dispatch.routing.lane).toBe('coding');
     expect(spawned.dispatch.recommendedModel).not.toContain('/'); // not OpenRouter
@@ -65,7 +65,7 @@ describe('Phase 3 PM tools', () => {
       taskKey: 'task:login',
       summary: 'done',
       author: 'executor',
-      model: 'composer-2.5-standard',
+      model: 'composer-2.5',
       input_tokens: 1000,
       output_tokens: 500,
     });
@@ -86,13 +86,13 @@ describe('Phase 3 PM tools', () => {
     const res = await call('report_usage', {
       taskKey: 'task:api',
       engineer: 'architect',
-      model: 'composer-2.5-fast',
+      model: 'composer-2.5',
       input_tokens: 200,
       output_tokens: 100,
     });
     expect(res.taskUsage.inputTokens).toBe(200);
     expect(res.teamUsage.byEngineer['architect'].outputTokens).toBe(100);
-    expect(res.teamUsage.byModel['composer-2.5-fast'].requests).toBe(1);
+    expect(res.teamUsage.byModel['composer-2.5'].requests).toBeGreaterThanOrEqual(1);
   });
 
   it('start_team_recipe seeds a graph and dispatches the ready tasks', async () => {
@@ -101,11 +101,11 @@ describe('Phase 3 PM tools', () => {
       goal: 'dark mode',
       namespace: 'dm',
     });
-    expect(out.tasks.length).toBe(5);
+    expect(out.tasks.length).toBe(6);
     // Only the dependency-free "design" task is ready to dispatch immediately.
     expect(out.dispatches.length).toBe(1);
     expect(out.dispatches[0].taskKey).toBe('task:dm-design');
-    expect(out.dispatches[0].recommendedModel).toBe('composer-2.5-fast'); // architect → reasoning
+    expect(out.dispatches[0].recommendedModel).toBe('composer-2.5'); // architect → reasoning
     // The implement task depends on the namespaced design task.
     const implement = out.tasks.find((t: any) => t.key === 'task:dm-implement');
     expect(implement.value.dependsOn).toContain('task:dm-design');

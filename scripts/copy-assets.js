@@ -21,20 +21,20 @@ if (fs.existsSync(configSrc)) {
   console.log(`✓ Copied config.yaml to ${configDest}`);
 }
 
-// Copy agents directory
+// Copy agents directory (preserve subdirs e.g. agents/unsc/)
 const agentsSrc = path.join(__dirname, '..', 'agents');
 const agentsDest = path.join(distDir, 'agents');
 if (fs.existsSync(agentsSrc)) {
-  if (!fs.existsSync(agentsDest)) {
-    fs.mkdirSync(agentsDest, { recursive: true });
-  }
-  
-  // Use platform-agnostic glob pattern
-  const pattern = agentsSrc.replace(/\\/g, '/') + '/**/*.yaml';
-  const agentFiles = globSync(pattern);
+  const agentPattern = agentsSrc.replace(/\\/g, '/') + '/**/*.yaml';
+  const agentFiles = globSync(agentPattern);
   agentFiles.forEach(file => {
-    const filename = path.basename(file);
-    fs.copyFileSync(file, path.join(agentsDest, filename));
+    const relative = path.relative(agentsSrc, file);
+    const destFile = path.join(agentsDest, relative);
+    const destDir = path.dirname(destFile);
+    if (!fs.existsSync(destDir)) {
+      fs.mkdirSync(destDir, { recursive: true });
+    }
+    fs.copyFileSync(file, destFile);
   });
   console.log(`✓ Copied ${agentFiles.length} agent files to ${agentsDest}`);
 } else {

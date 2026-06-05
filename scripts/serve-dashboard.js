@@ -14,6 +14,7 @@
  *   GET  /api/hitl-state           → .roland/hitl-state.json
  *   POST /api/hitl/:cmd            → append to .roland/hitl.json  (pause|resume|replan|abort|unblock|inject)
  *   GET  /api/blackboard           → .roland/blackboard.json
+ *   GET  /api/board-status         → UNSC concise summary (blackboard + command board)
  *   WS   /                         → push run-state on file changes (200 ms debounce)
  *
  * Usage:
@@ -24,7 +25,7 @@
 import http from 'http';
 import fs   from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { WebSocketServer } from 'ws';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -139,12 +140,42 @@ function broadcast(payload) {
 function pushCurrentState() {
   const runState  = readJson(path.join(stateDir, 'run-state.json'),  null);
   const hitlState = readJson(path.join(stateDir, 'hitl-state.json'), null);
-  broadcast({ type: 'state-update', runState, hitlState });
+  const boardStatus = readBoardStatusPayload();
+  broadcast({ type: 'state-update', runState, hitlState, boardStatus });
+}
+
+async function loadBoardReportModule() {
+  const modPath = path.join(__dirname, '..', 'dist', 'rco', 'board-report.js');
+  try {
+    return await import(pathToFileURL(modPath).href);
+  } catch {
+    return null;
+  }
+}
+
+function readBoardStatusPayload() {
+  try {
+    const bbPath = path.join(stateDir, 'blackboard.json');
+    const cmdPath = path.join(stateDir, 'command-blackboard.md');
+    const entries = readJson(bbPath, []);
+    const active = Array.isArray(entries) ? entries.filter(e => e.status !== 'archived') : [];
+    const blockers = active.filter(e => e.type === 'blocker' || e.status === 'blocked');
+    let commandExcerpt = '';
+    try { commandExcerpt = fs.readFileSync(cmdPath, 'utf-8').split('\n').slice(0, 30).join('\n'); } catch {}
+    return {
+      counts: { total: active.length, blockers: blockers.length, done: active.filter(e => e.status === 'done').length },
+      blockers: blockers.slice(0, 5).map(b => ({ title: b.title, content: (b.content || '').slice(0, 120) })),
+      commandExcerpt,
+      updatedAt: Date.now(),
+    };
+  } catch {
+    return null;
+  }
 }
 
 // ── File watcher (debounced push) ─────────────────────────────────────────────
 
-const WATCH_TARGETS = new Set(['run-state.json', 'hitl-state.json', 'memory.md', 'hitl.json']);
+const WATCH_TARGETS = new Set(['run-state.json', 'hitl-state.json', 'memory.md', 'hitl.json', 'blackboard.json', 'command-blackboard.md']);
 let watchTimer = null;
 
 try {
@@ -253,6 +284,21 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ── /api/board-status GET ────────────────────────────────────────────────
+  if (url === '/api/board-status' && method === 'GET') {
+    try {
+      const mod = await loadBoardReportModule();
+      if (mod) {
+        const report = mod.buildBoardStatusReport(stateDir);
+        const concise = mod.formatConciseUnscSummary(report);
+        jsonOk(res, { report, concise, markdown: concise, updatedAt: Date.now() });
+        return;
+      }
+      jsonOk(res, { fallback: readBoardStatusPayload(), markdown: '(Run npm run build for full board-status API)' });
+    } catch (e) { jsonErr(res, e.message, 500); }
+    return;
+  }
+
   // ── /api/hitl/:cmd POST ──────────────────────────────────────────────────
   const hitlMatch = url.match(/^\/api\/hitl\/([a-z]+)$/);
   if (hitlMatch && method === 'POST') {
@@ -300,7 +346,8 @@ wss.on('connection', (ws) => {
   try {
     const runState  = readJson(path.join(stateDir, 'run-state.json'),  null);
     const hitlState = readJson(path.join(stateDir, 'hitl-state.json'), null);
-    ws.send(JSON.stringify({ type: 'state-update', runState, hitlState }));
+    const boardStatus = readBoardStatusPayload();
+    ws.send(JSON.stringify({ type: 'state-update', runState, hitlState, boardStatus }));
   } catch {}
   ws.on('close', () => wsClients.delete(ws));
   ws.on('error', () => wsClients.delete(ws));
@@ -317,5 +364,6 @@ server.listen(port, '127.0.0.1', () => {
   console.log(`  State dir : ${stateDir}`);
   console.log(`  APIs      : ${base}/api/usage  ${base}/api/run-state`);
   console.log(`              ${base}/api/memory  ${base}/api/hitl/:cmd`);
+  console.log(`              ${base}/api/board-status`);
   console.log(`\n  Open the URL above in your browser.\n`);
 });

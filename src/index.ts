@@ -131,7 +131,26 @@ function doctor(): void {
   }
   add(canWrite, `Writable .roland/ in ${process.cwd()}`, canWrite ? undefined : 'Check directory permissions.');
 
-  console.log('🩺 Roland doctor\n');
+  // @cursor/sdk → sqlite3 native binding (orchestrate + team mode)
+  const pkgRoot = path.resolve(here, '..');
+  const sqliteBinding = path.join(
+    pkgRoot,
+    'node_modules',
+    'sqlite3',
+    'lib',
+    'binding',
+    `node-v${process.versions.modules}-${process.platform}-${process.arch}`,
+    'node_sqlite3.node',
+  );
+  const sqliteRelease = path.join(pkgRoot, 'node_modules', 'sqlite3', 'build', 'Release', 'node_sqlite3.node');
+  const sqliteOk = fs.existsSync(sqliteBinding) || fs.existsSync(sqliteRelease);
+  add(
+    sqliteOk,
+    `@cursor/sdk sqlite3 binding (${process.platform}/${process.arch}, Node ABI ${process.versions.modules})`,
+    sqliteOk
+      ? undefined
+      : 'Required for `roland team` and orchestrate. From repo root: install VS "Desktop development with C++", then `npm rebuild sqlite3`. See docs/guides/mini-pc-deployment.md.',
+  );
   for (const c of checks) {
     console.log(`${c.ok ? '✅' : '❌'} ${c.label}`);
     if (!c.ok && c.hint) console.log(`   → ${c.hint}`);
@@ -167,6 +186,7 @@ function printHelp(): void {
   ln(`    ${cy('roland')} ${b('watch')}                      Watch git commits, auto-run on change`);
   ln(`    ${cy('roland')} ${b('pr')} [number]               Review (and optionally fix) a GitHub PR`);
   ln(`    ${cy('roland')} ${b('status')}                     Live dashboard for a running job`);
+  ln(`    ${cy('roland')} ${b('board-status')}              UNSC summary (add --concise for chat-friendly)`);
   ln();
   ln('  ' + b('OPTIONS') + '  ' + d('(team / watch / pr)'));
   ln(`    ${b('--notify')}, -n               Desktop notification on complete`);
@@ -245,6 +265,7 @@ const KNOWN_CMDS = new Set([
   'team', 'run', 'goal', 'start', 'status', 'watch', 'pr', 'chat',
   // HITL controls
   'pause', 'resume', 'unblock', 'inject', 'replan', 'abort', 'hitl-status',
+  'board-status',
   // Background supervisor
   'bg-status', 'bg-logs', 'bg-stop',
   '--help', '-h', '--version',
@@ -347,6 +368,16 @@ async function main(): Promise<void> {
           const { TuiRenderer } = await import('./dashboard/tui.js');
           await TuiRenderer.watch(stateDir);
         }
+        break;
+      }
+      case 'board-status': {
+        const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const jsonMode = rest.includes('--json');
+        const concise = rest.includes('--concise') || rest.includes('-c');
+        const goalArgIdx = rest.indexOf('--goal');
+        const goal = goalArgIdx >= 0 ? rest[goalArgIdx + 1] : undefined;
+        const { printBoardStatus } = await import('./rco/board-report.js');
+        printBoardStatus(stateDir, { json: jsonMode, goal, concise });
         break;
       }
       case 'watch': {

@@ -1,0 +1,29 @@
+[
+  {
+    "id": "934d7a63-0d93-4ac0-b494-2a95f199ac15",
+    "from": "test-strategist",
+    "to": "lead-pm",
+    "subject": "Message from agent",
+    "body": "**Subject:** Test strategy complete — ready for architect/executor\n\nTask-4 deliverable is at `docs/stripe-test-plan.md`. Recommendations for downstream agents:\n\n1. **Architect (task-8):** Export `buildApp` test hook or DI for payment store so integration tests can inject in-memory store.\n2. **Executor (task-9):** Implement `src/payments/` module boundaries as named in the plan; keep Stripe SDK behind `stripe-client.ts` for clean mocking.\n3. **DevOps (task-6):** Optional stripe-mock Docker service for CI; `STRIPE_*` secrets for gated live job only.\n4. **QA (task-10):** Follow Appendix A case list; add `test:payments` script; update `TESTING.md` when suite lands.\n\nNo blockers — strategy is independent of implementation and grounded in existing Fastify/Vitest conventions (`tests/routes/hello.test.ts`, `vitest.config.ts`).",
+    "sentAt": 1779720256352,
+    "deliveredTo": []
+  },
+  {
+    "id": "0feac515-742f-402e-a22d-bbcf4a811942",
+    "from": "test-strategist",
+    "to": "lead-pm",
+    "subject": "Message from agent",
+    "body": "**Subject:** Stripe test scaffolding landed — helper smoke green\n\nTask-15 complete. Committed-ready files:\n\n- `tests/helpers/stripe.ts` + `stripe-helpers.test.ts` (6/6 green)\n- `tests/fixtures/stripe/` (3 events + README)\n- `stripe` devDependency + `test:stripe-helpers` / `stripe-mock:*` scripts\n\nTask-10 can start immediately on unit/route/webhook tests using `createMockGetStripe()` and signed fixtures. No dependency on task-9 implementation. CI should run `npm run test:stripe-helpers` on every PR; full payment suite comes with task-10.",
+    "sentAt": 1779720612059,
+    "deliveredTo": []
+  },
+  {
+    "id": "9891275f-af08-4ea4-af24-6b08f5a49e3c",
+    "from": "code-reviewer",
+    "to": "lead-pm",
+    "subject": "Message from agent",
+    "body": "**Subject:** Wave 2 code review complete — 4 bugs fixed, all green\n\nCode review of Wave 2 foundation is done. Four issues were caught and fixed inline:\n\n1. **Critical logic bug** in `pino-config.ts`: body was never included in serialized output for any route due to a dead-code branch — non-sensitive routes now log body as intended.\n2. **Test pollution risk** in `stripe.ts`: `createMockGetStripe().reset()` didn't reset `vi.fn` mock implementations on the client stubs — executor's task-10 tests would have been order-dependent. Fixed with `mockReset()` per stub.\n3. **Misleading API** in `stripe.ts`: `createMockGetStripe(options)` silently ignored its parameter. Removed the unused parameter entirely.\n4. **Packaging**: `stripe` exact pin (`17.7.0`) changed to `^17.7.0` for consistency.\n\nFive advisory findings are documented above for the executor. The most important one is **A4** (global `req.body` redact may hide body on non-sensitive routes) — executor should decide if this is intentional before task-9 ships.\n\n`tsc --noEmit` passes. 11/11 tests green. The foundation is clean for task-9 to build on.",
+    "sentAt": 1779721117807,
+    "deliveredTo": []
+  }
+]

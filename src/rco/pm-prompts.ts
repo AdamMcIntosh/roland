@@ -12,6 +12,7 @@
  */
 
 import type { AgentYaml } from './types.js';
+import { buildRolandOrchestratorPrompt } from './orchestrator-prompts.js';
 
 /** Max chars of Blackboard snapshot injected into any PM prompt. */
 const BLACKBOARD_PROMPT_MAX_CHARS = 3_000;
@@ -30,6 +31,8 @@ export interface PlanningContext {
   projectMemory?: string;
   /** Injection block from project knowledge files (ROLAND.md, ARCHITECTURE.md, etc.). */
   projectKnowledge?: string;
+  /** Keyword-scored excerpt from `.roland/command-blackboard.md` (UNSC mission state). */
+  commandBlackboard?: string;
 }
 
 export interface SynthesisContext extends PlanningContext {
@@ -83,7 +86,7 @@ ${ctx.goal}
 
 ---
 
-${ctx.projectKnowledge ? `${ctx.projectKnowledge}\n\n---\n\n` : ''}${ctx.projectMemory ? `## Project Memory\n\nThis project has been worked on before. The memory is organised into five sections — consult each one before planning:\n\n### Architecture Decisions\nEstablished tech choices and design patterns — don't contradict these without explicit justification.\n\n### Coding Standards\nFile layout, naming conventions, testing conventions — your engineers must follow these.\n\n### Past Mistakes\nThings that went wrong in previous runs — actively prevent each one in your task descriptions.\n\n### Preferences\nUser/team preferences — honour these when making trade-offs.\n\n### Project Gotchas\nEnvironment quirks, tooling edge cases, and API surprises — be proactive about preventing these in task descriptions.\n\n${ctx.projectMemory}\n\n---\n\n` : ''}## Current Blackboard State
+${ctx.projectKnowledge ? `${ctx.projectKnowledge}\n\n---\n\n` : ''}${ctx.projectMemory ? `## Project Memory\n\nThis project has been worked on before. The memory is organised into five sections — consult each one before planning:\n\n### Architecture Decisions\nEstablished tech choices and design patterns — don't contradict these without explicit justification.\n\n### Coding Standards\nFile layout, naming conventions, testing conventions — your engineers must follow these.\n\n### Past Mistakes\nThings that went wrong in previous runs — actively prevent each one in your task descriptions.\n\n### Preferences\nUser/team preferences — honour these when making trade-offs.\n\n### Project Gotchas\nEnvironment quirks, tooling edge cases, and API surprises — be proactive about preventing these in task descriptions.\n\n${ctx.projectMemory}\n\n---\n\n` : ''}${ctx.commandBlackboard ? `## Command Blackboard (UNSC Mission State)\n\nHuman-readable battlespace picture from prior missions. Consult Mission Objectives, Key Decisions, and Open Intel before planning. Update Active Tasks and Agent Status as you dispatch work.\n\n${ctx.commandBlackboard}\n\n---\n\n` : ''}## Current Blackboard State
 
 ${capBlackboard(ctx.blackboardSnapshot)}
 
@@ -611,63 +614,7 @@ Keep this response under 400 words. The developer understands the context — th
  * `roland_hello` MCP tool to surface as part of its welcome payload.
  */
 export function buildCursorSessionPMPrompt(): string {
-  return `# Roland — Interactive Cursor Session
-
-You are **Roland**, an AI-powered Lead PM and Engineering Manager operating inside Cursor chat.
-
-## Your Two Modes
-
-| Mode | When | Action |
-|------|------|--------|
-| **Direct** | Simple tasks: questions, 1–3 file edits, single-module bugs | Handle in chat using Cursor's file tools |
-| **PM Team** | Complex goals: new features, multi-file refactors, security audits, anything needing parallel specialists | Call \`roland_run_team({ goal })\` |
-
-## Decision Process
-
-1. **Call \`triage\`** with the user's message to assess complexity (skip for greetings/follow-ups)
-2. **If simple/medium** → act directly: read files, propose changes, edit
-3. **If complex** → ask the user:
-   > "This is a full-team job — architect + executor + test-author running in parallel. Want me to kick it off?"
-   Then call \`roland_run_team({ goal: "..." })\` when confirmed
-
-## Tracking Team Progress
-
-After launching a team run, check in with:
-- \`pm_standup()\` — board snapshot; blockers appear first
-- \`get_team_context()\` — full structured board state
-
-Resolve blockers immediately — they are your highest-priority action:
-\`\`\`
-unblock_task({ taskKey, blockerKey, resolution: "concrete decision here" })
-\`\`\`
-
-## Direct Editing Workflow
-
-1. Call \`read_context({ files: [...] })\` to load relevant code
-2. Propose the change in 3–5 bullets
-3. Edit files using Cursor's tools
-4. Summarise: what changed, why, any follow-up
-
-## PM Board Tools
-
-| Tool | Purpose |
-|------|---------|
-| \`roland_hello()\` | Welcome + project state snapshot |
-| \`roland_run_team({ goal })\` | Launch background PM team run |
-| \`pm_standup()\` | Board digest — blockers first, next actions |
-| \`get_team_context()\` | Full structured board |
-| \`spawn_task()\` | Add a task manually |
-| \`unblock_task()\` | Resolve a blocker |
-| \`complete_task()\` | Submit work |
-| \`synthesize_deliverable()\` | Final rollup when all tasks done |
-| \`start_team_recipe()\` | Instantiate: full-feature-team / bugfix-team / refactor-team |
-
-## Style
-
-- **Direct and PM-voiced**: "Starting Wave 1 — architect + executor in parallel."
-- **Proactive**: check \`pm_standup()\` before new work to surface any blockers
-- **Brief by default**: short replies unless detail is requested
-- **Always next-step**: never dead-end a response`;
+  return buildRolandOrchestratorPrompt();
 }
 
 // ── Wave review (PM control loop) ────────────────────────────────────────────
@@ -703,6 +650,10 @@ export interface ReviewContext {
   inboxMessages?: string;
   /** Blocker descriptions detected in this wave's agent outputs. */
   detectedBlockers?: string[];
+  /** Keyword-scored excerpt from `.roland/command-blackboard.md`. */
+  commandBlackboard?: string;
+  /** Escalation notes for operator attention (repeated blockers, parse failures). */
+  escalationNotes?: string[];
 }
 
 /**
@@ -754,8 +705,14 @@ export function buildLeadPMReviewPrompt(ctx: ReviewContext): string {
       `\n\nYou MUST respond with \`"decision": "adjust"\` and include \`unblocks\` or \`newTasks\` to resolve these before the team can move forward.\n`
     : '';
 
+  const escalationSection = ctx.escalationNotes && ctx.escalationNotes.length > 0
+    ? `\n## ⚠️ ESCALATION — Operator Attention Required\n\n` +
+      ctx.escalationNotes.map((n, i) => `${i + 1}. ${n}`).join('\n') +
+      `\n\nInclude operator-facing guidance in \`pmNotes\`. Escalate scope, priority, or irreversible actions to human command.\n`
+    : '';
+
   return `# Lead PM — Wave ${ctx.waveNumber} Review
-${blockerAlert}
+${blockerAlert}${escalationSection}
 You are the **Lead PM**. Wave ${ctx.waveNumber} just finished. Review what was done, check the Blackboard, then decide if any adjustments are needed before the next wave starts.
 
 > **Mindset:** A blocked or idle engineer is your highest-priority problem. Act now if anything is off.
@@ -778,7 +735,7 @@ ${pendingSection}
 
 ${capBlackboard(ctx.blackboardSnapshot)}
 
-${ctx.inboxMessages ? `---\n\n## Your Inbox\n\n${ctx.inboxMessages}\n` : ''}
+${ctx.commandBlackboard ? `---\n\n## Command Blackboard (UNSC Mission State)\n\n${ctx.commandBlackboard}\n` : ''}${ctx.inboxMessages ? `---\n\n## Your Inbox\n\n${ctx.inboxMessages}\n` : ''}
 
 ---
 

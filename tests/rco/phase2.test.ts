@@ -195,9 +195,9 @@ describe('RCO Phase 2: Prompts', () => {
       taskContext: 'Build a CLI',
       stepInput: 'Previous step output',
     });
-    expect(prompt).toContain('As Planner');
+    expect(prompt).toContain('You are **Planner**');
     expect(prompt).toContain('Build a CLI');
     expect(prompt).toContain('search');
-    expect(prompt).toContain('Respond in JSON');
+    expect(prompt).not.toContain('Respond in JSON');
   });
 });

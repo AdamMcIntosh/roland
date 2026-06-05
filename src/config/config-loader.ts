@@ -68,9 +68,9 @@ const DiffStreamConfigSchema = z.object({
 
 // PM team (Phase 3) — Cursor-native model routing. Independent of OpenRouter.
 const PmConfigSchema = z.object({
-  lead_model: z.string().default('claude-opus-4-7'),
-  fast_model: z.string().default('composer-2.5-fast'),
-  standard_model: z.string().default('composer-2.5-standard'),
+  lead_model: z.string().default('gpt-5.4-nano'),
+  fast_model: z.string().default('composer-2.5'),
+  standard_model: z.string().default('composer-2.5'),
   lane_overrides: z
     .record(z.enum(['pm', 'reasoning', 'coding', 'light']))
     .default({}),

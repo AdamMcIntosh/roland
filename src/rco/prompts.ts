@@ -33,6 +33,8 @@ export interface ToolCallingPromptInput {
   teamGoal?: string;
   /** Current Blackboard snapshot — agents can see what colleagues have done. */
   blackboardSnapshot?: string;
+  /** UNSC Command Blackboard excerpt — mission objectives, key decisions, intel. */
+  commandBlackboardSnapshot?: string;
   /** Number of agents on the team — gives agents a sense of scale. */
   teamSize?: number;
 }
@@ -74,7 +76,7 @@ export function buildClaudeToolCallingPrompt(input: ToolCallingPromptInput): str
   }
 
   // ── Team context ──────────────────────────────────────────────────────────
-  if (input.teamGoal || input.blackboardSnapshot || input.teamSize) {
+  if (input.teamGoal || input.blackboardSnapshot || input.commandBlackboardSnapshot || input.teamSize) {
     const teamParts: string[] = [];
 
     if (input.teamSize) {
@@ -100,6 +102,10 @@ export function buildClaudeToolCallingPrompt(input: ToolCallingPromptInput): str
       teamParts.push(`\n**Shared Blackboard (what the team knows so far):**\n\n${input.blackboardSnapshot}`);
     }
 
+    if (input.commandBlackboardSnapshot) {
+      teamParts.push(`\n**Command Blackboard (UNSC mission state):**\n\n${input.commandBlackboardSnapshot}`);
+    }
+
     sections.push(`## Team Context\n\n${teamParts.join('\n')}`);
   }
 
@@ -109,6 +115,16 @@ export function buildClaudeToolCallingPrompt(input: ToolCallingPromptInput): str
   // ── Previous agent output ─────────────────────────────────────────────────
   if (p.stepInput) {
     sections.push(`## Output from Previous Agent\n\n${p.stepInput}`);
+    sections.push(`## Handoff Protocol (Roland → You)
+
+You received upstream output from a prior wave. Before writing code or tests:
+
+1. **Read first** — Scan Command Blackboard + upstream output for decisions already made; do not contradict them without a BLOCKER.
+2. **Restate assumptions** — Open your response with 2–3 bullets: what you understood, which files you will touch, and what "done" looks like for your task.
+3. **Cite upstream** — When building on prior work, reference the upstream agent by name and quote specific paths, APIs, or constraints they established.
+4. **Never guess** — If upstream output is incomplete, ambiguous, or missing files you need, emit a BLOCKER immediately. Silent assumptions cause rework for every downstream callsign.
+
+**Vanguard handoff (test-author → test-executor):** test-author lists exact test file paths and npm/vitest commands; test-executor runs them verbatim — do not rewrite tests unless BLOCKED.`);
   }
 
   // ── Relevant project files ────────────────────────────────────────────────
@@ -152,7 +168,7 @@ The PM is watching and will act before the next wave starts. A blocker you signa
 \`\`\`
 ## 🚨 BLOCKER
 **Description:** [Exactly what is blocking you — be precise and specific]
-**Needs from:** [lead-pm | agent-name | "more context"]
+**Needs from:** [roland | callsign | operator]
 **Impact:** [What cannot proceed until this is resolved]
 \`\`\`
 
@@ -173,12 +189,12 @@ The orchestrator monitors both formats and surfaces them to the PM automatically
 Use this when you have a question, a status update, or information another agent needs to know:
 
 \`\`\`
-## 📨 MESSAGE TO lead-pm
+## 📨 MESSAGE TO roland
 **Subject:** [brief subject line]
 [message body — be concise]
 \`\`\`
 
-Replace \`lead-pm\` with any agent name (e.g. \`architect\`, \`executor\`, \`security-reviewer\`) to reach a colleague directly.
+Replace \`roland\` with any callsign (e.g. \`sparrow\`, \`vanguard\`, \`oracle\`, \`sentinel\`) to reach a colleague directly.
 
 ---
 

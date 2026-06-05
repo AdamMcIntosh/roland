@@ -101,10 +101,31 @@ export function loadRecipe(recipeName: string, recipesDir: string = DEFAULT_RECI
   }
   const content = fs.readFileSync(pathToLoad, 'utf-8');
   const doc = yaml.load(content) as Record<string, unknown>;
+  if (Array.isArray(doc.subagents)) {
+    for (const sub of doc.subagents as Array<Record<string, unknown>>) {
+      if (sub && typeof sub === 'object' && !sub.agentRef && sub.name) {
+        sub.agentRef = String(sub.name).toLowerCase();
+      }
+    }
+  }
   const parsed = RcoRecipeSchema.safeParse(doc);
   if (!parsed.success) {
     throw new Error(`Invalid recipe ${pathToLoad}: ${parsed.error.message}`);
   }
-  return parsed.data;
+  return { ...parsed.data, name: recipeName };
+}
+
+/** Match task text against config task_routing patterns; fallback to planner + executor. */
+export function getPreferredAgentsForTask(task: string, config: RcoConfig): string[] {
+  const routes = config.task_routing ?? [];
+  const lower = task.toLowerCase();
+  for (const route of routes) {
+    try {
+      if (new RegExp(route.pattern, 'i').test(lower)) return route.agents;
+    } catch {
+      // ignore invalid patterns
+    }
+  }
+  return ['planner', 'executor'];
 }
 

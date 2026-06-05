@@ -22,6 +22,8 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { Blackboard } from './blackboard.js';
+import { CommandBlackboard } from './command-blackboard.js';
+import type { Callsign } from './command-blackboard.js';
 import { MessageBus } from './message-bus.js';
 import {
   buildLeadPMPlanningPrompt,
@@ -57,8 +59,78 @@ import { loadProjectKnowledge, appendDecisions } from './project-knowledge.js';
 import { buildTaskUsage, buildRunUsage, saveRunUsage } from './usage-tracker.js';
 import type { TaskUsageRecord } from './usage-tracker.js';
 import { HitlQueue } from './hitl.js';
+import {
+  loadUnscAgents,
+  toSdkAgentDefinitions,
+  legacyAgentToCallsign,
+  type SdkAgentDefinition,
+} from './unsc-agents.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+/** Operator escalation threshold — cumulative blockers before surfacing to human command. */
+const OPERATOR_ESCALATION_THRESHOLD = 3;
+
+/** Max PM review parse failures before forcing an adjust decision with synthetic recovery. */
+const PM_REVIEW_PARSE_FAILURE_THRESHOLD = 2;
+
+/** Map legacy roster agent names to UNSC callsigns for Command Blackboard updates. */
+function agentToCallsign(agentName: string): Callsign {
+  const mapped = legacyAgentToCallsign(agentName);
+  const callsigns: Callsign[] = ['Roland', 'Sparrow', 'Vanguard', 'Oracle', 'Sentinel', 'Forge', 'Specter'];
+  const match = callsigns.find((c) => c.toLowerCase() === mapped);
+  return match ?? 'Sparrow';
+}
+
+/**
+ * Tracks blocker frequency and PM review failures for operator escalation.
+ */
+class EscalationTracker {
+  private _blockerCount = 0;
+  private _agentBlockers = new Map<string, number>();
+  private _reviewParseFailures = 0;
+  private _escalationNotes: string[] = [];
+
+  recordBlocker(agent: string, description: string): void {
+    this._blockerCount++;
+    const count = (this._agentBlockers.get(agent) ?? 0) + 1;
+    this._agentBlockers.set(agent, count);
+
+    if (count >= 2) {
+      this._escalationNotes.push(
+        `Repeated blocker from ${agent} (${count}× this run): ${description.slice(0, 120)}`,
+      );
+    }
+    if (this._blockerCount >= OPERATOR_ESCALATION_THRESHOLD) {
+      this._escalationNotes.push(
+        `Cumulative blocker threshold reached (${this._blockerCount}). Operator review recommended — scope or environment may need adjustment.`,
+      );
+    }
+  }
+
+  recordReviewParseFailure(waveNumber: number): boolean {
+    this._reviewParseFailures++;
+    if (this._reviewParseFailures >= PM_REVIEW_PARSE_FAILURE_THRESHOLD) {
+      this._escalationNotes.push(
+        `PM review JSON unparseable ${this._reviewParseFailures}× (wave ${waveNumber}). Forcing adjust recovery.`,
+      );
+      return true;
+    }
+    return false;
+  }
+
+  get escalationNotes(): readonly string[] {
+    return [...new Set(this._escalationNotes)];
+  }
+
+  shouldEscalateToOperator(): boolean {
+    return this._blockerCount >= OPERATOR_ESCALATION_THRESHOLD;
+  }
+}
+
+interface AgentCallOptions {
+  sdkAgents?: Record<string, SdkAgentDefinition>;
+  /** When true, Agent.create uses name "Roland" and registers UNSC sub-agents. */
+  isSupervisor?: boolean;
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -346,16 +418,25 @@ function isNetworkError(err: Error): boolean {
 }
 
 /** Single attempt: one SDK call with a hard timeout and a 60 s heartbeat. */
-async function callCursorAgentOnce(agentName: string, modelId: string, prompt: string): Promise<string> {
+async function callCursorAgentOnce(
+  agentName: string,
+  modelId: string,
+  prompt: string,
+  callOptions?: AgentCallOptions,
+): Promise<string> {
   const apiKey = process.env.CURSOR_API_KEY;
   if (!apiKey) throw new Error('CURSOR_API_KEY is not set');
 
   const { Agent } = await import('@cursor/sdk') as typeof import('@cursor/sdk');
+  const sdkAgents = callOptions?.sdkAgents;
+  const hasSubAgents = sdkAgents && Object.keys(sdkAgents).length > 0;
+
   const agent = await Agent.create({
     apiKey,
     model: { id: modelId },
-    name: agentName,
-    local: { cwd: process.cwd() },
+    name: callOptions?.isSupervisor ? 'Roland' : agentName,
+    local: { cwd: process.cwd(), settingSources: hasSubAgents ? ['project'] : [] },
+    ...(hasSubAgents ? { agents: sdkAgents } : {}),
   });
 
   const run   = await agent.send(prompt);
@@ -416,6 +497,7 @@ async function callCursorAgent(
   modelId: string,
   prompt: string,
   circuitBreaker?: WaveCircuitBreaker,
+  callOptions?: AgentCallOptions,
 ): Promise<string> {
   // Fast-fail if the circuit is already open — skip all retry attempts
   if (circuitBreaker?.isOpen) {
@@ -435,7 +517,7 @@ async function callCursorAgent(
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return await callCursorAgentOnce(agentName, modelId, prompt);
+      return await callCursorAgentOnce(agentName, modelId, prompt, callOptions);
     } catch (err) {
       lastErr = err instanceof Error ? err : new Error(String(err));
 
@@ -520,10 +602,24 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   // ── Coordination layer ────────────────────────────────────────────────────
   console.error('[Team] Initializing coordination layer...');
   const blackboard = new Blackboard(stateDir);
+  const commandBoard = new CommandBlackboard(stateDir);
   const bus = new MessageBus(stateDir);
   const memory = new ProjectMemory(stateDir);
   const memorySnapshot = memory.smartSnapshot(goal);
   if (memorySnapshot) console.error('[Team] Project memory loaded — smart recall injecting into planning prompt');
+
+  // UNSC sub-agents for SDK delegation (Roland supervisor + worker callsigns)
+  const unscAgentMap = loadUnscAgents();
+  const sdkAgents = toSdkAgentDefinitions(unscAgentMap);
+  if (Object.keys(sdkAgents).length > 0) {
+    console.error(`[Team] UNSC sub-agents registered: ${Object.keys(sdkAgents).join(', ')}`);
+  }
+
+  // Seed Command Blackboard with mission objective
+  commandBoard.appendBullet('Mission Objectives', `[P2 active] ${goal}`);
+  commandBoard.setAgentStatus({ callsign: 'Roland', state: 'active', lastUpdated: Date.now(), note: 'Lead PM planning' });
+
+  const getCommandBlackboardSnapshot = () => commandBoard.smartSnapshot(goal);
 
   const knowledge = loadProjectKnowledge(process.cwd());
   if (knowledge.files.length > 0) {
@@ -540,7 +636,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   // ── Model config banner ───────────────────────────────────────────────────
   console.error('[Team] ─────────────────────────────────────────────────────');
   console.error('[Team] Model config:');
-  console.error('[Team]   Lead PM     → gpt-5.4-nano     (orchestration + planning)');
+  console.error('[Team]   Lead PM     → gpt-5.4-nano     (Roland supervisor + UNSC sub-agents)');
   console.error('[Team]   All engineers → composer-2.5 (reasoning, execution, tests, docs)');
   console.error('[Team] ─────────────────────────────────────────────────────');
 
@@ -550,6 +646,9 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   let totalBlockers    = 0;
   let currentWaveNumber = 0; // tracks active wave for onBlockerDetected calls
   const waveCircuit    = new WaveCircuitBreaker(); // reused across waves; reset per-wave
+  const escalation     = new EscalationTracker();
+  const supervisorCallOpts: AgentCallOptions = { sdkAgents, isSupervisor: true };
+  const workerCallOpts: AgentCallOptions = { sdkAgents };
 
   // ── HITL processor ────────────────────────────────────────────────────────
   // Called at the start of each wave. Returns true if the run should be aborted.
@@ -648,11 +747,21 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
       stepInput: upstreamContext || undefined,
       teamGoal: goal,
       blackboardSnapshot: blackboard.snapshot(),
+      commandBlackboardSnapshot: getCommandBlackboardSnapshot(),
       teamSize: roster.length,
     });
 
+    const callsign = agentToCallsign(task.agent);
     const modelId = toCursorModelId(agentYaml.claude_model ?? '', task.agent);
-    console.error(`[Team]   → ${task.agent} (${modelId}): "${task.title}"`);
+    console.error(`[Team]   → ${task.agent} [${callsign}] (${modelId}): "${task.title}"`);
+
+    commandBoard.setAgentStatus({
+      callsign,
+      state: 'active',
+      currentTaskId: task.id,
+      lastUpdated: Date.now(),
+      note: task.title.slice(0, 60),
+    });
 
     // Diagnostic: log the first 400 chars of the task description for test-author
     // so we can verify the ESM reminder is actually reaching the agent.
@@ -663,7 +772,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
 
     onTaskStart?.(task.id, task.agent, task.title);
     const taskCallStart = Date.now();
-    const output = await callCursorAgent(task.agent, modelId, workerPrompt, waveCircuit);
+    const output = await callCursorAgent(callsign, modelId, workerPrompt, waveCircuit, workerCallOpts);
     allTaskUsage.push(buildTaskUsage(task.id, task.title, task.agent, modelId, workerPrompt.length, output.length, Date.now() - taskCallStart));
 
     // ── Parse worker signals ───────────────────────────────────────────────
@@ -674,6 +783,15 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
       totalBlockers += signals.blockers.length;
       for (const blocker of signals.blockers) {
         console.error(`[Team]   🚨 BLOCKER from ${task.agent}: ${blocker.description.slice(0, 100)}`);
+        escalation.recordBlocker(task.agent, blocker.description);
+        commandBoard.appendBullet('Open Intel', `[BLOCKER] ${callsign} on "${task.title}": ${blocker.description.slice(0, 200)}`);
+        commandBoard.setAgentStatus({
+          callsign,
+          state: 'blocked',
+          currentTaskId: task.id,
+          lastUpdated: Date.now(),
+          note: blocker.description.slice(0, 80),
+        });
         blackboard.post({
           type: 'blocker',
           title: `BLOCKER: ${task.agent} on "${task.title}"`,
@@ -715,15 +833,37 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     onTaskComplete?.(task.id, task.agent, output, hadBlocker);
     console.error(`[Team]   ✓ ${task.agent} done: "${task.title}"${hadBlocker ? ' 🚨 (blocker signalled)' : ''}`);
 
+    if (!hadBlocker) {
+      commandBoard.setAgentStatus({
+        callsign,
+        state: 'complete',
+        currentTaskId: task.id,
+        lastUpdated: Date.now(),
+      });
+      commandBoard.appendAgentLog(
+        callsign,
+        `${task.title}: ${output.slice(0, 200).replace(/\n/g, ' ')}`,
+      );
+      commandBoard.appendBullet('Active Tasks', `[done] ${task.id} — ${callsign}: ${task.title}`);
+    }
+
     return { taskId: task.id, taskTitle: task.title, agent: task.agent, output, hasBlocker: hadBlocker };
   }
 
   // ── Phase 1: Lead PM planning ─────────────────────────────────────────────
   console.error('[Team] Phase 1: Lead PM planning...');
 
-  const planningPrompt = buildLeadPMPlanningPrompt({ goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined, projectMemory: memorySnapshot || undefined, projectKnowledge: knowledge.injectionBlock || undefined });
+  const planningPrompt = buildLeadPMPlanningPrompt({
+    goal,
+    blackboardSnapshot: blackboard.snapshot(),
+    roster,
+    inboxMessages: bus.inboxSummary('Lead-PM') || undefined,
+    projectMemory: memorySnapshot || undefined,
+    projectKnowledge: knowledge.injectionBlock || undefined,
+    commandBlackboard: getCommandBlackboardSnapshot(),
+  });
   const pmPlanStart = Date.now();
-  const planText = await callCursorAgent('Lead-PM', 'gpt-5.4-nano', planningPrompt);
+  const planText = await callCursorAgent('Lead-PM', 'gpt-5.4-nano', planningPrompt, undefined, supervisorCallOpts);
   allTaskUsage.push(buildTaskUsage('pm-planning', 'Lead PM: Planning', 'Lead-PM', 'gpt-5.4-nano', planningPrompt.length, planText.length, Date.now() - pmPlanStart));
 
   const rawPlan = extractJsonBlock(planText);
@@ -732,7 +872,10 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
 
   for (const task of plan.tasks) {
     blackboard.post({ type: 'task', title: task.title, content: task.description, status: 'pending', author: 'Lead-PM', assignee: task.agent, priority: task.priority as 'critical' | 'high' | 'medium' | 'low', tags: ['dispatched', task.id], relatedIds: [] });
+    const callsign = agentToCallsign(task.agent);
+    commandBoard.appendBullet('Active Tasks', `[pending] ${task.id} — ${callsign}: ${task.title}`);
   }
+  commandBoard.setAgentStatus({ callsign: 'Roland', state: 'active', lastUpdated: Date.now(), note: `Wave control — ${plan.tasks.length} task(s)` });
   onPlanReady?.(plan.tasks);
 
   // ── Display memory citations (show user learning-in-action) ───────────────
@@ -904,15 +1047,45 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
         roster,
         inboxMessages: bus.inboxSummary('Lead-PM') || undefined,
         detectedBlockers: detectedBlockers.length > 0 ? detectedBlockers : undefined,
+        commandBlackboard: getCommandBlackboardSnapshot(),
+        escalationNotes: escalation.escalationNotes.length > 0 ? [...escalation.escalationNotes] : undefined,
       });
       const pmReviewStart = Date.now();
-      const reviewText = await callCursorAgent('Lead-PM', 'gpt-5.4-nano', reviewPrompt);
+      const reviewText = await callCursorAgent('Lead-PM', 'gpt-5.4-nano', reviewPrompt, undefined, supervisorCallOpts);
       allTaskUsage.push(buildTaskUsage(`pm-review-${waveNumber}`, `Lead PM: Wave ${waveNumber} Review`, 'Lead-PM', 'gpt-5.4-nano', reviewPrompt.length, reviewText.length, Date.now() - pmReviewStart));
 
       const rawDecision = extractJsonBlock(reviewText);
-      const decision: ReviewDecision = isReviewDecision(rawDecision)
+      let decision: ReviewDecision = isReviewDecision(rawDecision)
         ? rawDecision
         : { decision: 'continue' };
+
+      // Error recovery: unparseable review with blockers → force adjust
+      if (!isReviewDecision(rawDecision) && hasBlockers) {
+        const forceAdjust = escalation.recordReviewParseFailure(waveNumber);
+        if (forceAdjust || hasBlockers) {
+          console.error('[Team] ⚠️  PM review JSON unparseable with active blockers — forcing adjust recovery');
+          decision = {
+            decision: 'adjust',
+            pmNotes: 'Auto-recovery: PM review response was not parseable JSON. Blockers require resolution before continuing.',
+            unblocks: detectedBlockers.map((b) => ({
+              forAgent: waveResults.find((r) => b.includes(`[${r.agent}]`))?.agent ?? 'executor',
+              message: `PM auto-recovery: resolve blocker — ${b.slice(0, 200)}`,
+            })),
+          };
+        }
+      }
+
+      // Operator escalation when cumulative blockers exceed threshold
+      if (escalation.shouldEscalateToOperator()) {
+        const note = `Operator escalation: ${totalBlockers} blockers this run. Review scope, environment, or provide HITL directive via /inject.`;
+        commandBoard.appendBullet('Open Intel', `[ESCALATION] ${note}`);
+        console.error(`[Team] ⚠️  ${note}`);
+        if (hitlQueue && !hitlQueue.isPaused()) {
+          hitlQueue.setPaused(true);
+          onHitlPause?.(true);
+          console.error('[Team] Run paused for operator review — use `roland resume` or `/resume` after addressing blockers.');
+        }
+      }
 
       onWaveComplete?.(waveNumber, decision);
 
@@ -951,10 +1124,17 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   console.error('[Team] Phase 3: Lead PM synthesis...');
   onSynthesizing?.();
 
-  const synthesisCtx = { goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined, taskResults };
+  const synthesisCtx = {
+    goal,
+    blackboardSnapshot: blackboard.snapshot(),
+    roster,
+    inboxMessages: bus.inboxSummary('Lead-PM') || undefined,
+    taskResults,
+    commandBlackboard: getCommandBlackboardSnapshot(),
+  };
   const synthesisPrompt = buildLeadPMSynthesisPrompt(synthesisCtx);
   const pmSynthStart = Date.now();
-  let synthesis = await callCursorAgent('Lead-PM', 'gpt-5.4-nano', synthesisPrompt);
+  let synthesis = await callCursorAgent('Lead-PM', 'gpt-5.4-nano', synthesisPrompt, undefined, supervisorCallOpts);
   allTaskUsage.push(buildTaskUsage('pm-synthesis', 'Lead PM: Synthesis', 'Lead-PM', 'gpt-5.4-nano', synthesisPrompt.length, synthesis.length, Date.now() - pmSynthStart));
 
   // "no detail" fallback: empty, too-short, or blocker-string responses mean the full
@@ -966,7 +1146,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     console.error('[Team] ⚠️  Run is still alive — use `roland status` to monitor');
     const fallbackPrompt = buildFallbackSynthesisPrompt(synthesisCtx);
     const pmFallbackStart = Date.now();
-    synthesis = await callCursorAgent('Lead-PM', 'gpt-5.4-nano', fallbackPrompt);
+    synthesis = await callCursorAgent('Lead-PM', 'gpt-5.4-nano', fallbackPrompt, undefined, supervisorCallOpts);
     allTaskUsage.push(buildTaskUsage('pm-synthesis-fallback', 'Lead PM: Fallback Synthesis', 'Lead-PM', 'gpt-5.4-nano', fallbackPrompt.length, synthesis.length, Date.now() - pmFallbackStart));
 
     if (synthesisFailed(synthesis)) {
@@ -976,6 +1156,14 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   }
 
   console.error('[Team] Synthesis complete');
+
+  // Merge Command Blackboard updates from synthesis
+  const boardUpdates = commandBoard.extractAndMerge(synthesis);
+  if (boardUpdates > 0) {
+    console.error(`[Team] Command Blackboard updated — ${boardUpdates} new bullet(s) in .roland/command-blackboard.md`);
+  }
+  commandBoard.setAgentStatus({ callsign: 'Roland', state: 'complete', lastUpdated: Date.now(), note: 'Mission synthesis complete' });
+  commandBoard.appendBullet('Mission Objectives', `[complete] ${goal.slice(0, 120)}`);
 
   // ── Persist memory extract ────────────────────────────────────────────────
   const appended = memory.extractAndAppend(synthesis, goal, runId);
@@ -1012,7 +1200,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     const retroPrompt  = buildRetrospectivePrompt(goal, synthesis, taskSummary, memory.structuredSnapshot(), humanFeedback);
     const pmModel      = toCursorModelId('', 'lead-pm');
     const retroStart   = Date.now();
-    const retroText    = await callCursorAgent('Lead-PM', pmModel, retroPrompt);
+    const retroText    = await callCursorAgent('Lead-PM', pmModel, retroPrompt, undefined, supervisorCallOpts);
     allTaskUsage.push(buildTaskUsage(
       'pm-retrospective', 'Lead PM: Retrospective', 'Lead-PM', pmModel,
       retroPrompt.length, retroText.length, Date.now() - retroStart,
@@ -1067,6 +1255,11 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
 
   const goalEntry = blackboard.read({ type: 'task', status: 'in_progress' }).find((e) => e.tags.includes('goal'));
   if (goalEntry) blackboard.patch(goalEntry.id, { status: 'done' });
+
+  const { buildBoardStatusReport, formatConciseUnscSummary } = await import('./board-report.js');
+  const boardReport = buildBoardStatusReport(stateDir, goal);
+  console.error('\n' + formatConciseUnscSummary(boardReport) + '\n');
+  console.error('[Team] Full intel: `roland board-status` · JSON: `roland board-status --json`');
 
   return { goal, plan, taskResults, synthesis, wavesRun: waveNumber, blockersEncountered: totalBlockers };
 }

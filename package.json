@@ -28,7 +28,8 @@
     "qa:all": "npx tsx scripts/qa-scenarios.ts --all",
     "clean": "node scripts/clean-dist.mjs",
     "serve-dashboard": "node scripts/serve-dashboard.js",
-    "test:mcp": "node scripts/test-mcp-tools.mjs"
+    "test:mcp": "node scripts/test-mcp-tools.mjs",
+    "orchestrate": "node scripts/roland-orchestrate.mjs"
   },
   "keywords": [
     "agent-orchestration",
@@ -63,6 +64,7 @@
     "archiver": "^7.0.1",
     "esbuild": "^0.28.0",
     "eslint": "^9.18.0",
+    "file-uri-to-path": "^1.0.0",
     "prettier": "^3.4.2",
     "puppeteer": "^24.15.0",
     "sinon": "^21.0.0",
