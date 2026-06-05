@@ -31,6 +31,23 @@ After completing a major task (team run, multi-file feature, or delegated wave),
 
 Blockers first, then callsign roster. Do not leave the operator without battlespace picture.
 
+### Mission Complete footer (mandatory for CLI runs)
+
+Every `roland team` and `roland orchestrate` run **must end** with:
+
+```
+### 🎖 Mission Complete
+```
+
+This section is always **last** — nothing may follow it. Include:
+
+1. **Status line** — success verdict and blocker count if any
+2. **#### Next Steps** — numbered, copy-paste-ready commands (blockers → tests → commit → `roland team "..."`)
+3. **#### Battlespace Status** — `roland board-status --concise`
+4. **#### Suggested Follow-Up Commands** — `roland board-status`, `roland team "..."`, test commands
+
+Do **not** bury Next Steps in the middle of synthesis. The orchestrator extracts `## Next Steps` from PM synthesis and promotes it here automatically for team mode; for direct/orchestrate sessions, write the Mission Complete block yourself as the final output.
+
 ## Callsign Roster
 
 | Callsign | Role |

@@ -21,7 +21,7 @@
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { cleanupSdkSession, configureSdkProcessLimits } from '../utils/sdk-lifecycle.js';
+import { cleanupSdkSession, configureSdkProcessLimits, waitForSdkRun } from '../utils/sdk-lifecycle.js';
 
 // Team CLI and supervisor import this module directly (not via index.ts).
 configureSdkProcessLimits();
@@ -69,6 +69,7 @@ import {
   legacyAgentToCallsign,
   type SdkAgentDefinition,
 } from './unsc-agents.js';
+import { finalizeSynthesisOutput } from './mission-complete.js';
 
 /** Operator escalation threshold — cumulative blockers before surfacing to human command. */
 const OPERATOR_ESCALATION_THRESHOLD = 3;
@@ -291,10 +292,10 @@ function buildMinimalSynthesis(goal: string, taskResults: Record<string, TeamTas
     if (r.output.length > 600) lines.push('\n…(truncated)');
     lines.push('');
   }
-  lines.push('## Immediate Next Steps');
+  lines.push('## Next Steps');
   lines.push('');
   lines.push('1. Review the output excerpts above for files created or modified.');
-  lines.push('2. Run `dotnet test --no-build` (or `npm run test:run`) to check test status.');
+  lines.push('2. Run `npm run test:run` (or project-specific test command) to check test status.');
   lines.push('3. Use `roland team "..."` with a more focused goal to continue.');
   lines.push('');
   lines.push('_Full synthesis unavailable — rerun with a narrower goal if this recurs._');
@@ -440,8 +441,6 @@ async function callCursorAgentOnce(
 
   let agent: SdkAgent | undefined;
   let run: SdkRun | undefined;
-  let heartbeat: ReturnType<typeof setInterval> | undefined;
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
   try {
     agent = await Agent.create({
@@ -453,32 +452,22 @@ async function callCursorAgentOnce(
     });
 
     run = await agent.send(prompt);
-    const start = Date.now();
 
-    // Heartbeat: lets users see long-running agents are alive, not hung.
-    heartbeat = setInterval(() => {
-      const m = ((Date.now() - start) / 60_000).toFixed(1);
-      console.error(`[Team]   ⏳ ${agentName} still running… (${m}m elapsed)`);
-    }, 60_000);
-
-    // Hard timeout — on fire, cancel the run so shell child processes are torn down.
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => {
-        reject(new Error(
-          `Agent "${agentName}" timed out after ${(AGENT_TIMEOUT_MS / 60_000).toFixed(0)} min. ` +
-          `Raise the limit with ROLAND_AGENT_TIMEOUT_MS (ms).`,
-        ));
-      }, AGENT_TIMEOUT_MS);
+    const result = await waitForSdkRun(run, {
+      timeoutMs: AGENT_TIMEOUT_MS,
+      agentName,
+      heartbeatIntervalMs: 60_000,
+      onHeartbeat: (elapsedMs) => {
+        const m = (elapsedMs / 60_000).toFixed(1);
+        console.error(`[Team]   ⏳ ${agentName} still running… (${m}m elapsed)`);
+      },
     });
 
-    const result = await Promise.race([run.wait(), timeoutPromise]);
     if (result.status === 'error' || result.status === 'cancelled') {
       throw new Error(`Agent "${agentName}" ${result.status}: ${result.result ?? 'no detail'}`);
     }
     return result.result ?? '';
   } finally {
-    if (heartbeat) clearInterval(heartbeat);
-    if (timeoutId) clearTimeout(timeoutId);
     await cleanupSdkSession(agent, run);
   }
 }
@@ -1272,6 +1261,13 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   const boardReport = buildBoardStatusReport(stateDir, goal);
   console.error('\n' + formatConciseUnscSummary(boardReport) + '\n');
   console.error('[Team] Full intel: `roland board-status` · JSON: `roland board-status --json`');
+
+  synthesis = finalizeSynthesisOutput(synthesis, {
+    goal,
+    blockersEncountered: totalBlockers,
+    wavesRun: waveNumber,
+    taskCount: Object.keys(taskResults).length,
+  });
 
   return { goal, plan, taskResults, synthesis, wavesRun: waveNumber, blockersEncountered: totalBlockers };
 }

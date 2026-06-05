@@ -626,7 +626,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     }
     err('');
     err(`  ${c.dim('Ask Roland to refine:')}  roland team "Fix the failing tests"  ${c.dim('or')}  roland team "Add X"`);
-    err(`  ${c.dim('Full next-step detail in')} ${c.bold('## Next Steps')} ${c.dim('at the bottom of the synthesis ↓')}`);
+    err(`  ${c.dim('Action items in')} ${c.bold('### 🎖 Mission Complete')} ${c.dim('at the bottom of the synthesis ↓')}`);
     err('');
 
     console.log(result.synthesis);
@@ -852,7 +852,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
   }
   err('');
   err(`  ${c.dim('Ask Roland to refine:')}  roland team "Fix the failing tests"  ${c.dim('or')}  roland team "Add X"`);
-  err(`  ${c.dim('Full next-step detail in')} ${c.bold('## Next Steps')} ${c.dim('at the bottom of the synthesis ↓')}`);
+  err(`  ${c.dim('Action items in')} ${c.bold('### 🎖 Mission Complete')} ${c.dim('at the bottom of the synthesis ↓')}`);
   err('');
 
   // Notify on completion (rich contextual message)

@@ -18,7 +18,8 @@ import { runTool } from './tools.js';
 import { buildClaudeToolCallingPrompt } from './prompts.js';
 import { parseClaudeResponseText } from '../schemas.js';
 import { toCursorModelId } from './model-routing.js';
-import { cleanupSdkSession, configureSdkProcessLimits } from '../utils/sdk-lifecycle.js';
+import { AGENT_TIMEOUT_MS } from './constants.js';
+import { cleanupSdkSession, configureSdkProcessLimits, waitForSdkRun } from '../utils/sdk-lifecycle.js';
 
 configureSdkProcessLimits();
 
@@ -96,7 +97,10 @@ async function getResponseViaCursorSDK(prompt: string, agentName: string, model:
     });
 
     run = await agent.send(prompt);
-    const runResult = await run.wait();
+    const runResult = await waitForSdkRun(run, {
+      timeoutMs: AGENT_TIMEOUT_MS,
+      agentName,
+    });
 
     if (runResult.status === 'error' || runResult.status === 'cancelled') {
       throw new Error(`Cursor agent "${agentName}" ${runResult.status}: ${runResult.result ?? 'no detail'}`);

@@ -176,7 +176,33 @@ No Marvel references. No civilian-assistant framing.
 | \`roland_run_team\` / \`roland team\` | Background PM team with GitHub automation |
 | \`pm_standup\` | Board digest — blockers first |
 | \`get_team_context\` | Full structured board |
-| \`unblock_task\` | Resolve blockers with concrete decisions |`;
+| \`unblock_task\` | Resolve blockers with concrete decisions |
+
+---
+
+## End-of-Mission Output (mandatory)
+
+Every completed mission — \`roland team\`, \`roland orchestrate\`, delegated wave, or direct session — **must end** with a prominent final section. This is the **last thing the operator sees**. No synthesis content, logs, or commentary may follow it.
+
+Use this exact title:
+
+\`\`\`
+### 🎖 Mission Complete
+\`\`\`
+
+(Alternate acceptable title: \`### UNSC Mission Complete\`)
+
+The section must include, in order:
+
+1. **Status line** — one sentence: success verdict, blocker count if any, readiness (alpha / beta / production-ready).
+2. **#### Next Steps** — prioritized numbered list with copy-paste-ready commands in code blocks. Blockers first, then tests, then commit, then \`roland team "..."\` follow-ups. **Never bury Next Steps in the middle of the synthesis body.**
+3. **#### Battlespace Status** — remind the operator:
+   \`\`\`bash
+   roland board-status --concise
+   \`\`\`
+4. **#### Suggested Follow-Up Commands** — a code block with \`roland board-status\`, \`roland team "..."\`, and project test commands.
+
+Separate the Mission Complete block from prior content with \`---\`. Keep UNSC military tone — calm, competent, actionable.`;
 }
 
 /** Synthesis extract format Roland writes after mission complete. */

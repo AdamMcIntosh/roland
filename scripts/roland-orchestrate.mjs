@@ -35,6 +35,9 @@ const { loadUnscAgents, toSdkAgentDefinitions } = await import(
 const { buildRolandOrchestratorPrompt } = await import(
   resolve(distRoot, 'rco/orchestrator-prompts.js')
 );
+const { finalizeSynthesisOutput } = await import(
+  resolve(distRoot, 'rco/mission-complete.js')
+);
 const { CommandBlackboard } = await import(
   resolve(distRoot, 'rco/command-blackboard.js')
 );
@@ -93,23 +96,29 @@ async function createRolandSupervisor() {
 }
 
 const roland = await createRolandSupervisor();
+let activeRun;
 
 try {
-  const run = await roland.send(
+  activeRun = await roland.send(
     `${systemContext}\n\n---\n\nExecute this mission. Delegate to appropriate callsigns. Update the Command Blackboard as you proceed.\n\nMission: ${goal}`,
   );
 
-  console.error(`[Roland] run.id=${run.id} agentId=${roland.agentId}`);
+  console.error(`[Roland] run.id=${activeRun.id} agentId=${roland.agentId}`);
 
-  for await (const event of run.stream()) {
+  let streamedOutput = '';
+
+  for await (const event of activeRun.stream()) {
     if (event.type === 'assistant') {
       for (const block of event.message.content) {
-        if (block.type === 'text') process.stdout.write(block.text);
+        if (block.type === 'text') {
+          streamedOutput += block.text;
+          process.stdout.write(block.text);
+        }
       }
     }
   }
 
-  const result = await run.wait();
+  const result = await activeRun.wait();
 
   if (result.status === 'error') {
     console.error('\n[Roland] Run failed.');
@@ -128,6 +137,21 @@ try {
   board.appendAgentLog('Roland', `Mission complete: ${goal.slice(0, 120)}`);
   board.setAgentStatus({ callsign: 'Roland', state: 'complete', lastUpdated: Date.now() });
   board.appendBullet('Mission Objectives', `[complete] ${goal.slice(0, 120)}`);
+
+  const finalized = finalizeSynthesisOutput(streamedOutput, {
+    goal,
+    blockersEncountered: 0,
+    wavesRun: 1,
+    taskCount: 1,
+  });
+  const alreadyComplete = /###\s+(🎖\s+)?(UNSC\s+)?Mission Complete/i.test(streamedOutput);
+  if (!alreadyComplete) {
+    const footerStart = finalized.indexOf('\n---\n\n### 🎖 Mission Complete');
+    if (footerStart >= 0) {
+      process.stdout.write(finalized.slice(footerStart));
+    }
+  }
+
   console.error('\n[Roland] Mission complete.');
 
   const { buildBoardStatusReport, formatConciseUnscSummary } = await import(
@@ -143,6 +167,6 @@ try {
   board.appendBullet('Open Intel', `[ESCALATION] Unexpected error: ${String(err).slice(0, 120)}`);
   throw err;
 } finally {
-  const { disposeSdkAgent } = await import(resolve(distRoot, 'utils/sdk-lifecycle.js'));
-  await disposeSdkAgent(roland);
+  const { cleanupSdkSession } = await import(resolve(distRoot, 'utils/sdk-lifecycle.js'));
+  await cleanupSdkSession(roland, activeRun);
 }

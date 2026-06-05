@@ -542,18 +542,22 @@ Limit to 2–4 bullets. If nothing meaningful was decided, **omit this entire se
 
 ## Next Steps
 
-**This section is mandatory — always include it, even if nothing is broken.**
+**This section is mandatory — always include it as the last section of your deliverable.**
 
-Give the developer 4–6 concrete, copy-paste-ready actions. Follow this order:
+Write 4–6 concrete, copy-paste-ready actions. The orchestrator **extracts this section** and promotes it to the prominent \`### 🎖 Mission Complete\` footer — do **not** duplicate next steps elsewhere in the synthesis body. Do **not** write a Mission Complete section yourself.
+
+Follow this order:
 
 1. **Resolve any blockers first** — if the 🔴 section is non-empty, lead with the single most important fix command.
 2. **Run migrations** — e.g. \`dotnet ef database update --project src/Infrastructure\` (skip if no schema changes).
-3. **Run the tests** — e.g. \`dotnet test --no-build\`. If tests are known to be failing, name the class and the one-line fix.
-4. **Start / verify** — exact command to run and smoke-test the output (e.g. \`dotnet run --project src/Api\` + a \`curl\` command).
+3. **Run the tests** — e.g. \`dotnet test --no-build\` or \`npm run test:run\`. If tests are known to be failing, name the class and the one-line fix.
+4. **Start / verify** — exact command to run and smoke-test the output.
 5. **Commit** — ready-to-paste \`git commit\` with a conventional-commit message reflecting what was built.
 6. **Refine with Roland** — one or two follow-up \`roland team "..."\` prompts the developer can paste directly.
 
 Format: numbered list. Each item that includes a command must show it in a \`code block\`.
+
+**Nothing may follow this section** — it must be the final content in your response.
 `;
 }
 
@@ -592,8 +596,8 @@ List every file created or modified this run. One line per file: path + one-sent
 ### Test Status
 State clearly: were tests written? Did test-executor run? Pass count / fail count. If test-executor did not run, say so and give the exact command to run it manually.
 
-### Immediate Next Steps
-3–5 numbered, copy-paste-ready actions. Lead with any 🔴 blockers, then the command to run tests, then a \`roland team "..."\` command to continue if anything is incomplete.
+### Next Steps
+3–5 numbered, copy-paste-ready actions. Lead with any 🔴 blockers, then the command to run tests, then a \`roland team "..."\` command to continue if anything is incomplete. (Orchestrator promotes this to \`### 🎖 Mission Complete\`.)
 
 ---
 
