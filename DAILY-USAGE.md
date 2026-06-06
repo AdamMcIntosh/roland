@@ -488,11 +488,34 @@ roland doctor     # confirms agents are present
 
 ---
 
+## 🎯 Direct vs full team (Cursor)
+
+When using Roland as an MCP server in Cursor, every new request is triaged to **Direct** (handle in chat) or **Team** (`roland team` / `roland_run_team`). Roland shows the path in one line before acting.
+
+| Path | Typical work |
+|------|--------------|
+| **Direct** | Comments, typos, Q&A, single-file fixes (< ~30 min) |
+| **Team** | Multi-file features, tests, synthesis, blockers |
+
+**Force team** without confirmation: `--force-team`, `force team`, `full team`, `run as team`, `spawn team`.
+
+```bash
+roland board-status --concise    # battlespace from terminal
+roland board-cleanup --dry-run   # preview stale-task archival
+roland orchestrate "goal"        # SDK supervisor + UNSC sub-agents
+```
+
+See [README.md](README.md) for the full decision guide.
+
+---
+
 ## ⌨️ Quick Reference Card
 
 | Action | Chat | CLI |
 |--------|------|-----|
 | Start a goal | type it | `roland "goal"` |
+| Board snapshot | `board_status` MCP | `roland board-status --concise` |
+| Clean stale board | — | `roland board-cleanup` |
 | Pause run | `/pause` | `roland pause` |
 | Resume run | `/resume` | `roland resume` |
 | Abort run | `/abort` | `roland abort` |
@@ -509,3 +532,15 @@ roland doctor     # confirms agents are present
 | Full help | `/help` | `roland --help` |
 | Quit | `/exit` or Ctrl+D | — |
 
+---
+
+## 📚 More documentation
+
+| Doc | Contents |
+|-----|----------|
+| [README.md](README.md) | Main guide — install, CLI, Direct vs Team, MCP, architecture |
+| [INSTALLATION.md](INSTALLATION.md) | MCP setup for Cursor / VS Code |
+| [docs/evolution/README.md](docs/evolution/README.md) | UNSC architecture and capabilities |
+| [docs/guides/mini-pc-deployment.md](docs/guides/mini-pc-deployment.md) | Headless, Tailscale, systemd |
+| [docs/guides/pm-workflow.md](docs/guides/pm-workflow.md) | Manual PM mode in Cursor |
+| [CLAUDE.md](CLAUDE.md) | Developer conventions and smoke tests |

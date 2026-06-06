@@ -2,6 +2,8 @@
 
 Setup guide for Roland as an MCP server integrated with VS Code or Cursor.
 
+> **Start here:** [README.md](README.md) — quick start, CLI reference, Direct vs Team decision guide, and architecture summary.
+
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
@@ -16,7 +18,7 @@ Setup guide for Roland as an MCP server integrated with VS Code or Cursor.
 
 ## Prerequisites
 
-- **Node.js**: v18.0.0 or higher
+- **Node.js**: v22.0.0 or higher (see `package.json` engines)
 - **npm**: v9.0.0 or higher
 - **IDE**: Cursor (primary) or VS Code (with GitHub Copilot)
 - **Goose** (optional): [block.github.io/goose](https://block.github.io/goose/) — required for multi-model routing and autonomous recipes
@@ -67,8 +69,7 @@ npm run build
 
 ## PM Team Mode (Cursor) — one-command global setup
 
-To run Roland as a **PM-first engineering team** (you are the PM on Opus 4.7,
-engineers on Composer 2.5), use the dedicated installer — it builds, installs the
+To run Roland as a **PM-first engineering team** (Lead PM on grok-4.3, workers on Composer 2.5 / Sonnet by lane), use the dedicated installer — it builds, installs the
 `roland` binary globally, and merges the MCP entry into `~/.cursor/mcp.json`:
 
 ```bash

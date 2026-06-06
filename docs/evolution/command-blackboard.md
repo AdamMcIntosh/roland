@@ -177,11 +177,20 @@ Completed mission patterns migrate to `memory.md` **Proven Patterns** via the ex
 
 ## Relationship to Existing PM Board
 
-MCP tools (`spawn_task`, `pm_standup`, `unblock_task`) continue operating on `blackboard.json`. Roland keeps `command-blackboard.md` synchronized:
+MCP tools (`spawn_task`, `pm_standup`, `unblock_task`) operate on `blackboard.json`. `team-orchestrator.ts` keeps `command-blackboard.md` synchronized during autonomous team runs:
+
+- **Mission start** — `board-cleanup.ts` archives stale tasks from prior missions
+- **Planning / review / synthesis** — `smartSnapshot(goal)` injected into Lead PM prompts
+- **Wave events** — agent status, logs, artifacts updated on the markdown board
+- **Post-synthesis** — `## Command Blackboard Update` merged into sections
+
+Manual MCP board ops:
 
 - `spawn_task` → append Active Tasks + set Agent Status
 - Blocker resolved → move from Open Intel to Key Decisions
 - Wave complete → update Agent Logs + Artifacts
+
+CLI: `roland board-status [--concise]` · `roland board-cleanup [--dry-run]`
 
 ## Template
 
