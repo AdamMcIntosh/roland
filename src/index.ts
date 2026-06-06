@@ -201,6 +201,7 @@ function printHelp(): void {
   ln(`    ${cy('roland')} ${b('pr')} [number]               Review (and optionally fix) a GitHub PR`);
   ln(`    ${cy('roland')} ${b('status')}                     Live dashboard for a running job`);
   ln(`    ${cy('roland')} ${b('board-status')}              UNSC summary (add --concise for chat-friendly)`);
+  ln(`    ${cy('roland')} ${b('board-cleanup')}             Archive stale tasks from prior missions`);
   ln(`    ${cy('roland')} ${b('orchestrate')} "goal"       SDK supervisor + UNSC sub-agents`);
   ln();
   ln('  ' + b('OPTIONS') + '  ' + d('(team / watch / pr)'));
@@ -283,7 +284,7 @@ const KNOWN_CMDS = new Set([
   'team', 'run', 'goal', 'start', 'status', 'watch', 'pr', 'chat',
   // HITL controls
   'pause', 'resume', 'unblock', 'inject', 'replan', 'abort', 'hitl-status',
-  'board-status', 'orchestrate',
+  'board-status', 'board-cleanup', 'orchestrate',
   // Background supervisor
   'bg-status', 'bg-logs', 'bg-stop',
   '--help', '-h', '--version',
@@ -396,6 +397,17 @@ async function main(): Promise<void> {
         const goal = goalArgIdx >= 0 ? rest[goalArgIdx + 1] : undefined;
         const { printBoardStatus } = await import('./rco/board-report.js');
         printBoardStatus(stateDir, { json: jsonMode, goal, concise });
+        break;
+      }
+      case 'board-cleanup': {
+        const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const dryRun = rest.includes('--dry-run');
+        const goalArgIdx = rest.indexOf('--goal');
+        const goal = goalArgIdx >= 0 ? rest[goalArgIdx + 1] : '';
+        const { cleanupBoardsForNewMission, formatCleanupReport } = await import('./rco/board-cleanup.js');
+        const result = cleanupBoardsForNewMission(stateDir, goal, { dryRun });
+        console.log(formatCleanupReport(result));
+        if (rest.includes('--json')) console.log(JSON.stringify(result, null, 2));
         break;
       }
       case 'orchestrate': {

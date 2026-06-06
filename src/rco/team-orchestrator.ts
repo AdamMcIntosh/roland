@@ -468,10 +468,12 @@ async function callCursorAgentOnce(
     const result = await waitForSdkRun(run, {
       timeoutMs: AGENT_TIMEOUT_MS,
       agentName,
-      heartbeatIntervalMs: 60_000,
+      heartbeatIntervalMs: 30_000,
       onHeartbeat: (elapsedMs) => {
-        const m = (elapsedMs / 60_000).toFixed(1);
-        console.error(`[Team]   ⏳ ${agentName} still running… (${m}m elapsed)`);
+        const m = Math.floor(elapsedMs / 60_000);
+        const s = Math.floor((elapsedMs % 60_000) / 1000);
+        const elapsed = m > 0 ? `${m}m ${s}s` : `${s}s`;
+        console.error(`[Team]   ⏳ ${agentName} still running… (${elapsed} elapsed)`);
       },
     });
 
@@ -597,6 +599,13 @@ async function callCursorAgent(
   return lines.join('\n');
 }
 
+/** Suppress [Team] progress logs — used for --quiet runs (synthesis-only output). */
+function muteConsoleError(): () => void {
+  const prev = console.error;
+  console.error = () => {};
+  return () => { console.error = prev; };
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult> {
@@ -613,6 +622,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   } = opts;
 
   const restoreStderr = quiet ? createShellExecStderrFilter() : undefined;
+  const restoreLog = quiet ? muteConsoleError() : undefined;
   try {
     return await runTeamInner({
       goal, stateDir, agentsDir: agentsDirOverride,
@@ -627,6 +637,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     });
   } finally {
     restoreStderr?.();
+    restoreLog?.();
   }
 }
 
@@ -651,6 +662,20 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
   console.error('[Team] Initializing coordination layer...');
   const blackboard = new Blackboard(stateDir);
   const commandBoard = new CommandBlackboard(stateDir);
+
+  const { cleanupBoardsForNewMission, formatCleanupReport } = await import('./board-cleanup.js');
+  const cleanupResult = cleanupBoardsForNewMission(stateDir, goal);
+  if (
+    cleanupResult.blackboardArchived > 0 ||
+    cleanupResult.commandBoard.activeTasksRemoved.length > 0 ||
+    cleanupResult.commandBoard.objectivesArchived.length > 0
+  ) {
+    console.error('[Team] Board hygiene — prior mission state archived:');
+    for (const line of formatCleanupReport(cleanupResult).split('\n').slice(1)) {
+      if (line.trim()) console.error(`[Team]   ${line}`);
+    }
+  }
+
   const bus = new MessageBus(stateDir);
   const memory = new ProjectMemory(stateDir);
   const memorySnapshot = memory.smartSnapshot(goal);
@@ -1304,10 +1329,7 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
   const goalEntry = blackboard.read({ type: 'task', status: 'in_progress' }).find((e) => e.tags.includes('goal'));
   if (goalEntry) blackboard.patch(goalEntry.id, { status: 'done' });
 
-  const { buildBoardStatusReport, formatConciseUnscSummary } = await import('./board-report.js');
-  const boardReport = buildBoardStatusReport(stateDir, goal);
-  console.error('\n' + formatConciseUnscSummary(boardReport) + '\n');
-  console.error('[Team] Full intel: `roland board-status` · JSON: `roland board-status --json`');
+  // Battlespace summary lives in the Mission Complete footer — avoid duplicating on stderr.
 
   synthesis = finalizeSynthesisOutput(synthesis, {
     goal,

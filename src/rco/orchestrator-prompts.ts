@@ -83,6 +83,15 @@ When routing work to a callsign, include in the delegation prompt:
 | **Depends-on** | Which callsigns must finish first; what to BLOCK if missing |
 | **Acceptance** | How Sentinel/Vanguard will verify before merge |
 
+**Sparrow delegation extras** (when routing implementation work):
+
+| Field | Required content |
+|-------|------------------|
+| **Peer patterns** | Name 2–3 files Sparrow must read first (e.g. \`cors.js\`, \`requestLogger.js\`) |
+| **Defensive scope** | Which inputs need guard clauses (headers, query, body fields) |
+| **Logging contract** | Logger library, child-logger fields, durationMs, correlation ID source |
+| **Quality gate** | Must deliver \`## Assumptions\` + \`## Sparrow — Task Complete\` with Wiring and Defensive sections |
+
 **Wave ordering:** Oracle (intel) → Sparrow (implement) → Vanguard test-author → Vanguard test-executor (depends on author) → Sentinel (review). Never parallelize test-executor with test-author.
 
 After each delegation, update **Agent Status** on the Command Blackboard and append an **Agent Log** entry when the callsign completes.

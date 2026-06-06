@@ -441,13 +441,15 @@ export async function runTeamCli(argv: string[]): Promise<void> {
         },
       });
       runState.done();
-      console.log(result.synthesis);
+      hitlQueue.cleanup();
       await notifier.notify({
         event: 'complete', goal, summary: 'Run complete',
         tasksCompleted: Object.keys(result.taskResults).length,
         wavesRun: result.wavesRun, blockersEncountered: result.blockersEncountered,
         durationMs: Date.now() - runStart,
       });
+      // Synthesis (with ### 🎖 Mission Complete footer) is the definitive end of output.
+      console.log(result.synthesis);
     } catch (e) {
       runState.error(e instanceof Error ? e.message : String(e));
       await notifier.notify({ event: 'error', goal, summary: String(e), errorMessage: e instanceof Error ? e.message : String(e) });
@@ -611,24 +613,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
       durationMs: Date.now() - runStart,
     });
 
-    // ── "What would you like to do next?" prompt (TUI mode) ─────────────────
-    const tuiBlockers = result.blockersEncountered;
-    err('');
-    err('  ' + c.bold('💡  Run complete. What would you like to do next?'));
-    err('');
-    err(`  ${c.cyan('npm run dev')}                        Start (or restart) the dev server`);
-    err(`  ${c.cyan('npm test')}                           Run the full test suite`);
-    err(`  ${c.cyan('git add -A && git commit -m "..."')}  Commit all changes`);
-    err(`  ${c.cyan('Ctrl+C')}                             Stop any background dev server`);
-    if (tuiBlockers > 0) {
-      err('');
-      err(`  ${c.red('⚠️  ' + tuiBlockers + ' blocker' + (tuiBlockers !== 1 ? 's' : '') + ' need attention — see 🔴 Release Blockers in the synthesis below.')}`);
-    }
-    err('');
-    err(`  ${c.dim('Ask Roland to refine:')}  roland team "Fix the failing tests"  ${c.dim('or')}  roland team "Add X"`);
-    err(`  ${c.dim('Action items in')} ${c.bold('### 🎖 Mission Complete')} ${c.dim('at the bottom of the synthesis ↓')}`);
-    err('');
-
+    // Synthesis (with ### 🎖 Mission Complete footer) is the definitive end of output.
     console.log(result.synthesis);
     return;
   }
@@ -839,23 +824,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
   err('  ' + '═'.repeat(COLS - 2));
   err('');
 
-  // ── "What would you like to do next?" prompt ────────────────────────────────
-  err('  ' + c.bold('💡  Run complete. What would you like to do next?'));
-  err('');
-  err(`  ${c.cyan('npm run dev')}                        Start (or restart) the dev server`);
-  err(`  ${c.cyan('npm test')}                           Run the full test suite`);
-  err(`  ${c.cyan('git add -A && git commit -m "..."')}  Commit all changes`);
-  err(`  ${c.cyan('Ctrl+C')}                             Stop any background dev server`);
-  if (blockers > 0) {
-    err('');
-    err(`  ${c.red('⚠️  ' + blockers + ' blocker' + (blockers !== 1 ? 's' : '') + ' need attention — see 🔴 Release Blockers in the synthesis below.')}`);
-  }
-  err('');
-  err(`  ${c.dim('Ask Roland to refine:')}  roland team "Fix the failing tests"  ${c.dim('or')}  roland team "Add X"`);
-  err(`  ${c.dim('Action items in')} ${c.bold('### 🎖 Mission Complete')} ${c.dim('at the bottom of the synthesis ↓')}`);
-  err('');
-
-  // Notify on completion (rich contextual message)
+  // Side effects before synthesis — nothing may print after Mission Complete footer.
   runState.done();
   hitlQueue.cleanup();
   await notifier.notify({
@@ -864,7 +833,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     blockersEncountered: blockers, durationMs: Date.now() - scrollRunStart,
   });
 
-  // Synthesis to stdout — pipeable, separable from progress stderr
+  // Synthesis (with ### 🎖 Mission Complete footer) is the definitive end of output.
   console.log(result.synthesis);
 }
 
