@@ -57,6 +57,7 @@ import type { PMEventAction } from '../pm/event-log.js';
 import { QualityTracker, initializeQualityTracker } from '../orchestrator/quality-tracker.js';
 import { selectRelevantFiles, bundleFileContents, formatBundleAsMarkdown, DEFAULT_CONTEXT_GATHERING_CONFIG } from '../utils/file-gatherer.js';
 import { resolveAgentsDir as resolveAgentsDirShared } from '../rco/loadConfig.js';
+import { classifyExecutionPath } from '../rco/execution-path.js';
 import type { FileBundle } from '../utils/file-gatherer.js';
 import fs from 'fs';
 import path from 'path';
@@ -640,7 +641,7 @@ export class McpServer {
   private registerTriage(): void {
     this.registerTool(
       'triage',
-      'Auto-pilot: analyze any user message and recommend the best Roland agent persona and/or recipe workflow. Call this FIRST on every coding request to get intelligent routing. Returns which agent to adopt, whether a multi-agent recipe applies, and the reasoning.',
+      'Auto-pilot: analyze any user message and recommend agent persona, recipe workflow, and execution path (direct in chat vs team mission). Call FIRST on new coding requests. Returns execution_path.path ("direct" | "team"), execution_path.summary (show to operator), execution_path.team_offer (when team), execution_path.forced (true when force-team override), execution_path.cleaned_goal (goal with triggers stripped), plus agent and complexity routing. Power-user override: append --force-team or phrases like "force team", "full team", "run as team", "spawn team" to bypass scoring and force Team path.',
       async (args: Record<string, unknown>) => {
         const message = args.message as string;
         if (!message) {
@@ -648,6 +649,8 @@ export class McpServer {
         }
 
         const lowerMessage = message.toLowerCase();
+
+        const executionPath = classifyExecutionPath(message);
 
         // --- Score agents ---
         const agentScores = McpServer.AGENT_CATALOG.map(agent => {
@@ -703,6 +706,15 @@ export class McpServer {
 
         // --- Build recommendation ---
         const recommendation: Record<string, unknown> = {
+          execution_path: {
+            path: executionPath.path,
+            summary: executionPath.summary,
+            reasons: executionPath.reasons,
+            estimated_minutes: executionPath.estimatedMinutes,
+            team_offer: executionPath.teamOffer,
+            forced: executionPath.forced ?? false,
+            cleaned_goal: executionPath.cleanedGoal ?? null,
+          },
           agent: {
             name: topAgent.score > 0 ? topAgent.name : 'executor',
             role: topAgent.score > 0 ? topAgent.role : 'General implementation — no strong pattern match; defaulting to executor.',
@@ -848,11 +860,13 @@ export class McpServer {
           recommendation.budget_notice = `Budget ≥80% used — switched to free model (${openrouterModel}). Quality may be reduced.`;
         }
 
-        recommendation.instructions = suggestRecipe
-          ? `Adopt the "${agentName}" persona. A multi-agent recipe "${topRecipe.name}" is recommended — offer to run it, or proceed as the recommended agent if the user prefers a single pass.`
+        recommendation.instructions = executionPath.path === 'team'
+          ? `${executionPath.summary} Do NOT implement in chat. ${executionPath.teamOffer ?? 'Offer roland team and wait for confirmation.'}`
+          : suggestRecipe
+          ? `Adopt the "${agentName}" persona. A multi-agent recipe "${topRecipe.name}" is recommended — offer to run it, or proceed as the recommended agent if the user prefers a single pass. ${executionPath.summary}`
           : isComplexExecution
-            ? `This is a complex task. Spawn a subagent to write the code (see execution_strategy + relevant_files for full codebase context), then apply the output to files yourself.`
-            : `Adopt the "${agentName}" persona for this task. Apply that agent's expertise and thinking style to your response.`;
+            ? `This is a complex task. Spawn a subagent to write the code (see execution_strategy + relevant_files for full codebase context), then apply the output to files yourself. ${executionPath.summary}`
+            : `Adopt the "${agentName}" persona for this task. Apply that agent's expertise and thinking style to your response. ${executionPath.summary}`;
 
         return recommendation;
       },
@@ -3384,9 +3398,11 @@ ${blockerWarning}
 
 | Mode | Use when | How |
 |------|----------|-----|
-| **Direct in chat** | Small tasks · 1–3 file edits · Quick bugs | I edit files here in Cursor |
-| **PM Team run** | Features · Refactors · Tests · Security audits | \`roland_run_team({ goal })\` |
+| **Direct in chat** | Single-file edits · Q&A · Quick fixes · < 30 min | I edit files here in Cursor |
+| **PM Team run** | Features · Refactors · Tests · Multi-file · > 30 min | \`roland_run_team({ goal })\` after you confirm |
 | **Background mode** | Long-running goals while you keep working | \`roland team "goal" --background\` in terminal |
+
+Every request is triaged to **Direct** or **Team** — I show the path and reasoning before acting.
 
 ## Current project state
 ${bgStatus}
@@ -3449,7 +3465,7 @@ What would you like to work on?`;
     // ── roland_run_team ───────────────────────────────────────────────────────
     this.registerTool(
       'roland_run_team',
-      'Launch a PM team run for a complex goal directly from Cursor chat. The Lead PM (Opus) decomposes the goal into parallel tasks, dispatches specialist agents, and runs until synthesis. Spawns in the background and returns immediately. Track progress with pm_standup() or get_team_context().',
+      'Launch a background PM team run for goals on the **Team** execution path. Use when work needs multi-file changes, Sparrow + Vanguard test orchestration, Command Blackboard tracking, wave synthesis, or > 30–45 min effort. Also use when the operator forces team mode via --force-team, "force team", "full team", "run as team", or "spawn team" (no confirmation needed — launch immediately). Do NOT use for single-file edits, Q&A, or quick fixes unless force-team was explicitly requested. Trade-off: team runs add PM overhead but provide parallel callsigns, blocker surfacing, and Mission Complete synthesis. Returns immediately; track with pm_standup() or get_team_context().',
       async (args: Record<string, unknown>) => {
         const goal = args.goal as string;
         if (!goal || typeof goal !== 'string' || !goal.trim()) {

@@ -150,6 +150,21 @@ function doctor(): void {
       ? undefined
       : 'Required for `roland team` and orchestrate. From repo root: install VS "Desktop development with C++", then `npm rebuild sqlite3`. See docs/guides/mini-pc-deployment.md.',
   );
+
+  // SDK shell-exec cleanup tuning (optional env overrides)
+  const settleMs = process.env.ROLAND_SDK_SETTLE_MS ?? '3500 (default)';
+  const heavySettleMs = process.env.ROLAND_SDK_HEAVY_SETTLE_MS ?? '8000 (default)';
+  const terminalWaitMs = process.env.ROLAND_SDK_TERMINAL_WAIT_MS ?? '30000 (default)';
+  add(
+    true,
+    `SDK cleanup: ROLAND_SDK_SETTLE_MS=${settleMs}, ROLAND_SDK_HEAVY_SETTLE_MS=${heavySettleMs}`,
+  );
+  add(
+    true,
+    `SDK cleanup: ROLAND_SDK_TERMINAL_WAIT_MS=${terminalWaitMs}`,
+    'Raise settle if you see [shell-exec] Close event warnings during team runs.',
+  );
+
   for (const c of checks) {
     console.log(`${c.ok ? '✅' : '❌'} ${c.label}`);
     if (!c.ok && c.hint) console.log(`   → ${c.hint}`);
@@ -186,6 +201,7 @@ function printHelp(): void {
   ln(`    ${cy('roland')} ${b('pr')} [number]               Review (and optionally fix) a GitHub PR`);
   ln(`    ${cy('roland')} ${b('status')}                     Live dashboard for a running job`);
   ln(`    ${cy('roland')} ${b('board-status')}              UNSC summary (add --concise for chat-friendly)`);
+  ln(`    ${cy('roland')} ${b('board-cleanup')}             Archive stale tasks from prior missions`);
   ln(`    ${cy('roland')} ${b('orchestrate')} "goal"       SDK supervisor + UNSC sub-agents`);
   ln();
   ln('  ' + b('OPTIONS') + '  ' + d('(team / watch / pr)'));
@@ -268,7 +284,7 @@ const KNOWN_CMDS = new Set([
   'team', 'run', 'goal', 'start', 'status', 'watch', 'pr', 'chat',
   // HITL controls
   'pause', 'resume', 'unblock', 'inject', 'replan', 'abort', 'hitl-status',
-  'board-status', 'orchestrate',
+  'board-status', 'board-cleanup', 'orchestrate',
   // Background supervisor
   'bg-status', 'bg-logs', 'bg-stop',
   '--help', '-h', '--version',
@@ -381,6 +397,17 @@ async function main(): Promise<void> {
         const goal = goalArgIdx >= 0 ? rest[goalArgIdx + 1] : undefined;
         const { printBoardStatus } = await import('./rco/board-report.js');
         printBoardStatus(stateDir, { json: jsonMode, goal, concise });
+        break;
+      }
+      case 'board-cleanup': {
+        const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const dryRun = rest.includes('--dry-run');
+        const goalArgIdx = rest.indexOf('--goal');
+        const goal = goalArgIdx >= 0 ? rest[goalArgIdx + 1] : '';
+        const { cleanupBoardsForNewMission, formatCleanupReport } = await import('./rco/board-cleanup.js');
+        const result = cleanupBoardsForNewMission(stateDir, goal, { dryRun });
+        console.log(formatCleanupReport(result));
+        if (rest.includes('--json')) console.log(JSON.stringify(result, null, 2));
         break;
       }
       case 'orchestrate': {

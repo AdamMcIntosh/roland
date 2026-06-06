@@ -1,0 +1,10 @@
+
+  [1m❌  CURSOR_API_KEY is not set[0m
+
+  Agent execution requires a Cursor API key. Add to your shell profile:
+
+    [36mexport CURSOR_API_KEY=your_key_here[0m    [2m# .zshrc / .bashrc / PowerShell $PROFILE[0m
+
+  Get your key at: https://cursor.com/settings → API Keys
+  Or diagnose your install: [36mroland doctor[0m
+

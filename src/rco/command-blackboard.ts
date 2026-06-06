@@ -125,9 +125,10 @@ export class CommandBlackboard {
     const scored: Array<{ section: BlackboardSection; bullet: string; score: number }> = [];
 
     for (const [section, bullets] of Object.entries(sections)) {
+      if (section === 'Agent Logs') continue; // logs are rarely planning-relevant
       bullets.forEach((bullet, idx) => {
-        const score =
-          tokenOverlap(tokens, tokenize(bullet)) + idx * 0.01; // recency bias
+        const score = scoreBulletForRecall(bullet, section as BlackboardSection, tokens, idx);
+        if (score < -100) return; // filtered stale entries
         scored.push({ section: section as BlackboardSection, bullet, score });
       });
     }
@@ -148,6 +149,17 @@ export class CommandBlackboard {
 
     if (lines.length <= 1) return this.snapshot(maxChars);
     return lines.join('');
+  }
+
+  /** Replace section bullets in one write (used by board cleanup). */
+  replaceSections(sections: Partial<Record<BlackboardSection, string[]>>): void {
+    const current = parseSections(fs.readFileSync(this.filePath, 'utf-8'));
+    fs.writeFileSync(this.filePath, renderSections({ ...current, ...sections }), 'utf-8');
+  }
+
+  /** Read parsed sections for programmatic cleanup. */
+  readSections(): Partial<Record<BlackboardSection, string[]>> {
+    return parseSections(fs.readFileSync(this.filePath, 'utf-8'));
   }
 
   /** Append a bullet to any section. */
@@ -357,4 +369,50 @@ function tokenOverlap(a: Set<string>, b: Set<string>): number {
   return n;
 }
 
-export { AGENT_LOG_HEADER_RE };
+const STALE_TASK_RE = /\[(done|complete|cancelled|archived)\]/i;
+const STALE_PENDING_RE = /\[(pending)\]/i;
+const CLEARED_INTEL_RE = /\[(blocker\s+)?cleared\]|deferred\s+—|fixed in task-/i;
+
+function isGoalRelevant(text: string, goalTokens: Set<string>): boolean {
+  if (goalTokens.size === 0) return false;
+  return tokenOverlap(goalTokens, tokenize(text)) >= 2;
+}
+
+/** Score a bullet for smart recall; return -999 to exclude stale noise. */
+function scoreBulletForRecall(
+  bullet: string,
+  section: BlackboardSection,
+  goalTokens: Set<string>,
+  index: number,
+): number {
+  const b = bullet.trim();
+  if (!b || b.startsWith('_(')) return -999;
+
+  let score = tokenOverlap(goalTokens, tokenize(b)) + index * 0.01;
+
+  if (section === 'Active Tasks') {
+    if (STALE_TASK_RE.test(b)) return -999;
+    if (STALE_PENDING_RE.test(b) && !isGoalRelevant(b, goalTokens)) return -999;
+    if (/\[in_progress\]/i.test(b)) score += 2;
+  }
+
+  if (section === 'Mission Objectives') {
+    if (/\[(complete|cancelled|archived)\]/i.test(b)) return -999;
+    if (/\[(P[1-4]\s+)?active\]/i.test(b)) score += 3;
+    else if (!isGoalRelevant(b, goalTokens)) score -= 2;
+  }
+
+  if (section === 'Open Intel') {
+    if (CLEARED_INTEL_RE.test(b)) return -999;
+    if (/\[BLOCKER\]/i.test(b) && !/\bcleared\b/i.test(b)) score += 4;
+  }
+
+  if (section === 'Agent Status') {
+    if (/\b(idle|complete)\b/i.test(b)) return -999;
+    if (/\b(active|blocked)\b/i.test(b)) score += 1;
+  }
+
+  return score;
+}
+
+export { AGENT_LOG_HEADER_RE, isGoalRelevant, tokenize, tokenOverlap };

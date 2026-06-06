@@ -23,6 +23,13 @@ import type { FileBundle } from '../utils/file-gatherer.js';
 import { formatBundleAsMarkdown } from '../utils/file-gatherer.js';
 import { ClaudePromptPayloadSchema } from '../schemas.js';
 
+const IMPLEMENTATION_AGENTS = new Set(['sparrow', 'executor', 'executor-low', 'executor-high']);
+
+function isImplementationAgent(name: string): boolean {
+  const n = name.toLowerCase();
+  return IMPLEMENTATION_AGENTS.has(n) || n.includes('executor');
+}
+
 export interface ToolCallingPromptInput {
   agentYaml: AgentYaml;
   taskContext: string;
@@ -112,6 +119,24 @@ export function buildClaudeToolCallingPrompt(input: ToolCallingPromptInput): str
   // ── Task context ──────────────────────────────────────────────────────────
   sections.push(`## Your Task\n\n${p.taskContext}`);
 
+  const agentName = (p.agentName ?? input.agentYaml.name ?? 'agent').toLowerCase();
+  const isImplementer = isImplementationAgent(agentName);
+
+  if (isImplementer) {
+    sections.push(`## Sparrow Handoff Protocol (Roland → You)
+
+Before writing or editing code:
+
+1. **Restate assumptions** — Open with \`## Assumptions\`: goal, files to touch, done-when criterion, **Patterns** (2–3 peer files read), **Edge cases** you will guard, and any Command Blackboard Key Decision you honour.
+2. **Read peers first** — Find 2–3 similar files (e.g. \`cors.js\` + \`requestLogger.js\` for middleware; sibling routes for handlers). Mirror their exports, imports, logging child-logger pattern, and error shape. **Extend existing patterns — do not invent parallel conventions.**
+3. **Defensive coding** — Guard clauses at entry; safe header/query/body access (headers may be \`string | string[] | undefined\`); null-safe defaults; meaningful server-side logs with safe client errors.
+4. **Wire completely** — New middleware/routes/services must be registered in the app entry point in the same order/style as peers; unregistered code is a partial delivery.
+5. **Comments & TODOs** — Brief \`why\` comments on non-obvious choices; \`// TODO(scope): reason\` for known limitations not fixed this task.
+6. **pino-http wiring** — Custom req/res serializers must be passed on \`pinoHttp({ serializers: { req, res } })\`, not only on the parent logger; use \`wrapSerializers: false\` when serializers already wrap std serializers. Handlers use \`req.log\`, never the shared base logger.
+7. **Cite blackboard** — When a Key Decision constrains your approach, quote it in Assumptions. Contradict only via BLOCKER.
+8. **Never guess paths** — If the repo layout is unclear, search before creating files. Wrong-directory scaffolding causes rework.`);
+  }
+
   // ── Previous agent output ─────────────────────────────────────────────────
   if (p.stepInput) {
     sections.push(`## Output from Previous Agent\n\n${p.stepInput}`);
@@ -125,6 +150,10 @@ You received upstream output from a prior wave. Before writing code or tests:
 4. **Never guess** — If upstream output is incomplete, ambiguous, or missing files you need, emit a BLOCKER immediately. Silent assumptions cause rework for every downstream callsign.
 
 **Vanguard handoff (test-author → test-executor):** test-author lists exact test file paths and npm/vitest commands; test-executor runs them verbatim — do not rewrite tests unless BLOCKED.`);
+  } else if (isImplementer && input.commandBlackboardSnapshot) {
+    sections.push(`## Command Blackboard Decisions
+
+The excerpt below includes Key Decisions and Open Intel from prior waves. **Cite applicable bullets in your ## Assumptions section.**`);
   }
 
   // ── Relevant project files ────────────────────────────────────────────────
@@ -204,9 +233,19 @@ Replace \`roland\` with any callsign (e.g. \`sparrow\`, \`vanguard\`, \`oracle\`
   const producesDotGraph =
     toolsList.includes('dependency-mapper') || toolsList.includes('graph-visualizer');
 
+  const implementerFormat = `Respond in well-structured markdown. **Required section order for implementation tasks:**
+
+1. \`## Assumptions\` — goal, files, done-when, **Patterns** (peer files cited), **Edge cases**, **Blackboard** decisions
+2. \`## Implementation\` — what you built and why (reference peer patterns by path)
+3. \`## Sparrow — Task Complete\` — Objective, Changes, Wiring, Defensive, Verification, Follow-up, TODOs left
+
+Use \`## 🚨 BLOCKER\` only when truly blocked. Be specific — the Lead PM and Vanguard read your output verbatim.`;
+
   const baseFormat = producesDotGraph
     ? `Respond in well-structured markdown. Include your dependency or architecture graph in a \`\`\`dot code block.\n\nUse section headers such as:\n- ## Analysis\n- ## Dependencies (with \`\`\`dot block)\n- ## Recommendations`
-    : `Respond in well-structured markdown prose. Use clear section headers appropriate to your role:\n\n- **Planner / Architect**: \`## Plan\`, \`## Approach\`, \`## Open Questions\`\n- **Executor / Builder**: \`## Implementation\`, \`## Changes Made\`, \`## Next Steps\`\n- **Reviewer / Critic**: \`## Review\`, \`## Issues Found\`, \`## Recommendations\`\n- **QA / Tester**: \`## Test Results\`, \`## Failures\`, \`## Coverage\`\n- **Doc Writer**: \`## Documentation\`, \`## Summary\`\n\nBe specific and actionable — the Lead PM and the next agent both read your output.`;
+    : isImplementer
+      ? implementerFormat
+      : `Respond in well-structured markdown prose. Use clear section headers appropriate to your role:\n\n- **Planner / Architect**: \`## Plan\`, \`## Approach\`, \`## Open Questions\`\n- **Executor / Builder**: \`## Implementation\`, \`## Changes Made\`, \`## Next Steps\`\n- **Reviewer / Critic**: \`## Review\`, \`## Issues Found\`, \`## Recommendations\`\n- **QA / Tester**: \`## Test Results\`, \`## Failures\`, \`## Coverage\`\n- **Doc Writer**: \`## Documentation\`, \`## Summary\`\n\nBe specific and actionable — the Lead PM and the next agent both read your output.`;
 
   sections.push(`## Response Format\n\n${baseFormat}`);
 

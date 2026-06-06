@@ -78,6 +78,27 @@ Some synthesis text
     expect(snap).toContain('health check');
   });
 
+  it('smartSnapshot excludes done and cleared intel', () => {
+    board.appendBullet('Active Tasks', '[done] task-1 — Sparrow: Old feature');
+    board.appendBullet('Open Intel', '[BLOCKER cleared] schema fixed');
+    board.appendBullet('Key Decisions', 'Use pino for structured logging in woody');
+
+    const snap = board.smartSnapshot('Add pino logging to woody Express');
+    expect(snap).not.toContain('[done] task-1');
+    expect(snap).not.toContain('BLOCKER cleared');
+    expect(snap).toContain('pino');
+  });
+
+  it('replaceSections updates multiple sections', () => {
+    board.replaceSections({
+      'Active Tasks': ['[in_progress] task-99 — Sparrow: Current work'],
+      'Agent Status': ['**Sparrow**: active task:task-99'],
+    });
+    const snap = board.snapshot();
+    expect(snap).toContain('task-99');
+    expect(snap).toContain('**Sparrow**: active');
+  });
+
   it('buildEmptyTemplate is valid markdown', () => {
     const t = buildEmptyTemplate();
     expect(t).toContain('# UNSC Command Blackboard');

@@ -11,11 +11,18 @@ Before responding to any coding, development, or technical request, **always cal
 
 1. Call the `triage` tool with `{ "message": "<the user's full message>" }`
 2. Read the response — it tells you:
+   - **`execution_path.path`** — `"direct"` (handle in chat) or `"team"` (offer `roland team`)
+   - **`execution_path.summary`** — one-line decision to show the operator
+   - **`execution_path.team_offer`** — copy-paste prompt when path is `"team"`
+   - **`execution_path.forced`** — `true` when operator used `--force-team`, `force team`, `full team`, `run as team`, or `spawn team`
+   - **`execution_path.cleaned_goal`** — goal with force triggers stripped (use for `roland_run_team`)
    - **Which agent persona** to adopt (architect, executor, researcher, etc.)
    - **Whether a multi-agent recipe** is recommended (BugFix, WebAppFullStack, etc.)
    - **Complexity level** and suggested depth (quick / standard / deep)
-3. **Adopt the recommended agent's thinking style** in your response
-4. If a recipe is suggested, **offer to run it** — e.g., "This looks like a good fit for the BugFix workflow. Want me to run it, or should I handle it directly?"
+3. **State the execution path visibly** — e.g. `**Execution path:** Direct — single-file comment (~10 min)`
+4. If `execution_path.path` is `"team"`, **do not implement in chat** — use `team_offer` and wait for confirmation before `roland_run_team`, **except** when `execution_path.forced` is true: respond *"Understood — forcing full team mission."* and call `roland_run_team({ goal: execution_path.cleaned_goal })` immediately
+5. **Adopt the recommended agent's thinking style** in your response (for Direct path work)
+6. If a recipe is suggested, **offer to run it** — e.g., "This looks like a good fit for the BugFix workflow. Want me to run it, or should I handle it directly?"
 
 ### When NOT to triage
 

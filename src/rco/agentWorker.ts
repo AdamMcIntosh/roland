@@ -18,7 +18,14 @@ import { runTool } from './tools.js';
 import { buildClaudeToolCallingPrompt } from './prompts.js';
 import { parseClaudeResponseText } from '../schemas.js';
 import { toCursorModelId } from './model-routing.js';
-import { cleanupSdkSession, configureSdkProcessLimits } from '../utils/sdk-lifecycle.js';
+import { AGENT_TIMEOUT_MS } from './constants.js';
+import {
+  cleanupSdkSession,
+  configureSdkProcessLimits,
+  resolveSdkAgentLocalOptions,
+  resolveSdkSettleMs,
+  waitForSdkRun,
+} from '../utils/sdk-lifecycle.js';
 
 configureSdkProcessLimits();
 
@@ -92,11 +99,14 @@ async function getResponseViaCursorSDK(prompt: string, agentName: string, model:
       apiKey,
       model: { id: toCursorModelId(model, agentName) },
       name: agentName,
-      local: { cwd: process.cwd() },
+      local: resolveSdkAgentLocalOptions(agentName, { cwd: process.cwd() }) as import('@cursor/sdk').LocalAgentOptions,
     });
 
     run = await agent.send(prompt);
-    const runResult = await run.wait();
+    const runResult = await waitForSdkRun(run, {
+      timeoutMs: AGENT_TIMEOUT_MS,
+      agentName,
+    });
 
     if (runResult.status === 'error' || runResult.status === 'cancelled') {
       throw new Error(`Cursor agent "${agentName}" ${runResult.status}: ${runResult.result ?? 'no detail'}`);
@@ -104,7 +114,11 @@ async function getResponseViaCursorSDK(prompt: string, agentName: string, model:
 
     return JSON.stringify({ output: runResult.result ?? '', success: true });
   } finally {
-    await cleanupSdkSession(agent, run);
+    const settleMs = resolveSdkSettleMs(agentName, prompt);
+    const { forced } = await cleanupSdkSession(agent, run, { settleMs, agentName });
+    if (forced) {
+      log('cursor-sdk', `Force cleanup after settle (${settleMs}ms) for ${agentName}`);
+    }
   }
 }
 
