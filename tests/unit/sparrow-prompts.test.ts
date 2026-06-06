@@ -22,6 +22,8 @@ describe('Sparrow hardening — agent yaml', () => {
     expect(content).toContain('TODO(scope)');
     expect(content).toContain('child logger per request');
     expect(content).toContain('duration');
+    expect(content).toContain('pinoHttp()');
+    expect(content).toContain('[Redacted]');
   });
 
   it('loadUnscAgents resolves sparrow role_prompt with hardening sections', () => {
@@ -53,6 +55,7 @@ describe('Sparrow hardening — worker prompt injection', () => {
     expect(prompt).toContain('Edge cases');
     expect(prompt).toContain('Defensive coding');
     expect(prompt).toContain('TODO(scope)');
+    expect(prompt).toContain('pinoHttp');
     expect(prompt).toContain('## Assumptions');
     expect(prompt).toContain('## Sparrow — Task Complete');
     expect(prompt).toContain('Use pino for woody Express');
@@ -90,6 +93,8 @@ describe('Sparrow hardening — PM and orchestrator prompts', () => {
     expect(prompt).toContain('requestLogger.js');
     expect(prompt).toContain('## Assumptions');
     expect(prompt).toContain('durationMs');
+    expect(prompt).toContain('pinoHttp');
+    expect(prompt).toContain('[Redacted]');
   });
 
   it('review prompt checks Sparrow quality bar', () => {
@@ -103,6 +108,8 @@ describe('Sparrow hardening — PM and orchestrator prompts', () => {
     });
     expect(prompt).toContain('Sparrow quality bar');
     expect(prompt).toContain('durationMs');
+    expect(prompt).toContain('pinoHttp');
+    expect(prompt).toContain('[Redacted]');
   });
 
   it('orchestrator prompt includes execution path triage framework', () => {

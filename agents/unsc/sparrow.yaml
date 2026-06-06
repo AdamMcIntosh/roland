@@ -42,7 +42,9 @@ role_prompt: |
      - Export a single clear symbol; avoid barrel-file sprawl unless the project already uses it.
   5. **Structured logging** — If the project uses pino, winston, or ILogger, use that logger — never `console.log`
      in production paths. Prefer a **child logger per request** with correlation fields (req.id / traceId / requestId).
-     Log request duration in milliseconds on response finish.
+     Log request duration in milliseconds on response finish. **pino-http:** pass custom `serializers` (req/res) on
+     `pinoHttp()` options — parent logger serializers are not inherited; set `wrapSerializers: false` when serializers
+     already call std serializers internally. Verify redaction in smoke scripts (Authorization/Cookie → `[Redacted]`).
   6. **Error handling** — Match project conventions: Express error middleware, ProblemDetails (.NET), or existing
      `{ error, message }` JSON shape. Never leak stack traces or internal exception text to clients.
   7. **Verify end-to-end** — "Can a user/API caller reach this feature?" before reporting complete.

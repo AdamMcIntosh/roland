@@ -276,7 +276,7 @@ Every \`executor\` / \`sparrow\` task \`description\` MUST include this block ve
 1. **Pattern adherence:** Read 2–3 peer files in the same layer (e.g. cors.js + requestLogger.js for middleware) before editing. Mirror their exports, logging, and error patterns — extend, do not reinvent.
 2. **Assumptions first:** Open output with ## Assumptions — goal, files, done-when, Patterns (peers cited), Edge cases, Blackboard decisions honoured.
 3. **Defensive coding:** Guard clauses; safe header/query/body access (headers may be string | string[] | undefined); null-safe defaults; structured server logs + safe client errors.
-4. **Logging:** Use the project's logger (pino/winston/ILogger) — child logger per request when applicable; log durationMs on response finish; never console.log in production paths.
+4. **Logging:** Use the project's logger (pino/winston/ILogger) — child logger per request when applicable; log durationMs on response finish; never console.log in production paths. **pino-http:** pass custom \`serializers\` (req/res) on the \`pinoHttp()\` options — parent logger serializers are not inherited by the pino-http child; verify redaction with a smoke script sending Authorization/Cookie and asserting \`[Redacted]\` in emitted JSON.
 5. **Comments & TODOs:** Brief why-comments on non-obvious choices; // TODO(scope): reason for known limitations left unfixed.
 6. **Completion report:** End with ## Sparrow — Task Complete including Wiring, Defensive, Verification, and TODOs left.
 \`\`\`
@@ -878,7 +878,7 @@ For **every executor task** in this wave, answer these questions before choosing
 1. **Is the feature reachable end-to-end?** Is the new code wired into every relevant endpoint, DI registration, middleware pipeline, and handler — not just written as a standalone class?
 2. **Are production hardening items present?** Check: EF Core migrations committed, no hardcoded secrets, input validation returns ProblemDetails, rate limiting applied, ILogger<T> structured logging in place, CancellationToken propagated, all error paths return ProblemDetails. **Skip this check for minimal/local tasks** (comment edits, one-line changes) unless the wave explicitly delivered a new API or service.
 3. **Are tests covering the wired path?** A test that only unit-tests a helper in isolation does not prove the endpoint works.
-4. **Sparrow quality bar met?** Did the executor open with \`## Assumptions\` (Patterns + Edge cases cited)? Mirror peer files instead of new conventions? Include guard clauses / safe header handling where inputs are read? Use structured logging with child logger + durationMs when logging was in scope? End with \`## Sparrow — Task Complete\` including Wiring and Defensive?
+4. **Sparrow quality bar met?** Did the executor open with \`## Assumptions\` (Patterns + Edge cases cited)? Mirror peer files instead of new conventions? Include guard clauses / safe header handling where inputs are read? Use structured logging with child logger + durationMs when logging was in scope? For pino-http: are custom \`serializers\` wired on \`pinoHttp()\` options (not only the parent logger) so redaction runs at emission time — smoke script must assert \`[Redacted]\` for Authorization/Cookie? End with \`## Sparrow — Task Complete\` including Wiring and Defensive?
 
 If **any answer is "no" or "unclear"**, you MUST respond with \`"decision": "adjust"\` and spawn a follow-up executor task to complete the wiring. Partial delivery is a release blocker.
 

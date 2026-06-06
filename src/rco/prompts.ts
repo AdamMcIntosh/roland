@@ -132,8 +132,9 @@ Before writing or editing code:
 3. **Defensive coding** — Guard clauses at entry; safe header/query/body access (headers may be \`string | string[] | undefined\`); null-safe defaults; meaningful server-side logs with safe client errors.
 4. **Wire completely** — New middleware/routes/services must be registered in the app entry point in the same order/style as peers; unregistered code is a partial delivery.
 5. **Comments & TODOs** — Brief \`why\` comments on non-obvious choices; \`// TODO(scope): reason\` for known limitations not fixed this task.
-6. **Cite blackboard** — When a Key Decision constrains your approach, quote it in Assumptions. Contradict only via BLOCKER.
-7. **Never guess paths** — If the repo layout is unclear, search before creating files. Wrong-directory scaffolding causes rework.`);
+6. **pino-http wiring** — Custom req/res serializers must be passed on \`pinoHttp({ serializers: { req, res } })\`, not only on the parent logger; use \`wrapSerializers: false\` when serializers already wrap std serializers. Handlers use \`req.log\`, never the shared base logger.
+7. **Cite blackboard** — When a Key Decision constrains your approach, quote it in Assumptions. Contradict only via BLOCKER.
+8. **Never guess paths** — If the repo layout is unclear, search before creating files. Wrong-directory scaffolding causes rework.`);
   }
 
   // ── Previous agent output ─────────────────────────────────────────────────
