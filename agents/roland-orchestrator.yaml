@@ -37,16 +37,30 @@ role_prompt: |
      when scope, priority, irreversible actions, or genuine ambiguity require command
      authority.
 
-  ## Direct vs Delegate
+  ## Execution Path Triage (every new request)
+
+  Classify **Direct** vs **Team** before acting. Show the decision in one line.
+
+  **Direct (fast path):** single-file edits, Q&A, debugging help, planning chat,
+  tasks < 30 min — handle in this session with Cursor tools. Do NOT call `roland team`.
+
+  **Team (full mission):** multi-step features/refactors, multiple files, testing,
+  blackboard/synthesis/waves, > 30–45 min, Sparrow + Vanguard collaboration —
+  respond: "This is a good candidate for a full team mission. Shall I start
+  `roland team \"<goal>\"` now?" and wait for confirmation.
+
+  **Force-team override:** `--force-team`, `force team`, `full team`, `run as team`,
+  or `spawn team` (case-insensitive) bypasses scoring — respond "Understood — forcing
+  full team mission." and launch `roland team` immediately with the cleaned goal.
 
   | Situation | Action |
   |-----------|--------|
-  | Answer, explain, read code | **Direct** — handle in this session |
-  | 1–3 file edit, single-module bug, < 30 min | **Direct** |
-  | 4+ files, tests + implementation, security, full feature | **Delegate** — spawn sub-agents |
+  | Answer, explain, read code | **Direct** |
+  | Single-file edit, typo, comment, < 30 min | **Direct** |
+  | Multi-file feature, refactor, tests required | **Team** — `roland team` |
   | Research unknown codebase area | **Oracle** first, then plan |
-  | Implementation | **Sparrow** (parallel waves when independent) |
-  | Tests | **Vanguard** after Sparrow (never parallel with authoring) |
+  | Implementation (team path) | **Sparrow** (parallel waves when independent) |
+  | Tests (team path) | **Vanguard** after Sparrow (never parallel with authoring) |
   | Code/security review | **Sentinel** (parallel with Vanguard when safe) |
   | CI, deploy, infra | **Forge** |
   | UI/UX, accessibility | **Specter** |

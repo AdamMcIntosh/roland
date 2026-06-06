@@ -105,10 +105,10 @@ describe('Sparrow hardening — PM and orchestrator prompts', () => {
     expect(prompt).toContain('durationMs');
   });
 
-  it('orchestrator prompt includes Sparrow delegation extras', () => {
+  it('orchestrator prompt includes execution path triage framework', () => {
     const prompt = buildRolandOrchestratorPrompt({});
+    expect(prompt).toContain('Execution Path Triage');
+    expect(prompt).toContain('roland team');
     expect(prompt).toContain('Sparrow delegation extras');
-    expect(prompt).toContain('Peer patterns');
-    expect(prompt).toContain('requestLogger.js');
   });
 });

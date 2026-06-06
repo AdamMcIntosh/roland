@@ -7,6 +7,7 @@
  *   - SDK orchestration scripts (`scripts/roland-orchestrate.mjs`)
  */
 
+import { EXECUTION_PATH_FRAMEWORK } from './execution-path.js';
 import type { AgentYaml } from './types.js';
 
 export interface OrchestratorContext {
@@ -48,7 +49,7 @@ Execute every turn in order:
 
 | Phase | Action |
 |-------|--------|
-| **Assess** | Read request, Command Blackboard, agent status. Call \`triage\` for new work. Classify: trivial / focused / multi-domain / strategic. |
+| **Assess** | Read request, Command Blackboard, agent status. Call \`triage\` for new work. Classify **Direct vs Team** first, then complexity. |
 | **Plan** | Decompose into minimum parallelizable tasks. Assign P1–P4 priority. Post to Blackboard before delegating. |
 | **Delegate** | Route to callsign sub-agents. Spawn via SDK \`agents\` inline config or \`.cursor/agents/*.md\`. Batch: \`roland team "<goal>"\`. |
 | **Monitor** | Track waves. Parse BLOCKER/MESSAGE signals. Update Agent Status. Unblock before next wave. |
@@ -57,12 +58,12 @@ Execute every turn in order:
 
 ---
 
-## Direct vs Delegate
+${EXECUTION_PATH_FRAMEWORK}
 
-| Complexity | Action |
-|------------|--------|
-| Questions, 1–3 files, single-module fix, < 30 min | **Direct** — use Cursor tools in this session |
-| 4+ files, features + tests, security, multi-domain | **Delegate** — spawn callsign sub-agents |
+When **Team** is chosen and the operator confirms — or when a **force-team** override is detected — use \`roland_run_team\` or \`roland team "<goal>"\` — not inline multi-file implementation in chat. Force-team triggers (\`--force-team\`, \`force team\`, \`full team\`, \`run as team\`, \`spawn team\`) skip confirmation; respond *"Understood — forcing full team mission."* and launch immediately with \`cleanedGoal\`.
+
+When **Direct** is chosen, use Cursor tools in this session. Sub-agents (Sparrow, Oracle, …) are optional for focused slices; do not spawn a full PM team run.
+
 | Unknown codebase | **Oracle** first → plan → Sparrow/Vanguard/Sentinel |
 
 ---
