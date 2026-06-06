@@ -1,13 +1,29 @@
 # PM Team Workflow — You Are the PM
 
-Roland turns Cursor into a small engineering team that **you manage**. You stay
-on Claude Opus 4.7 as the Lead PM; your engineers run on Cursor's Composer 2.5
-models. Your job is not to write code — it's to **decompose work, delegate it,
-and keep the team unblocked.**
+Roland turns Cursor into a small engineering team that **you manage**. In this **manual PM mode**, you act as Lead PM in chat; engineers run in separate Cursor panes on Composer 2.5 (Sparrow, Vanguard, Oracle, …). Your job is not to write code — it's to **decompose work, delegate it, and keep the team unblocked.**
 
 > **The mantra:** *I am the PM. Roland runs the team. Keep them unblocked.*
 
-This guide walks one feature end to end.
+For **autonomous PM team runs** (Lead PM is grok-4.3 inside `roland team`), see the [main README](../../README.md) and [DAILY-USAGE.md](../../DAILY-USAGE.md).
+
+---
+
+## Direct vs Team vs manual PM
+
+| Mode | Who plans | When |
+|------|-----------|------|
+| **Direct** | You + Cursor chat | Single-file edits, Q&A, < ~30 min — `triage` returns `execution_path.path: "direct"` |
+| **Team (autonomous)** | Lead PM (grok-4.3) | `roland team "goal"` or MCP `roland_run_team` |
+| **Manual PM (this guide)** | You in chat | Fine-grained control; `spawn_task`, `assign_task`, separate engineer panes |
+
+Force full autonomous team from chat: append `--force-team` or say `force team: …` — Roland calls `roland_run_team` immediately.
+
+Check battlespace anytime:
+
+```
+board_status
+# or terminal: roland board-status --concise
+```
 
 ---
 

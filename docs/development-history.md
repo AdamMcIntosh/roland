@@ -1,6 +1,6 @@
 # Development History
 
-Internal reference documenting the evolution of Roland Code Orchestrator (RCO) through four post-MVP phases. For the current feature set, see [README](../ReadMe.MD).
+Internal reference documenting the evolution of Roland Code Orchestrator (RCO) through four post-MVP phases. For the current feature set, see [README](../README.md).
 
 ---
 

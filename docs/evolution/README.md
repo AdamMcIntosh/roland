@@ -1,199 +1,260 @@
-# Roland Evolution — UNSC Orchestration Step
+# Roland Evolution — Architecture & Capabilities
 
-This evolution strengthens Roland as a **Cursor SDK supervisor** with Halo-themed sub-agents, a military reasoning loop, and a structured Command Blackboard — while preserving the web UI request/response model and GitHub branch + PR automation.
+Roland operates as a **UNSC Smart AI supervisor**: a Lead PM orchestrates Halo-themed callsign specialists through the Cursor SDK, a live Command Blackboard, and execution-path triage (Direct chat vs full team mission).
 
-## Deliverables
+Phase 1 (Command Blackboard, SDK orchestration, global CLI) and Phase 2 (CLI polish, blackboard hygiene, Sparrow hardening, execution-path triage, GitHub branch workflow) are **complete and wired into production paths**.
+
+---
+
+## Capabilities at a glance
+
+| Capability | Status | Entry point |
+|------------|--------|-------------|
+| PM team execution | ✅ Production | `roland team "goal"` |
+| Interactive chat CLI | ✅ Production | `roland` / `roland chat` |
+| SDK orchestrate mode | ✅ Production | `roland orchestrate "goal"` |
+| Command Blackboard | ✅ Wired into `runTeam()` | `.roland/command-blackboard.md` |
+| Board cleanup / hygiene | ✅ Auto at mission start | `board-cleanup.ts`, `roland board-cleanup` |
+| Execution-path triage | ✅ MCP + rules | `triage` tool, `execution-path.ts` |
+| Force-team override | ✅ Production | `--force-team`, `force team`, … |
+| Sparrow hardening | ✅ Production | `agents/unsc/sparrow.yaml`, worker prompts |
+| UNSC callsign map | ✅ Production | `unsc-agents.ts`, legacy alias routing |
+| GitHub PR mode | ✅ Production | `roland pr`, `roland/<slug>` branches |
+| HITL controls | ✅ Production | `pause`, `resume`, `inject`, … |
+| Background supervisor | ✅ Production | `--background`, `bg-status`, `bg-logs` |
+| MCP server (47 tools) | ✅ Production | `roland mcp-config --write` |
+| Project memory + smart recall | ✅ Production | `.roland/memory.md` |
+| Self-improvement loop | ✅ Production | post-synthesis retrospective |
+| Web dashboard | ✅ Production | `npm run serve-dashboard` |
+
+---
+
+## Architecture diagram
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Operator — Cursor chat · CLI · Dashboard · SSH HITL          │
+└────────────┬───────────────────────────────┬────────────────────┘
+             │                               │
+             ▼                               ▼
+┌────────────────────────┐      ┌───────────────────────────────┐
+│  MCP server            │      │  CLI (index.ts)               │
+│  triage · roland_run_  │      │  team · orchestrate · board-  │
+│  team · pm_standup ·   │      │  status · board-cleanup · HITL│
+│  board_status · …      │      └───────────────┬───────────────┘
+└────────────┬───────────┘                      │
+             │                                  │
+             └──────────────┬───────────────────┘
+                            ▼
+              ┌─────────────────────────────┐
+              │  team-orchestrator.ts       │
+              │  Plan → Waves → Review →    │
+              │  Synthesis                  │
+              └─────────────┬───────────────┘
+                            │
+         ┌──────────────────┼──────────────────┐
+         ▼                  ▼                  ▼
+┌─────────────────┐ ┌───────────────┐ ┌─────────────────┐
+│ Lead PM         │ │ Worker agents │ │ Command         │
+│ grok-4.3        │ │ Sparrow ·     │ │ Blackboard +    │
+│ planning/review │ │ Vanguard ·    │ │ blackboard.json │
+│ synthesis       │ │ Oracle · …    │ │ memory.md       │
+└─────────────────┘ └───────────────┘ └─────────────────┘
+```
+
+---
+
+## Execution modes
+
+| Mode | Best for | Command / tool |
+|------|----------|----------------|
+| **Direct** | Single-file edits, Q&A, < 30 min | Cursor chat + tools |
+| **Team** | Multi-file missions, tests, synthesis | `roland team`, `roland_run_team` |
+| **Orchestrate** | SDK supervisor with inline sub-agents | `roland orchestrate` |
+| **Manual PM** | You dispatch engineers in separate panes | MCP `spawn_task`, `pm_standup`, recipes |
+
+### Execution-path triage
+
+`src/rco/execution-path.ts` classifies requests as **direct** or **team**:
+
+- Heuristic scoring (scope, file count signals, explicit Sparrow+Vanguard mentions)
+- **Force-team triggers** bypass scoring: `--force-team`, `force team`, `full team`, `run as team`, `spawn team`
+- Embedded in Roland system prompts (`EXECUTION_PATH_FRAMEWORK`) and MCP `triage` response (`execution_path.*`)
+
+Cursor rules (`.cursor/rules/roland.mdc`, `roland-autopilot.mdc`) require visible path declaration and correct spawn behavior.
+
+---
+
+## Deliverables map
 
 | Artifact | Location |
 |----------|----------|
 | Orchestrator persona | `agents/roland-orchestrator.yaml` |
-| Sub-agent templates (YAML) | `agents/unsc/*.yaml` |
-| SDK sub-agent definitions (MD) | `.cursor/agents/*.md` |
-| Orchestrator prompt builder | `src/rco/orchestrator-prompts.ts` |
-| Command Blackboard module | `src/rco/command-blackboard.ts` |
+| UNSC sub-agent YAML | `agents/unsc/*.yaml` |
+| Cursor SDK sub-agent MD | `.cursor/agents/*.md` |
+| Orchestrator prompts | `src/rco/orchestrator-prompts.ts` |
+| Command Blackboard | `src/rco/command-blackboard.ts` |
+| Board cleanup | `src/rco/board-cleanup.ts` |
+| Execution-path triage | `src/rco/execution-path.ts` |
 | SDK agent loader | `src/rco/unsc-agents.ts` |
-| Reference orchestration script | `scripts/roland-orchestrate.mjs` |
-| Architecture | [command-blackboard.md](./command-blackboard.md) |
-| Sample workflow | [sample-workflow-rate-limiting.md](./sample-workflow-rate-limiting.md) |
-| SDK patterns | [cursor-sdk-orchestration.md](./cursor-sdk-orchestration.md) |
+| PM team loop | `src/rco/team-orchestrator.ts` |
+| Board status report | `src/rco/board-report.ts` |
+| Reference orchestration | `scripts/roland-orchestrate.mjs` |
+| Global CLI shim | `bin/roland.js` |
 
-## Suggested Folder Structure
+---
+
+## Folder structure
 
 ```
 roland/
 ├── agents/
-│   ├── roland-orchestrator.yaml    ← Supervisor persona (evolves lead-pm)
-│   ├── unsc/                       ← Halo callsign specialists
-│   │   ├── sparrow.yaml
-│   │   ├── vanguard.yaml
-│   │   ├── oracle.yaml
-│   │   ├── sentinel.yaml
-│   │   ├── forge.yaml
-│   │   └── specter.yaml
-│   └── *.yaml                      ← Legacy roster (still used by roland team)
+│   ├── roland-orchestrator.yaml
+│   ├── unsc/                    ← Sparrow, Vanguard, Oracle, Sentinel, Forge, Specter
+│   └── *.yaml                   ← Legacy roster (still used by roland team)
 ├── .cursor/
-│   ├── agents/                     ← Cursor SDK file-based subagents
-│   │   ├── roland.md
-│   │   ├── sparrow.md
-│   │   └── ...
-│   └── rules/
-│       └── roland.mdc              ← Interactive chat persona
-├── .roland/
-│   ├── command-blackboard.md       ← Human-readable UNSC battlespace (NEW)
-│   ├── blackboard.json             ← Machine-readable tasks (existing)
-│   ├── memory.md                   ← Cross-run learning (existing, complementary)
-│   └── messages.json               ← Inter-agent bus (existing)
+│   ├── agents/                  ← SDK file-based subagents
+│   └── rules/                   ← roland.mdc, roland-autopilot.mdc
+├── .roland/                     ← per-project state (created at runtime)
+│   ├── command-blackboard.md
+│   ├── blackboard.json
+│   ├── memory.md
+│   └── messages.json
 ├── src/rco/
-│   ├── orchestrator-prompts.ts     ← buildRolandOrchestratorPrompt()
-│   ├── command-blackboard.ts       ← CommandBlackboard class
-│   ├── unsc-agents.ts              ← YAML → SDK agents map
-│   └── team-orchestrator.ts        ← Existing PM loop (integrate incrementally)
-├── scripts/
-│   └── roland-orchestrate.mjs      ← SDK orchestration reference
-└── docs/evolution/                 ← This documentation set
+│   ├── team-orchestrator.ts
+│   ├── command-blackboard.ts
+│   ├── board-cleanup.ts
+│   ├── execution-path.ts
+│   └── orchestrator-prompts.ts
+├── recipes/teams/               ← full-feature-team, bugfix-team, refactor-team
+└── docs/evolution/              ← this documentation set
 ```
 
-## Integration Path (Incremental)
+---
 
-1. **Now** — Use new prompts and `.cursor/agents/` in Cursor chat; Roland delegates via SDK sub-agent tool.
-2. **Next** — Wire `CommandBlackboard` into `runTeam()` planning/review prompts alongside `ProjectMemory`.
-3. **Then** — Pass `toSdkAgentDefinitions(loadUnscAgents())` into `Agent.create()` in `team-orchestrator.ts`.
-4. **Web UI** — No change required initially; `roland team` CLI path unchanged. Optional: surface `command-blackboard.md` in dashboard.
+## Command Blackboard (integrated)
 
-## Global CLI (`npm link` / `npm install -g`)
+The Command Blackboard is **not a future integration** — it is active in every `runTeam()`:
 
-Roland ships a thin launcher at `bin/roland.js` that resolves install + project roots, then loads `dist/index.js`. After build, the `roland` command works from **any directory**.
+1. **Mission start** — `cleanupBoardsForNewMission()` archives stale tasks from prior runs
+2. **Planning / review / synthesis** — `commandBoard.smartSnapshot(goal)` injected into Lead PM prompts
+3. **During waves** — agent status, logs, artifacts updated on the markdown board
+4. **Post-synthesis** — PM writes `## Command Blackboard Update`; bullets merge into sections
 
-### Development (linked install)
+Two-layer model:
+
+| File | Audience | Content |
+|------|----------|---------|
+| `command-blackboard.md` | Humans + prompt injection | Mission objectives, decisions, agent status, intel, artifacts |
+| `blackboard.json` | Orchestrator + MCP board tools | Typed task/blocker/decision entries |
+
+Details: [command-blackboard.md](./command-blackboard.md)
+
+---
+
+## Callsign map (legacy → UNSC)
+
+| Callsign | Role | Legacy agents |
+|----------|------|---------------|
+| Sparrow | Coder | `executor*` |
+| Vanguard | Tester | `test-author`, `test-executor` |
+| Oracle | Researcher | `researcher`, `explore`, `architect` |
+| Sentinel | Reviewer | `code-reviewer`, `security-reviewer` |
+| Forge | DevOps | `build-fixer` |
+| Specter | UI/UX | `designer*` |
+
+`legacyAgentToCallsign()` in `unsc-agents.ts` routes worker prompts and board status.
+
+---
+
+## Global CLI
 
 ```bash
-cd /path/to/roland
-npm ci
-npm run build
-npm link          # symlinks bin/roland.js → global PATH
-
-# From any project repo:
+cd /path/to/roland && npm ci && npm run build && npm link
 cd /path/to/myapp
 roland doctor
 roland board-status --concise
 roland team "Test task"
 roland orchestrate "SDK supervisor smoke test"
-```
-
-### Production (global install)
-
-```bash
-cd /path/to/roland
-npm ci
-npm run build
-npm install -g .   # or: npm install -g /path/to/roland
-```
-
-Verify:
-
-```bash
-which roland       # e.g. ~/.npm-global/bin/roland → ../lib/node_modules/roland/bin/roland.js
-roland --version
-roland doctor
+roland board-cleanup --dry-run
 ```
 
 ### Project root detection
 
-When you run `roland` outside the Roland repo, the CLI sets `ROLAND_PROJECT_ROOT` automatically:
-
 | Priority | Signal |
 |----------|--------|
-| 1 | `ROLAND_PROJECT_ROOT` or `ROLAND_ROOT` env var |
+| 1 | `ROLAND_PROJECT_ROOT` or `ROLAND_ROOT` |
 | 2 | Parent of `ROLAND_STATE_DIR` when it ends in `.roland` |
 | 3 | Walk up from `cwd` for `.roland/` or `.git/` |
 | 4 | `process.cwd()` |
 
-Install root (agents, recipes, `dist/`) is always the npm package directory — resolved from `bin/roland.js` via `package.json` name `"roland"`, or `ROLAND_INSTALL_ROOT`.
-
-### Bin entries
+Install root (agents, recipes, `dist/`) resolves from `bin/roland.js` via npm package name `"roland"`.
 
 | Command | Entry | Purpose |
 |---------|-------|---------|
-| `roland` | `bin/roland.js` | Full CLI (`team`, `board-status`, `doctor`, …) |
-| `roland-mcp` | `bin/roland-mcp.js` | Stdio MCP server (`dist/server/mcp-server.js`) |
+| `roland` | `bin/roland.js` | Full CLI |
+| `roland-mcp` | `bin/roland-mcp.js` | Stdio MCP server |
 
-`roland mcp-config --write` generates Cursor config pointing at the installed MCP entry with the correct absolute paths.
+---
 
-## Cursor MCP Integration
-
-Roland is a first-class MCP server in Cursor. The dedicated stdio entry is `dist/server/mcp-server.js` (also `npm run mcp` or `roland-mcp` from a global install).
-
-### Quick setup
+## Cursor MCP integration
 
 ```bash
-# 1. Build + link or install globally
-cd /path/to/roland && npm ci && npm run build && npm link
-
-# 2. Generate or print ~/.cursor/mcp.json entry
-roland mcp-config --write
-
-# 3. Restart Cursor
+roland mcp-config --write    # merge ~/.cursor/mcp.json — restart Cursor
+npm run test:mcp             # smoke test core tools
 ```
 
-### Recommended `~/.cursor/mcp.json`
+Recommended env in MCP config:
 
-When Roland is installed at `/path/to/roland` and your project lives at `/path/to/myapp`:
+- `ROLAND_PROJECT_ROOT` — target project when Cursor cwd ≠ repo
+- `ROLAND_QUIET=1` — keep stderr clean for stdio transport
+- `CURSOR_API_KEY` — required for `roland_run_team`
 
-```json
-{
-  "mcpServers": {
-    "roland": {
-      "command": "node",
-      "args": ["/path/to/roland/dist/server/mcp-server.js"],
-      "env": {
-        "ROLAND_PROJECT_ROOT": "/path/to/myapp",
-        "ROLAND_QUIET": "1"
-      },
-      "autoApprove": [
-        "health_check", "roland_hello", "board_status", "pm_standup", "triage",
-        "list_team", "list_team_recipes", "list_recipes", "get_team_context",
-        "get_pm_playbook", "get_team_usage", "get_pm_events", "get_analytics",
-        "suggest_mode", "route_model", "blackboard_read", "bus_poll",
-        "git_status", "git_diff", "git_log", "read_context"
-      ]
-    }
-  }
-}
-```
+Key tools: `roland_hello`, `triage`, `roland_run_team`, `pm_standup`, `board_status`, `start_team_recipe`, `blackboard_read`, `git_status`.
 
-Add `CURSOR_API_KEY` to `env` (or your shell profile) when using `roland_run_team`.
+Full tool list: see [README.md](../../README.md#using-roland-in-cursor).
 
-For global installs, `roland mcp-config --write` uses absolute paths to your linked/global package automatically.
+---
 
-### MCP tool surface (47 tools)
+## SDK orchestration reference
 
-| Category | Tools |
-|----------|-------|
-| **Cursor chat** | `roland_hello`, `roland_run_team` |
-| **PM / board** | `pm_standup`, `board_status`, `get_team_context`, `spawn_task`, `assign_task`, … |
-| **Coordination** | `blackboard_post`, `blackboard_read`, `blackboard_patch`, `bus_send`, `bus_poll` |
-| **Git (local)** | `git_status`, `git_diff`, `git_log`, `git_commit` |
-| **Routing / cost** | `triage`, `route_model`, `track_cost`, `manage_budget`, `get_analytics` |
-| **Recipes** | `list_recipes`, `start_recipe`, `advance_recipe`, `list_team_recipes`, `start_team_recipe` |
+| Pattern | Doc |
+|---------|-----|
+| Inline sub-agents via `Agent.create` | [cursor-sdk-orchestration.md](./cursor-sdk-orchestration.md) |
+| Runnable script | `scripts/roland-orchestrate.mjs` |
+| Sample mission walkthrough | [sample-workflow-rate-limiting.md](./sample-workflow-rate-limiting.md) |
+| Sample board output | [sample-board-status-output.md](./sample-board-status-output.md) |
+| Stress test scenarios | [workflow-stress-tests.md](./workflow-stress-tests.md) |
 
-Read-only tools are listed in `autoApprove` above. Mutating tools always require user approval in Cursor.
+---
 
-### Production behavior
+## GitHub automation
 
-- **Stdio transport** — MCP JSON-RPC on stdin/stdout; logs go to stderr only
-- **Graceful shutdown** — SIGINT/SIGTERM handlers close the server cleanly
-- **Connect retry** — up to 5 attempts with exponential backoff on startup failure
-- **Disconnect handling** — exits cleanly when Cursor closes stdio so Cursor can respawn the process
+Team and orchestrate modes preserve the web UI branch workflow:
 
-See also: [Mini PC Deployment](../guides/mini-pc-deployment.md#roland-as-a-cursor-mcp-server) for headless/mini-PC specifics.
+- Mission branches: `roland/<slug>`
+- Sub-agents commit to the active mission branch
+- Sentinel review gate before merge
+- `roland pr <n> [--fix]` for PR review via `gh` CLI
 
-## Callsign Map (Legacy → UNSC)
+---
 
-| Callsign | Role | Legacy agents |
-|----------|------|---------------|
-| Sparrow | Coder | executor |
-| Vanguard | Tester | test-author, test-executor |
-| Oracle | Researcher | researcher, explore, architect |
-| Sentinel | Reviewer | code-reviewer, security-reviewer |
-| Forge | DevOps | build-fixer, devops-agent |
-| Specter | UI/UX | designer, ui-designer |
+## Operational loop (UNSC)
+
+Every turn — in Cursor or CLI synthesis:
+
+1. **Assess** — `triage` for new work; declare Direct vs Team
+2. **Plan** — Lead PM decomposes goal; Command Blackboard + memory injected
+3. **Delegate** — waves of parallel callsigns
+4. **Monitor** — `pm_standup` / `board-status`; blockers first
+5. **Review** — Sentinel gates; Vanguard confirms tests
+6. **Report** — Mission Complete footer with Next Steps + battlespace status
+
+---
+
+## Related guides
+
+- [Main README](../../README.md) — user-facing quick start and CLI reference
+- [Mini PC deployment](../guides/mini-pc-deployment.md) — Tailscale, systemd, headless MCP
+- [PM workflow](../guides/pm-workflow.md) — manual PM mode in Cursor
+- [CLAUDE.md](../../CLAUDE.md) — developer conventions and smoke tests
