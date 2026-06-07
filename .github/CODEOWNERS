@@ -1,0 +1,12 @@
+# Code owners for AdamMcIntosh/roland
+#
+# GitHub automatically requests review from these owners when a PR touches
+# matching paths. To enforce this on main, enable branch protection:
+#   Settings → Branches → Add rule for "main"
+#     ✓ Require a pull request before merging
+#     ✓ Require review from Code Owners
+#     ✓ Restrict who can push to matching branches → add @AdamMcIntosh
+#
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+* @AdamMcIntosh
