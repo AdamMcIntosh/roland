@@ -14,6 +14,15 @@ export const RUN_STATE_FILE = 'run-state.json';
 export type TaskStatus = 'pending' | 'running' | 'done' | 'error' | 'blocked';
 export type RunStatus = 'planning' | 'running' | 'reviewing' | 'synthesizing' | 'done' | 'error';
 
+/** Git branch / PR metadata for executor tasks (populated by task-git-workflow). */
+export interface TaskGitState {
+  branch?: string;
+  phase?: string;
+  statusLabel?: string;
+  prUrl?: string;
+  prNumber?: number;
+}
+
 export interface TaskRunState {
   id: string;
   title: string;
@@ -25,6 +34,8 @@ export interface TaskRunState {
   hadBlocker?: boolean;
   /** Last 300 chars of agent output, set on completion. */
   outputPreview?: string;
+  /** Branch / PR workflow state when task is an executor. */
+  git?: TaskGitState;
 }
 
 export interface RunState {
@@ -99,11 +110,12 @@ export class RunStateWriter {
     this.flush();
   }
 
-  taskStart(id: string): void {
+  taskStart(id: string, git?: TaskGitState): void {
     const task = this.state.tasks.find((t) => t.id === id);
     if (task) {
       task.status = 'running';
       task.startedAt = Date.now();
+      if (git) task.git = { ...task.git, ...git };
     }
     if (!this.state.activeTaskIds.includes(id)) {
       this.state.activeTaskIds.push(id);
@@ -111,7 +123,7 @@ export class RunStateWriter {
     this.flush();
   }
 
-  taskComplete(id: string, output: string, hadBlocker: boolean): void {
+  taskComplete(id: string, output: string, hadBlocker: boolean, git?: TaskGitState): void {
     const task = this.state.tasks.find((t) => t.id === id);
     if (task) {
       task.status = hadBlocker ? 'blocked' : 'done';
@@ -119,10 +131,19 @@ export class RunStateWriter {
       task.hadBlocker = hadBlocker;
       const preview = output.replace(/\n{3,}/g, '\n\n').trim();
       task.outputPreview = preview.length > 300 ? '…' + preview.slice(-297) : preview;
+      if (git) task.git = { ...task.git, ...git };
     }
     this.state.activeTaskIds = this.state.activeTaskIds.filter((a) => a !== id);
     // completedTasks is recomputed from task statuses in flush() — no manual increment.
     this.flush();
+  }
+
+  taskGitUpdate(id: string, git: TaskGitState): void {
+    const task = this.state.tasks.find((t) => t.id === id);
+    if (task) {
+      task.git = { ...task.git, ...git };
+      this.flush();
+    }
   }
 
   waveReviewing(): void {

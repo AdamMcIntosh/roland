@@ -247,6 +247,21 @@
     .task-agent { font-size: .64rem; color: var(--muted); }
     .task-title { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.3; }
     .task-time  { font-size: .63rem; color: var(--muted); margin-top: .12rem; }
+    .task-git {
+      font-size: .6rem; color: var(--muted); margin-top: .2rem; line-height: 1.35;
+      word-break: break-all;
+    }
+    .task-git a { color: var(--indigo); text-decoration: none; }
+    .task-git a:hover { text-decoration: underline; }
+    .task-git-phase { color: var(--emerald); }
+    .git-intel-panel {
+      margin-top: .65rem; padding: .55rem .65rem; border-radius: 8px;
+      background: rgba(99,102,241,.08); border: 1px solid rgba(99,102,241,.2);
+      font-size: .72rem; line-height: 1.45;
+    }
+    .git-intel-panel h4 { margin: 0 0 .35rem; font-size: .72rem; color: var(--indigo); }
+    .git-intel-row { display: flex; gap: .35rem; flex-wrap: wrap; align-items: baseline; }
+    .git-intel-row + .git-intel-row { margin-top: .25rem; }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
     .task-card.status-running .task-icon { animation: blink 1.5s ease-in-out infinite; }
 
@@ -2547,6 +2562,7 @@
   let supervisorInfo = null;
   let missionMeta = null;
   let projectContext = null;
+  let taskGitPayload = null;
   let projectContextExpanded = false;
   let projectsPayload = null;
   let projectTemplatesPayload = null;
@@ -2856,6 +2872,7 @@
             if (msg.boardStatus !== undefined) boardStatus = msg.boardStatus;
             if (msg.missionDag !== undefined) missionDagPayload = msg.missionDag;
             if (msg.projectContext !== undefined) applyProjectContextPayload(msg.projectContext);
+            if (msg.taskGit !== undefined) taskGitPayload = msg.taskGit;
             if (msg.supervisor !== undefined) applySupervisorPayload(msg.supervisor);
             // Overlay hitl-state.json values into runState for TUI accuracy
             if (runState && hitlState) {
@@ -2920,6 +2937,10 @@
         else                        delete runState.hitlAbortPending;
       }
     } catch { runState = null; }
+    try {
+      const tg = await fetch('/api/task-git');
+      taskGitPayload = await tg.json();
+    } catch { taskGitPayload = null; }
   }
 
   function applySupervisorPayload(sup) {
@@ -4074,6 +4095,42 @@
       active && activeGoal ? activeGoal.slice(0, 40) + (activeGoal.length > 40 ? '…' : '') : '';
   }
 
+  function taskGitInfoFor(taskId, task) {
+    if (task?.git) return task.git;
+    const store = taskGitPayload?.tasks;
+    if (store && store[taskId]) return store[taskId];
+    return null;
+  }
+
+  function formatTaskGitHtml(git) {
+    if (!git || (!git.branch && !git.statusLabel && !git.prUrl)) return '';
+    const parts = [];
+    if (git.branch) parts.push('<code>' + escHtml(git.branch) + '</code>');
+    if (git.statusLabel) {
+      parts.push('<span class="task-git-phase">' + escHtml(git.statusLabel) + '</span>');
+    } else if (git.phase) {
+      parts.push('<span class="task-git-phase">' + escHtml(git.phase) + '</span>');
+    }
+    if (git.prUrl) {
+      parts.push('<a href="' + escHtml(git.prUrl) + '" target="_blank" rel="noopener">PR</a>');
+    }
+    return '<div class="task-git">' + parts.join(' · ') + '</div>';
+  }
+
+  function renderGitIntelSummary(tasks) {
+    const withGit = (tasks || []).filter(t => taskGitInfoFor(t.id, t));
+    if (!withGit.length) return '';
+    const rows = withGit.map(t => {
+      const g = taskGitInfoFor(t.id, t);
+      const pr = g.prUrl
+        ? '<a href="' + escHtml(g.prUrl) + '" target="_blank" rel="noopener">Draft PR</a>'
+        : '—';
+      return '<div class="git-intel-row"><strong>' + escHtml(t.id) + '</strong> ' +
+        escHtml(g.branch || '—') + ' · ' + escHtml(g.statusLabel || g.phase || '—') + ' · ' + pr + '</div>';
+    }).join('');
+    return '<div class="git-intel-panel"><h4>Git workflow</h4>' + rows + '</div>';
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   //  Render: Live Status (with HITL controls)
   // ═══════════════════════════════════════════════════════════════════════════
@@ -4188,12 +4245,14 @@
       const elapsed = t.status === 'running' ? elapsedSince(t.startedAt)
                     : t.status === 'done'    ? formatDuration(t.completedAt && t.startedAt ? t.completedAt - t.startedAt : 0)
                     : '';
+      const gitHtml = formatTaskGitHtml(taskGitInfoFor(t.id, t));
       taskCardsHtml +=
         '<div class="task-card status-' + escHtml(t.status) + '" title="' + escHtml(t.title) + '">' +
           '<div class="task-top"><span class="task-icon">' + icon + '</span>' +
           '<span class="task-agent">' + escHtml(t.agent||'') + '</span></div>' +
           '<div class="task-title">' + escHtml(t.title) + '</div>' +
           (elapsed ? '<div class="task-time">' + escHtml(elapsed) + '</div>' : '') +
+          gitHtml +
         '</div>';
     }
 
@@ -4213,6 +4272,7 @@
       '</div>' +
       bannerHtml +
       hitlControlsHtml(rs) +
+      renderGitIntelSummary(tasks) +
       (tasks.length ? '<div class="task-grid" style="margin-top:.7rem">' + taskCardsHtml + '</div>' : '');
   }
 
@@ -4469,9 +4529,11 @@
       const blockers = (report.blockers || []).map(b =>
         `<li>${b.title}${b.content ? ' — ' + b.content.slice(0, 80) : ''}</li>`
       ).join('');
+      const gitSummary = renderGitIntelSummary(runState?.tasks || []);
       el.innerHTML = `
         <div><strong>Mission:</strong> ${(report.goal || report.missionObjective || '—').slice(0, 120)}</div>
         <div style="margin-top:.35rem;color:var(--muted)">Run: ${report.runActive ? 'ACTIVE' : 'idle'} · ${report.counts?.total ?? 0} entries · ${report.counts?.blockers ?? 0} blockers</div>
+        ${gitSummary}
         <div class="board-roster">${roster || '<span class="board-callsign">Roster unavailable</span>'}</div>
         ${blockers ? `<ul class="board-blocker-list">${blockers}</ul>` : '<div style="color:var(--muted);margin-top:.35rem">No blockers</div>'}
       `;
@@ -4714,6 +4776,14 @@
         <div class="drawer-field-value">${escHtml(node.priority || '—')} · ${node.wave != null ? 'Wave ' + node.wave : '—'} · ${durLabel}</div>
       </div>
       ${rt ? `<div class="drawer-field"><div class="drawer-field-label">Runtime status</div><div class="drawer-field-value">${escHtml(rt.status)}</div></div>` : ''}
+      ${(() => {
+        const g = taskGitInfoFor(nodeId, rt);
+        if (!g) return '';
+        const pr = g.prUrl ? `<a href="${escHtml(g.prUrl)}" target="_blank" rel="noopener">${escHtml(g.prUrl)}</a>` : '—';
+        return `<div class="drawer-field"><div class="drawer-field-label">Git branch</div><div class="drawer-field-value"><code>${escHtml(g.branch || '—')}</code></div></div>
+          <div class="drawer-field"><div class="drawer-field-label">Git status</div><div class="drawer-field-value">${escHtml(g.statusLabel || g.phase || '—')}</div></div>
+          <div class="drawer-field"><div class="drawer-field-label">Pull request</div><div class="drawer-field-value">${pr}</div></div>`;
+      })()}
       <div class="drawer-actions">
         <button type="button" class="detail-link-btn" data-action="show-board">Command Board</button>
         ${rt?.outputPreview ? `<button type="button" class="detail-link-btn" data-action="show-output">Output preview</button>` : ''}
