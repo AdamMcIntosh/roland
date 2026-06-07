@@ -282,7 +282,8 @@ function pushCurrentState() {
   const runState  = readJson(path.join(stateDir, 'run-state.json'),  null);
   const hitlState = readJson(path.join(stateDir, 'hitl-state.json'), null);
   const boardStatus = readBoardStatusPayload();
-  broadcast({ type: 'state-update', runState, hitlState, boardStatus });
+  const missionDag = readMissionDagPayload();
+  broadcast({ type: 'state-update', runState, hitlState, boardStatus, missionDag });
 }
 
 async function loadBoardReportModule() {
@@ -433,9 +434,22 @@ function readBoardStatusPayload() {
   }
 }
 
+function readMissionDagPayload() {
+  try {
+    const file = path.join(stateDir, 'mission-dag.json');
+    if (!fs.existsSync(file)) {
+      return { dag: null, message: 'DAG planning not enabled for this mission — using wave mode' };
+    }
+    const dag = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    return { dag, updatedAt: dag.updatedAt ?? Date.now() };
+  } catch {
+    return { dag: null, message: 'Mission DAG unreadable' };
+  }
+}
+
 // ── File watcher (debounced push) ─────────────────────────────────────────────
 
-const WATCH_TARGETS = new Set(['run-state.json', 'hitl-state.json', 'memory.md', 'hitl.json', 'blackboard.json', 'command-blackboard.md']);
+const WATCH_TARGETS = new Set(['run-state.json', 'hitl-state.json', 'memory.md', 'hitl.json', 'blackboard.json', 'command-blackboard.md', 'mission-dag.json']);
 let watchTimer = null;
 
 try {
@@ -672,13 +686,7 @@ const server = http.createServer(async (req, res) => {
   // ── /api/mission-dag GET ─────────────────────────────────────────────────
   if (url === '/api/mission-dag' && method === 'GET') {
     try {
-      const file = path.join(stateDir, 'mission-dag.json');
-      if (!fs.existsSync(file)) {
-        jsonOk(res, { dag: null, message: 'No active mission DAG' });
-        return;
-      }
-      const dag = JSON.parse(fs.readFileSync(file, 'utf-8'));
-      jsonOk(res, { dag, updatedAt: dag.updatedAt ?? Date.now() });
+      jsonOk(res, readMissionDagPayload());
     } catch (e) { jsonErr(res, e.message, 500); }
     return;
   }
@@ -746,7 +754,8 @@ wss.on('connection', (ws) => {
     const runState  = readJson(path.join(stateDir, 'run-state.json'),  null);
     const hitlState = readJson(path.join(stateDir, 'hitl-state.json'), null);
     const boardStatus = readBoardStatusPayload();
-    ws.send(JSON.stringify({ type: 'state-update', runState, hitlState, boardStatus }));
+    const missionDag = readMissionDagPayload();
+    ws.send(JSON.stringify({ type: 'state-update', runState, hitlState, boardStatus, missionDag }));
   } catch {}
   ws.on('close', () => wsClients.delete(ws));
   ws.on('error', () => wsClients.delete(ws));
@@ -769,6 +778,6 @@ server.listen(port, host, () => {
   console.log(`  Project   : ${projectRoot}`);
   console.log(`  APIs      : ${localBase}/api/usage  ${localBase}/api/run-state`);
   console.log(`              ${localBase}/api/memory  ${localBase}/api/hitl/:cmd`);
-  console.log(`              ${localBase}/api/board-status  ${localBase}/api/mission`);
+  console.log(`              ${localBase}/api/board-status  ${localBase}/api/mission-dag`);
   console.log(`\n  Open the URL above in your browser (Tailscale: use machine IP).\n`);
 });

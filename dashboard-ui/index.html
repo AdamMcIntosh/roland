@@ -1101,6 +1101,394 @@
       background: rgba(255,255,255,0.15);
       border-radius: 3px;
     }
+
+    /* Mission Intel sub-tabs (Command Board | Mission Graph) */
+    .intel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.65rem 0.85rem;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      border-bottom: 1px solid var(--border);
+    }
+    .intel-subtabs {
+      display: flex;
+      gap: 0.2rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.18rem;
+    }
+    .intel-tab {
+      padding: 0.32rem 0.72rem;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      transition: background 0.15s, color 0.15s;
+    }
+    .intel-tab:hover { color: var(--fg); }
+    .intel-tab.active {
+      background: rgba(99,102,241,0.22);
+      color: var(--indigo);
+    }
+    .intel-panel { display: none; }
+    .intel-panel.active { display: block; }
+
+    /* Mission Graph panel */
+    .mission-graph-panel { padding: 0.75rem 1rem 1rem; font-size: 0.76rem; }
+    .mission-graph-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.45rem;
+      margin-bottom: 0.55rem;
+    }
+    .mission-graph-summary {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.45rem 0.85rem;
+      color: var(--muted);
+      font-size: 0.72rem;
+      flex: 1;
+      min-width: 0;
+    }
+    .mission-graph-summary strong { color: var(--fg); font-weight: 600; }
+    .mission-graph-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.28rem;
+      padding: 0.12rem 0.45rem;
+      border-radius: 999px;
+      font-size: 0.66rem;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+    }
+    .mission-graph-badge.mode-dag { border-color: rgba(99,102,241,0.35); color: var(--indigo); }
+    .mission-graph-badge.mode-flat { border-color: rgba(136,136,170,0.35); color: var(--muted); }
+    .mission-graph-badge.critical { border-color: rgba(245,158,11,0.4); color: var(--amber); }
+    .mission-graph-controls { display: flex; gap: 0.35rem; flex-shrink: 0; }
+    .btn-dag-fit {
+      font-size: 0.68rem;
+      padding: 0.28rem 0.55rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .btn-dag-fit:hover { color: var(--fg); border-color: rgba(99,102,241,0.4); }
+    .mission-graph-viewport {
+      position: relative;
+      overflow: auto;
+      max-height: min(58vh, 520px);
+      min-height: 200px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: linear-gradient(180deg, rgba(15,15,26,0.35) 0%, rgba(26,26,46,0.55) 100%);
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+      touch-action: pan-x pan-y;
+    }
+    [data-theme="light"] .mission-graph-viewport {
+      background: linear-gradient(180deg, rgba(240,240,246,0.5) 0%, rgba(255,255,255,0.9) 100%);
+    }
+    .dag-zoom-layer {
+      transform-origin: 0 0;
+      will-change: transform;
+      display: inline-block;
+      min-width: min-content;
+    }
+    .mission-graph-svg { display: block; }
+    .dag-edge {
+      fill: none;
+      stroke: rgba(136,136,170,0.42);
+      stroke-width: 1.5;
+      marker-end: url(#dag-arrow);
+      transition: stroke 0.25s, stroke-width 0.25s;
+    }
+    .dag-edge.critical {
+      stroke: #f59e0b;
+      stroke-width: 3.25;
+      marker-end: url(#dag-arrow-critical);
+      filter: drop-shadow(0 0 5px rgba(245,158,11,0.55));
+    }
+    .dag-node { cursor: pointer; }
+    .dag-node rect {
+      rx: 8;
+      ry: 8;
+      stroke-width: 1.5;
+      transition: fill 0.3s, stroke 0.3s, filter 0.2s;
+    }
+    .dag-node:hover rect { filter: brightness(1.1); }
+    .dag-node.selected rect { stroke-width: 2.5; filter: brightness(1.12); }
+    .dag-node.critical rect {
+      stroke-width: 2;
+      filter: drop-shadow(0 0 4px rgba(245,158,11,0.35));
+    }
+    .dag-node.status-changed rect {
+      animation: dag-node-pulse 0.65s ease-out;
+    }
+    @keyframes dag-node-pulse {
+      0%   { filter: brightness(1); }
+      40%  { filter: brightness(1.4); }
+      100% { filter: brightness(1); }
+    }
+    .dag-node-label {
+      font-size: 11px;
+      font-weight: 600;
+      fill: var(--fg);
+      pointer-events: none;
+    }
+    .dag-node-sub {
+      font-size: 9.5px;
+      fill: var(--muted);
+      pointer-events: none;
+    }
+    .dag-node-sub.dag-node-title { fill: var(--fg); opacity: 0.88; }
+    .dag-node-status {
+      font-size: 11px;
+      font-weight: 700;
+      pointer-events: none;
+    }
+    .dag-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem 0.75rem;
+      margin-top: 0.65rem;
+      padding: 0.55rem 0.65rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface2);
+      font-size: 0.66rem;
+      color: var(--muted);
+    }
+    .dag-legend-title {
+      width: 100%;
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 0.1rem;
+    }
+    .dag-legend span { display: inline-flex; align-items: center; gap: 0.3rem; }
+    .dag-legend i {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+      border: 1px solid rgba(255,255,255,0.12);
+      font-size: 9px;
+      font-style: normal;
+      font-weight: 700;
+    }
+    .dag-linear { padding: 0.5rem 0; }
+    .dag-linear-msg {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-bottom: 0.55rem;
+      line-height: 1.45;
+    }
+    .dag-linear-track {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.35rem;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: 0.25rem;
+    }
+    .dag-linear-node {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.35rem 0.55rem;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      font-size: 0.7rem;
+      cursor: pointer;
+      max-width: 100%;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .dag-linear-node:hover { border-color: rgba(99,102,241,0.4); }
+    .dag-linear-node.selected { border-color: rgba(99,102,241,0.65); background: rgba(99,102,241,0.1); }
+    .dag-linear-node.critical { border-color: rgba(245,158,11,0.55); }
+    .dag-linear-node.status-changed { animation: dag-node-pulse 0.65s ease-out; }
+    .dag-linear-arrow { color: var(--muted); font-size: 0.75rem; flex-shrink: 0; }
+    .dag-empty-state {
+      text-align: center;
+      padding: 1.75rem 1rem;
+      color: var(--muted);
+    }
+    .dag-empty-state .dag-empty-icon {
+      font-size: 1.6rem;
+      opacity: 0.45;
+      margin-bottom: 0.5rem;
+    }
+    .dag-empty-state h3 {
+      margin: 0 0 0.4rem;
+      font-size: 0.88rem;
+      color: var(--fg);
+      font-weight: 600;
+    }
+    .dag-empty-state p {
+      margin: 0;
+      font-size: 0.74rem;
+      line-height: 1.5;
+      max-width: 28rem;
+      margin-inline: auto;
+    }
+    .dag-empty-state code {
+      font-size: 0.68rem;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+    }
+
+    /* Mission node detail drawer */
+    .mission-node-drawer {
+      position: fixed;
+      inset: 0;
+      z-index: 500;
+      display: flex;
+      justify-content: flex-end;
+      pointer-events: none;
+      visibility: hidden;
+      transition: visibility 0.25s;
+    }
+    .mission-node-drawer.open {
+      pointer-events: auto;
+      visibility: visible;
+    }
+    .mission-node-drawer-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      opacity: 0;
+      transition: opacity 0.25s;
+    }
+    .mission-node-drawer.open .mission-node-drawer-backdrop { opacity: 1; }
+    .mission-node-drawer-panel {
+      position: relative;
+      width: min(360px, 100vw);
+      max-width: 100%;
+      height: 100%;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      box-shadow: -8px 0 32px rgba(0,0,0,0.35);
+      transform: translateX(100%);
+      transition: transform 0.28s ease-out;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .mission-node-drawer.open .mission-node-drawer-panel { transform: translateX(0); }
+    .mission-node-drawer-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.5rem;
+      padding: 0.85rem 1rem 0.65rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .mission-node-drawer-header h3 {
+      margin: 0;
+      font-size: 0.92rem;
+      font-weight: 600;
+      line-height: 1.35;
+      color: var(--fg);
+    }
+    .mission-node-drawer-id {
+      font-size: 0.68rem;
+      color: var(--muted);
+      font-weight: 500;
+      margin-top: 0.2rem;
+    }
+    .mission-node-drawer-close {
+      flex-shrink: 0;
+      width: 2rem;
+      height: 2rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface2);
+      color: var(--muted);
+      font-size: 1.1rem;
+      line-height: 1;
+    }
+    .mission-node-drawer-close:hover { color: var(--fg); }
+    .mission-node-drawer-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.75rem 1rem 1.25rem;
+      -webkit-overflow-scrolling: touch;
+    }
+    .drawer-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      margin-bottom: 0.65rem;
+      border: 1px solid var(--border);
+    }
+    .drawer-field {
+      margin-bottom: 0.65rem;
+    }
+    .drawer-field-label {
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-bottom: 0.2rem;
+    }
+    .drawer-field-value {
+      font-size: 0.76rem;
+      line-height: 1.45;
+      color: var(--fg);
+    }
+    .drawer-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-top: 0.85rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--border);
+    }
+    .drawer-actions .detail-link-btn {
+      font-size: 0.68rem;
+      padding: 0.28rem 0.6rem;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      color: var(--indigo);
+    }
+    .drawer-actions .detail-link-btn:hover {
+      border-color: rgba(99,102,241,0.45);
+      background: rgba(99,102,241,0.12);
+    }
+    @media (max-width: 640px) {
+      .intel-header { flex-direction: column; align-items: stretch; }
+      .intel-subtabs { justify-content: center; }
+      .mission-graph-viewport { max-height: 46vh; min-height: 180px; }
+      .dag-node-sub.dag-node-title { display: none; }
+      .dag-node-sub.dag-node-meta { display: none; }
+      .mission-node-drawer-panel { width: 100vw; }
+    }
   </style>
 </head>
 <body>
@@ -1294,17 +1682,28 @@
         </div>
       </section>
 
-      <!-- UNSC Command Board -->
+      <!-- UNSC Mission Intel: Command Board + Mission Graph -->
       <section class="section">
-        <div class="section-box" id="board-section-box">
-          <div class="section-header" style="display:flex;align-items:center;justify-content:space-between;padding-right:.65rem;gap:.5rem;flex-wrap:wrap">
-            <h2 style="margin:0">🎖 Command Board</h2>
-            <button class="btn-secondary btn-board-refresh" id="btn-refresh-board" type="button" title="Refresh board status">
-              <span class="refresh-icon">↻</span> Refresh Board
+        <div class="section-box" id="intel-section-box">
+          <div class="intel-header">
+            <h2 style="margin:0">🎖 Mission Intel</h2>
+            <nav class="intel-subtabs" role="tablist" aria-label="Mission intel views">
+              <button type="button" class="intel-tab active" data-intel="board" role="tab" aria-selected="true">Command Board</button>
+              <button type="button" class="intel-tab" data-intel="graph" role="tab" aria-selected="false">Mission Graph</button>
+            </nav>
+            <button class="btn-secondary btn-board-refresh" id="btn-refresh-board" type="button" title="Refresh board and mission graph">
+              <span class="refresh-icon">↻</span> Refresh
             </button>
           </div>
-          <div class="board-panel board-panel-scroll" id="board-panel">
-            <div class="idle-state"><span>○</span><span>Loading command board…</span></div>
+          <div id="intel-panel-board" class="intel-panel active" role="tabpanel">
+            <div class="board-panel board-panel-scroll" id="board-panel">
+              <div class="idle-state"><span>○</span><span>Loading command board…</span></div>
+            </div>
+          </div>
+          <div id="intel-panel-graph" class="intel-panel" role="tabpanel" hidden>
+            <div class="mission-graph-panel" id="mission-graph-panel">
+              <div class="idle-state"><span>○</span><span>Loading mission graph…</span></div>
+            </div>
           </div>
         </div>
       </section>
@@ -1480,6 +1879,21 @@
   <!-- Toast container -->
   <div id="toast-container"></div>
 
+  <!-- Mission node detail drawer (Mission Graph) -->
+  <div id="mission-node-drawer" class="mission-node-drawer" hidden aria-hidden="true">
+    <div class="mission-node-drawer-backdrop" data-action="close-drawer"></div>
+    <aside class="mission-node-drawer-panel" role="dialog" aria-labelledby="mission-drawer-title">
+      <div class="mission-node-drawer-header">
+        <div>
+          <h3 id="mission-drawer-title">Task</h3>
+          <div class="mission-node-drawer-id" id="mission-drawer-id"></div>
+        </div>
+        <button type="button" class="mission-node-drawer-close" data-action="close-drawer" aria-label="Close">×</button>
+      </div>
+      <div class="mission-node-drawer-body" id="mission-node-drawer-content"></div>
+    </aside>
+  </div>
+
   <script>
   // ═══════════════════════════════════════════════════════════════════════════
   //  Constants
@@ -1525,6 +1939,15 @@
   let runState     = null;
   let hitlState    = null;
   let boardStatus  = null;
+  let missionDagPayload = null;
+  let selectedMissionNodeId = null;
+  let activeIntelTab = 'board';
+  let missionGraphEverOpened = false;
+  let lastDagNodeStatuses = {};
+  let missionGraphRenderTimer = null;
+  let dagViewState = { scale: 1, tx: 0, ty: 0 };
+  let dagZoomController = null;
+  let lastDagRunId = null;
   let memoryContent = '';
   let memoryEditMode = false;
   let period       = 'today';
@@ -1674,6 +2097,7 @@
             if (msg.runState  !== undefined) runState  = msg.runState;
             if (msg.hitlState !== undefined) hitlState = msg.hitlState;
             if (msg.boardStatus !== undefined) boardStatus = msg.boardStatus;
+            if (msg.missionDag !== undefined) missionDagPayload = msg.missionDag;
             // Overlay hitl-state.json values into runState for TUI accuracy
             if (runState && hitlState) {
               if (hitlState.paused)       runState.hitlPaused        = true;
@@ -1687,6 +2111,7 @@
             renderLiveStatus();
             renderOpsStatus();
             renderBoardPanel();
+            scheduleMissionGraphRender();
             renderRecentRuns();
             if (activeTab === 'actions') renderHitlActionsPanel();
             updateLastUpdated();
@@ -1755,6 +2180,17 @@
     } catch (e) {
       console.warn('Board status fetch failed:', e.message);
       boardStatus = null;
+    }
+  }
+
+  async function fetchMissionDag() {
+    try {
+      const res = await fetch('/api/mission-dag');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      missionDagPayload = await res.json();
+    } catch (e) {
+      console.warn('Mission DAG fetch failed:', e.message);
+      missionDagPayload = null;
     }
   }
 
@@ -2705,17 +3141,572 @@
     el.innerHTML = '<div class="idle-state"><span>○</span><span>No command board data — run a team mission first</span></div>';
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Mission Graph panel
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const DAG_STATUS_STYLE = {
+    pending:     { fill: 'rgba(136,136,170,0.12)', stroke: 'rgba(136,136,170,0.45)', icon: '○', label: 'Pending',  legendBg: 'rgba(136,136,170,0.25)' },
+    ready:       { fill: 'rgba(99,102,241,0.12)', stroke: 'rgba(99,102,241,0.45)', icon: '◎', label: 'Ready',    legendBg: 'rgba(99,102,241,0.28)' },
+    in_progress: { fill: 'rgba(99,102,241,0.22)', stroke: 'rgba(99,102,241,0.85)', icon: '→', label: 'In progress', legendBg: 'rgba(99,102,241,0.38)' },
+    done:        { fill: 'rgba(16,185,129,0.15)', stroke: 'rgba(16,185,129,0.55)', icon: '✓', label: 'Done',     legendBg: 'rgba(16,185,129,0.35)' },
+    blocked:     { fill: 'rgba(245,158,11,0.15)', stroke: 'rgba(245,158,11,0.65)', icon: '⏸', label: 'Blocked', legendBg: 'rgba(245,158,11,0.35)' },
+    skipped:     { fill: 'rgba(136,136,170,0.08)', stroke: 'rgba(136,136,170,0.3)', icon: '⚠', label: 'Skipped', legendBg: 'rgba(136,136,170,0.18)' },
+  };
+
+  const MISSION_GRAPH_RENDER_DEBOUNCE_MS = 180;
+
+  function scheduleMissionGraphRender() {
+    if (activeIntelTab !== 'graph') return;
+    clearTimeout(missionGraphRenderTimer);
+    missionGraphRenderTimer = setTimeout(() => renderMissionGraphPanel(), MISSION_GRAPH_RENDER_DEBOUNCE_MS);
+  }
+
+  function isMobileGraph() {
+    return window.matchMedia('(max-width: 640px)').matches;
+  }
+
+  function truncateTitle(title, max) {
+    if (!title) return '';
+    return title.length > max ? title.slice(0, max - 1) + '…' : title;
+  }
+
+  function nodeStatusChanged(nodeId, status) {
+    const prev = lastDagNodeStatuses[nodeId];
+    return prev !== undefined && prev !== status;
+  }
+
+  function snapshotDagStatuses(dag) {
+    const snap = {};
+    for (const n of dag.nodes) snap[n.id] = n.status;
+    lastDagNodeStatuses = snap;
+  }
+
+  function estimateNodeDuration(node, rt) {
+    if (node.completedAt && node.startedAt) return node.completedAt - node.startedAt;
+    if (rt?.completedAt && rt?.startedAt) return rt.completedAt - rt.startedAt;
+    if (node.startedAt && node.status === 'in_progress') return Date.now() - node.startedAt;
+    const est = node.metadata?.estimatedMinutes;
+    if (typeof est === 'number' && est > 0) return est * 60_000;
+    return null;
+  }
+
+  function renderDagLegend() {
+    const items = ['done', 'in_progress', 'ready', 'pending', 'blocked', 'skipped'];
+    const chips = items.map(key => {
+      const st = DAG_STATUS_STYLE[key];
+      return `<span><i style="background:${st.legendBg}">${st.icon}</i> ${st.label}</span>`;
+    }).join('');
+    return `<div class="dag-legend"><div class="dag-legend-title">Status legend</div>${chips}<span><i style="background:rgba(245,158,11,0.45);border-color:rgba(245,158,11,0.5)">—</i> Critical path</span></div>`;
+  }
+
+  function renderDagEmptyState() {
+    const msg = missionDagPayload?.message;
+    const isWaveOnly = !missionDagPayload?.dag;
+    return `
+      <div class="dag-empty-state">
+        <div class="dag-empty-icon">◇</div>
+        <h3>${isWaveOnly ? 'DAG planning not enabled for this mission' : 'No tasks in mission graph'}</h3>
+        <p>${isWaveOnly
+          ? 'Using wave mode — tasks run in parallel waves without an explicit dependency graph. Enable DAG planning with <code>ROLAND_MISSION_DAG=1</code> or launch a complex multi-step goal.'
+          : escHtml(msg || 'Start a team mission to populate the graph.')}</p>
+      </div>`;
+  }
+
+  function getMissionDag() {
+    return missionDagPayload?.dag ?? null;
+  }
+
+  function dagProgressPct(dag) {
+    const p = dag?.progress;
+    if (!p || !p.total) return 0;
+    return Math.round((p.done / p.total) * 100);
+  }
+
+  function computeDagLayers(nodes, edges) {
+    const ids = nodes.map(n => n.id);
+    const inDeg = new Map(ids.map(id => [id, 0]));
+    const adj = new Map(ids.map(id => [id, []]));
+    for (const e of edges) {
+      if (!adj.has(e.from) || !inDeg.has(e.to)) continue;
+      adj.get(e.from).push(e.to);
+      inDeg.set(e.to, (inDeg.get(e.to) || 0) + 1);
+    }
+    const layer = new Map(ids.map(id => [id, 0]));
+    const queue = ids.filter(id => (inDeg.get(id) || 0) === 0);
+    const visited = new Set();
+    while (queue.length) {
+      const id = queue.shift();
+      if (visited.has(id)) continue;
+      visited.add(id);
+      for (const next of adj.get(id) || []) {
+        layer.set(next, Math.max(layer.get(next) || 0, (layer.get(id) || 0) + 1));
+        const deg = (inDeg.get(next) || 0) - 1;
+        inDeg.set(next, deg);
+        if (deg <= 0) queue.push(next);
+      }
+    }
+    for (const id of ids) {
+      if (!visited.has(id)) layer.set(id, layer.get(id) || 0);
+    }
+    return layer;
+  }
+
+  function topologicalNodeOrder(nodes, edges) {
+    const layer = computeDagLayers(nodes, edges);
+    return [...nodes].sort((a, b) => {
+      const la = layer.get(a.id) || 0;
+      const lb = layer.get(b.id) || 0;
+      if (la !== lb) return la - lb;
+      return a.id.localeCompare(b.id);
+    });
+  }
+
+  function layoutDagNodes(dag) {
+    const NODE_W = 152;
+    const NODE_H = 58;
+    const GAP_X = 56;
+    const GAP_Y = 28;
+    const PAD = 24;
+    const layerMap = computeDagLayers(dag.nodes, dag.edges || []);
+    const layers = new Map();
+    for (const node of dag.nodes) {
+      const l = layerMap.get(node.id) || 0;
+      if (!layers.has(l)) layers.set(l, []);
+      layers.get(l).push(node);
+    }
+    for (const [, list] of layers) {
+      list.sort((a, b) => a.id.localeCompare(b.id));
+    }
+    const positions = new Map();
+    let maxLayer = 0;
+    let maxRows = 1;
+    for (const [l, list] of [...layers.entries()].sort((a, b) => a[0] - b[0])) {
+      maxLayer = Math.max(maxLayer, l);
+      maxRows = Math.max(maxRows, list.length);
+      list.forEach((node, idx) => {
+        positions.set(node.id, {
+          x: PAD + l * (NODE_W + GAP_X),
+          y: PAD + idx * (NODE_H + GAP_Y),
+          w: NODE_W,
+          h: NODE_H,
+        });
+      });
+    }
+    const width = PAD * 2 + (maxLayer + 1) * NODE_W + maxLayer * GAP_X;
+    const height = PAD * 2 + maxRows * NODE_H + (maxRows - 1) * GAP_Y;
+    return { positions, width, height, NODE_W, NODE_H };
+  }
+
+  function edgePath(from, to, positions) {
+    const a = positions.get(from);
+    const b = positions.get(to);
+    if (!a || !b) return '';
+    const x1 = a.x + a.w;
+    const y1 = a.y + a.h / 2;
+    const x2 = b.x;
+    const y2 = b.y + b.h / 2;
+    const mx = (x1 + x2) / 2;
+    return `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
+  }
+
+  function isCriticalEdge(dag, from, to) {
+    const path = dag.criticalPath || [];
+    for (let i = 0; i < path.length - 1; i++) {
+      if (path[i] === from && path[i + 1] === to) return true;
+    }
+    return false;
+  }
+
+  function runTaskForNode(nodeId) {
+    return (runState?.tasks || []).find(t => t.id === nodeId) || null;
+  }
+
+  function openMissionNodeDrawer(dag, nodeId) {
+    const node = dag.nodes.find(n => n.id === nodeId);
+    if (!node) return;
+    selectedMissionNodeId = nodeId;
+    const drawer = document.getElementById('mission-node-drawer');
+    const titleEl = document.getElementById('mission-drawer-title');
+    const idEl = document.getElementById('mission-drawer-id');
+    const bodyEl = document.getElementById('mission-node-drawer-content');
+    if (!drawer || !bodyEl) return;
+
+    const st = DAG_STATUS_STYLE[node.status] || DAG_STATUS_STYLE.pending;
+    const rt = runTaskForNode(nodeId);
+    const downstream = (dag.edges || []).filter(e => e.from === nodeId).map(e => e.to);
+    const onCritical = (dag.criticalPath || []).includes(nodeId);
+    const dur = estimateNodeDuration(node, rt);
+    const durLabel = dur != null
+      ? (node.status === 'in_progress' ? `Elapsed: ${formatDuration(dur)}` : `Duration: ${formatDuration(dur)}`)
+      : '—';
+
+    if (titleEl) titleEl.textContent = node.title || node.id;
+    if (idEl) idEl.textContent = node.id;
+
+    bodyEl.innerHTML = `
+      <div class="drawer-status-pill" style="background:${st.fill};border-color:${st.stroke};color:var(--fg)">
+        <span>${st.icon}</span><span>${st.label}</span>
+        ${onCritical ? '<span style="color:var(--amber)">· Critical path</span>' : ''}
+      </div>
+      <div class="drawer-field">
+        <div class="drawer-field-label">Agent</div>
+        <div class="drawer-field-value">${escHtml(node.agent)}</div>
+      </div>
+      <div class="drawer-field">
+        <div class="drawer-field-label">Description</div>
+        <div class="drawer-field-value">${escHtml(node.description || 'No description')}</div>
+      </div>
+      <div class="drawer-field">
+        <div class="drawer-field-label">Depends on</div>
+        <div class="drawer-field-value">${node.dependsOn?.length ? node.dependsOn.map(escHtml).join(', ') : '—'}</div>
+      </div>
+      ${downstream.length ? `<div class="drawer-field"><div class="drawer-field-label">Unlocks</div><div class="drawer-field-value">${downstream.map(escHtml).join(', ')}</div></div>` : ''}
+      <div class="drawer-field">
+        <div class="drawer-field-label">Priority · Wave · Time</div>
+        <div class="drawer-field-value">${escHtml(node.priority || '—')} · ${node.wave != null ? 'Wave ' + node.wave : '—'} · ${durLabel}</div>
+      </div>
+      ${rt ? `<div class="drawer-field"><div class="drawer-field-label">Runtime status</div><div class="drawer-field-value">${escHtml(rt.status)}</div></div>` : ''}
+      <div class="drawer-actions">
+        <button type="button" class="detail-link-btn" data-action="show-board">Command Board</button>
+        ${rt?.outputPreview ? `<button type="button" class="detail-link-btn" data-action="show-output">Output preview</button>` : ''}
+      </div>`;
+
+    const alreadyOpen = drawer.classList.contains('open');
+    drawer.hidden = false;
+    drawer.setAttribute('aria-hidden', 'false');
+    if (!alreadyOpen) requestAnimationFrame(() => drawer.classList.add('open'));
+    else drawer.classList.add('open');
+
+    bodyEl.querySelector('[data-action="show-board"]')?.addEventListener('click', () => {
+      closeMissionNodeDrawer();
+      switchIntelTab('board');
+    });
+    bodyEl.querySelector('[data-action="show-output"]')?.addEventListener('click', () => {
+      if (rt?.outputPreview) toast(rt.outputPreview.slice(0, 320), 'info', 6000);
+    });
+
+    // Highlight selected node in graph without full re-render
+    document.querySelectorAll('.dag-node, .dag-linear-node').forEach(el => {
+      el.classList.toggle('selected', el.getAttribute('data-node-id') === nodeId);
+    });
+  }
+
+  function closeMissionNodeDrawer() {
+    const drawer = document.getElementById('mission-node-drawer');
+    if (!drawer) return;
+    drawer.classList.remove('open');
+    drawer.setAttribute('aria-hidden', 'true');
+    setTimeout(() => { if (!drawer.classList.contains('open')) drawer.hidden = true; }, 280);
+    document.querySelectorAll('.dag-node.selected, .dag-linear-node.selected').forEach(el => el.classList.remove('selected'));
+  }
+
+  document.getElementById('mission-node-drawer')?.addEventListener('click', (e) => {
+    if (e.target.closest('[data-action="close-drawer"]')) closeMissionNodeDrawer();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeMissionNodeDrawer();
+  });
+
+  function bindMissionGraphInteractions(dag) {
+    const panel = document.getElementById('mission-graph-panel');
+    if (!panel) return;
+
+    panel.querySelectorAll('.dag-node, .dag-linear-node').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = el.getAttribute('data-node-id');
+        if (!id) return;
+        openMissionNodeDrawer(dag, id);
+      });
+    });
+
+    panel.querySelector('[data-action="fit-dag"]')?.addEventListener('click', () => {
+      dagZoomController?.fitToView();
+    });
+  }
+
+  function initDagZoomPan(viewport, layer, svgW, svgH) {
+    if (!viewport || !layer) return null;
+
+    let scale = dagViewState.scale || 1;
+    let tx = dagViewState.tx || 0;
+    let ty = dagViewState.ty || 0;
+    let pinching = false;
+    let lastPinchDist = 0;
+    let panning = false;
+    let panStart = { x: 0, y: 0, sl: 0, st: 0 };
+
+    function clampScale(s) {
+      return Math.min(3, Math.max(0.35, s));
+    }
+
+    function applyTransform() {
+      layer.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+      dagViewState = { scale, tx, ty };
+    }
+
+    function fitToView() {
+      const pad = 12;
+      const vw = Math.max(viewport.clientWidth, 1);
+      const vh = Math.max(viewport.clientHeight, 1);
+      scale = clampScale(Math.min((vw - pad * 2) / svgW, (vh - pad * 2) / svgH, 1));
+      tx = pad + Math.max(0, (vw - svgW * scale) / 2);
+      ty = pad + Math.max(0, (vh - svgH * scale) / 2);
+      applyTransform();
+      viewport.scrollLeft = 0;
+      viewport.scrollTop = 0;
+    }
+
+    function zoomAt(factor, cx, cy) {
+      const prev = scale;
+      scale = clampScale(scale * factor);
+      const ratio = scale / prev;
+      tx = cx - (cx - tx) * ratio;
+      ty = cy - (cy - ty) * ratio;
+      applyTransform();
+    }
+
+    applyTransform();
+
+    viewport.addEventListener('wheel', (e) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const rect = viewport.getBoundingClientRect();
+      const cx = e.clientX - rect.left + viewport.scrollLeft;
+      const cy = e.clientY - rect.top + viewport.scrollTop;
+      zoomAt(e.deltaY > 0 ? 0.92 : 1.08, cx, cy);
+    }, { passive: false });
+
+    viewport.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || e.target.closest('.dag-node')) return;
+      if (!e.altKey) return;
+      panning = true;
+      panStart = { x: e.clientX, y: e.clientY, sl: viewport.scrollLeft, st: viewport.scrollTop };
+      viewport.setPointerCapture(e.pointerId);
+    });
+    viewport.addEventListener('pointermove', (e) => {
+      if (!panning) return;
+      viewport.scrollLeft = panStart.sl - (e.clientX - panStart.x);
+      viewport.scrollTop = panStart.st - (e.clientY - panStart.y);
+    });
+    viewport.addEventListener('pointerup', () => { panning = false; });
+    viewport.addEventListener('pointercancel', () => { panning = false; });
+
+    viewport.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        pinching = true;
+        const [a, b] = e.touches;
+        lastPinchDist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      }
+    }, { passive: true });
+
+    viewport.addEventListener('touchmove', (e) => {
+      if (!pinching || e.touches.length !== 2) return;
+      e.preventDefault();
+      const [a, b] = e.touches;
+      const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      if (lastPinchDist > 0) {
+        const rect = viewport.getBoundingClientRect();
+        const cx = (a.clientX + b.clientX) / 2 - rect.left + viewport.scrollLeft;
+        const cy = (a.clientY + b.clientY) / 2 - rect.top + viewport.scrollTop;
+        zoomAt(dist / lastPinchDist, cx, cy);
+      }
+      lastPinchDist = dist;
+    }, { passive: false });
+
+    viewport.addEventListener('touchend', () => {
+      pinching = false;
+      lastPinchDist = 0;
+    });
+
+    return { fitToView };
+  }
+
+  function renderGraphToolbar(dag, showFit) {
+    const pct = dagProgressPct(dag);
+    const p = dag.progress || {};
+    const isFlat = dag.planningMode === 'flat';
+    return `
+      <div class="mission-graph-toolbar">
+        <div class="mission-graph-summary">
+          <span><strong>${p.done ?? 0}/${p.total ?? 0}</strong> done (${pct}%)</span>
+          <span class="mission-graph-badge ${isFlat ? 'mode-flat' : 'mode-dag'}">${isFlat ? 'Wave mode' : 'DAG mode'}</span>
+          ${dag.criticalPath?.length ? `<span class="mission-graph-badge critical">Critical path: ${dag.criticalPath.length} tasks</span>` : ''}
+          ${p.inProgress ? `<span>${p.inProgress} active</span>` : ''}
+          ${p.blocked ? `<span style="color:var(--amber)">${p.blocked} blocked</span>` : ''}
+        </div>
+        ${showFit ? `<div class="mission-graph-controls"><button type="button" class="btn-dag-fit" data-action="fit-dag" title="Fit graph to viewport">⊡ Fit to View</button></div>` : ''}
+      </div>`;
+  }
+
+  function renderLinearDagView(dag) {
+    const critical = new Set(dag.criticalPath || []);
+    const mobile = isMobileGraph();
+    const ordered = [...dag.nodes].sort((a, b) => {
+      const wa = a.wave ?? 999;
+      const wb = b.wave ?? 999;
+      if (wa !== wb) return wa - wb;
+      return a.id.localeCompare(b.id);
+    });
+    const chips = [];
+    ordered.forEach((node, idx) => {
+      const st = DAG_STATUS_STYLE[node.status] || DAG_STATUS_STYLE.pending;
+      const crit = critical.has(node.id) ? ' critical' : '';
+      const changed = nodeStatusChanged(node.id, node.status) ? ' status-changed' : '';
+      const titleHint = mobile ? ` title="${escHtml(node.title)}"` : '';
+      const titleSpan = mobile ? '' : `<span style="color:var(--muted)">${escHtml(truncateTitle(node.title, 18))}</span>`;
+      chips.push(
+        `<button type="button" class="dag-linear-node${crit}${changed}" data-node-id="${escHtml(node.id)}"${titleHint}>` +
+        `<span>${st.icon}</span><span>${escHtml(node.id)}</span>${titleSpan}<span style="color:var(--muted)">${escHtml(node.agent)}</span></button>`
+      );
+      if (idx < ordered.length - 1) {
+        const next = ordered[idx + 1];
+        const sep = (node.wave ?? 0) < (next.wave ?? 0) ? '→' : '·';
+        chips.push(`<span class="dag-linear-arrow">${sep}</span>`);
+      }
+    });
+    return `
+      ${renderGraphToolbar(dag, false)}
+      <div class="dag-linear">
+        <div class="dag-linear-msg">DAG planning not enabled for this mission — using wave mode. Tasks shown in wave order; tap a node for details.</div>
+        <div class="dag-linear-track">${chips.join('')}</div>
+      </div>
+      ${renderDagLegend()}`;
+  }
+
+  function renderSvgDagView(dag) {
+    const { positions, width, height } = layoutDagNodes(dag);
+    const critical = new Set(dag.criticalPath || []);
+    const mobile = isMobileGraph();
+    const titleMax = mobile ? 0 : 22;
+
+    let edgesSvg = '';
+    for (const e of dag.edges || []) {
+      const d = edgePath(e.from, e.to, positions);
+      if (!d) continue;
+      const crit = isCriticalEdge(dag, e.from, e.to) ? ' critical' : '';
+      edgesSvg += `<path class="dag-edge${crit}" d="${d}"/>`;
+    }
+
+    let nodesSvg = '';
+    for (const node of dag.nodes) {
+      const pos = positions.get(node.id);
+      if (!pos) continue;
+      const st = DAG_STATUS_STYLE[node.status] || DAG_STATUS_STYLE.pending;
+      const onCrit = critical.has(node.id);
+      const changed = nodeStatusChanged(node.id, node.status) ? ' status-changed' : '';
+      const title = titleMax ? truncateTitle(node.title, titleMax) : '';
+      nodesSvg += `
+        <g class="dag-node${onCrit ? ' critical' : ''}${changed}" data-node-id="${escHtml(node.id)}" transform="translate(${pos.x},${pos.y})">
+          <title>${escHtml(node.title)} · ${escHtml(node.agent)}</title>
+          <rect width="${pos.w}" height="${pos.h}" fill="${st.fill}" stroke="${onCrit ? '#f59e0b' : st.stroke}"/>
+          <text class="dag-node-status" x="10" y="17" fill="${st.stroke}">${st.icon}</text>
+          <text class="dag-node-label" x="26" y="17">${escHtml(node.id)}</text>
+          ${title ? `<text class="dag-node-sub dag-node-title" x="10" y="34">${escHtml(title)}</text>` : ''}
+          <text class="dag-node-sub dag-node-meta" x="10" y="${title ? 48 : 36}">${escHtml(node.agent)} · ${escHtml(node.priority || '')}</text>
+        </g>`;
+    }
+
+    return `
+      ${renderGraphToolbar(dag, true)}
+      <div class="mission-graph-viewport" id="dag-viewport">
+        <div class="dag-zoom-layer" id="dag-zoom-layer" style="width:${width}px;height:${height}px">
+          <svg class="mission-graph-svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Mission task dependency graph">
+            <defs>
+              <marker id="dag-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+                <path d="M0,0 L7,3 L0,6 Z" fill="rgba(136,136,170,0.55)"/>
+              </marker>
+              <marker id="dag-arrow-critical" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+                <path d="M0,0 L7,3 L0,6 Z" fill="#f59e0b"/>
+              </marker>
+            </defs>
+            ${edgesSvg}
+            ${nodesSvg}
+          </svg>
+        </div>
+      </div>
+      ${renderDagLegend()}`;
+  }
+
+  function renderMissionGraphPanel() {
+    const el = document.getElementById('mission-graph-panel');
+    if (!el || activeIntelTab !== 'graph') return;
+
+    const dag = getMissionDag();
+    if (!dag || !Array.isArray(dag.nodes) || dag.nodes.length === 0) {
+      el.innerHTML = renderDagEmptyState();
+      dagZoomController = null;
+      return;
+    }
+
+    const useLinear = dag.planningMode === 'flat' || !(dag.edges || []).length;
+    const drawerWasOpen = selectedMissionNodeId && document.getElementById('mission-node-drawer')?.classList.contains('open');
+    if (dag.runId && dag.runId !== lastDagRunId) {
+      dagViewState = { scale: 1, tx: 0, ty: 0 };
+      lastDagRunId = dag.runId;
+    }
+
+    el.innerHTML = useLinear ? renderLinearDagView(dag) : renderSvgDagView(dag);
+    bindMissionGraphInteractions(dag);
+    snapshotDagStatuses(dag);
+
+    if (!useLinear) {
+      const viewport = document.getElementById('dag-viewport');
+      const layer = document.getElementById('dag-zoom-layer');
+      const layout = layoutDagNodes(dag);
+      const isFirstRender = dagViewState.scale === 1 && dagViewState.tx === 0 && dagViewState.ty === 0;
+      dagZoomController = initDagZoomPan(viewport, layer, layout.width, layout.height);
+      if (isFirstRender) dagZoomController?.fitToView();
+    } else {
+      dagZoomController = null;
+    }
+
+    if (drawerWasOpen && selectedMissionNodeId) {
+      openMissionNodeDrawer(dag, selectedMissionNodeId);
+    }
+  }
+
+  async function activateMissionGraphTab() {
+    missionGraphEverOpened = true;
+    if (!missionDagPayload) await fetchMissionDag();
+    renderMissionGraphPanel();
+  }
+
+  function switchIntelTab(tab) {
+    activeIntelTab = tab;
+    document.querySelectorAll('.intel-tab').forEach(btn => {
+      const on = btn.dataset.intel === tab;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    document.querySelectorAll('.intel-panel').forEach(panel => {
+      const on = panel.id === `intel-panel-${tab}`;
+      panel.classList.toggle('active', on);
+      panel.hidden = !on;
+    });
+    if (tab === 'graph') activateMissionGraphTab();
+    else closeMissionNodeDrawer();
+  }
+
+  document.querySelectorAll('.intel-tab').forEach(btn => {
+    btn.addEventListener('click', () => switchIntelTab(btn.dataset.intel || 'board'));
+  });
+
   document.getElementById('btn-refresh-board')?.addEventListener('click', async () => {
     const btn = document.getElementById('btn-refresh-board');
     btn?.classList.add('spinning');
     btn?.setAttribute('disabled', 'true');
     try {
-      await fetchBoardStatus();
+      const fetches = [fetchBoardStatus()];
+      if (activeIntelTab === 'graph' || missionGraphEverOpened) fetches.push(fetchMissionDag());
+      await Promise.all(fetches);
       renderBoardPanel();
+      if (activeIntelTab === 'graph') renderMissionGraphPanel();
       updateLastUpdated();
-      toast('Command board updated', 'success', 2800);
+      toast('Mission intel updated', 'success', 2800);
     } catch (e) {
-      toast('Board refresh failed', 'error');
+      toast('Refresh failed', 'error');
     } finally {
       btn?.classList.remove('spinning');
       btn?.removeAttribute('disabled');
@@ -2733,6 +3724,7 @@
     renderLiveStatus();
     renderOpsStatus();
     renderBoardPanel();
+    scheduleMissionGraphRender();
     renderRecentRuns();
     renderTokensChart(filtered);
     renderModelChart(filtered);
@@ -3124,12 +4116,15 @@
   // ═══════════════════════════════════════════════════════════════════════════
 
   async function pollRunState() {
-    await Promise.all([fetchRunState(), fetchBoardStatus(), fetchSupervisor()]);
+    const fetches = [fetchRunState(), fetchBoardStatus(), fetchSupervisor()];
+    if (missionGraphEverOpened && activeIntelTab === 'graph') fetches.push(fetchMissionDag());
+    await Promise.all(fetches);
     renderLiveIndicator();
     renderCards();
     renderLiveStatus();
     renderOpsStatus();
     renderBoardPanel();
+    scheduleMissionGraphRender();
     renderRecentRuns();
     if (activeTab === 'actions') renderHitlActionsPanel();
     if (activeTab === 'history') renderHistory();
