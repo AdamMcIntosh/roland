@@ -23,6 +23,8 @@ export interface CritiqueInput {
   iteration: number;
   retryCount: number;
   maxRetries: number;
+  /** Consecutive verify failures before HITL (defaults to 4). */
+  escalationThreshold?: number;
   hadBlockers?: boolean;
   verification?: {
     pass: boolean;

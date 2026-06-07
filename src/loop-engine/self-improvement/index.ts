@@ -12,6 +12,7 @@ export {
   shouldEscalateToHuman,
   escalationRetryDecision,
   DEFAULT_MAX_RETRIES,
+  DEFAULT_ESCALATION_THRESHOLD,
 } from './escalation.js';
 export type { EscalationContext } from './escalation.js';
 

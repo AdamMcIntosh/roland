@@ -13,6 +13,7 @@ import {
   type CritiqueEngineOptions,
 } from '../self-improvement/critique-engine.js';
 import type { LoopCritiqueSnapshot } from '../self-improvement/types.js';
+import { DEFAULT_ESCALATION_THRESHOLD } from '../self-improvement/escalation.js';
 
 export class CritiquePhaseHandler implements PhaseHandler {
   readonly phase = Phase.Critique;
@@ -24,6 +25,12 @@ export class CritiquePhaseHandler implements PhaseHandler {
 
   async execute(ctx: PhaseHandlerContext): Promise<PhaseResult> {
     const maxRetries = ctx.maxRetries ?? 3;
+    const escalationThreshold = ctx.escalationThreshold ?? DEFAULT_ESCALATION_THRESHOLD;
+
+    console.error(
+      `[Loop][critique] thresholds maxRetries=${maxRetries} escalationThreshold=${escalationThreshold} ` +
+        `retryCount=${ctx.state.retryCount} iteration=${ctx.iteration}`,
+    );
 
     let critique: LoopCritiqueSnapshot;
     try {
@@ -32,6 +39,7 @@ export class CritiquePhaseHandler implements PhaseHandler {
         iteration: ctx.iteration,
         retryCount: ctx.state.retryCount,
         maxRetries,
+        escalationThreshold,
         hadBlockers: ctx.hadBlockers,
         verification: ctx.state.lastVerification,
         phaseHistory: ctx.state.phaseHistory.map((t) => ({
@@ -106,7 +114,9 @@ export class CritiquePhaseHandler implements PhaseHandler {
     );
     ctx.commandBoard?.appendBullet(
       'Open Intel',
-      `[CRITIQUE] model=${critique.model} decision=${critique.retryDecision} issues=${critique.issues.length}`,
+      `[CRITIQUE] model=${critique.model} decision=${critique.retryDecision} ` +
+        `retry=${ctx.state.retryCount}/${maxRetries} escalationThreshold=${escalationThreshold} ` +
+        `issues=${critique.issues.length}`,
     );
 
     const shouldEscalate = critique.retryDecision === 'escalate';

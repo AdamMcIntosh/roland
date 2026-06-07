@@ -16,8 +16,13 @@ export type {
 } from './loop-state.js';
 
 export { LoopTemplates, LoopTemplateSchema } from './loop-templates.js';
-export { loadLoopEngineConfig, LoopEngineConfigSchema } from './loop-config.js';
-export type { LoopEngineConfig } from './loop-config.js';
+export {
+  loadLoopEngineConfig,
+  LoopEngineConfigSchema,
+  resolveCritiqueThresholds,
+  clearLoopEngineConfigCache,
+} from './loop-config.js';
+export type { LoopEngineConfig, CritiqueThresholds } from './loop-config.js';
 
 export type {
   VerificationStrategyType,

@@ -3,7 +3,12 @@
  */
 
 import type { CritiqueInput, RetryDecision } from './types.js';
-import { escalationRetryDecision, shouldEscalateToHuman, type EscalationContext } from './escalation.js';
+import {
+  DEFAULT_ESCALATION_THRESHOLD,
+  escalationRetryDecision,
+  shouldEscalateToHuman,
+  type EscalationContext,
+} from './escalation.js';
 
 export interface RetryStrategyResult {
   decision: RetryDecision;
@@ -14,12 +19,7 @@ export interface RetryStrategyResult {
 
 /** Simple retry — re-run the full loop iteration when any gate fails. */
 export function simpleRetryStrategy(input: CritiqueInput): RetryStrategyResult {
-  const escalationCtx: EscalationContext = {
-    retryCount: input.retryCount,
-    maxRetries: input.maxRetries,
-    consecutiveVerifyFailures: countConsecutiveVerifyFailures(input),
-    hadBlockers: Boolean(input.hadBlockers),
-  };
+  const escalationCtx = buildEscalationContext(input);
 
   if (shouldEscalateToHuman(escalationCtx)) {
     return {
@@ -45,12 +45,7 @@ export function simpleRetryStrategy(input: CritiqueInput): RetryStrategyResult {
  * Used when failures are localized (single strategy type).
  */
 export function focusedRetryStrategy(input: CritiqueInput): RetryStrategyResult {
-  const escalationCtx: EscalationContext = {
-    retryCount: input.retryCount,
-    maxRetries: input.maxRetries,
-    consecutiveVerifyFailures: countConsecutiveVerifyFailures(input),
-    hadBlockers: Boolean(input.hadBlockers),
-  };
+  const escalationCtx = buildEscalationContext(input);
 
   if (shouldEscalateToHuman(escalationCtx)) {
     return {
@@ -92,6 +87,16 @@ export function resolveRetryStrategy(input: CritiqueInput): RetryStrategyResult 
     return focusedRetryStrategy(input);
   }
   return simpleRetryStrategy(input);
+}
+
+function buildEscalationContext(input: CritiqueInput): EscalationContext {
+  return {
+    retryCount: input.retryCount,
+    maxRetries: input.maxRetries,
+    escalationThreshold: input.escalationThreshold ?? DEFAULT_ESCALATION_THRESHOLD,
+    consecutiveVerifyFailures: countConsecutiveVerifyFailures(input),
+    hadBlockers: Boolean(input.hadBlockers),
+  };
 }
 
 function countConsecutiveVerifyFailures(input: CritiqueInput): number {

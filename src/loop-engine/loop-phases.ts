@@ -47,8 +47,13 @@ export interface LoopTemplate {
   phases: PhaseConfig[];
   /** Outer loop iterations before escalation (default: 5) */
   maxIterations?: number;
-  /** Max retry attempts within a single iteration (default: 3) */
+  /** Max retry attempts before HITL escalation (default: 3) */
   maxRetries?: number;
+  /** Consecutive verify failures before HITL (default: 4, independent of maxRetries) */
+  escalationThreshold?: number;
+  /** Test-mode overrides — used when isTestMode or ROLAND_LOOP_TEST_MODE=1 */
+  testModeMaxRetries?: number;
+  testModeEscalationThreshold?: number;
 }
 
 export function isPhase(value: string): value is Phase {

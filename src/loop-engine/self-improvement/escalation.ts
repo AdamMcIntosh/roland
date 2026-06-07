@@ -7,22 +7,42 @@ import type { RetryDecision } from './types.js';
 export interface EscalationContext {
   retryCount: number;
   maxRetries: number;
+  /** Consecutive verify failures before escalating (independent of retry budget). */
+  escalationThreshold: number;
   consecutiveVerifyFailures: number;
   hadBlockers: boolean;
 }
 
 export const DEFAULT_MAX_RETRIES = 3;
+/** Default consecutive verify-failure count before HITL (was tied to maxRetries=2–3; now 4). */
+export const DEFAULT_ESCALATION_THRESHOLD = 4;
 
 /**
  * Returns true when the loop should escalate to human operator (HITL).
- * Threshold: retryCount >= maxRetries after failed verification/critique cycles.
+ * Two paths: retry budget exhausted, or consecutive verify failures exceed threshold.
  */
 export function shouldEscalateToHuman(ctx: EscalationContext): boolean {
   if (ctx.maxRetries <= 0) return false;
-  // After maxRetries exhausted, stop autonomous retry and escalate.
-  if (ctx.retryCount >= ctx.maxRetries) return true;
-  // Repeated verify failures across iterations without recovery.
-  if (ctx.consecutiveVerifyFailures >= ctx.maxRetries && ctx.retryCount > 0) return true;
+
+  const threshold = ctx.escalationThreshold > 0
+    ? ctx.escalationThreshold
+    : DEFAULT_ESCALATION_THRESHOLD;
+
+  if (ctx.retryCount >= ctx.maxRetries) {
+    console.error(
+      `[Loop][escalation] retry budget exhausted retryCount=${ctx.retryCount} maxRetries=${ctx.maxRetries}`,
+    );
+    return true;
+  }
+
+  if (ctx.consecutiveVerifyFailures >= threshold && ctx.retryCount > 0) {
+    console.error(
+      `[Loop][escalation] consecutive verify failures threshold met ` +
+        `failures=${ctx.consecutiveVerifyFailures} threshold=${threshold} retryCount=${ctx.retryCount}`,
+    );
+    return true;
+  }
+
   return false;
 }
 

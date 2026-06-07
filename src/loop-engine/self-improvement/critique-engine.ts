@@ -15,6 +15,7 @@ import type {
   LoopCritiqueSnapshot,
 } from './types.js';
 import { critiqueOutputToSnapshot } from './types.js';
+import { DEFAULT_ESCALATION_THRESHOLD } from './escalation.js';
 
 export interface CritiqueEngineOptions {
   /** Override max retries (template maxRetries takes precedence at handler level). */
@@ -32,7 +33,9 @@ export class CritiqueEngine {
 
   critique(input: CritiqueInput): CritiqueOutput {
     const maxRetries = input.maxRetries ?? this.opts.maxRetries ?? 3;
-    const enriched: CritiqueInput = { ...input, maxRetries };
+    const escalationThreshold =
+      input.escalationThreshold ?? DEFAULT_ESCALATION_THRESHOLD;
+    const enriched: CritiqueInput = { ...input, maxRetries, escalationThreshold };
 
     const strengths = collectStrengths(enriched);
     const issues = collectIssues(enriched);
@@ -48,7 +51,8 @@ export class CritiqueEngine {
     );
     console.error(
       `[Loop][critique] model=${model} routed=${routedModelId} decision=${retryResult.decision} ` +
-        `retry=${input.retryCount}/${maxRetries}`,
+        `retry=${input.retryCount}/${maxRetries} escalationThreshold=${escalationThreshold} ` +
+        `reason="${retryResult.reason}"`,
     );
 
     const summary = buildSummary(enriched, retryResult.decision, retryResult.reason);

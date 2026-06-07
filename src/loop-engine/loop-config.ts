@@ -8,6 +8,11 @@ import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
 import { z } from 'zod';
 import { isVerificationStrategyType } from './verification/verification-strategies.js';
+import {
+  DEFAULT_ESCALATION_THRESHOLD,
+  DEFAULT_MAX_RETRIES,
+} from './self-improvement/escalation.js';
+import type { LoopTemplate } from './loop-phases.js';
 
 const VerificationStrategySchema = z.object({
   type: z.string().refine(isVerificationStrategyType, { message: 'Invalid verification strategy type' }),
@@ -28,6 +33,13 @@ export const LoopEngineConfigSchema = z.object({
   critique: z
     .object({
       max_retries: z.number().int().nonnegative().optional(),
+      escalation_threshold: z.number().int().positive().optional(),
+      test_mode: z
+        .object({
+          max_retries: z.number().int().nonnegative().optional(),
+          escalation_threshold: z.number().int().positive().optional(),
+        })
+        .optional(),
     })
     .optional(),
 });
@@ -44,8 +56,18 @@ export type LoopEngineConfig = z.infer<typeof LoopEngineConfigSchema> & {
   };
   critique?: {
     maxRetries?: number;
+    escalationThreshold?: number;
+    testMode?: {
+      maxRetries?: number;
+      escalationThreshold?: number;
+    };
   };
 };
+
+export interface CritiqueThresholds {
+  maxRetries: number;
+  escalationThreshold: number;
+}
 
 const DEFAULT_CONFIG: LoopEngineConfig = {
   default_template: 'standard-code-loop',
@@ -54,7 +76,8 @@ const DEFAULT_CONFIG: LoopEngineConfig = {
     require_pass_before_critique: false,
   },
   critique: {
-    maxRetries: 3,
+    maxRetries: DEFAULT_MAX_RETRIES,
+    escalationThreshold: DEFAULT_ESCALATION_THRESHOLD,
   },
 };
 
@@ -98,8 +121,49 @@ function normaliseCritique(
 ): LoopEngineConfig['critique'] {
   if (!raw) return DEFAULT_CONFIG.critique;
   return {
-    maxRetries: raw.max_retries ?? DEFAULT_CONFIG.critique?.maxRetries ?? 3,
+    maxRetries: raw.max_retries ?? DEFAULT_CONFIG.critique?.maxRetries ?? DEFAULT_MAX_RETRIES,
+    escalationThreshold:
+      raw.escalation_threshold ??
+      DEFAULT_CONFIG.critique?.escalationThreshold ??
+      DEFAULT_ESCALATION_THRESHOLD,
+    testMode: raw.test_mode
+      ? {
+          maxRetries: raw.test_mode.max_retries,
+          escalationThreshold: raw.test_mode.escalation_threshold,
+        }
+      : undefined,
   };
+}
+
+/** Resolve retry + escalation thresholds from template, base config, and optional test mode. */
+export function resolveCritiqueThresholds(
+  template: LoopTemplate,
+  opts: { isTestMode?: boolean } = {},
+): CritiqueThresholds {
+  const cfg = loadLoopEngineConfig();
+  const envTestMode = process.env.ROLAND_LOOP_TEST_MODE === '1';
+  const testMode = Boolean(opts.isTestMode || envTestMode);
+
+  const baseMaxRetries = template.maxRetries ?? cfg.critique?.maxRetries ?? DEFAULT_MAX_RETRIES;
+  const baseEscalation =
+    template.escalationThreshold ??
+    cfg.critique?.escalationThreshold ??
+    DEFAULT_ESCALATION_THRESHOLD;
+
+  if (testMode) {
+    return {
+      maxRetries:
+        template.testModeMaxRetries ??
+        cfg.critique?.testMode?.maxRetries ??
+        baseMaxRetries + 2,
+      escalationThreshold:
+        template.testModeEscalationThreshold ??
+        cfg.critique?.testMode?.escalationThreshold ??
+        baseEscalation + 2,
+    };
+  }
+
+  return { maxRetries: baseMaxRetries, escalationThreshold: baseEscalation };
 }
 
 export function loadLoopEngineConfig(): LoopEngineConfig {

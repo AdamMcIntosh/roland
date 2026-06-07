@@ -29,6 +29,9 @@ export const LoopTemplateSchema = z.object({
   phases: z.array(PhaseConfigSchema).min(1),
   maxIterations: z.number().int().positive().optional(),
   maxRetries: z.number().int().nonnegative().optional(),
+  escalationThreshold: z.number().int().positive().optional(),
+  testModeMaxRetries: z.number().int().nonnegative().optional(),
+  testModeEscalationThreshold: z.number().int().positive().optional(),
 });
 
 export class LoopTemplates {
@@ -79,6 +82,9 @@ export class LoopTemplates {
           })),
           maxIterations: parsed.maxIterations,
           maxRetries: parsed.maxRetries,
+          escalationThreshold: parsed.escalationThreshold,
+          testModeMaxRetries: parsed.testModeMaxRetries,
+          testModeEscalationThreshold: parsed.testModeEscalationThreshold,
         };
         map.set(template.name, template);
       } catch {

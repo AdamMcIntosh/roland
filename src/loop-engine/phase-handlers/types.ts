@@ -26,8 +26,10 @@ export interface PhaseHandlerContext {
   waveNumber?: number;
   hadBlockers?: boolean;
   phaseConfig?: PhaseConfig;
-  /** Max retry attempts before escalation (from loop template). */
+  /** Max retry attempts before escalation (from loop template / config). */
   maxRetries?: number;
+  /** Consecutive verify failures before HITL (from loop template / config). */
+  escalationThreshold?: number;
 }
 
 export interface PhaseHandler {

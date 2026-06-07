@@ -21,6 +21,7 @@ import {
   type PhaseHandler,
   type PhaseResult,
 } from './phase-handlers/index.js';
+import { resolveCritiqueThresholds } from './loop-config.js';
 
 export interface LoopHooks {
   onPhaseStart?: (phase: Phase, iteration: number) => void;
@@ -38,6 +39,8 @@ export interface LoopEngineOptions {
   commandBoard?: CommandBlackboard;
   handlers?: Map<Phase, PhaseHandler>;
   hooks?: LoopHooks;
+  /** Elevated retry/escalation thresholds for E2E and dev (also ROLAND_LOOP_TEST_MODE=1). */
+  isTestMode?: boolean;
 }
 
 export interface LoopRunResult {
@@ -54,6 +57,7 @@ export class LoopEngine {
   private readonly goal: string;
   private readonly blackboard: Blackboard;
   private readonly commandBoard?: CommandBlackboard;
+  private readonly critiqueThresholds: ReturnType<typeof resolveCritiqueThresholds>;
 
   constructor(opts: LoopEngineOptions) {
     const firstPhase = opts.template.phases[0]?.phase ?? P.Plan;
@@ -63,6 +67,9 @@ export class LoopEngine {
     this.commandBoard = opts.commandBoard;
     this.handlers = opts.handlers ?? createDefaultHandlers();
     this.hooks = opts.hooks ?? {};
+    this.critiqueThresholds = resolveCritiqueThresholds(opts.template, {
+      isTestMode: opts.isTestMode,
+    });
     this.store = new LoopStateStore(
       opts.stateDir,
       createInitialLoopState(opts.template.name, opts.goal, firstPhase),
@@ -124,8 +131,7 @@ export class LoopEngine {
       const state = this.store.get();
       if (!shouldRetryLoop) break;
 
-      const maxRetries = this.template.maxRetries ?? 3;
-      // Escalate when critique retry budget is exhausted (3 failed retries → HITL).
+      const { maxRetries } = this.critiqueThresholds;
       if (state.retryCount >= maxRetries) {
         this.store.setStatus('escalated');
         this.hooks.onLoopComplete?.(this.store.get(), 'escalated');
@@ -170,7 +176,8 @@ export class LoopEngine {
       waveNumber: ctx.waveNumber,
       hadBlockers: ctx.hadBlockers,
       phaseConfig,
-      maxRetries: this.template.maxRetries ?? 3,
+      maxRetries: this.critiqueThresholds.maxRetries,
+      escalationThreshold: this.critiqueThresholds.escalationThreshold,
     });
 
     this.store.completePhase(phase, {

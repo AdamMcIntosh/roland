@@ -28,3 +28,8 @@ phases:
     label: Observe
 maxIterations: 5
 maxRetries: 3
+# Consecutive verify failures before HITL (independent of maxRetries retry budget)
+escalationThreshold: 4
+# E2E / dev overrides when isTestMode or ROLAND_LOOP_TEST_MODE=1
+testModeMaxRetries: 6
+testModeEscalationThreshold: 8
