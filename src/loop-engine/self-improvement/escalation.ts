@@ -35,7 +35,12 @@ export function shouldEscalateToHuman(ctx: EscalationContext): boolean {
     return true;
   }
 
-  if (ctx.consecutiveVerifyFailures >= threshold && ctx.retryCount > 0) {
+  // Defer verify-failure escalation until the penultimate retry — let retry budget run first.
+  if (
+    ctx.consecutiveVerifyFailures >= threshold &&
+    ctx.retryCount > 0 &&
+    ctx.retryCount < ctx.maxRetries - 1
+  ) {
     console.error(
       `[Loop][escalation] consecutive verify failures threshold met ` +
         `failures=${ctx.consecutiveVerifyFailures} threshold=${threshold} retryCount=${ctx.retryCount}`,

@@ -1,0 +1,31 @@
+name: feature-implementation-loop
+description: >
+  Feature delivery loop — plan scope, implement, verify with unit/integration tests,
+  critique completeness, retry gaps, observe before shipping next slice.
+phases:
+  - phase: plan
+    label: Plan feature
+    agent: lead-pm
+  - phase: act
+    label: Implement
+    agent: executor
+  - phase: verify
+    label: Verify feature
+    agent: test-executor
+    verification:
+      - unit
+      - integration
+      - smoke
+  - phase: critique
+    label: Critique delivery
+    agent: critic
+  - phase: retry
+    label: Retry implementation
+    optional: true
+  - phase: observe
+    label: Observe state
+maxIterations: 5
+maxRetries: 3
+escalationThreshold: 4
+testModeMaxRetries: 6
+testModeEscalationThreshold: 8

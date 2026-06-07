@@ -78,11 +78,20 @@ export class LoopStateStore {
   private readonly filePath: string;
   private state: LoopState;
 
-  constructor(stateDir: string, initial: LoopState) {
+  constructor(stateDir: string, initial: LoopState, opts: { skipInitialFlush?: boolean } = {}) {
     fs.mkdirSync(stateDir, { recursive: true });
     this.filePath = path.join(stateDir, LOOP_STATE_FILE);
     this.state = initial;
-    this.flush();
+    if (!opts.skipInitialFlush) this.flush();
+  }
+
+  /** Resume from disk when a running loop snapshot exists (supervisor recovery). */
+  static loadOrCreate(stateDir: string, fallback: LoopState): LoopStateStore {
+    const existing = readLoopState(stateDir);
+    if (existing && existing.status === 'running') {
+      return new LoopStateStore(stateDir, existing, { skipInitialFlush: true });
+    }
+    return new LoopStateStore(stateDir, fallback);
   }
 
   get(): LoopState {

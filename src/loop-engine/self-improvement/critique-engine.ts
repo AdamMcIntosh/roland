@@ -16,6 +16,7 @@ import type {
 } from './types.js';
 import { critiqueOutputToSnapshot } from './types.js';
 import { DEFAULT_ESCALATION_THRESHOLD } from './escalation.js';
+import { loopDegradationPolicy } from '../loop-resilience.js';
 
 export interface CritiqueEngineOptions {
   /** Override max retries (template maxRetries takes precedence at handler level). */
@@ -42,7 +43,7 @@ export class CritiqueEngine {
     const suggestions = collectSuggestions(enriched);
     const proposals = generateImprovementProposals(enriched);
     const retryResult = resolveRetryStrategy(enriched);
-    const model = selectCritiqueModel(enriched, issues);
+    const model = loopDegradationPolicy.selectModel(selectCritiqueModel(enriched, issues));
 
     // Log model routing for observability (matches team-orchestrator banner pattern).
     const routedModelId = toCursorModelId(

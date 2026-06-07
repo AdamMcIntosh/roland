@@ -772,6 +772,7 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
         goal,
         blackboard,
         commandBoard,
+        recoverOnStart: true,
         hooks: { onStateChange: onLoopStateChange },
       });
       loopCoordinator = new LoopEngineCoordinator(engine);

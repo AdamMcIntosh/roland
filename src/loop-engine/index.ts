@@ -43,6 +43,42 @@ export { LoopEngine, LoopEngineCoordinator } from './loop-engine.js';
 export type { LoopEngineOptions, LoopHooks, LoopRunResult } from './loop-engine.js';
 
 export {
+  LoopObservability,
+  computeLoopMetrics,
+  summarizeHistory,
+  LOOP_METRICS_FILE,
+  LOOP_HISTORY_FILE,
+  HISTORY_SUMMARIZE_AT,
+} from './loop-observability.js';
+export type {
+  LoopMetrics,
+  PhaseTransitionLog,
+  LoopHistoryEntry,
+  LoopExecutionHistory,
+  PhaseDurationStats,
+} from './loop-observability.js';
+
+export {
+  saveLoopCheckpoint,
+  readLoopCheckpoint,
+  clearLoopCheckpoint,
+  tryRecoverLoopState,
+  LOOP_CHECKPOINT_FILE,
+} from './loop-checkpoint.js';
+export type { LoopCheckpoint } from './loop-checkpoint.js';
+
+export {
+  isRateLimitOrUnavailableError,
+  degradedCritiqueModel,
+  loopDegradationPolicy,
+  ModelDegradationPolicy,
+} from './loop-resilience.js';
+export type { DegradationState } from './loop-resilience.js';
+
+export { buildLoopHealthReport } from './loop-health.js';
+export type { LoopHealthReport, LoopHealthStatus } from './loop-health.js';
+
+export {
   createDefaultHandlers,
   PlanPhaseHandler,
   ActPhaseHandler,

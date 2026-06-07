@@ -196,17 +196,65 @@ roland team "Fix auth regression" --loop-template standard-code-loop --backgroun
 import { LoopEngine, LoopTemplates } from './loop-engine/index.js';
 ```
 
-### Known limitations (Wave 1)
+### Known limitations (Wave 1 — superseded by task-6)
 
-- Verify handler is a **stub gate** (blocker-aware pass/fail) — real test-executor / linter wiring is Wave 2.
-- Retry phase does not yet re-queue PM tasks automatically — records intent on blackboard only.
-- No advanced exponential backoff (non-goal for this wave).
-- Dashboard UI panel for loop phase not yet built — fields are in `run-state.json` API.
+See **Maturity (task-6)** below for current state.
 
-### Downstream tasks
+---
 
-- **task-2 (Vanguard):** Wired E2E test using `minimal-3-phase` template via `LoopEngine.run()`.
-- **task-3 (Vanguard):** Execute scoped test command from task-2 handoff.
+## Maturity Level (task-6 — Reliability & Observability)
+
+**Overall:** **Beta / production-hardening** — core loop phases, verification, critique, retry, and escalation are wired end-to-end. Observability, checkpoint recovery, and dashboard loop control ship in task-6.
+
+| Area | Maturity | Shipped in task-6 |
+|------|----------|-------------------|
+| **Loop primitives** | Stable | Plan → Act → Verify → Critique → Retry → Observe; `LoopEngine` + coordinator |
+| **Verification gates** | Stable | `TestExecutor` with unit/lint/typecheck strategies; injected runner for E2E |
+| **Critique + retry** | Stable | Rule-based critique engine; escalation independent of maxRetries |
+| **Observability** | Beta | Structured phase logging, `loop-metrics.json`, `loop-execution-history.json`, blackboard history |
+| **Checkpoint / recovery** | Beta | `loop-checkpoint.json` before each phase; supervisor recovery hint on restart |
+| **Model degradation** | Beta | Rate-limit detection; Grok ↔ Composer fallback via `loopDegradationPolicy` |
+| **Dashboard** | Beta | Loop intel panel, phase timeline chips, live metrics, Resume/Replan actions |
+| **Health API** | Beta | `GET /api/loop-health` — diagnostics, metrics, template catalog |
+| **Reference templates** | Beta | `code-quality-loop`, `feature-implementation-loop`, `research-synthesis-loop` (+ legacy templates) |
+
+### task-6 module layout
+
+| Path | Role |
+|------|------|
+| `src/loop-engine/loop-observability.ts` | Phase transition logging, metrics, execution history + blackboard summarization |
+| `src/loop-engine/loop-checkpoint.ts` | Pre-phase checkpoints; `tryRecoverLoopState()` for supervisor restart |
+| `src/loop-engine/loop-resilience.ts` | Rate-limit detection; model degradation policy |
+| `src/loop-engine/loop-health.ts` | Aggregated health report for dashboard `/api/loop-health` |
+| `scripts/serve-dashboard.js` | Loop health route + WebSocket push; watches loop state files |
+| `recipes/loops/code-quality-loop.yaml` | Lint/unit/typecheck quality loop |
+| `recipes/loops/feature-implementation-loop.yaml` | Feature delivery with integration/smoke verify |
+| `recipes/loops/research-synthesis-loop.yaml` | Research → synthesize → validate loop |
+
+### Remaining gaps (post task-6)
+
+| Gap | Priority | Notes |
+|-----|----------|-------|
+| Retry phase auto re-queues PM tasks | P2 | Retry records intent on blackboard; orchestrator does not yet spawn retry wave automatically |
+| LLM-backed critique | P3 | Critique is rule-based; model routing logged for future LLM wiring |
+| Distributed / multi-node loops | — | Explicit non-goal |
+| Visual loop designer | — | Explicit non-goal |
+| 14-day dogfood AC-1 window | P1 | Requires operator usage; no code gate |
+| Full exponential backoff on verify | P3 | Circuit breaker covers network; verify retry uses critique policy |
+
+### Usage (task-6)
+
+```bash
+# Launch with reference template
+roland team "Improve test coverage" --loop-template code-quality-loop --background
+
+# Health diagnostics (dashboard or curl)
+curl http://127.0.0.1:8081/api/loop-health
+
+# Scoped tests
+npm run test:run -- tests/unit/loop-observability.test.ts
+npm run test:run -- tests/e2e/loop-critique-retry-escalation.test.ts
+```
 
 ---
 
