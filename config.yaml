@@ -24,8 +24,14 @@ loop_engine:
   default_template: standard-code-loop
   templates_dir: recipes/loops
   verification:
-    # Gate: Critique phase is skipped when verification fails
-    require_pass_before_critique: true
+    # Legacy flag — Critique always runs after Verify; retry owned by critique phase
+    require_pass_before_critique: false
+  critique:
+    max_retries: 3
+    escalation_threshold: 4
+    test_mode:
+      max_retries: 6
+      escalation_threshold: 8
     strategies:
       - type: unit
         command: npm run test:run

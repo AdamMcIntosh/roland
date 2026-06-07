@@ -83,16 +83,10 @@ export class VerifyPhaseHandler implements PhaseHandler {
 
     ctx.commandBoard?.appendBullet('Open Intel', `[VERIFY] ${verification.summary}`);
 
-    // TODO(auto-critique): Feed verification.strategies failures into CritiquePhaseHandler context
-    // so the critic agent receives structured test/lint output instead of re-running checks.
-
-    const requirePass = cfg.verification?.require_pass_before_critique !== false;
-    const shouldRetry = !verification.pass && requirePass;
-
+    // Retry decisions are owned by Critique phase; Verify only records gate results.
     return {
       success: verification.pass,
       summary: verification.summary,
-      shouldRetry,
       verification: loopSnapshot,
     };
   }

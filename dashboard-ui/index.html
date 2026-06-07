@@ -276,6 +276,11 @@
     .loop-strategy-row + .loop-strategy-row { margin-top: .2rem; }
     .loop-strategy-pass { color: var(--emerald); }
     .loop-strategy-fail { color: #fca5a5; }
+    .loop-critique-panel { margin-top: .45rem; padding-top: .35rem; border-top: 1px solid rgba(255,255,255,.08); font-size: .72rem; }
+    .loop-critique-decision { font-weight: 600; }
+    .loop-critique-decision.escalate { color: #fca5a5; }
+    .loop-critique-decision.retry { color: #fcd34d; }
+    .loop-critique-decision.proceed { color: var(--emerald); }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
     .task-card.status-running .task-icon { animation: blink 1.5s ease-in-out infinite; }
 
@@ -4306,10 +4311,25 @@
       }).join('');
     }
     const summary = lv && lv.summary ? '<div style="margin-top:.3rem;color:var(--muted)">' + escHtml(lv.summary.slice(0, 120)) + '</div>' : '';
+    const lc = rs.lastCritique;
+    let critiqueHtml = '';
+    if (lc && lc.retryDecision) {
+      const decCls = lc.retryDecision === 'escalate' ? 'escalate'
+        : (lc.retryDecision === 'retry' || lc.retryDecision === 'retry_focused') ? 'retry' : 'proceed';
+      const decLabel = lc.retryDecision === 'retry_focused' ? 'RETRY (focused)' : lc.retryDecision.toUpperCase();
+      const modelLabel = lc.model === 'composer' ? 'Composer' : 'Grok';
+      const retryNote = rs.loopRetryCount != null ? ' · retry ' + rs.loopRetryCount : '';
+      const issueNote = lc.issueCount != null ? ' · ' + lc.issueCount + ' issue(s)' : '';
+      critiqueHtml = '<div class="loop-critique-panel">' +
+        '<span class="loop-critique-decision ' + decCls + '">' + escHtml(decLabel) + '</span>' +
+        ' · ' + escHtml(modelLabel) + escHtml(retryNote) + escHtml(issueNote) +
+        (lc.summary ? '<div style="margin-top:.2rem;color:var(--muted)">' + escHtml(lc.summary.slice(0, 140)) + '</div>' : '') +
+        '</div>';
+    }
     return '<div class="' + panelClass + '"><h4>Loop Engineering</h4>' +
       '<div><strong>' + escHtml(rs.loopTemplateId) + '</strong> · phase <strong>' + escHtml(phase) + '</strong>' + escHtml(iter) +
       ' · ' + statusLabel + (lv && lv.durationMs ? ' · ' + escHtml(String(lv.durationMs)) + 'ms' : '') + '</div>' +
-      strategyHtml + summary + '</div>';
+      strategyHtml + summary + critiqueHtml + '</div>';
   }
 
   function renderGitIntelSummary(tasks) {

@@ -70,7 +70,21 @@ function syncLoopStateToRun(runState: RunStateWriter, loopState: LoopState): voi
     loopTemplateId: loopState.templateId,
     loopPhase: loopState.currentPhase,
     loopIteration: loopState.iteration,
+    loopRetryCount: loopState.retryCount,
     lastVerification: loopState.lastVerification,
+    lastCritique: loopState.lastCritique
+      ? {
+          summary: loopState.lastCritique.summary,
+          retryDecision: loopState.lastCritique.retryDecision,
+          model: loopState.lastCritique.model,
+          at: loopState.lastCritique.at,
+          iteration: loopState.lastCritique.iteration,
+          issueCount: loopState.lastCritique.issues?.length,
+          strengths: loopState.lastCritique.strengths,
+          issues: loopState.lastCritique.issues,
+          suggestions: loopState.lastCritique.suggestions,
+        }
+      : undefined,
   });
 }
 

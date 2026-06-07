@@ -16,12 +16,12 @@ import {
   type LoopState,
   type LoopRunStatus,
 } from './loop-state.js';
-import { loadLoopEngineConfig } from './loop-config.js';
 import {
   createDefaultHandlers,
   type PhaseHandler,
   type PhaseResult,
 } from './phase-handlers/index.js';
+import { resolveCritiqueThresholds } from './loop-config.js';
 
 export interface LoopHooks {
   onPhaseStart?: (phase: Phase, iteration: number) => void;
@@ -39,6 +39,8 @@ export interface LoopEngineOptions {
   commandBoard?: CommandBlackboard;
   handlers?: Map<Phase, PhaseHandler>;
   hooks?: LoopHooks;
+  /** Elevated retry/escalation thresholds for E2E and dev (also ROLAND_LOOP_TEST_MODE=1). */
+  isTestMode?: boolean;
 }
 
 export interface LoopRunResult {
@@ -55,6 +57,7 @@ export class LoopEngine {
   private readonly goal: string;
   private readonly blackboard: Blackboard;
   private readonly commandBoard?: CommandBlackboard;
+  private readonly critiqueThresholds: ReturnType<typeof resolveCritiqueThresholds>;
 
   constructor(opts: LoopEngineOptions) {
     const firstPhase = opts.template.phases[0]?.phase ?? P.Plan;
@@ -64,6 +67,9 @@ export class LoopEngine {
     this.commandBoard = opts.commandBoard;
     this.handlers = opts.handlers ?? createDefaultHandlers();
     this.hooks = opts.hooks ?? {};
+    this.critiqueThresholds = resolveCritiqueThresholds(opts.template, {
+      isTestMode: opts.isTestMode,
+    });
     this.store = new LoopStateStore(
       opts.stateDir,
       createInitialLoopState(opts.template.name, opts.goal, firstPhase),
@@ -91,21 +97,9 @@ export class LoopEngine {
       }
 
       let shouldRetryLoop = false;
-      let verifyPassed = true;
-      const requirePassBeforeCritique =
-        loadLoopEngineConfig().verification?.require_pass_before_critique !== false;
 
       for (const phaseConfig of this.template.phases) {
         if (phaseConfig.optional && phaseConfig.phase === P.Retry && !shouldRetryLoop) {
-          continue;
-        }
-
-        if (
-          phaseConfig.phase === P.Critique &&
-          requirePassBeforeCritique &&
-          !verifyPassed
-        ) {
-          console.error('[Loop] Skipping Critique — verification did not pass');
           continue;
         }
 
@@ -122,13 +116,14 @@ export class LoopEngine {
           return { status: 'escalated', state: this.store.get(), phasesCompleted };
         }
 
-        if (phaseConfig.phase === P.Verify) {
-          verifyPassed = result.success;
-          if (!result.success) {
-            shouldRetryLoop = true;
-          }
-        }
-        if (result.shouldRetry) {
+        // Critique phase owns retry decisions; Verify only records gate results.
+        if (phaseConfig.phase === P.Critique) {
+          if (result.shouldRetry) shouldRetryLoop = true;
+        } else if (phaseConfig.phase === P.Verify && !result.success) {
+          // Verify failure without critique phase — fall back to retry.
+          const hasCritique = this.template.phases.some((p) => p.phase === P.Critique);
+          if (!hasCritique) shouldRetryLoop = true;
+        } else if (result.shouldRetry) {
           shouldRetryLoop = true;
         }
       }
@@ -136,7 +131,7 @@ export class LoopEngine {
       const state = this.store.get();
       if (!shouldRetryLoop) break;
 
-      const maxRetries = this.template.maxRetries ?? 3;
+      const { maxRetries } = this.critiqueThresholds;
       if (state.retryCount >= maxRetries) {
         this.store.setStatus('escalated');
         this.hooks.onLoopComplete?.(this.store.get(), 'escalated');
@@ -181,12 +176,15 @@ export class LoopEngine {
       waveNumber: ctx.waveNumber,
       hadBlockers: ctx.hadBlockers,
       phaseConfig,
+      maxRetries: this.critiqueThresholds.maxRetries,
+      escalationThreshold: this.critiqueThresholds.escalationThreshold,
     });
 
     this.store.completePhase(phase, {
       success: result.success,
       summary: result.summary,
       verification: result.verification,
+      critique: result.critique,
     });
     this.emitState();
     this.hooks.onPhaseComplete?.(phase, result);
@@ -245,22 +243,19 @@ export class LoopEngineCoordinator {
   }
 
   async onWaveComplete(waveNumber: number, hadBlockers: boolean): Promise<void> {
-    let verifyPassed = true;
     if (this.engine.hasPhase(P.Verify)) {
-      const verifyResult = await this.engine.runNamedPhase(P.Verify, { waveNumber, hadBlockers });
-      verifyPassed = verifyResult?.success ?? true;
+      await this.engine.runNamedPhase(P.Verify, { waveNumber, hadBlockers });
     }
 
-    const requirePass =
-      loadLoopEngineConfig().verification?.require_pass_before_critique !== false;
+    let critiqueResult: PhaseResult | null = null;
     if (this.engine.hasPhase(P.Critique)) {
-      if (!requirePass || verifyPassed) {
-        await this.engine.runNamedPhase(P.Critique, { waveNumber, hadBlockers });
-      } else {
-        console.error('[Loop] Skipping Critique — verification did not pass');
-      }
+      critiqueResult = await this.engine.runNamedPhase(P.Critique, { waveNumber, hadBlockers });
     }
-    if (hadBlockers && this.engine.hasPhase(P.Retry)) {
+
+    const shouldRetry =
+      critiqueResult?.shouldRetry ||
+      (hadBlockers && !critiqueResult?.shouldEscalate);
+    if (shouldRetry && this.engine.hasPhase(P.Retry)) {
       await this.engine.runNamedPhase(P.Retry, { waveNumber, hadBlockers });
     }
     void waveNumber;
