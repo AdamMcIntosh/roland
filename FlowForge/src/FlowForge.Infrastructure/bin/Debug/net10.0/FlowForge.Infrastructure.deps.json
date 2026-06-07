@@ -1,0 +1,55 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "FlowForge.Infrastructure/1.0.0": {
+        "dependencies": {
+          "FlowForge.Application": "1.0.0"
+        },
+        "runtime": {
+          "FlowForge.Infrastructure.dll": {}
+        }
+      },
+      "FlowForge.Application/1.0.0": {
+        "dependencies": {
+          "FlowForge.Domain": "1.0.0"
+        },
+        "runtime": {
+          "FlowForge.Application.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      },
+      "FlowForge.Domain/1.0.0": {
+        "runtime": {
+          "FlowForge.Domain.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "FlowForge.Infrastructure/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "FlowForge.Application/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "FlowForge.Domain/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

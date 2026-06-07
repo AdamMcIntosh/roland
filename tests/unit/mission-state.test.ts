@@ -4,11 +4,14 @@ import path from 'path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   archiveMissionMeta,
+  buildSupervisorStartDiagnostics,
   cleanupPreviousRuns,
   isolateProjectMissionState,
   readActiveMissionMeta,
+  readActiveRunStateForClient,
   readMissionMetaFile,
   sanitizeStaleMissionState,
+  waitForSupervisorReady,
   SUPERVISOR_PID_FILE,
   MISSION_META_FILE,
   RUN_STATE_FILE,
@@ -115,5 +118,79 @@ describe('mission-state', () => {
     expect(result.metaArchived).toBe(true);
     expect(boardCalls).toHaveLength(1);
     expect(archiveMissionMeta(stateDir, 'again')).toBe(false);
+  });
+
+  it('readActiveRunStateForClient returns null for stale run-state without supervisor', () => {
+    const stateDir = makeStateDir();
+    fs.writeFileSync(
+      path.join(stateDir, RUN_STATE_FILE),
+      JSON.stringify({
+        runId: 'old',
+        status: 'running',
+        updatedAt: Date.now() - 900_000,
+      }),
+    );
+    expect(readActiveRunStateForClient(stateDir)).toBeNull();
+  });
+
+  it('readActiveRunStateForClient returns run-state when supervisor is alive', () => {
+    const stateDir = makeStateDir();
+    const rs = {
+      runId: 'live',
+      status: 'done',
+      updatedAt: Date.now() - 900_000,
+      goal: 'test',
+    };
+    fs.writeFileSync(path.join(stateDir, RUN_STATE_FILE), JSON.stringify(rs));
+    fs.writeFileSync(
+      path.join(stateDir, SUPERVISOR_PID_FILE),
+      JSON.stringify({ pid: process.pid, goal: 'test', startedAt: Date.now() }),
+    );
+    expect(readActiveRunStateForClient(stateDir)).toMatchObject({ runId: 'live' });
+  });
+
+  it('waitForSupervisorReady resolves when supervisor.pid has live PID', async () => {
+    const stateDir = makeStateDir();
+    fs.writeFileSync(
+      path.join(stateDir, SUPERVISOR_PID_FILE),
+      JSON.stringify({
+        pid: process.pid,
+        goal: 'ready test',
+        startedAt: Date.now(),
+        logFile: path.join(stateDir, 'logs', 'bg-test.log'),
+      }),
+    );
+
+    const result = await waitForSupervisorReady(stateDir, { timeoutMs: 2_000 });
+    expect(result.ready).toBe(true);
+    expect(result.record?.pid).toBe(process.pid);
+  });
+
+  it('waitForSupervisorReady times out when supervisor.pid is missing', async () => {
+    const stateDir = makeStateDir();
+    const result = await waitForSupervisorReady(stateDir, {
+      timeoutMs: 400,
+      pollIntervalMs: 100,
+    });
+    expect(result.ready).toBe(false);
+    expect(result.error).toMatch(/not written|not running/i);
+  });
+
+  it('buildSupervisorStartDiagnostics includes log tail when log file exists', () => {
+    const stateDir = makeStateDir();
+    const logDir = path.join(stateDir, 'logs');
+    fs.mkdirSync(logDir, { recursive: true });
+    const logFile = path.join(logDir, 'bg-test.log');
+    fs.writeFileSync(logFile, 'line1\nline2\nSUPERVISOR_FAIL\n');
+    fs.writeFileSync(
+      path.join(stateDir, SUPERVISOR_PID_FILE),
+      JSON.stringify({ pid: 999999999, goal: 'x', startedAt: Date.now(), logFile }),
+    );
+
+    const diag = buildSupervisorStartDiagnostics(stateDir, 'spawn failed');
+    expect(diag.message).toContain('spawn failed');
+    expect(diag.logFile).toBe(logFile);
+    expect(diag.logTail).toContain('SUPERVISOR_FAIL');
+    expect(diag.hints.length).toBeGreaterThan(0);
   });
 });
