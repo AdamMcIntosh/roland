@@ -295,7 +295,7 @@ export class McpServer {
     this.leadPm = new LeadPM(this.coordination, {
       policy: pmCfg
         ? {
-            pm: pmCfg.lead_model ?? 'gpt-5.4-nano',
+            pm: pmCfg.lead_model ?? 'grok-4.3',
             fast: pmCfg.fast_model ?? 'composer-2.5',
             standard: pmCfg.standard_model ?? 'composer-2.5',
           }

@@ -591,13 +591,24 @@
       z-index: 9999; pointer-events: none;
     }
     .toast {
-      padding: .55rem 1rem; border-radius: 8px;
-      font-size: .8rem; font-weight: 500;
-      opacity: 0; transform: translateY(8px);
-      transition: opacity .25s, transform .25s;
-      pointer-events: none; max-width: 320px;
+      padding: 0.6rem 1rem 0.6rem 0.85rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      opacity: 0;
+      transform: translateY(10px) scale(0.98);
+      transition: opacity 0.28s ease, transform 0.28s ease;
+      pointer-events: none;
+      max-width: 320px;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.45rem;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.08);
     }
-    .toast.toast-visible { opacity: 1; transform: translateY(0); }
+    .toast.toast-visible { opacity: 1; transform: translateY(0) scale(1); }
+    .toast-icon { flex-shrink: 0; font-size: 0.9rem; line-height: 1.3; }
+    .toast-body { flex: 1; line-height: 1.35; }
     .toast-success { background: rgba(16,185,129,.92); color: #fff; }
     .toast-error   { background: rgba(239,68,68,.92);  color: #fff; }
     .toast-warning { background: rgba(245,158,11,.92); color: #fff; }
@@ -617,6 +628,478 @@
     .ws-badge.disconnected {
       background: rgba(239,68,68,.1); color: var(--red);
       border-color: rgba(239,68,68,.22);
+    }
+
+    /* ═══════════════════════════════════════════════════════
+       Mobile-first / responsive enhancements
+    ═══════════════════════════════════════════════════════ */
+    @media (max-width: 640px) {
+      .page { padding: 0.75rem 0.85rem 2.5rem; }
+      .header {
+        padding: 0.55rem 0.85rem;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+      }
+      .header-left { flex-wrap: wrap; gap: 0.45rem; }
+      .header-right { width: 100%; justify-content: space-between; }
+      .site-title { font-size: 0.95rem; }
+      .tab-bar { top: auto; padding: 0 0.5rem; -webkit-overflow-scrolling: touch; }
+      .tab-btn { padding: 0.55rem 0.75rem; font-size: 0.78rem; min-height: 44px; }
+      .cards { grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+      .card { padding: 0.65rem 0.75rem; }
+      .card-value { font-size: 1.25rem; }
+      .task-grid { grid-template-columns: 1fr; }
+      .run-row { flex-wrap: wrap; gap: 0.35rem; padding: 0.55rem 0.85rem; }
+      .run-goal { white-space: normal; line-height: 1.35; }
+      .hitl-bar { gap: 0.4rem; }
+      .btn-hitl, .btn-primary, .btn-secondary, .btn-icon {
+        min-height: 44px;
+        padding-top: 0.45rem;
+        padding-bottom: 0.45rem;
+      }
+      .toast { max-width: calc(100vw - 2rem); right: 1rem; left: 1rem; }
+      #toast-container { left: 0; right: 0; align-items: stretch; }
+      .board-panel-scroll { max-height: 38vh; }
+      .board-md { font-size: 0.71rem; line-height: 1.42; }
+      .board-md div { margin: 0.08rem 0; }
+      .board-panel { padding: 0.55rem 0.7rem; font-size: 0.71rem; line-height: 1.42; }
+      .board-callsign { font-size: 0.6rem; padding: 0.12rem 0.35rem; }
+      .board-roster { gap: 0.25rem; margin: 0.35rem 0; }
+      .ops-status { padding: 0.55rem 0.7rem; }
+      .ops-log-preview { font-size: 0.64rem; max-height: 120px; }
+    }
+
+    @media (max-width: 380px) {
+      .cards { grid-template-columns: 1fr; }
+    }
+
+    /* Quick action bar */
+    .quick-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin: 0.85rem 0 0.65rem;
+    }
+    .quick-actions .btn-secondary {
+      flex: 1 1 auto;
+      min-width: 7.5rem;
+      text-align: center;
+      font-size: 0.74rem;
+    }
+
+    /* New Mission form */
+    .mission-box {
+      background: linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(16,185,129,0.06) 100%);
+      border: 1px solid rgba(99,102,241,0.35);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 1rem;
+      box-shadow: 0 0 24px rgba(99,102,241,0.08);
+    }
+    .mission-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem 0.35rem;
+      flex-wrap: wrap;
+    }
+    .mission-title {
+      margin: 0;
+      font-size: 0.92rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: var(--fg);
+    }
+    .mission-title span { color: var(--emerald); }
+    .mission-sub { font-size: 0.68rem; color: var(--muted); margin: 0; }
+    .mission-body { padding: 0.35rem 1rem 1rem; display: flex; flex-direction: column; gap: 0.65rem; }
+    .mission-textarea {
+      width: 100%;
+      min-height: 96px;
+      padding: 0.65rem 0.75rem;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      color: var(--fg);
+      font-size: 0.88rem;
+      line-height: 1.45;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .mission-textarea:focus {
+      border-color: var(--indigo);
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+    }
+    .mission-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.55rem;
+    }
+    @media (max-width: 640px) { .mission-row { grid-template-columns: 1fr; } }
+    .mission-field label {
+      display: block;
+      font-size: 0.68rem;
+      color: var(--muted);
+      margin-bottom: 0.25rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .mission-select, .mission-input {
+      width: 100%;
+      padding: 0.48rem 0.65rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--fg);
+      font-size: 0.8rem;
+      outline: none;
+      min-height: 44px;
+    }
+    .mission-select:focus, .mission-input:focus { border-color: var(--indigo); }
+
+    /* Model picker (searchable grouped dropdown) */
+    .model-picker { position: relative; }
+    .model-picker-trigger {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.12rem;
+      padding: 0.48rem 2rem 0.48rem 0.65rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--fg);
+      font-size: 0.8rem;
+      text-align: left;
+      min-height: 44px;
+      cursor: pointer;
+      position: relative;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .model-picker-trigger:hover { border-color: var(--border2); }
+    .model-picker.open .model-picker-trigger,
+    .model-picker-trigger:focus-visible {
+      border-color: var(--indigo);
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+      outline: none;
+    }
+    .model-picker-trigger::after {
+      content: '▾';
+      position: absolute;
+      right: 0.65rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      font-size: 0.72rem;
+      pointer-events: none;
+    }
+    .model-picker-label {
+      font-weight: 600;
+      line-height: 1.25;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      flex-wrap: wrap;
+    }
+    .model-picker-label .star { color: var(--amber); font-size: 0.72rem; }
+    .model-picker-hint {
+      font-size: 0.65rem;
+      color: var(--muted);
+      line-height: 1.3;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .model-picker-dropdown {
+      display: none;
+      position: absolute;
+      z-index: 300;
+      left: 0;
+      right: 0;
+      top: calc(100% + 4px);
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.35);
+      overflow: hidden;
+    }
+    .model-picker.open .model-picker-dropdown { display: flex; flex-direction: column; }
+    .model-picker-search {
+      width: 100%;
+      padding: 0.5rem 0.65rem;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--fg);
+      font-size: 0.78rem;
+      outline: none;
+    }
+    .model-picker-search::placeholder { color: var(--muted); }
+    .model-picker-list {
+      max-height: 260px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+    .model-picker-group-label {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      padding: 0.35rem 0.65rem 0.2rem;
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+    }
+    .model-picker-group-label:first-child { border-top: none; }
+    .model-picker-option {
+      display: flex;
+      flex-direction: column;
+      gap: 0.1rem;
+      width: 100%;
+      padding: 0.45rem 0.65rem;
+      border: none;
+      background: transparent;
+      color: var(--fg);
+      text-align: left;
+      cursor: pointer;
+      font-size: 0.78rem;
+      transition: background 0.1s;
+    }
+    .model-picker-option:hover,
+    .model-picker-option.focused { background: rgba(99,102,241,0.12); }
+    .model-picker-option.selected { background: rgba(99,102,241,0.18); }
+    .model-picker-option-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.4rem;
+    }
+    .model-picker-option-name { font-weight: 600; }
+    .model-picker-option-name .star { color: var(--amber); margin-left: 0.15rem; }
+    .model-picker-option-price {
+      font-size: 0.62rem;
+      color: var(--muted);
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .model-picker-option-desc {
+      font-size: 0.65rem;
+      color: var(--muted);
+      line-height: 1.3;
+    }
+    .model-picker-empty {
+      padding: 0.75rem;
+      text-align: center;
+      font-size: 0.74rem;
+      color: var(--muted);
+    }
+    .mission-toggles {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem 1rem;
+      align-items: center;
+    }
+    .mission-toggle {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.76rem;
+      cursor: pointer;
+      min-height: 44px;
+    }
+    .mission-toggle input { width: 1rem; height: 1rem; accent-color: var(--indigo); }
+    .mission-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    .btn-mission {
+      padding: 0.6rem 1.35rem;
+      background: linear-gradient(135deg, #4f46e5 0%, var(--indigo) 50%, #4338ca 100%);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px;
+      font-size: 0.86rem;
+      font-weight: 700;
+      min-height: 46px;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      box-shadow: 0 2px 12px rgba(99,102,241,0.35), inset 0 1px 0 rgba(255,255,255,0.1);
+      transition: transform 0.12s, opacity 0.12s, box-shadow 0.12s;
+    }
+    .btn-mission:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 18px rgba(99,102,241,0.45), inset 0 1px 0 rgba(255,255,255,0.12);
+    }
+    .btn-mission:active:not(:disabled) { transform: translateY(0); }
+    .btn-mission:disabled { opacity: 0.55; cursor: not-allowed; }
+    .mission-status {
+      font-size: 0.74rem;
+      padding: 0.45rem 0.65rem;
+      border-radius: 7px;
+      display: none;
+    }
+    .mission-status.visible { display: block; }
+    .mission-status.loading {
+      background: rgba(99,102,241,0.12);
+      color: var(--indigo);
+      border: 1px solid rgba(99,102,241,0.25);
+    }
+    .mission-status.success {
+      background: rgba(16,185,129,0.12);
+      color: var(--emerald);
+      border: 1px solid rgba(16,185,129,0.28);
+    }
+    .mission-status.error {
+      background: rgba(239,68,68,0.12);
+      color: var(--red);
+      border: 1px solid rgba(239,68,68,0.28);
+    }
+    .mission-status a { color: inherit; font-weight: 600; text-decoration: underline; }
+
+    .mission-box.mission-active {
+      border-color: rgba(16,185,129,0.45);
+      box-shadow: 0 0 28px rgba(16,185,129,0.1);
+    }
+
+    /* Mission ops status strip */
+    .ops-status {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.7rem 0.9rem;
+      margin-bottom: 0.75rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .ops-status.running {
+      border-color: rgba(16,185,129,0.4);
+      box-shadow: 0 0 16px rgba(16,185,129,0.08);
+    }
+    .ops-status-top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .ops-status-left { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; min-width: 0; }
+    .ops-status-title { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; }
+    .ops-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: 20px;
+      font-size: 0.67rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .ops-badge.idle { background: rgba(136,136,170,0.15); color: var(--muted); border: 1px solid var(--border); }
+    .ops-badge.active {
+      background: rgba(16,185,129,0.15);
+      color: var(--emerald);
+      border: 1px solid rgba(16,185,129,0.35);
+      animation: pulse-badge 2.5s ease-in-out infinite;
+    }
+    @keyframes pulse-badge {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.25); }
+      50% { box-shadow: 0 0 0 4px rgba(16,185,129,0); }
+    }
+    .ops-goal {
+      font-size: 0.8rem;
+      color: var(--fg);
+      margin-top: 0.35rem;
+      line-height: 1.4;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+    .ops-meta {
+      font-size: 0.68rem;
+      color: var(--muted);
+      margin-top: 0.3rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem 0.75rem;
+    }
+    .ops-meta a { color: var(--indigo); text-decoration: none; font-weight: 600; }
+    .ops-meta a:hover { text-decoration: underline; }
+    .ops-progress { margin-top: 0.45rem; }
+    .ops-progress-bar {
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .ops-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--emerald), var(--indigo));
+      border-radius: 2px;
+      transition: width 0.4s ease;
+    }
+    .ops-last {
+      margin-top: 0.55rem;
+      padding-top: 0.55rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.72rem;
+      color: var(--muted);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.35rem 0.65rem;
+    }
+    .ops-last strong { color: var(--fg); font-weight: 600; }
+    .ops-log-preview {
+      margin-top: 0.45rem;
+      padding: 0.45rem 0.55rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      line-height: 1.4;
+      color: var(--muted);
+      max-height: 140px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      display: none;
+    }
+    .ops-log-preview.open { display: block; }
+    .btn-board-refresh {
+      font-size: 0.72rem;
+      padding: 0.28rem 0.6rem;
+      min-height: 32px;
+    }
+    .btn-board-refresh.spinning .refresh-icon { display: inline-block; animation: spin 0.7s linear infinite; }
+    .board-md { font-size: 0.76rem; line-height: 1.5; }
+    .board-md div[style*="font-weight"] { font-size: 0.78rem !important; margin-top: 0.35rem !important; }
+
+    /* Scrollable command board */
+    .board-panel-scroll {
+      max-height: min(52vh, 480px);
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+    .board-panel-scroll .board-md,
+    .board-panel-scroll .idle-state { padding-top: 0.15rem; }
+    .board-panel-scroll::-webkit-scrollbar { width: 6px; }
+    .board-panel-scroll::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.15);
+      border-radius: 3px;
     }
   </style>
 </head>
@@ -651,6 +1134,115 @@
   ══════════════════════════════════════════════════════════════════ -->
   <div id="tab-overview" class="tab-panel active">
     <div class="page">
+
+      <!-- Quick actions -->
+      <div class="quick-actions">
+        <button class="btn-secondary" id="btn-qa-board" type="button">🎖 Board Status</button>
+        <button class="btn-secondary" id="btn-qa-cleanup" type="button">🧹 Cleanup</button>
+        <button class="btn-secondary" id="btn-qa-refresh" type="button">↻ Refresh</button>
+      </div>
+
+      <!-- Mission ops status -->
+      <section class="ops-status" id="ops-status" aria-live="polite">
+        <div class="ops-status-top">
+          <div class="ops-status-left">
+            <span class="ops-status-title">🎖 Mission Control</span>
+            <span class="ops-badge idle" id="ops-badge">Idle</span>
+          </div>
+        </div>
+        <div class="ops-goal" id="ops-goal">No active background mission</div>
+        <div class="ops-meta" id="ops-meta"></div>
+        <div class="ops-progress" id="ops-progress-wrap" style="display:none">
+          <div class="ops-progress-bar"><div class="ops-progress-fill" id="ops-progress-fill" style="width:0%"></div></div>
+        </div>
+        <pre class="ops-log-preview" id="ops-log-preview" aria-hidden="true"></pre>
+        <div class="ops-last" id="ops-last"></div>
+      </section>
+
+      <!-- New Mission -->
+      <section class="section mission-box" id="mission-section">
+        <div class="mission-header">
+          <div>
+            <h2 class="mission-title">🚀 <span>New Mission</span></h2>
+            <p class="mission-sub">Launch a Roland team run from phone or browser (Tailscale-safe)</p>
+          </div>
+        </div>
+        <div class="mission-body">
+          <div>
+            <label class="form-label" for="mission-goal">Mission objective</label>
+            <textarea
+              id="mission-goal"
+              class="mission-textarea"
+              placeholder="Describe what Roland should build, fix, or investigate…"
+              rows="3"
+              autofocus
+            ></textarea>
+          </div>
+          <div class="mission-row">
+            <div class="mission-field">
+              <label for="mission-pm-model-trigger">Lead PM model</label>
+              <div class="model-picker" id="mission-pm-model-picker" data-role="pm">
+                <button type="button" class="model-picker-trigger" id="mission-pm-model-trigger" aria-haspopup="listbox" aria-expanded="false">
+                  <span class="model-picker-label">Loading…</span>
+                  <span class="model-picker-hint"></span>
+                </button>
+                <div class="model-picker-dropdown" role="listbox">
+                  <input type="search" class="model-picker-search" placeholder="Search models…" autocomplete="off" aria-label="Search Lead PM models" />
+                  <div class="model-picker-list"></div>
+                </div>
+                <input type="hidden" id="mission-pm-model" value="grok-4.3" />
+              </div>
+            </div>
+            <div class="mission-field">
+              <label for="mission-eng-model-trigger">Engineer model</label>
+              <div class="model-picker" id="mission-eng-model-picker" data-role="engineer">
+                <button type="button" class="model-picker-trigger" id="mission-eng-model-trigger" aria-haspopup="listbox" aria-expanded="false">
+                  <span class="model-picker-label">Loading…</span>
+                  <span class="model-picker-hint"></span>
+                </button>
+                <div class="model-picker-dropdown" role="listbox">
+                  <input type="search" class="model-picker-search" placeholder="Search models…" autocomplete="off" aria-label="Search engineer models" />
+                  <div class="model-picker-list"></div>
+                </div>
+                <input type="hidden" id="mission-eng-model" value="composer-2.5" />
+              </div>
+            </div>
+          </div>
+          <div class="mission-row">
+            <div class="mission-field">
+              <label for="mission-run-name">Run name (optional)</label>
+              <input type="text" id="mission-run-name" class="mission-input" placeholder="e.g. auth-refactor" maxlength="80" />
+            </div>
+            <div class="mission-field">
+              <label for="mission-priority">Priority</label>
+              <select id="mission-priority" class="mission-select">
+                <option value="P1">P1 — Critical</option>
+                <option value="P2">P2 — High</option>
+                <option value="P3" selected>P3 — Normal</option>
+                <option value="P4">P4 — Low</option>
+              </select>
+            </div>
+          </div>
+          <div class="mission-toggles">
+            <label class="mission-toggle">
+              <input type="checkbox" id="mission-force-team" />
+              Force full team
+            </label>
+            <label class="mission-toggle">
+              <input type="checkbox" id="mission-notify" checked />
+              Notify on complete
+            </label>
+            <label class="mission-toggle">
+              <input type="checkbox" id="mission-cleanup" checked />
+              Cleanup board first
+            </label>
+          </div>
+          <div class="mission-actions">
+            <button type="button" class="btn-mission" id="btn-start-mission">▶ Start Mission</button>
+          </div>
+          <div class="mission-status" id="mission-status" role="status" aria-live="polite"></div>
+        </div>
+      </section>
 
       <!-- Period filter -->
       <div class="period-row">
@@ -705,11 +1297,13 @@
       <!-- UNSC Command Board -->
       <section class="section">
         <div class="section-box" id="board-section-box">
-          <div class="section-header" style="display:flex;align-items:center;justify-content:space-between;padding-right:.65rem">
+          <div class="section-header" style="display:flex;align-items:center;justify-content:space-between;padding-right:.65rem;gap:.5rem;flex-wrap:wrap">
             <h2 style="margin:0">🎖 Command Board</h2>
-            <button class="btn-icon" id="btn-refresh-board" title="Refresh board status">↻</button>
+            <button class="btn-secondary btn-board-refresh" id="btn-refresh-board" type="button" title="Refresh board status">
+              <span class="refresh-icon">↻</span> Refresh Board
+            </button>
           </div>
-          <div class="board-panel" id="board-panel">
+          <div class="board-panel board-panel-scroll" id="board-panel">
             <div class="idle-state"><span>○</span><span>Loading command board…</span></div>
           </div>
         </div>
@@ -939,6 +1533,11 @@
   let agentSortDir = 'desc';
   let expandedRuns = new Set();      // overview recent runs
   let historyExpanded = new Set();   // history tab
+  let modelCatalog = { models: [], defaults: { pm: 'grok-4.3', engineer: 'composer-2.5' } };
+  let missionSubmitting = false;
+  let supervisorInfo = null;
+  let missionMeta = null;
+  let opsLogOpen = false;
   let tokensChart  = null;
   let modelChart   = null;
 
@@ -1029,19 +1628,25 @@
   //  Toast notifications
   // ═══════════════════════════════════════════════════════════════════════════
 
-  function toast(message, type = 'info') {
+  const TOAST_ICONS = { success: '✓', error: '✕', warning: '⚠', info: '◆' };
+  const TOAST_MS = { success: 4000, error: 5500, warning: 4500, info: 3200 };
+
+  function toast(message, type = 'info', durationMs) {
     const container = document.getElementById('toast-container');
     const el = document.createElement('div');
     el.className = 'toast toast-' + type;
-    el.textContent = message;
+    el.innerHTML =
+      '<span class="toast-icon">' + (TOAST_ICONS[type] || '◆') + '</span>' +
+      '<span class="toast-body">' + escHtml(message) + '</span>';
     container.appendChild(el);
     requestAnimationFrame(() => {
       requestAnimationFrame(() => el.classList.add('toast-visible'));
     });
+    const ms = durationMs ?? TOAST_MS[type] ?? 3200;
     setTimeout(() => {
       el.classList.remove('toast-visible');
-      setTimeout(() => el.remove(), 300);
-    }, 3200);
+      setTimeout(() => el.remove(), 320);
+    }, ms);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1053,7 +1658,7 @@
     if (wsConn && wsConn.readyState <= 1) return;
 
     try {
-      const ws = new WebSocket(`ws://${location.host}`);
+      const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`);
       wsConn = ws;
 
       ws.onopen = () => {
@@ -1080,6 +1685,7 @@
             renderLiveIndicator();
             renderCards();
             renderLiveStatus();
+            renderOpsStatus();
             renderBoardPanel();
             renderRecentRuns();
             if (activeTab === 'actions') renderHitlActionsPanel();
@@ -1130,6 +1736,17 @@
     } catch { runState = null; }
   }
 
+  async function fetchSupervisor() {
+    try {
+      const res = await fetch('/api/supervisor');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      supervisorInfo = await res.json();
+      missionMeta = supervisorInfo?.missionMeta ?? missionMeta;
+    } catch (e) {
+      console.warn('Supervisor fetch failed:', e.message);
+    }
+  }
+
   async function fetchBoardStatus() {
     try {
       const res = await fetch('/api/board-status');
@@ -1141,6 +1758,486 @@
     }
   }
 
+  async function fetchModels() {
+    try {
+      const res = await fetch('/api/models');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      modelCatalog = await res.json();
+    } catch (e) {
+      console.warn('Models fetch failed:', e.message);
+    }
+  }
+
+  function pickModelDefault(list, preferredIds) {
+    for (const id of preferredIds) {
+      if (list.some(m => m.id === id)) return id;
+    }
+    const rec = list.find(m => m.recommendedFor?.length);
+    if (rec) return rec.id;
+    return list[0]?.id ?? preferredIds[0];
+  }
+
+  function modelMatchesRole(m, role) {
+    if (m.id === 'auto') return true;
+    const roles = m.roles || (m.role ? [m.role] : []);
+    return roles.includes(role) || roles.includes('both');
+  }
+
+  function isRecommendedForRole(m, role) {
+    return Boolean(m.recommendedFor?.includes(role));
+  }
+
+  function formatModelPrice(m) {
+    if (!m.pricing?.label) return m.id === 'auto' ? 'Cursor picks per task' : '';
+    return m.pricing.label + ' (in / out)';
+  }
+
+  function modelSearchText(m) {
+    return [m.id, m.label, m.description, m.pricing?.label, m.group].filter(Boolean).join(' ').toLowerCase();
+  }
+
+  const modelPickers = [];
+
+  function closeAllModelPickers(except) {
+    for (const p of modelPickers) {
+      if (p !== except) p.close();
+    }
+  }
+
+  function createModelPicker(rootEl) {
+    const role = rootEl.dataset.role || 'engineer';
+    const hidden = rootEl.querySelector('input[type="hidden"]');
+    const trigger = rootEl.querySelector('.model-picker-trigger');
+    const labelEl = trigger?.querySelector('.model-picker-label');
+    const hintEl = trigger?.querySelector('.model-picker-hint');
+    const dropdown = rootEl.querySelector('.model-picker-dropdown');
+    const searchInput = rootEl.querySelector('.model-picker-search');
+    const listEl = rootEl.querySelector('.model-picker-list');
+    let selectedId = hidden?.value || '';
+    let focusedIdx = -1;
+
+    function getModelsForRole() {
+      const models = Array.isArray(modelCatalog.models) ? modelCatalog.models : [];
+      return models.filter(m => modelMatchesRole(m, role));
+    }
+
+    function getModelById(id) {
+      return (modelCatalog.models || []).find(m => m.id === id);
+    }
+
+    function setSelected(id) {
+      selectedId = id;
+      if (hidden) hidden.value = id;
+      const m = getModelById(id);
+      if (!m) {
+        if (labelEl) labelEl.textContent = id || 'Select model';
+        if (hintEl) hintEl.textContent = '';
+        return;
+      }
+      const star = isRecommendedForRole(m, role) ? ' <span class="star" title="Recommended">★</span>' : '';
+      if (labelEl) labelEl.innerHTML = escHtml(m.label) + star;
+      if (hintEl) {
+        const price = formatModelPrice(m);
+        hintEl.textContent = price || m.description || '';
+        hintEl.title = m.description || price;
+      }
+    }
+
+    function renderList(filter = '') {
+      if (!listEl) return;
+      const q = filter.trim().toLowerCase();
+      const models = getModelsForRole().filter(m => !q || modelSearchText(m).includes(q));
+      const groups = Array.isArray(modelCatalog.groups) ? modelCatalog.groups : [];
+      const groupOrder = groups.map(g => g.id);
+      const byGroup = new Map();
+      for (const m of models) {
+        const g = m.group || 'other';
+        if (!byGroup.has(g)) byGroup.set(g, []);
+        byGroup.get(g).push(m);
+      }
+
+      let html = '';
+      const orderedGroupIds = [...groupOrder.filter(id => byGroup.has(id)), ...[...byGroup.keys()].filter(id => !groupOrder.includes(id))];
+      let optionIdx = 0;
+      for (const gid of orderedGroupIds) {
+        const items = byGroup.get(gid) || [];
+        if (!items.length) continue;
+        const gLabel = groups.find(g => g.id === gid)?.label || gid;
+        html += '<div class="model-picker-group-label">' + escHtml(gLabel) + '</div>';
+        for (const m of items) {
+          const selected = m.id === selectedId;
+          const star = isRecommendedForRole(m, role) ? '<span class="star" title="Recommended for ' + escHtml(role) + '">★</span>' : '';
+          const price = m.pricing?.label ? escHtml(m.pricing.label) : (m.id === 'auto' ? 'Auto' : '—');
+          html +=
+            '<button type="button" class="model-picker-option' + (selected ? ' selected' : '') + '" data-id="' + escHtml(m.id) + '" data-idx="' + optionIdx + '" role="option" aria-selected="' + selected + '">' +
+            '<span class="model-picker-option-top">' +
+            '<span class="model-picker-option-name">' + escHtml(m.label) + star + '</span>' +
+            '<span class="model-picker-option-price">' + price + '</span>' +
+            '</span>' +
+            (m.description ? '<span class="model-picker-option-desc">' + escHtml(m.description) + '</span>' : '') +
+            '</button>';
+          optionIdx++;
+        }
+      }
+      listEl.innerHTML = html || '<div class="model-picker-empty">No models match your search</div>';
+      focusedIdx = -1;
+    }
+
+    function open() {
+      closeAllModelPickers(picker);
+      rootEl.classList.add('open');
+      trigger?.setAttribute('aria-expanded', 'true');
+      renderList(searchInput?.value || '');
+      setTimeout(() => searchInput?.focus(), 0);
+    }
+
+    function close() {
+      rootEl.classList.remove('open');
+      trigger?.setAttribute('aria-expanded', 'false');
+      if (searchInput) searchInput.value = '';
+      focusedIdx = -1;
+    }
+
+    const picker = { close, setSelected, open };
+
+    trigger?.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (rootEl.classList.contains('open')) close();
+      else open();
+    });
+
+    searchInput?.addEventListener('input', () => renderList(searchInput.value));
+    searchInput?.addEventListener('keydown', (e) => {
+      const opts = [...listEl.querySelectorAll('.model-picker-option')];
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        focusedIdx = Math.min(focusedIdx + 1, opts.length - 1);
+        opts.forEach((o, i) => o.classList.toggle('focused', i === focusedIdx));
+        opts[focusedIdx]?.scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        focusedIdx = Math.max(focusedIdx - 1, 0);
+        opts.forEach((o, i) => o.classList.toggle('focused', i === focusedIdx));
+        opts[focusedIdx]?.scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const pick = opts[focusedIdx] || opts[0];
+        if (pick) {
+          setSelected(pick.dataset.id);
+          close();
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        close();
+        trigger?.focus();
+      }
+    });
+
+    listEl?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.model-picker-option');
+      if (!btn) return;
+      setSelected(btn.dataset.id);
+      close();
+      trigger?.focus();
+    });
+
+    return picker;
+  }
+
+  function populateModelSelects() {
+    const pmPickerRoot = document.getElementById('mission-pm-model-picker');
+    const engPickerRoot = document.getElementById('mission-eng-model-picker');
+    if (!pmPickerRoot || !engPickerRoot) return;
+
+    modelPickers.length = 0;
+    const pmPicker = createModelPicker(pmPickerRoot);
+    const engPicker = createModelPicker(engPickerRoot);
+    modelPickers.push(pmPicker, engPicker);
+
+    const pmModels = (modelCatalog.models || []).filter(m => modelMatchesRole(m, 'pm'));
+    const engModels = (modelCatalog.models || []).filter(m => modelMatchesRole(m, 'engineer'));
+
+    const pmDefault = modelCatalog.defaults?.pm
+      || pickModelDefault(pmModels, ['grok-4.3', 'auto', 'gpt-5.4-nano']);
+    const engDefault = modelCatalog.defaults?.engineer
+      || pickModelDefault(engModels, ['composer-2.5', 'auto', 'composer-2']);
+
+    pmPicker.setSelected(pmDefault);
+    engPicker.setSelected(engDefault);
+  }
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.model-picker')) closeAllModelPickers(null);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeAllModelPickers(null);
+  });
+
+  function scrollToBoard() {
+    document.getElementById('board-section-box')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async function toggleOpsLogs() {
+    const preview = document.getElementById('ops-log-preview');
+    if (!preview) return;
+    opsLogOpen = !opsLogOpen;
+    if (!opsLogOpen) {
+      preview.classList.remove('open');
+      preview.setAttribute('aria-hidden', 'true');
+      return;
+    }
+    try {
+      const res = await fetch('/api/supervisor/logs?lines=35');
+      const data = await res.json();
+      preview.textContent = data.tail?.trim() || '(Log empty or unavailable — run `roland bg-logs`)';
+      preview.classList.add('open');
+      preview.setAttribute('aria-hidden', 'false');
+    } catch {
+      preview.textContent = '(Could not load logs)';
+      preview.classList.add('open');
+    }
+  }
+
+  function renderOpsStatus() {
+    const section = document.getElementById('ops-status');
+    const badge   = document.getElementById('ops-badge');
+    const goalEl  = document.getElementById('ops-goal');
+    const metaEl  = document.getElementById('ops-meta');
+    const progWrap = document.getElementById('ops-progress-wrap');
+    const progFill = document.getElementById('ops-progress-fill');
+    const lastEl  = document.getElementById('ops-last');
+    const missionBox = document.getElementById('mission-section');
+    if (!section || !badge || !goalEl) return;
+
+    const sup = supervisorInfo;
+    const run = sup?.run;
+    const rec = sup?.record;
+    const alive = sup?.alive;
+    const active = isRunActive(runState) || sup?.missionActive || run?.active;
+
+    section.classList.toggle('running', active);
+    missionBox?.classList.toggle('mission-active', active);
+
+    if (active) {
+      badge.className = 'ops-badge active';
+      badge.textContent = '● Active';
+      const goal = runState?.goal || run?.goal || rec?.goal || missionMeta?.goal || 'Mission in progress';
+      goalEl.textContent = goal;
+      goalEl.title = goal;
+
+      const parts = [];
+      const statusLabels = {
+        planning: 'Planning', running: 'Running', reviewing: 'Reviewing',
+        synthesizing: 'Synthesizing', done: 'Done', error: 'Error',
+      };
+      if (alive && rec?.pid) parts.push('PID ' + rec.pid);
+      if (run?.status) parts.push(statusLabels[run.status] || run.status);
+      if (run?.currentWave) parts.push('Wave ' + run.currentWave);
+      if (run?.totalTasks) parts.push((run.completedTasks ?? 0) + '/' + run.totalTasks + ' tasks');
+      if (run?.startedAt) parts.push(elapsedSince(run.startedAt) + ' elapsed');
+      metaEl.innerHTML =
+        parts.map(p => '<span>' + p + '</span>').join('') +
+        ' <a href="#" id="ops-view-board">View Board</a>' +
+        (rec?.logFile ? ' · <a href="#" id="ops-view-logs">View Logs</a>' : '');
+
+      if (progWrap && progFill && (run?.totalTasks > 0 || runState?.totalTasks > 0)) {
+        const pct = run?.progressPct ?? (runState?.totalTasks
+          ? Math.min(Math.round((Math.min(runState.completedTasks, runState.totalTasks) / runState.totalTasks) * 100), 100)
+          : 0);
+        progWrap.style.display = 'block';
+        progFill.style.width = pct + '%';
+      } else if (progWrap) {
+        progWrap.style.display = 'none';
+      }
+    } else {
+      badge.className = 'ops-badge idle';
+      badge.textContent = 'Idle';
+      goalEl.textContent = 'No active background mission';
+      goalEl.removeAttribute('title');
+      metaEl.innerHTML = '<span>Ready for new orders</span> <a href="#" id="ops-view-board">View Board</a>';
+      if (progWrap) progWrap.style.display = 'none';
+      if (!opsLogOpen) {
+        document.getElementById('ops-log-preview')?.classList.remove('open');
+      }
+    }
+
+    document.getElementById('ops-view-board')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      scrollToBoard();
+    });
+    document.getElementById('ops-view-logs')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      toggleOpsLogs();
+    });
+
+    if (lastEl) {
+      const meta = missionMeta || sup?.missionMeta;
+      const lastRun = usageData.length
+        ? [...usageData].sort((a, b) => b.timestamp - a.timestamp)[0]
+        : null;
+
+      if (meta?.startedAt && !active) {
+        const label = meta.runName ? escHtml(meta.runName) : escHtml((meta.goal || '').slice(0, 60));
+        lastEl.innerHTML =
+          '<span>Last launch:</span> <strong>' + label + '</strong>' +
+          ' · ' + escHtml(timeAgo(meta.startedAt)) +
+          ' · <a href="#" id="ops-last-board">View Board</a>';
+      } else if (lastRun && !active) {
+        lastEl.innerHTML =
+          '<span>Last mission:</span> <strong>' + escHtml(lastRun.goal.slice(0, 55)) + (lastRun.goal.length > 55 ? '…' : '') + '</strong>' +
+          ' · ' + escHtml(formatDate(lastRun.timestamp) + ' ' + formatTime(lastRun.timestamp)) +
+          ' · <a href="#" id="ops-last-board">View Board</a>';
+      } else if (active && meta?.startedAt) {
+        lastEl.innerHTML =
+          '<span>Launched:</span> ' + escHtml(formatDate(meta.startedAt) + ' ' + formatTime(meta.startedAt)) +
+          (meta.runName ? ' · <strong>' + escHtml(meta.runName) + '</strong>' : '');
+      } else {
+        lastEl.innerHTML = '';
+      }
+
+      document.getElementById('ops-last-board')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        scrollToBoard();
+      });
+    }
+  }
+
+  function focusMissionGoal() {
+    if (activeTab !== 'overview') return;
+    const ta = document.getElementById('mission-goal');
+    if (ta && document.activeElement !== ta) {
+      try { ta.focus({ preventScroll: true }); } catch { ta.focus(); }
+    }
+  }
+
+  function setMissionStatus(kind, html) {
+    const el = document.getElementById('mission-status');
+    if (!el) return;
+    el.className = 'mission-status visible ' + (kind || '');
+    el.innerHTML = html;
+  }
+
+  function clearMissionStatus() {
+    const el = document.getElementById('mission-status');
+    if (!el) { return; }
+    el.className = 'mission-status';
+    el.innerHTML = '';
+  }
+
+  async function startMission() {
+    if (missionSubmitting) return;
+    const goalEl = document.getElementById('mission-goal');
+    const goal = (goalEl?.value || '').trim();
+    if (!goal) {
+      toast('Enter a mission objective first', 'warning');
+      goalEl?.focus();
+      return;
+    }
+
+    const btn = document.getElementById('btn-start-mission');
+    missionSubmitting = true;
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Launching…'; }
+    setMissionStatus('loading', '<span class="spinning">⏳</span> Starting background team mission…');
+
+    const payload = {
+      goal,
+      pmModel: document.getElementById('mission-pm-model')?.value,
+      engineerModel: document.getElementById('mission-eng-model')?.value,
+      priority: document.getElementById('mission-priority')?.value || 'P3',
+      runName: document.getElementById('mission-run-name')?.value?.trim() || '',
+      forceTeam: document.getElementById('mission-force-team')?.checked || false,
+      notify: document.getElementById('mission-notify')?.checked || false,
+      cleanup: document.getElementById('mission-cleanup')?.checked || false,
+    };
+
+    try {
+      const res = await fetch('/api/mission', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+
+      setMissionStatus(
+        'success',
+        '✅ Mission launched' +
+        (data.pid ? ` (PID ${data.pid})` : '') +
+        '. <a href="#" id="mission-board-link">View Command Board ↓</a> · ' +
+        '<a href="#" id="mission-refresh-link">Refresh status</a>'
+      );
+
+      document.getElementById('mission-board-link')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        document.getElementById('board-section-box')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      document.getElementById('mission-refresh-link')?.addEventListener('click', async (e) => {
+        e.preventDefault();
+        await refreshDashboard();
+      });
+
+      toast('Mission started in background', 'success');
+      missionMeta = {
+        goal,
+        runName: payload.runName || null,
+        startedAt: Date.now(),
+        pid: data.pid,
+      };
+      await Promise.all([pollRunState(), fetchSupervisor()]);
+      renderOpsStatus();
+    } catch (e) {
+      setMissionStatus('error', '✕ ' + escHtml(e.message));
+      toast('Mission failed: ' + e.message, 'error');
+    } finally {
+      missionSubmitting = false;
+      if (btn) { btn.disabled = false; btn.textContent = '▶ Start Mission'; }
+    }
+  }
+
+  async function runBoardCleanup() {
+    const goal = (document.getElementById('mission-goal')?.value || '').trim();
+    if (!confirm('Archive stale board entries from prior missions?\n\nActive goal-relevant items are preserved.')) return;
+    try {
+      const res = await fetch('/api/board-cleanup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ goal, dryRun: false }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      toast('Board cleanup complete', 'success');
+      await fetchBoardStatus();
+      renderBoardPanel();
+    } catch (e) {
+      toast('Cleanup failed: ' + e.message, 'error');
+    }
+  }
+
+  async function refreshDashboard() {
+    await Promise.all([fetchUsage(), fetchRunState(), fetchBoardStatus(), fetchSupervisor()]);
+    renderAll();
+    if (activeTab === 'history') renderHistory();
+    if (activeTab === 'actions') { renderHitlActionsPanel(); renderRecentGoals(); }
+    updateLastUpdated();
+    toast('Dashboard refreshed', 'info');
+  }
+
+  document.getElementById('btn-start-mission')?.addEventListener('click', startMission);
+  document.getElementById('mission-goal')?.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      startMission();
+    }
+  });
+  document.getElementById('btn-qa-board')?.addEventListener('click', async () => {
+    await fetchBoardStatus();
+    renderBoardPanel();
+    document.getElementById('board-section-box')?.scrollIntoView({ behavior: 'smooth' });
+    toast('Board status updated', 'info');
+  });
+  document.getElementById('btn-qa-cleanup')?.addEventListener('click', runBoardCleanup);
+  document.getElementById('btn-qa-refresh')?.addEventListener('click', refreshDashboard);
+
   // ═══════════════════════════════════════════════════════════════════════════
   //  Tab Switching
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1150,6 +2247,7 @@
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + tab));
 
+    if (tab === 'overview') focusMissionGoal();
     if (tab === 'memory')  loadMemoryTab();
     if (tab === 'history') renderHistory();
     if (tab === 'actions') { renderHitlActionsPanel(); renderRecentGoals(); }
@@ -1608,9 +2706,20 @@
   }
 
   document.getElementById('btn-refresh-board')?.addEventListener('click', async () => {
-    await fetchBoardStatus();
-    renderBoardPanel();
-    updateLastUpdated();
+    const btn = document.getElementById('btn-refresh-board');
+    btn?.classList.add('spinning');
+    btn?.setAttribute('disabled', 'true');
+    try {
+      await fetchBoardStatus();
+      renderBoardPanel();
+      updateLastUpdated();
+      toast('Command board updated', 'success', 2800);
+    } catch (e) {
+      toast('Board refresh failed', 'error');
+    } finally {
+      btn?.classList.remove('spinning');
+      btn?.removeAttribute('disabled');
+    }
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1622,6 +2731,7 @@
     renderLiveIndicator();
     renderCards();
     renderLiveStatus();
+    renderOpsStatus();
     renderBoardPanel();
     renderRecentRuns();
     renderTokensChart(filtered);
@@ -2014,10 +3124,11 @@
   // ═══════════════════════════════════════════════════════════════════════════
 
   async function pollRunState() {
-    await Promise.all([fetchRunState(), fetchBoardStatus()]);
+    await Promise.all([fetchRunState(), fetchBoardStatus(), fetchSupervisor()]);
     renderLiveIndicator();
     renderCards();
     renderLiveStatus();
+    renderOpsStatus();
     renderBoardPanel();
     renderRecentRuns();
     if (activeTab === 'actions') renderHitlActionsPanel();
@@ -2121,8 +3232,10 @@
 
   // Initial load
   (async () => {
-    await Promise.all([fetchUsage(), fetchRunState(), fetchBoardStatus()]);
+    await Promise.all([fetchUsage(), fetchRunState(), fetchBoardStatus(), fetchModels(), fetchSupervisor()]);
+    populateModelSelects();
     renderAll();
+    focusMissionGoal();
   })();
 
   // Start polling intervals (fast + slow)

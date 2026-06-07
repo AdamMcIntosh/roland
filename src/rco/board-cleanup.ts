@@ -146,6 +146,7 @@ export function cleanupCommandBlackboard(
   if (!options.dryRun) {
     board.replaceSections({
       'Active Tasks': keptTasks,
+      'Mission Graph': ['_(no active graph)_'],
       'Mission Objectives': keptObjectives,
       'Open Intel': keptIntel,
       'Agent Status': UNSC_CALLSIGNS.map((c) => `**${c}**: idle`),

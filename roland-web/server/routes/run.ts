@@ -9,6 +9,7 @@ import { createRolandBranch, pushBranchAndCreatePR, ensureGitRepo } from '../git
 import { decrypt } from '../crypto.js';
 import { getConfig } from '../config.js';
 import { logger } from '../logger.js';
+import { isValidCursorModel } from '../../@roland-core/dist/rco/cursor-models.js';
 
 export const runRouter = Router();
 
@@ -177,18 +178,13 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
   const pmModel       = req.headers['x-pm-model'] as string | undefined;
   const engineerModel = req.headers['x-engineer-model'] as string | undefined;
 
-  const VALID_CURSOR_MODELS = new Set([
-    'gpt-5.4-nano', 'gpt-5-mini', 'gpt-5.1-codex-mini',
-    'gemini-2.5-flash', 'composer-2.5', 'composer-2',
-  ]);
-
   const modelEnv: Record<string, string> = {
     CURSOR_API_KEY: cursorApiKey,
     ROLAND_SIMPLE_TUI: '1',
   };
-  if (pmModel && VALID_CURSOR_MODELS.has(pmModel))
+  if (pmModel && pmModel !== 'auto' && isValidCursorModel(pmModel))
     modelEnv.ROLAND_PM_MODEL = pmModel;
-  if (engineerModel && VALID_CURSOR_MODELS.has(engineerModel))
+  if (engineerModel && engineerModel !== 'auto' && isValidCursorModel(engineerModel))
     modelEnv.ROLAND_ENGINEER_MODEL = engineerModel;
 
   logger.info('Run starting', { runId, projectId, branch: branchName || null });

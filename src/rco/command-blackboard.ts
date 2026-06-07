@@ -31,6 +31,7 @@ export const BLACKBOARD_SECTIONS = [
   'Mission Objectives',
   'Key Decisions',
   'Active Tasks',
+  'Mission Graph',
   'Agent Status',
   'Open Intel',
   'Artifacts',
@@ -87,6 +88,9 @@ const SECTION_ALIASES: Record<string, BlackboardSection> = {
   'decisions': 'Key Decisions',
   'active tasks': 'Active Tasks',
   'tasks': 'Active Tasks',
+  'mission graph': 'Mission Graph',
+  'dag': 'Mission Graph',
+  'graph': 'Mission Graph',
   'agent status': 'Agent Status',
   'status': 'Agent Status',
   'open intel': 'Open Intel',
@@ -208,6 +212,14 @@ export class CommandBlackboard {
     fs.writeFileSync(this.filePath, beforeLogs + logsBody, 'utf-8');
   }
 
+  /** Replace Mission Graph section with current DAG summary (single bullet). */
+  setMissionGraph(summary: string): void {
+    const content = fs.readFileSync(this.filePath, 'utf-8');
+    const sections = parseSections(content);
+    sections['Mission Graph'] = summary.trim() ? [summary.trim()] : ['_(no active graph)_'];
+    fs.writeFileSync(this.filePath, renderSections(sections), 'utf-8');
+  }
+
   /** Update Agent Status table row for a callsign. */
   setAgentStatus(entry: AgentStatusEntry): void {
     const ts = new Date(entry.lastUpdated).toISOString();
@@ -269,6 +281,10 @@ export function buildEmptyTemplate(): string {
 ## Active Tasks
 
 - _(none)_
+
+## Mission Graph
+
+- _(no active graph)_
 
 ## Agent Status
 

@@ -8,7 +8,9 @@
  *     returns a structured task plan.
  *
  *   Phase 2 — Iterated wave execution (the PM control loop)
- *     Each wave runs all ready tasks in parallel. After every wave:
+ *     Each wave runs all ready tasks in parallel (DAG-aware via dependsOn).
+ *     Mission graph persisted to `.roland/mission-dag.json` when DAG planning
+ *     is enabled; wave scheduling unchanged for flat plans.
  *       - Worker signals are parsed (blockers posted to Blackboard, messages to Bus)
  *       - PM reviews results; blockers are surfaced prominently
  *       - PM decides: continue | adjust (spawn / unblock / re-scope)
@@ -45,6 +47,13 @@ import {
 } from './pm-prompts.js';
 import type { ReviewDecision, ReviewTask, WaveResult } from './pm-prompts.js';
 import { buildClaudeToolCallingPrompt } from './prompts.js';
+import {
+  MissionDagStore,
+  formatMissionGraphSummary,
+  formatNodeDagContext,
+  isDagPlanningEnabled,
+  type MissionPlanningMode,
+} from './mission-dag.js';
 import { loadAllAgents, resolveAgentsDir } from './loadConfig.js';
 import { toCursorModelId } from './model-routing.js';
 import { parseWorkerSignals } from './worker-signals.js';
@@ -151,6 +160,9 @@ export interface TeamTask extends ReviewTask {}
 export interface TeamPlan {
   tasks: TeamTask[];
   pmNotes?: string;
+  /** Explicit DAG planning from Lead PM; omitted = flat (backward-compatible). */
+  planningMode?: MissionPlanningMode;
+  dagNotes?: string;
 }
 
 export interface TeamTaskResult {
@@ -707,10 +719,12 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
   console.error(`[Team] Roster: ${roster.length} agents from ${agentsDir}`);
 
   // ── Model config banner ───────────────────────────────────────────────────
+  const pmModelId = toCursorModelId('', 'lead-pm');
+  const engineerModelId = toCursorModelId('', 'executor');
   console.error('[Team] ─────────────────────────────────────────────────────');
   console.error('[Team] Model config:');
-  console.error('[Team]   Lead PM     → gpt-5.4-nano     (Roland supervisor + UNSC sub-agents)');
-  console.error('[Team]   All engineers → composer-2.5 (reasoning, execution, tests, docs)');
+  console.error(`[Team]   Lead PM       → ${pmModelId}     (Roland supervisor + UNSC sub-agents)`);
+  console.error(`[Team]   All engineers → ${engineerModelId} (reasoning, execution, tests, docs)`);
   console.error('[Team] ─────────────────────────────────────────────────────');
 
   // ── Shared execution state ─────────────────────────────────────────────────
@@ -722,6 +736,8 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
   const escalation     = new EscalationTracker();
   const supervisorCallOpts: AgentCallOptions = { sdkAgents, isSupervisor: true };
   const workerCallOpts: AgentCallOptions = { sdkAgents };
+  let missionDag: MissionDagStore | undefined;
+  let syncMissionGraph: () => void = () => {};
 
   // ── HITL processor ────────────────────────────────────────────────────────
   // Called at the start of each wave. Returns true if the run should be aborted.
@@ -813,6 +829,10 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
       inbox && `\n## Your Inbox (from Lead PM or colleagues)\n\n${inbox}`,
     ].filter(Boolean).join('\n');
 
+    const dagContext = missionDag
+      ? formatNodeDagContext(missionDag.getSnapshot(), task.id)
+      : undefined;
+
     // Build prompt with full team awareness
     const workerPrompt = buildClaudeToolCallingPrompt({
       agentYaml,
@@ -821,6 +841,7 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
       teamGoal: goal,
       blackboardSnapshot: blackboard.snapshot(),
       commandBlackboardSnapshot: getCommandBlackboardSnapshot(),
+      missionDagContext: dagContext,
       teamSize: roster.length,
     });
 
@@ -844,6 +865,8 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
     }
 
     onTaskStart?.(task.id, task.agent, task.title);
+    missionDag?.markInProgress(task.id, currentWaveNumber);
+    syncMissionGraph();
     const taskCallStart = Date.now();
     const output = await callCursorAgent(callsign, modelId, workerPrompt, waveCircuit, workerCallOpts);
     allTaskUsage.push(buildTaskUsage(task.id, task.title, task.agent, modelId, workerPrompt.length, output.length, Date.now() - taskCallStart));
@@ -888,6 +911,12 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
     // Record result
     taskResults[task.id] = { taskTitle: task.title, agent: task.agent, output, hadBlocker };
     completedIds.add(task.id);
+    if (hadBlocker) {
+      missionDag?.markBlocked(task.id);
+    } else {
+      missionDag?.markDone(task.id, false);
+    }
+    syncMissionGraph();
 
     // Post result to Blackboard
     blackboard.post({
@@ -923,6 +952,11 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
     return { taskId: task.id, taskTitle: task.title, agent: task.agent, output, hasBlocker: hadBlocker };
   }
 
+  const dagPlanningEnabled = isDagPlanningEnabled(goal);
+  if (dagPlanningEnabled) {
+    console.error('[Team] Mission DAG planning enabled (complex goal or ROLAND_MISSION_DAG=1)');
+  }
+
   // ── Phase 1: Lead PM planning ─────────────────────────────────────────────
   console.error('[Team] Phase 1: Lead PM planning...');
 
@@ -934,14 +968,37 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
     projectMemory: memorySnapshot || undefined,
     projectKnowledge: knowledge.injectionBlock || undefined,
     commandBlackboard: getCommandBlackboardSnapshot(),
+    dagPlanningEnabled,
   });
   const pmPlanStart = Date.now();
-  const planText = await callCursorAgent('Lead-PM', 'gpt-5.4-nano', planningPrompt, undefined, supervisorCallOpts);
-  allTaskUsage.push(buildTaskUsage('pm-planning', 'Lead PM: Planning', 'Lead-PM', 'gpt-5.4-nano', planningPrompt.length, planText.length, Date.now() - pmPlanStart));
+  const planText = await callCursorAgent('Lead-PM', pmModelId, planningPrompt, undefined, supervisorCallOpts);
+  allTaskUsage.push(buildTaskUsage('pm-planning', 'Lead PM: Planning', 'Lead-PM', pmModelId, planningPrompt.length, planText.length, Date.now() - pmPlanStart));
 
   const rawPlan = extractJsonBlock(planText);
   const plan: TeamPlan = isTeamPlan(rawPlan) ? rawPlan : fallbackPlan(goal);
-  console.error(`[Team] Plan: ${plan.tasks.length} task(s)${plan.pmNotes ? ` — ${plan.pmNotes.slice(0, 80)}` : ''}`);
+  const planningMode: MissionPlanningMode =
+    plan.planningMode ?? (dagPlanningEnabled ? 'dag' : 'flat');
+  console.error(`[Team] Plan: ${plan.tasks.length} task(s) [${planningMode}]${plan.pmNotes ? ` — ${plan.pmNotes.slice(0, 80)}` : ''}`);
+
+  const missionDagStore = MissionDagStore.fromPlan({
+    stateDir,
+    goal,
+    runId,
+    tasks: plan.tasks,
+    planningMode,
+    dagNotes: plan.dagNotes,
+  });
+  missionDag = missionDagStore;
+  commandBoard.setMissionGraph(formatMissionGraphSummary(missionDagStore.getSnapshot()));
+  if (plan.dagNotes) {
+    commandBoard.appendBullet('Key Decisions', `DAG plan: ${plan.dagNotes.slice(0, 200)}`);
+  }
+
+  syncMissionGraph = () => {
+    missionDagStore.refreshReadyStates(completedIds);
+    commandBoard.setMissionGraph(formatMissionGraphSummary(missionDagStore.getSnapshot()));
+  };
+  syncMissionGraph();
 
   for (const task of plan.tasks) {
     blackboard.post({ type: 'task', title: task.title, content: task.description, status: 'pending', author: 'Lead-PM', assignee: task.agent, priority: task.priority as 'critical' | 'high' | 'medium' | 'low', tags: ['dispatched', task.id], relatedIds: [] });
@@ -993,6 +1050,7 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
       ? `Step ${waveNumber}  [${ready[0]?.agent ?? '?'}]`
       : `Wave ${waveNumber}: ${ready.length} task(s) in parallel`;
     console.error(`[Team] ${modeLabel} — ${ready.map((t) => t.id).join(', ')}`);
+    syncMissionGraph();
     onWaveStart?.(waveNumber, ready);
 
     // Reset circuit breaker for this wave (clears error count and open flag)
@@ -1124,8 +1182,8 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
         escalationNotes: escalation.escalationNotes.length > 0 ? [...escalation.escalationNotes] : undefined,
       });
       const pmReviewStart = Date.now();
-      const reviewText = await callCursorAgent('Lead-PM', 'gpt-5.4-nano', reviewPrompt, undefined, supervisorCallOpts);
-      allTaskUsage.push(buildTaskUsage(`pm-review-${waveNumber}`, `Lead PM: Wave ${waveNumber} Review`, 'Lead-PM', 'gpt-5.4-nano', reviewPrompt.length, reviewText.length, Date.now() - pmReviewStart));
+      const reviewText = await callCursorAgent('Lead-PM', pmModelId, reviewPrompt, undefined, supervisorCallOpts);
+      allTaskUsage.push(buildTaskUsage(`pm-review-${waveNumber}`, `Lead PM: Wave ${waveNumber} Review`, 'Lead-PM', pmModelId, reviewPrompt.length, reviewText.length, Date.now() - pmReviewStart));
 
       const rawDecision = extractJsonBlock(reviewText);
       let decision: ReviewDecision = isReviewDecision(rawDecision)
@@ -1171,9 +1229,13 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
         for (const task of spawnedTasks) {
           console.error(`[Team]   + spawn ${task.id} → ${task.agent} ("${task.title}")`);
           remaining.push(task);
+          missionDag?.addNodes([task]);
           blackboard.post({ type: 'task', title: task.title, content: task.description, status: 'pending', author: 'Lead-PM', assignee: task.agent, priority: task.priority as 'critical' | 'high' | 'medium' | 'low', tags: ['spawned', task.id], relatedIds: [] });
         }
-        if (spawnedTasks.length > 0) onTasksSpawned?.(spawnedTasks);
+        if (spawnedTasks.length > 0) {
+          syncMissionGraph();
+          onTasksSpawned?.(spawnedTasks);
+        }
 
         for (const u of decision.unblocks ?? []) {
           console.error(`[Team]   ↑ unblock ${u.forAgent}: "${u.message.slice(0, 80)}"`);
@@ -1207,8 +1269,8 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
   };
   const synthesisPrompt = buildLeadPMSynthesisPrompt(synthesisCtx);
   const pmSynthStart = Date.now();
-  let synthesis = await callCursorAgent('Lead-PM', 'gpt-5.4-nano', synthesisPrompt, undefined, supervisorCallOpts);
-  allTaskUsage.push(buildTaskUsage('pm-synthesis', 'Lead PM: Synthesis', 'Lead-PM', 'gpt-5.4-nano', synthesisPrompt.length, synthesis.length, Date.now() - pmSynthStart));
+  let synthesis = await callCursorAgent('Lead-PM', pmModelId, synthesisPrompt, undefined, supervisorCallOpts);
+  allTaskUsage.push(buildTaskUsage('pm-synthesis', 'Lead PM: Synthesis', 'Lead-PM', pmModelId, synthesisPrompt.length, synthesis.length, Date.now() - pmSynthStart));
 
   // "no detail" fallback: empty, too-short, or blocker-string responses mean the full
   // synthesis failed. Retry once with a minimal focused prompt; if that also fails,
@@ -1219,8 +1281,8 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
     console.error('[Team] ⚠️  Run is still alive — use `roland status` to monitor');
     const fallbackPrompt = buildFallbackSynthesisPrompt(synthesisCtx);
     const pmFallbackStart = Date.now();
-    synthesis = await callCursorAgent('Lead-PM', 'gpt-5.4-nano', fallbackPrompt, undefined, supervisorCallOpts);
-    allTaskUsage.push(buildTaskUsage('pm-synthesis-fallback', 'Lead PM: Fallback Synthesis', 'Lead-PM', 'gpt-5.4-nano', fallbackPrompt.length, synthesis.length, Date.now() - pmFallbackStart));
+    synthesis = await callCursorAgent('Lead-PM', pmModelId, fallbackPrompt, undefined, supervisorCallOpts);
+    allTaskUsage.push(buildTaskUsage('pm-synthesis-fallback', 'Lead PM: Fallback Synthesis', 'Lead-PM', pmModelId, fallbackPrompt.length, synthesis.length, Date.now() - pmFallbackStart));
 
     if (synthesisFailed(synthesis)) {
       console.error('[Team] ⚠️  Fallback synthesis also failed — auto-generating minimal summary from task outputs');
@@ -1271,11 +1333,10 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
       .join('\n');
 
     const retroPrompt  = buildRetrospectivePrompt(goal, synthesis, taskSummary, memory.structuredSnapshot(), humanFeedback);
-    const pmModel      = toCursorModelId('', 'lead-pm');
     const retroStart   = Date.now();
-    const retroText    = await callCursorAgent('Lead-PM', pmModel, retroPrompt, undefined, supervisorCallOpts);
+    const retroText    = await callCursorAgent('Lead-PM', pmModelId, retroPrompt, undefined, supervisorCallOpts);
     allTaskUsage.push(buildTaskUsage(
-      'pm-retrospective', 'Lead PM: Retrospective', 'Lead-PM', pmModel,
+      'pm-retrospective', 'Lead PM: Retrospective', 'Lead-PM', pmModelId,
       retroPrompt.length, retroText.length, Date.now() - retroStart,
     ));
 

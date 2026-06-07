@@ -14,19 +14,31 @@
  *   GET  /api/hitl-state           → .roland/hitl-state.json
  *   POST /api/hitl/:cmd            → append to .roland/hitl.json  (pause|resume|replan|abort|unblock|inject)
  *   GET  /api/blackboard           → .roland/blackboard.json
+ *   GET  /api/mission-dag          → .roland/mission-dag.json (task graph export)
  *   GET  /api/board-status         → UNSC concise summary (blackboard + command board)
+ *   POST /api/board-cleanup        → archive stale board entries before a new mission
+ *   GET  /api/models               → available Cursor PM / engineer models
+ *   POST /api/mission              → spawn `roland team` in background
+ *   GET  /api/supervisor           → background supervisor PID + status
  *   WS   /                         → push run-state on file changes (200 ms debounce)
  *
  * Usage:
  *   node scripts/serve-dashboard.js
  *   node scripts/serve-dashboard.js --state-dir /path/to/.roland --port 8082
+ *   node scripts/serve-dashboard.js --host 0.0.0.0   # Tailscale / LAN access
  */
 
 import http from 'http';
 import fs   from 'fs';
 import path from 'path';
+import { spawn } from 'child_process';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { WebSocketServer } from 'ws';
+import {
+  VALID_CURSOR_MODELS,
+  DEFAULT_PM_MODEL,
+  DEFAULT_ENGINEER_MODEL,
+} from '../dist/rco/cursor-models.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -42,8 +54,137 @@ function argValue(name) {
   return null;
 }
 
-const stateDir = path.resolve(argValue('state-dir') ?? '.roland');
-const port     = Number(argValue('port') ?? 8081);
+const stateDir    = path.resolve(argValue('state-dir') ?? '.roland');
+const port        = Number(argValue('port') ?? 8081);
+const host        = argValue('host') ?? '0.0.0.0';
+const projectRoot = path.resolve(argValue('project-root') ?? path.join(__dirname, '..'));
+const rolandEntry = path.join(projectRoot, 'dist', 'index.js');
+
+/** Model groups for /api/models — ordered for UI display */
+const MODEL_GROUPS = [
+  { id: 'recommended', label: 'Recommended',  description: 'Best defaults for Roland team missions' },
+  { id: 'reasoning',   label: 'Reasoning',    description: 'Planning, architecture, and deep analysis' },
+  { id: 'coding',      label: 'Agentic Coding', description: 'Implementation, tests, and tool use' },
+  { id: 'fast',        label: 'Fast',         description: 'Low latency and quick iterations' },
+  { id: 'budget',      label: 'Budget',       description: 'Lowest cost per token' },
+  { id: 'vision',      label: 'Vision',       description: 'Multimodal / image-capable models' },
+];
+
+/**
+ * Cursor SDK model catalog for the dashboard.
+ * Pricing is estimated USD per 1M tokens (input / output) — update when you have contract rates.
+ */
+const CURSOR_MODELS = [
+  {
+    id: 'auto', label: 'Auto', group: 'recommended',
+    roles: ['pm', 'engineer'],
+    description: 'Balanced cost and intelligence — let Cursor choose the best model per task',
+    pricing: null,
+  },
+  {
+    id: 'grok-4.3', label: 'Grok 4.3', group: 'recommended',
+    roles: ['pm'], recommendedFor: ['pm'],
+    description: 'Strongest orchestration and multi-wave planning',
+    pricing: { inputUsdPerMTok: 5.00, outputUsdPerMTok: 15.00 },
+  },
+  {
+    id: 'composer-2.5', label: 'Composer 2.5', group: 'recommended',
+    roles: ['engineer'], recommendedFor: ['engineer'],
+    description: 'Best for agentic coding — default for all engineer agents',
+    pricing: { inputUsdPerMTok: 3.00, outputUsdPerMTok: 12.00 },
+  },
+  {
+    id: 'gpt-5.4-nano', label: 'GPT-5.4 Nano', group: 'recommended',
+    roles: ['pm', 'engineer'],
+    description: 'Fast, low-cost orchestration alternative',
+    pricing: { inputUsdPerMTok: 0.20, outputUsdPerMTok: 1.25 },
+  },
+  {
+    id: 'claude-opus-4-7', label: 'Claude Opus 4.7', group: 'reasoning',
+    roles: ['pm', 'engineer'],
+    description: 'Highest reasoning depth — architecture and security review',
+    pricing: { inputUsdPerMTok: 15.00, outputUsdPerMTok: 75.00 },
+  },
+  {
+    id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', group: 'reasoning',
+    roles: ['pm', 'engineer'],
+    description: 'Strong reasoning at moderate cost — review and planning',
+    pricing: { inputUsdPerMTok: 3.00, outputUsdPerMTok: 15.00 },
+  },
+  {
+    id: 'gpt-5.2', label: 'GPT-5.2', group: 'reasoning',
+    roles: ['pm', 'engineer'],
+    description: 'General-purpose reasoning and analysis',
+    pricing: { inputUsdPerMTok: 2.50, outputUsdPerMTok: 10.00 },
+  },
+  {
+    id: 'gpt-5.5-medium', label: 'GPT-5.5 Medium', group: 'reasoning',
+    roles: ['pm', 'engineer'],
+    description: 'Balanced GPT-5.5 tier for complex tasks',
+    pricing: { inputUsdPerMTok: 3.50, outputUsdPerMTok: 14.00 },
+  },
+  {
+    id: 'composer-2', label: 'Composer 2', group: 'coding',
+    roles: ['engineer'],
+    description: 'Lighter composer — faster edits and smaller diffs',
+    pricing: { inputUsdPerMTok: 2.50, outputUsdPerMTok: 10.00 },
+  },
+  {
+    id: 'gpt-5.1-codex-mini', label: 'GPT-5.1 Codex Mini', group: 'coding',
+    roles: ['engineer'],
+    description: 'Code-focused mini model for targeted fixes',
+    pricing: { inputUsdPerMTok: 1.50, outputUsdPerMTok: 6.00 },
+  },
+  {
+    id: 'gpt-5-mini', label: 'GPT-5 Mini', group: 'fast',
+    roles: ['engineer'],
+    description: 'Quick engineer override for simple tasks',
+    pricing: { inputUsdPerMTok: 0.40, outputUsdPerMTok: 2.00 },
+  },
+  {
+    id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', group: 'fast',
+    roles: ['engineer'],
+    description: 'Very fast flash model — great for light tasks',
+    pricing: { inputUsdPerMTok: 0.15, outputUsdPerMTok: 0.60 },
+  },
+  {
+    id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', group: 'budget',
+    roles: ['engineer'],
+    description: 'Low-cost Claude tier for docs and simple edits',
+    pricing: { inputUsdPerMTok: 0.80, outputUsdPerMTok: 4.00 },
+  },
+  {
+    id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', group: 'vision',
+    roles: ['engineer'],
+    description: 'Multimodal pro tier — screenshots and UI review',
+    pricing: { inputUsdPerMTok: 1.25, outputUsdPerMTok: 5.00 },
+  },
+];
+
+/** Explicit model picks passed to ROLAND_*_MODEL env vars (not "auto"). */
+const VALID_MODEL_IDS = VALID_CURSOR_MODELS;
+
+function formatPricing(p) {
+  if (!p) return null;
+  return {
+    inputUsdPerMTok: p.inputUsdPerMTok,
+    outputUsdPerMTok: p.outputUsdPerMTok,
+    label: `$${p.inputUsdPerMTok.toFixed(2)} / $${p.outputUsdPerMTok.toFixed(2)} per MTok`,
+  };
+}
+
+function buildModelsApiPayload() {
+  const models = CURSOR_MODELS.map(m => ({
+    ...m,
+    pricing: formatPricing(m.pricing),
+    recommended: Boolean(m.recommendedFor?.length),
+  }));
+  return {
+    groups: MODEL_GROUPS,
+    models,
+    defaults: { pm: DEFAULT_PM_MODEL, engineer: DEFAULT_ENGINEER_MODEL },
+  };
+}
 
 // ── Static file root ──────────────────────────────────────────────────────────
 
@@ -151,6 +292,125 @@ async function loadBoardReportModule() {
   } catch {
     return null;
   }
+}
+
+function isProcessAlive(pid) {
+  if (!pid || pid <= 0) return false;
+  try { process.kill(pid, 0); return true; } catch { return false; }
+}
+
+function readSupervisorRecord() {
+  return readJson(path.join(stateDir, 'supervisor.pid'), null);
+}
+
+function readMissionMeta() {
+  return readJson(path.join(stateDir, 'mission-meta.json'), null);
+}
+
+function writeMissionMeta(meta) {
+  fs.mkdirSync(stateDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(stateDir, 'mission-meta.json'),
+    JSON.stringify({ ...meta, updatedAt: Date.now() }, null, 2),
+    'utf-8',
+  );
+}
+
+function summarizeRunState() {
+  const rs = readJson(path.join(stateDir, 'run-state.json'), null);
+  if (!rs?.runId) return null;
+  const ACTIVE = new Set(['planning', 'running', 'reviewing', 'synthesizing']);
+  const fresh = rs.updatedAt && (Date.now() - rs.updatedAt) < 600_000;
+  const active = ACTIVE.has(rs.status) && fresh;
+  const total = Math.max(rs.totalTasks ?? 0, 0);
+  const done = Math.min(rs.completedTasks ?? 0, total);
+  return {
+    runId: rs.runId,
+    goal: rs.goal ?? '',
+    status: rs.status ?? 'unknown',
+    currentWave: rs.currentWave ?? 0,
+    completedTasks: done,
+    totalTasks: total,
+    progressPct: total > 0 ? Math.min(Math.round((done / total) * 100), 100) : 0,
+    startedAt: rs.startedAt ?? null,
+    updatedAt: rs.updatedAt ?? null,
+    active,
+  };
+}
+
+function tailLogFile(logFile, lines = 40) {
+  if (!logFile || !fs.existsSync(logFile)) return '';
+  try {
+    const content = fs.readFileSync(logFile, 'utf-8');
+    return content.split('\n').slice(-Math.max(1, lines)).join('\n');
+  } catch {
+    return '';
+  }
+}
+
+function buildMissionGoal(rawGoal, { priority, runName, forceTeam }) {
+  let goal = String(rawGoal || '').trim();
+  if (!goal) return '';
+  const parts = [];
+  if (runName?.trim()) parts.push(`[Mission: ${runName.trim()}]`);
+  if (priority && priority !== 'P3') parts.push(`[${priority}]`);
+  if (forceTeam) parts.push('force team:');
+  if (parts.length) goal = `${parts.join(' ')} ${goal}`.trim();
+  return goal;
+}
+
+async function loadBoardCleanupModule() {
+  const modPath = path.join(projectRoot, 'dist', 'rco', 'board-cleanup.js');
+  try {
+    return await import(pathToFileURL(modPath).href);
+  } catch {
+    return null;
+  }
+}
+
+function spawnTeamMission(effectiveGoal, options = {}) {
+  if (!fs.existsSync(rolandEntry)) {
+    throw new Error(`Roland not built — run \`npm run build\` in ${projectRoot}`);
+  }
+
+  const {
+    pmModel,
+    engineerModel,
+    notify = false,
+    clean = false,
+  } = options;
+
+  const args = [
+    rolandEntry,
+    'team',
+    effectiveGoal,
+    '--background',
+    '--quiet',
+    '--no-tui',
+    '--state-dir',
+    stateDir,
+  ];
+  if (notify) args.push('--notify');
+  if (clean) args.push('--clean');
+
+  const env = {
+    ...process.env,
+    ROLAND_STATE_DIR: stateDir,
+    ROLAND_SIMPLE_TUI: '1',
+  };
+  if (pmModel && pmModel !== 'auto' && VALID_MODEL_IDS.has(pmModel)) env.ROLAND_PM_MODEL = pmModel;
+  if (engineerModel && engineerModel !== 'auto' && VALID_MODEL_IDS.has(engineerModel)) {
+    env.ROLAND_ENGINEER_MODEL = engineerModel;
+  }
+
+  const child = spawn(process.execPath, args, {
+    cwd: projectRoot,
+    env,
+    detached: true,
+    stdio: 'ignore',
+  });
+  child.unref();
+  return { pid: child.pid ?? null };
 }
 
 function readBoardStatusPayload() {
@@ -284,6 +544,145 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ── /api/models GET ──────────────────────────────────────────────────────
+  if (url === '/api/models' && method === 'GET') {
+    jsonOk(res, buildModelsApiPayload());
+    return;
+  }
+
+  // ── /api/mission-meta GET ────────────────────────────────────────────────
+  if (url === '/api/mission-meta' && method === 'GET') {
+    jsonOk(res, { meta: readMissionMeta() });
+    return;
+  }
+
+  // ── /api/supervisor GET ──────────────────────────────────────────────────
+  if (url === '/api/supervisor' && method === 'GET') {
+    const rec = readSupervisorRecord();
+    const alive = rec?.pid ? isProcessAlive(rec.pid) : false;
+    const runSummary = summarizeRunState();
+    const missionMeta = readMissionMeta();
+    jsonOk(res, {
+      record: rec,
+      alive,
+      logFile: rec?.logFile ?? null,
+      run: runSummary,
+      missionMeta,
+      missionActive: Boolean(alive || runSummary?.active),
+    });
+    return;
+  }
+
+  // ── /api/supervisor/logs GET ─────────────────────────────────────────────
+  if (url === '/api/supervisor/logs' && method === 'GET') {
+    const rec = readSupervisorRecord();
+    const q = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams;
+    const lines = Math.min(Math.max(Number(q.get('lines') ?? 40), 5), 200);
+    jsonOk(res, {
+      logFile: rec?.logFile ?? null,
+      tail: tailLogFile(rec?.logFile, lines),
+    });
+    return;
+  }
+
+  // ── /api/board-cleanup POST ──────────────────────────────────────────────
+  if (url === '/api/board-cleanup' && method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const goal = typeof body.goal === 'string' ? body.goal : '';
+      const dryRun = Boolean(body.dryRun);
+      const mod = await loadBoardCleanupModule();
+      if (!mod) {
+        jsonErr(res, 'Board cleanup unavailable — run `npm run build` first', 503);
+        return;
+      }
+      const result = mod.cleanupBoardsForNewMission(stateDir, goal, { dryRun, goal });
+      jsonOk(res, {
+        ok: true,
+        dryRun,
+        report: mod.formatCleanupReport(result),
+        result,
+      });
+    } catch (e) { jsonErr(res, e.message, 500); }
+    return;
+  }
+
+  // ── /api/mission POST ────────────────────────────────────────────────────
+  if (url === '/api/mission' && method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const rawGoal = typeof body.goal === 'string' ? body.goal.trim() : '';
+      if (!rawGoal) { jsonErr(res, 'goal is required'); return; }
+
+      const supervisor = readSupervisorRecord();
+      if (supervisor?.pid && isProcessAlive(supervisor.pid)) {
+        jsonErr(res, `A background mission is already running (PID ${supervisor.pid}). Stop it with \`roland bg-stop\` or wait for completion.`, 409);
+        return;
+      }
+
+      const runState = readJson(path.join(stateDir, 'run-state.json'), null);
+      const ACTIVE = new Set(['planning', 'running', 'reviewing', 'synthesizing']);
+      const runFresh = runState?.updatedAt && (Date.now() - runState.updatedAt) < 600_000;
+      if (runState?.runId && ACTIVE.has(runState.status) && runFresh) {
+        jsonErr(res, `A team mission is already active (${runState.status}). Wait for completion or use HITL controls.`, 409);
+        return;
+      }
+
+      const priority = ['P1', 'P2', 'P3', 'P4'].includes(body.priority) ? body.priority : 'P3';
+      const runName = typeof body.runName === 'string' ? body.runName.trim() : '';
+      const forceTeam = Boolean(body.forceTeam);
+      const pmModel = typeof body.pmModel === 'string' ? body.pmModel : DEFAULT_PM_MODEL;
+      const engineerModel = typeof body.engineerModel === 'string' ? body.engineerModel : DEFAULT_ENGINEER_MODEL;
+      const notify = Boolean(body.notify);
+      const cleanup = Boolean(body.cleanup);
+
+      if (cleanup) {
+        const mod = await loadBoardCleanupModule();
+        if (mod) mod.cleanupBoardsForNewMission(stateDir, rawGoal, { goal: rawGoal });
+      }
+
+      const effectiveGoal = buildMissionGoal(rawGoal, { priority, runName, forceTeam });
+      const { pid } = spawnTeamMission(effectiveGoal, { pmModel, engineerModel, notify, clean: cleanup });
+
+      writeMissionMeta({
+        goal: rawGoal,
+        effectiveGoal,
+        runName: runName || null,
+        priority,
+        forceTeam,
+        pmModel,
+        engineerModel,
+        pid,
+        startedAt: Date.now(),
+      });
+
+      jsonOk(res, {
+        ok: true,
+        pid,
+        goal: rawGoal,
+        effectiveGoal,
+        message: 'Mission launched in background',
+        logHint: 'roland bg-logs --follow',
+        boardStatusUrl: '/api/board-status',
+      });
+    } catch (e) { jsonErr(res, e.message, 500); }
+    return;
+  }
+
+  // ── /api/mission-dag GET ─────────────────────────────────────────────────
+  if (url === '/api/mission-dag' && method === 'GET') {
+    try {
+      const file = path.join(stateDir, 'mission-dag.json');
+      if (!fs.existsSync(file)) {
+        jsonOk(res, { dag: null, message: 'No active mission DAG' });
+        return;
+      }
+      const dag = JSON.parse(fs.readFileSync(file, 'utf-8'));
+      jsonOk(res, { dag, updatedAt: dag.updatedAt ?? Date.now() });
+    } catch (e) { jsonErr(res, e.message, 500); }
+    return;
+  }
+
   // ── /api/board-status GET ────────────────────────────────────────────────
   if (url === '/api/board-status' && method === 'GET') {
     try {
@@ -355,15 +754,21 @@ wss.on('connection', (ws) => {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
-server.listen(port, '127.0.0.1', () => {
-  const base = `http://127.0.0.1:${port}`;
+server.listen(port, host, () => {
+  const localBase = `http://127.0.0.1:${port}`;
+  const bindBase  = host === '0.0.0.0' ? localBase : `http://${host}:${port}`;
   console.log(`\n  🎛  Roland Dashboard 2.0`);
   console.log(`  ─────────────────────────────────────────`);
-  console.log(`  UI        : ${base}`);
-  console.log(`  WebSocket : ws://127.0.0.1:${port}`);
+  console.log(`  UI        : ${bindBase}`);
+  console.log(`  Local     : ${localBase}`);
+  if (host === '0.0.0.0') {
+    console.log(`  Tailscale : http://<your-tailscale-ip>:${port}`);
+  }
+  console.log(`  WebSocket : ws://${host === '0.0.0.0' ? '127.0.0.1' : host}:${port}`);
   console.log(`  State dir : ${stateDir}`);
-  console.log(`  APIs      : ${base}/api/usage  ${base}/api/run-state`);
-  console.log(`              ${base}/api/memory  ${base}/api/hitl/:cmd`);
-  console.log(`              ${base}/api/board-status`);
-  console.log(`\n  Open the URL above in your browser.\n`);
+  console.log(`  Project   : ${projectRoot}`);
+  console.log(`  APIs      : ${localBase}/api/usage  ${localBase}/api/run-state`);
+  console.log(`              ${localBase}/api/memory  ${localBase}/api/hitl/:cmd`);
+  console.log(`              ${localBase}/api/board-status  ${localBase}/api/mission`);
+  console.log(`\n  Open the URL above in your browser (Tailscale: use machine IP).\n`);
 });

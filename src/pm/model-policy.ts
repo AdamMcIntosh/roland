@@ -4,12 +4,12 @@
  * The PM team runs entirely on Cursor's native models — there is no OpenRouter
  * here. Routing is deterministic and lane-based:
  *
- *   pm        → gpt-5.4-nano  (Lead PM only — orchestration + planning)
+ *   pm        → grok-4.3      (Lead PM only — orchestration + planning)
  *   reasoning → composer-2.5  (architect, reviewer, critic, planner, security…)
  *   coding    → composer-2.5  (executor, builder — cost-efficient default)
  *   light     → composer-2.5  (docs, tests, research — also standard)
  *
- * Cost strategy: GPT-5.4 Nano for the one orchestration agent ($0.20/$1.25 per MTok);
+ * Cost strategy: grok-4.3 for the one orchestration agent; composer-2.5 for engineers;
  * composer-2.5 for every engineer regardless of lane.
  *
  * This module is intentionally self-contained: it imports none of the legacy
@@ -32,7 +32,7 @@ export interface ModelPolicy {
 }
 
 export const DEFAULT_MODEL_POLICY: ModelPolicy = {
-  pm: 'gpt-5.4-nano',
+  pm: 'grok-4.3',
   fast: 'composer-2.5',
   standard: 'composer-2.5',
 };

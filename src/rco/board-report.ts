@@ -12,6 +12,7 @@ import {
   type Callsign,
 } from './command-blackboard.js';
 import { readRunGoal, isRunActive } from './hitl.js';
+import { MISSION_DAG_FILE, type MissionDagSnapshot } from './mission-dag.js';
 
 export interface BoardStatusCounts {
   total: number;
@@ -39,6 +40,10 @@ export interface BoardStatusReport {
   activeTasks: BlackboardEntry[];
   roster: CallsignRosterEntry[];
   missionObjective?: string;
+  /** One-line Mission Graph summary from command-blackboard.md */
+  missionGraph?: string;
+  /** Parsed mission DAG export when present on disk */
+  missionDag?: MissionDagSnapshot | null;
   openIntel: string[];
   blackboardSnapshot: string;
   commandBlackboardSnapshot: string;
@@ -124,6 +129,25 @@ function parseOpenIntel(content: string, limit = 3): string[] {
     .slice(0, limit);
 }
 
+function parseMissionGraph(content: string): string | undefined {
+  const section = content.match(/## Mission Graph\n([\s\S]*?)(?:\n## |$)/);
+  if (!section) return undefined;
+  const bullet = section[1]
+    .split('\n')
+    .map((l) => l.replace(/^-\s*/, '').trim())
+    .find((l) => l.length > 0 && !l.startsWith('_('));
+  return bullet;
+}
+
+function readMissionDagSnapshot(stateDir: string): MissionDagSnapshot | null {
+  const filePath = path.join(stateDir, MISSION_DAG_FILE);
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as MissionDagSnapshot;
+  } catch {
+    return null;
+  }
+}
+
 function readCommandBoardContent(stateDir: string): string {
   const filePath = path.join(stateDir, 'command-blackboard.md');
   try {
@@ -149,6 +173,8 @@ export function buildBoardStatusReport(stateDir = '.roland', goalHint?: string):
     activeTasks: entries.filter((e) => e.type === 'task' && e.status !== 'done'),
     roster: parseCallsignRoster(commandContent),
     missionObjective: parseMissionObjective(commandContent),
+    missionGraph: parseMissionGraph(commandContent),
+    missionDag: readMissionDagSnapshot(stateDir),
     openIntel: parseOpenIntel(commandContent),
     blackboardSnapshot: blackboard.snapshot(),
     commandBlackboardSnapshot: goal ? commandBoard.smartSnapshot(goal) : readCommandBoardExcerpt(stateDir),
@@ -202,6 +228,15 @@ export function formatConciseUnscSummary(report: BoardStatusReport): string {
 
   lines.push(`**Roster:** ${formatRosterLine(report.roster)}`);
   lines.push('');
+
+  if (report.missionGraph) {
+    lines.push(`**Mission graph:** ${report.missionGraph.slice(0, 160)}`);
+    lines.push('');
+  } else if (report.missionDag?.progress) {
+    const p = report.missionDag.progress;
+    lines.push(`**Mission graph:** ${p.done}/${p.total} complete · critical path: ${report.missionDag.criticalPath.join(' → ')}`);
+    lines.push('');
+  }
 
   if (report.activeTasks.length > 0) {
     lines.push(`**Active tasks (${report.activeTasks.length}):**`);

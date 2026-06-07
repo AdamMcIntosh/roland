@@ -24,10 +24,22 @@ import { formatBundleAsMarkdown } from '../utils/file-gatherer.js';
 import { ClaudePromptPayloadSchema } from '../schemas.js';
 
 const IMPLEMENTATION_AGENTS = new Set(['sparrow', 'executor', 'executor-low', 'executor-high']);
+const TEST_AUTHOR_AGENTS = new Set(['test-author', 'vanguard', 'tdd-guide']);
+const TEST_EXECUTOR_AGENTS = new Set(['test-executor']);
 
 function isImplementationAgent(name: string): boolean {
   const n = name.toLowerCase();
+  if (TEST_AUTHOR_AGENTS.has(n) || TEST_EXECUTOR_AGENTS.has(n)) return false;
   return IMPLEMENTATION_AGENTS.has(n) || n.includes('executor');
+}
+
+function isTestAuthorAgent(name: string): boolean {
+  const n = name.toLowerCase();
+  return TEST_AUTHOR_AGENTS.has(n) || n.includes('test-author');
+}
+
+function isTestExecutorAgent(name: string): boolean {
+  return TEST_EXECUTOR_AGENTS.has(name.toLowerCase());
 }
 
 export interface ToolCallingPromptInput {
@@ -42,6 +54,8 @@ export interface ToolCallingPromptInput {
   blackboardSnapshot?: string;
   /** UNSC Command Blackboard excerpt — mission objectives, key decisions, intel. */
   commandBlackboardSnapshot?: string;
+  /** Per-node DAG context — upstream/downstream/critical path for this task. */
+  missionDagContext?: string;
   /** Number of agents on the team — gives agents a sense of scale. */
   teamSize?: number;
 }
@@ -113,6 +127,10 @@ export function buildClaudeToolCallingPrompt(input: ToolCallingPromptInput): str
       teamParts.push(`\n**Command Blackboard (UNSC mission state):**\n\n${input.commandBlackboardSnapshot}`);
     }
 
+    if (input.missionDagContext) {
+      teamParts.push(`\n**Mission DAG (your position in the task graph):**\n\n${input.missionDagContext}`);
+    }
+
     sections.push(`## Team Context\n\n${teamParts.join('\n')}`);
   }
 
@@ -121,6 +139,36 @@ export function buildClaudeToolCallingPrompt(input: ToolCallingPromptInput): str
 
   const agentName = (p.agentName ?? input.agentYaml.name ?? 'agent').toLowerCase();
   const isImplementer = isImplementationAgent(agentName);
+  const isTestAuthor = isTestAuthorAgent(agentName);
+  const isTestExecutor = isTestExecutorAgent(agentName);
+
+  if (isTestAuthor) {
+    sections.push(`## Vanguard Author Protocol (Roland → You)
+
+Before writing or editing tests:
+
+1. **Read peers first** — Find 2–3 similar test files or smoke scripts (\`scripts/test-*.mjs\`, sibling \`*.test.ts\`, integration helpers). Mirror their structure, imports, mock patterns, and assertion style. **Extend existing patterns — do not invent parallel conventions.**
+2. **Restate assumptions** — Open with \`## Assumptions\`: goal, files to create/modify, done-when criterion, **Patterns** (peer test files cited), **Pipeline scope** (which middleware layers — logging, CORS, errors — you will hit via HTTP), **Edge cases** (malformed headers, preflight, redaction inputs).
+3. **Wired path only** — Tests must exercise the production pipeline (supertest/fetch/WebApplicationFactory), not just isolated helpers. Logging tests send real requests with \`Authorization\`/\`Cookie\` and assert \`[Redacted]\` in emitted JSON.
+4. **Specific assertions** — No vague smoke tests. Every \`expect\` must fail for a concrete reason if implementation regresses.
+5. **Isolation** — Fresh app/server/DbContext per test (\`beforeEach\`); never reuse mutable singletons across tests.
+6. **Preflight audit** — Read implementation files before finalising assertions; remove expectations for old/buggy behavior.
+7. **Scoped commands** — End with \`## Vanguard — Author Handoff\` listing exact test file paths and a copy-paste run command (\`npx vitest run …\` or \`node scripts/test-….mjs\`) — never bare \`npm test\`.
+8. **Never run tests** — You are test-author. test-executor runs your command verbatim.
+9. **Respect the DAG** — When Mission DAG context shows downstream nodes waiting on you, deliver complete handoff artifacts (file paths + run command). Critical-path nodes block mission completion — prioritise completeness over scope expansion.`);
+  }
+
+  if (isTestExecutor) {
+    sections.push(`## Vanguard Execute Protocol (Roland → You)
+
+You are the runner — not the author:
+
+1. **Use the handoff command** — Run exactly the command from test-author's \`## Vanguard — Author Handoff\`. If missing, discover files via \`git diff --name-only\` for test files changed this wave, then run scoped only.
+2. **Never rewrite assertions** — Do not change test logic or intent. Trivial env fixes (missing dep, wrong path) are OK; assertion changes require BLOCKER to test-author.
+3. **Triage failures** — Categorise each failure: (a) implementation bug → BLOCKER **Needs from:** sparrow, (b) test bug → BLOCKER **Needs from:** test-author, (c) environment → BLOCKER with exact stderr.
+4. **Report fidelity** — Total passed/failed/skipped, exact command, file:line for every failure, slow tests >5s, coverage if available.
+5. **Wall-clock budget** — Scoped run under ~3 minutes; narrow the filter if needed before raising BLOCKER.`);
+  }
 
   if (isImplementer) {
     sections.push(`## Sparrow Handoff Protocol (Roland → You)
@@ -134,7 +182,8 @@ Before writing or editing code:
 5. **Comments & TODOs** — Brief \`why\` comments on non-obvious choices; \`// TODO(scope): reason\` for known limitations not fixed this task.
 6. **pino-http wiring** — Custom req/res serializers must be passed on \`pinoHttp({ serializers: { req, res } })\`, not only on the parent logger; use \`wrapSerializers: false\` when serializers already wrap std serializers. Handlers use \`req.log\`, never the shared base logger.
 7. **Cite blackboard** — When a Key Decision constrains your approach, quote it in Assumptions. Contradict only via BLOCKER.
-8. **Never guess paths** — If the repo layout is unclear, search before creating files. Wrong-directory scaffolding causes rework.`);
+8. **Never guess paths** — If the repo layout is unclear, search before creating files. Wrong-directory scaffolding causes rework.
+9. **Respect the DAG** — When Mission DAG context is provided, honour upstream/downstream edges. Do not start work that assumes an incomplete upstream node; emit BLOCKER if upstream output is insufficient.`);
   }
 
   // ── Previous agent output ─────────────────────────────────────────────────
@@ -149,7 +198,7 @@ You received upstream output from a prior wave. Before writing code or tests:
 3. **Cite upstream** — When building on prior work, reference the upstream agent by name and quote specific paths, APIs, or constraints they established.
 4. **Never guess** — If upstream output is incomplete, ambiguous, or missing files you need, emit a BLOCKER immediately. Silent assumptions cause rework for every downstream callsign.
 
-**Vanguard handoff (test-author → test-executor):** test-author lists exact test file paths and npm/vitest commands; test-executor runs them verbatim — do not rewrite tests unless BLOCKED.`);
+**Vanguard handoff (test-author → test-executor):** test-author ends with \`## Vanguard — Author Handoff\` (exact file paths + scoped run command + pipeline scope). test-executor runs that command verbatim — do not rewrite tests unless BLOCKED.`);
   } else if (isImplementer && input.commandBlackboardSnapshot) {
     sections.push(`## Command Blackboard Decisions
 
@@ -241,11 +290,32 @@ Replace \`roland\` with any callsign (e.g. \`sparrow\`, \`vanguard\`, \`oracle\`
 
 Use \`## 🚨 BLOCKER\` only when truly blocked. Be specific — the Lead PM and Vanguard read your output verbatim.`;
 
+  const testAuthorFormat = `Respond in well-structured markdown. **Required section order for test-author tasks:**
+
+1. \`## Assumptions\` — goal, files, done-when, **Patterns** (peer test/smoke files cited), **Pipeline scope** (logging/CORS/errors via HTTP), **Edge cases**
+2. \`## Tests Written\` — files created/modified and what each proves (wired path, not helpers-only)
+3. \`## Vanguard — Author Handoff\` — **Test files**, **Run command** (exact copy-paste), **Coverage intent**, **Preflight notes**
+
+Use \`## 🚨 BLOCKER\` when implementation is missing or ambiguous. Be specific — test-executor reads your handoff verbatim.`;
+
+  const testExecutorFormat = `Respond in well-structured markdown. **Required section order for test-executor tasks:**
+
+1. \`## Run Summary\` — exact command used, pass/fail/skip counts, duration
+2. \`## Failures\` — file:line + message for each failure (or "none")
+3. \`## Triage\` — implementation bug | test bug | environment (with evidence)
+4. \`## Vanguard — Test Report\` — Scope, Pipeline verified, Redaction/correlation, Gaps
+
+Use \`## 🚨 BLOCKER\` for implementation or environment failures — include **Needs from:** sparrow or test-author.`;
+
   const baseFormat = producesDotGraph
     ? `Respond in well-structured markdown. Include your dependency or architecture graph in a \`\`\`dot code block.\n\nUse section headers such as:\n- ## Analysis\n- ## Dependencies (with \`\`\`dot block)\n- ## Recommendations`
-    : isImplementer
-      ? implementerFormat
-      : `Respond in well-structured markdown prose. Use clear section headers appropriate to your role:\n\n- **Planner / Architect**: \`## Plan\`, \`## Approach\`, \`## Open Questions\`\n- **Executor / Builder**: \`## Implementation\`, \`## Changes Made\`, \`## Next Steps\`\n- **Reviewer / Critic**: \`## Review\`, \`## Issues Found\`, \`## Recommendations\`\n- **QA / Tester**: \`## Test Results\`, \`## Failures\`, \`## Coverage\`\n- **Doc Writer**: \`## Documentation\`, \`## Summary\`\n\nBe specific and actionable — the Lead PM and the next agent both read your output.`;
+    : isTestAuthor
+      ? testAuthorFormat
+      : isTestExecutor
+        ? testExecutorFormat
+        : isImplementer
+          ? implementerFormat
+          : `Respond in well-structured markdown prose. Use clear section headers appropriate to your role:\n\n- **Planner / Architect**: \`## Plan\`, \`## Approach\`, \`## Open Questions\`\n- **Executor / Builder**: \`## Implementation\`, \`## Changes Made\`, \`## Next Steps\`\n- **Reviewer / Critic**: \`## Review\`, \`## Issues Found\`, \`## Recommendations\`\n- **QA / Tester**: \`## Test Results\`, \`## Failures\`, \`## Coverage\`\n- **Doc Writer**: \`## Documentation\`, \`## Summary\`\n\nBe specific and actionable — the Lead PM and the next agent both read your output.`;
 
   sections.push(`## Response Format\n\n${baseFormat}`);
 
