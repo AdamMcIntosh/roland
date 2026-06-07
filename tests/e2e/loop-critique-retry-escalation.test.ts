@@ -10,6 +10,9 @@
  *   - After retry budget (maxRetries=3) critique escalates to operator (HITL)
  *   - isTestMode allows 3+ retry cycles without escalating; verify can pass on retry #3
  *
+ * Team-cli / coordinator wiring (parseTeamArgs, LoopEngineCoordinator, run-state sync):
+ *   see tests/e2e/loop-full-team-coordinator.test.ts
+ *
  * Scoped run: npx vitest run tests/e2e/loop-critique-retry-escalation.test.ts
  */
 
