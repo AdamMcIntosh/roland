@@ -281,6 +281,15 @@
     .loop-critique-decision.escalate { color: #fca5a5; }
     .loop-critique-decision.retry { color: #fcd34d; }
     .loop-critique-decision.proceed { color: var(--emerald); }
+    .loop-phase-timeline { margin-top: .45rem; padding-top: .35rem; border-top: 1px solid rgba(255,255,255,.08); }
+    .loop-phase-timeline h5 { margin: 0 0 .25rem; font-size: .68rem; color: var(--muted); font-weight: 600; }
+    .loop-phase-chip { display: inline-flex; align-items: center; gap: .2rem; font-size: .65rem; padding: .12rem .35rem; border-radius: 4px; margin: .1rem .15rem .1rem 0; background: rgba(255,255,255,.06); }
+    .loop-phase-chip.running { border: 1px solid var(--emerald); color: var(--emerald); animation: loop-pulse 1.2s ease-in-out infinite; }
+    .loop-phase-chip.pass { color: var(--emerald); }
+    .loop-phase-chip.fail { color: #fca5a5; }
+    .loop-progress-bar { height: 3px; background: rgba(255,255,255,.08); border-radius: 2px; margin-top: .35rem; overflow: hidden; }
+    .loop-progress-fill { height: 100%; background: var(--emerald); transition: width .4s ease; }
+    @keyframes loop-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
     .task-card.status-running .task-icon { animation: blink 1.5s ease-in-out infinite; }
 
@@ -4297,6 +4306,9 @@
     if (!rs || !rs.loopTemplateId) return '';
     const phase = rs.loopPhase || '—';
     const iter = rs.loopIteration != null ? ' · iter ' + rs.loopIteration : '';
+    const statusNote = rs.loopStatus && rs.loopStatus !== 'running'
+      ? ' · ' + rs.loopStatus
+      : (rs.status === 'running' || rs.status === 'reviewing' ? ' · live' : '');
     const lv = rs.lastVerification;
     const pass = lv ? lv.pass : null;
     const panelClass = pass === false ? 'loop-intel-panel fail' : 'loop-intel-panel';
@@ -4326,10 +4338,39 @@
         (lc.summary ? '<div style="margin-top:.2rem;color:var(--muted)">' + escHtml(lc.summary.slice(0, 140)) + '</div>' : '') +
         '</div>';
     }
+    const lr = rs.lastRetry;
+    let retryHtml = '';
+    if (lr && lr.strategy) {
+      const stratLabel = lr.strategy === 'focused'
+        ? 'Focused · ' + escHtml((lr.focusAreas || []).join(', ') || '—')
+        : 'Full retry';
+      const backoffNote = lr.backoffMs > 0 ? ' · backoff ' + lr.backoffMs + 'ms' : '';
+      retryHtml = '<div class="loop-critique-panel" style="margin-top:.25rem">' +
+        '<span class="loop-critique-decision retry">RETRY #' + escHtml(String(lr.attempt)) + '</span>' +
+        ' · ' + stratLabel + escHtml(backoffNote) + '</div>';
+    }
+    let timelineHtml = '';
+    const history = rs.loopPhaseHistory;
+    if (Array.isArray(history) && history.length) {
+      const chips = history.slice(-8).map(h => {
+        const isCurrent = h.phase === rs.loopPhase && !h.completedAt;
+        const cls = isCurrent ? 'running' : h.success === false ? 'fail' : h.success === true ? 'pass' : '';
+        const icon = isCurrent ? '●' : h.success === false ? '✕' : h.success === true ? '✓' : '○';
+        return '<span class="loop-phase-chip ' + cls + '" title="' + escHtml(h.summary || '') + '">' +
+          icon + ' ' + escHtml(h.phase) + '</span>';
+      }).join('');
+      timelineHtml = '<div class="loop-phase-timeline"><h5>Phase timeline</h5>' + chips + '</div>';
+    }
+    const maxIter = 5;
+    const iterNum = rs.loopIteration || 1;
+    const progressPct = Math.min(100, Math.round((iterNum / maxIter) * 100));
+    const progressHtml = rs.loopStatus === 'running' || isRunActive(rs)
+      ? '<div class="loop-progress-bar"><div class="loop-progress-fill" style="width:' + progressPct + '%"></div></div>'
+      : '';
     return '<div class="' + panelClass + '"><h4>Loop Engineering</h4>' +
       '<div><strong>' + escHtml(rs.loopTemplateId) + '</strong> · phase <strong>' + escHtml(phase) + '</strong>' + escHtml(iter) +
-      ' · ' + statusLabel + (lv && lv.durationMs ? ' · ' + escHtml(String(lv.durationMs)) + 'ms' : '') + '</div>' +
-      strategyHtml + summary + critiqueHtml + '</div>';
+      escHtml(statusNote) + ' · ' + statusLabel + (lv && lv.durationMs ? ' · ' + escHtml(String(lv.durationMs)) + 'ms' : '') + '</div>' +
+      progressHtml + strategyHtml + summary + critiqueHtml + retryHtml + timelineHtml + '</div>';
   }
 
   function renderGitIntelSummary(tasks) {

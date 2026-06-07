@@ -4,7 +4,7 @@ import { PlanPhaseHandler } from './plan.js';
 import { ActPhaseHandler } from './act.js';
 import { VerifyPhaseHandler } from './verify-phase.js';
 import { CritiquePhaseHandler } from './critique-phase.js';
-import { RetryPhaseHandler } from './retry.js';
+import { RetryPhaseHandler } from './retry-phase.js';
 import { ObservePhaseHandler } from './observe.js';
 
 export type { PhaseHandler, PhaseHandlerContext, PhaseResult } from './types.js';
@@ -31,3 +31,4 @@ export {
   ObservePhaseHandler,
 };
 export type { VerifyPhaseHandlerOptions } from './verify-phase.js';
+export type { RetryPhaseHandlerOptions } from './retry-phase.js';

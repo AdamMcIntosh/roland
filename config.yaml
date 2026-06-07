@@ -23,15 +23,10 @@
 loop_engine:
   default_template: standard-code-loop
   templates_dir: recipes/loops
+  timeout_ms: 1800000
   verification:
     # Legacy flag — Critique always runs after Verify; retry owned by critique phase
     require_pass_before_critique: false
-  critique:
-    max_retries: 3
-    escalation_threshold: 4
-    test_mode:
-      max_retries: 6
-      escalation_threshold: 8
     strategies:
       - type: unit
         command: npm run test:run
@@ -44,6 +39,17 @@ loop_engine:
         command: npm run build
         timeout_ms: 180000
         optional: true
+  critique:
+    max_retries: 3
+    escalation_threshold: 4
+    test_mode:
+      max_retries: 6
+      escalation_threshold: 8
+  retry:
+    exponential_backoff:
+      enabled: false
+      base_ms: 2000
+      max_ms: 60000
 
 pm:
   lead_model: "grok-4.3"                # The Lead PM (Grok 4.3 — orchestration + planning)

@@ -141,10 +141,11 @@ See [docs/evolution/README.md](./docs/evolution/README.md) for the current produ
 ## Next Steps for Implementation Waves
 
 1. ~~**Define loop phase model**~~ — **Done (Wave 1, task-1).** See implementation notes below.
-2. **Wire verification gates** — Connect `test-executor` and linter checks as mandatory verify steps in reference templates.
-3. **Harden reliability layer** — Close state/supervisor/project-switch bugs before adding new loop surfaces.
-4. **Upgrade dashboard** — Loop phase and verification panel on existing run-state API.
-5. **Ship reference loops** — `code → test → fix` and `research → synthesize → validate` as runnable, documented templates.
+2. ~~**Wire verification gates**~~ — **Done (Wave 2–3).** TestExecutor + strategies in verify phase.
+3. ~~**Implement critique + retry loop**~~ — **Done (Wave 4–5).** CritiqueEngine + RetryPhaseHandler + `runFullLoop()`.
+4. **Harden reliability layer** — Close state/supervisor/project-switch bugs before adding new loop surfaces.
+5. ~~**Upgrade dashboard**~~ — **Done (Wave 5).** Loop phase timeline + retry intel in Mission Intel panel.
+6. **Ship reference loops** — `code → test → fix` and `research → synthesize → validate` as runnable, documented templates.
 
 ---
 
@@ -198,15 +199,52 @@ import { LoopEngine, LoopTemplates } from './loop-engine/index.js';
 
 ### Known limitations (Wave 1)
 
-- Verify handler is a **stub gate** (blocker-aware pass/fail) — real test-executor / linter wiring is Wave 2.
-- Retry phase does not yet re-queue PM tasks automatically — records intent on blackboard only.
-- No advanced exponential backoff (non-goal for this wave).
-- Dashboard UI panel for loop phase not yet built — fields are in `run-state.json` API.
+- ~~Verify handler is a **stub gate**~~ — **Done (Wave 2).** Real TestExecutor + strategy runner wired.
+- ~~Retry phase does not yet re-queue PM tasks automatically~~ — **Done (Wave 5).** Retry phase schedules focused/full retry with blackboard scope; PM re-planning is coordinator-driven.
+- ~~No advanced exponential backoff~~ — **Done (Wave 5).** Optional exponential backoff in retry phase (`loop_engine.retry.exponential_backoff`).
+- ~~Dashboard UI panel for loop phase not yet built~~ — **Done (Wave 5).** Phase timeline, retry count, live progress bar in Mission Intel panel.
+
+---
+
+## Implementation Notes (Wave 5 — Retry Phase + Full Loop Orchestration)
+
+**Status:** Shipped in `src/loop-engine/` (2026-06-07).
+
+### New / enhanced modules
+
+| Path | Role |
+|------|------|
+| `src/loop-engine/phase-handlers/retry-phase.ts` | Smart retry handler — focused scope, exponential backoff, HITL escalation |
+| `src/loop-engine/loop-engine.ts` | `runFullLoop()` — multi-iteration orchestration with timeout, resume, structured logging |
+| `src/loop-engine/loop-state.ts` | `LoopStateStore.loadOrCreate()` — resume from `.roland/loop-state.json`; `lastRetry` / `retryHistory` |
+| `src/loop-engine/loop-config.ts` | `timeout_ms`, `retry.exponential_backoff` config section |
+| `dashboard-ui/index.html` | Phase timeline chips, retry snapshot, live progress bar |
+
+### Capabilities shipped
+
+| Capability | Status |
+|------------|--------|
+| Full loop execution (`runFullLoop()`) | ✅ Plan → Act → Verify → Critique → Retry → next iteration or complete |
+| Configurable max iterations / timeout | ✅ Template + `config.yaml` `loop_engine.timeout_ms` |
+| State persistence across restarts | ✅ `resumeFromState` + `LoopStateStore.loadOrCreate()` |
+| Focused retry on failed checks | ✅ `retry_focused` decision → scoped verification targets on blackboard |
+| Exponential backoff (optional) | ✅ Config-driven; disabled by default for dev speed |
+| Human escalation after max retries | ✅ Critique + Retry phases → `escalated` status + HITL blackboard entry |
+| Dashboard loop visibility | ✅ Iteration, phase timeline, retry count, live progress |
+| Escalation threshold fix | ✅ Consecutive verify-failure HITL no longer fires at `retryCount=maxRetries-1` |
+
+### Remaining gaps
+
+- Retry phase does not auto-spawn PM tasks in standalone mode — coordinator/team mode required for Act re-execution.
+- Visual loop designer UI (explicit non-goal).
+- Parallel agent execution inside loops (explicit non-goal).
+- Advanced memory summarization per iteration (explicit non-goal).
+- Template-level `exponential_backoff: true` not yet parsed into runtime (use global config).
 
 ### Downstream tasks
 
-- **task-2 (Vanguard):** Wired E2E test using `minimal-3-phase` template via `LoopEngine.run()`.
-- **task-3 (Vanguard):** Execute scoped test command from task-2 handoff.
+- **task-2 (test-author):** E2E test for `runFullLoop()` with 2+ iterations (success + one retry).
+- **task-3 (test-executor):** Run scoped loop-engine E2E suite.
 
 ---
 

@@ -54,6 +54,10 @@ export interface LoopTemplate {
   /** Test-mode overrides — used when isTestMode or ROLAND_LOOP_TEST_MODE=1 */
   testModeMaxRetries?: number;
   testModeEscalationThreshold?: number;
+  /** Wall-clock timeout for the entire loop (ms). Default from config or 30 min. */
+  timeoutMs?: number;
+  /** Enable exponential backoff before retry iterations */
+  exponentialBackoff?: boolean;
 }
 
 export function isPhase(value: string): value is Phase {
