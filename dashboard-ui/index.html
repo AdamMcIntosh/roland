@@ -312,7 +312,56 @@
     .board-callsign.complete { border-color: rgba(16,185,129,.35); color: var(--emerald); }
     .board-callsign.active   { border-color: rgba(99,102,241,.4);  color: var(--indigo); }
     .board-callsign.blocked  { border-color: rgba(245,158,11,.4);  color: var(--amber); }
-    .board-blocker-list { margin: .5rem 0 0; padding-left: 1rem; color: var(--amber); }
+    .board-blocker-list { margin: .5rem 0 0; padding-left: 0; list-style: none; color: var(--amber); }
+    .board-blocker-item {
+      display: flex; flex-wrap: wrap; align-items: flex-start; gap: .45rem;
+      padding: .55rem .65rem; margin-top: .4rem;
+      background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.28);
+      border-radius: 8px;
+    }
+    .board-blocker-body { flex: 1 1 12rem; min-width: 0; font-size: .76rem; line-height: 1.45; }
+    .board-blocker-title { font-weight: 700; color: #fbbf24; }
+    .board-blocker-actions {
+      display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; flex-shrink: 0;
+    }
+    .btn-blocker-ignore {
+      min-height: 34px; padding: .32rem .65rem;
+      border: 1px solid rgba(239,68,68,0.45); border-radius: 6px;
+      background: rgba(239,68,68,0.14); color: #f87171;
+      font-size: .72rem; font-weight: 700; cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-blocker-ignore:hover:not(:disabled) { background: rgba(239,68,68,0.28); }
+    .btn-blocker-ignore:disabled { opacity: .55; cursor: default; }
+    .board-blocker-snooze {
+      min-height: 34px; padding: .32rem .45rem;
+      border: 1px solid rgba(245,158,11,0.45); border-radius: 6px;
+      background: rgba(245,158,11,0.12); color: var(--amber);
+      font-size: .72rem; font-weight: 600;
+    }
+    .board-ignored-section { margin-top: .75rem; }
+    .board-ignored-toggle {
+      width: 100%; text-align: left; padding: .4rem .55rem;
+      border: 1px dashed var(--border); border-radius: 6px;
+      background: transparent; color: var(--muted);
+      font-size: .72rem; cursor: pointer;
+    }
+    .board-ignored-toggle:hover { color: var(--fg); border-color: var(--muted); }
+    .board-ignored-list {
+      margin: .45rem 0 0; padding-left: 0; list-style: none;
+      display: none;
+    }
+    .board-ignored-list.open { display: block; }
+    .board-ignored-item {
+      padding: .4rem .55rem; margin-top: .3rem;
+      border-radius: 6px; background: var(--surface2);
+      border: 1px solid var(--border); font-size: .72rem; color: var(--muted);
+    }
+    @media (max-width: 640px) {
+      .board-blocker-item { flex-direction: column; align-items: stretch; }
+      .board-blocker-actions { width: 100%; }
+      .btn-blocker-ignore, .board-blocker-snooze { flex: 1 1 auto; min-height: 44px; font-size: .78rem; }
+    }
 
     /* Add team goal form (Command Board — active missions) */
     .board-add-goal-section {
@@ -2673,6 +2722,7 @@
   let pollTimer = null;
   let missionBoostPollTimer = null;
   let boardSyncCount = 0;
+  let blockerIgnoreSubmitting = false;
 
   // ═══════════════════════════════════════════════════════════════════════════
   //  Format helpers
@@ -4292,6 +4342,24 @@
     return html;
   }
 
+  /** Compact blocker strip for Live Status — links to Command Board actions. */
+  function renderActiveBlockersBanner() {
+    const blockers = boardStatus?.report?.blockers || boardStatus?.fallback?.blockers || [];
+    if (!blockers.length) return '';
+    const preview = blockers.slice(0, 2).map(b => escHtml((b.title || 'Blocker').slice(0, 60))).join(' · ');
+    const extra = blockers.length > 2 ? ' +' + (blockers.length - 2) + ' more' : '';
+    return '<div class="pm-banner" style="background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.35);color:#fca5a5;margin-top:.5rem">' +
+      '🚨 ' + blockers.length + ' active blocker' + (blockers.length === 1 ? '' : 's') + ': ' + preview + extra +
+      ' — <a href="#" id="live-blockers-board-link" style="color:inherit">Manage in Command Board ↓</a></div>';
+  }
+
+  function bindLiveBlockersLink() {
+    document.getElementById('live-blockers-board-link')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      document.getElementById('intel-section-box')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
+
   function renderLiveStatus() {
     const el  = document.getElementById('live-section');
     const box = document.getElementById('live-section-box');
@@ -4378,9 +4446,11 @@
         '<div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%"></div></div>' +
       '</div>' +
       bannerHtml +
+      renderActiveBlockersBanner() +
       hitlControlsHtml(rs) +
       renderGitIntelSummary(tasks) +
       (tasks.length ? '<div class="task-grid" style="margin-top:.7rem">' + taskCardsHtml + '</div>' : '');
+    bindLiveBlockersLink();
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -4661,13 +4731,162 @@
     }
   }
 
+  function formatBlockerPreview(b) {
+    const title = b.title || 'Blocker';
+    const content = b.content ? ' — ' + String(b.content).slice(0, 80) : '';
+    return escHtml(title + content);
+  }
+
+  function formatIgnoredMeta(b) {
+    if (b.ignored && b.ignoredAt) {
+      return 'Ignored ' + escHtml(timeAgo(b.ignoredAt));
+    }
+    if (b.ignoredUntil && b.ignoredUntil > Date.now()) {
+      return 'Snoozed until ' + escHtml(new Date(b.ignoredUntil).toLocaleString());
+    }
+    return 'Ignored';
+  }
+
+  /** Interactive blocker row — Ignore / Snooze controls (requires blackboard entry id). */
+  function renderBlockerItemHtml(b) {
+    const id = b.id ? escHtml(b.id) : '';
+    if (!id) {
+      return '<li class="board-blocker-item"><div class="board-blocker-body">' +
+        '<div class="board-blocker-title">' + formatBlockerPreview(b) + '</div></div></li>';
+    }
+    return '<li class="board-blocker-item" data-blocker-id="' + id + '">' +
+      '<div class="board-blocker-body">' +
+        '<div class="board-blocker-title">' + formatBlockerPreview(b) + '</div>' +
+      '</div>' +
+      '<div class="board-blocker-actions">' +
+        '<button type="button" class="btn-blocker-ignore" data-blocker-ignore="' + id + '" title="Mark resolved — mission may continue with incomplete work">Mark Resolved</button>' +
+        '<select class="board-blocker-snooze" data-blocker-snooze="' + id + '" aria-label="Snooze blocker">' +
+          '<option value="">Snooze…</option>' +
+          '<option value="3600000">1 hour</option>' +
+          '<option value="14400000">4 hours</option>' +
+          '<option value="86400000">24 hours</option>' +
+        '</select>' +
+      '</div>' +
+    '</li>';
+  }
+
+  function renderIgnoredBlockersSection(ignored) {
+    if (!ignored || !ignored.length) return '';
+    const items = ignored.map(b =>
+      '<li class="board-ignored-item">' + formatBlockerPreview(b) +
+      ' <span style="opacity:.75">(' + formatIgnoredMeta(b) + ')</span></li>'
+    ).join('');
+    return '<div class="board-ignored-section">' +
+      '<button type="button" class="board-ignored-toggle" data-ignored-toggle aria-expanded="false">' +
+        '▸ Ignored / snoozed (' + ignored.length + ')' +
+      '</button>' +
+      '<ul class="board-ignored-list" data-ignored-list>' + items + '</ul>' +
+    '</div>';
+  }
+
+  function bindBlockerPanelActions(root) {
+    if (!root) return;
+    root.querySelector('[data-ignored-toggle]')?.addEventListener('click', (e) => {
+      const btn = e.currentTarget;
+      const list = root.querySelector('[data-ignored-list]');
+      if (!list) return;
+      const open = list.classList.toggle('open');
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      btn.textContent = (open ? '▾' : '▸') + ' Ignored / snoozed (' + list.querySelectorAll('.board-ignored-item').length + ')';
+    });
+    root.querySelectorAll('[data-blocker-ignore]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-blocker-ignore');
+        if (id) confirmIgnoreBlocker(id, { snoozeMs: 0, trigger: btn });
+      });
+    });
+    root.querySelectorAll('[data-blocker-snooze]').forEach(sel => {
+      sel.addEventListener('change', () => {
+        const ms = Number(sel.value);
+        if (!ms) return;
+        const id = sel.getAttribute('data-blocker-snooze');
+        sel.value = '';
+        if (id) confirmIgnoreBlocker(id, { snoozeMs: ms, trigger: sel });
+      });
+    });
+  }
+
+  /** Confirmation toast before ignoring — warns that work may be incomplete. */
+  function confirmIgnoreBlocker(blockerId, { snoozeMs = 0, trigger = null } = {}) {
+    if (blockerIgnoreSubmitting) return;
+    const snoozeLabel = snoozeMs >= 3_600_000
+      ? Math.round(snoozeMs / 3_600_000) + 'h'
+      : Math.round(snoozeMs / 60_000) + 'm';
+    const actionLabel = snoozeMs > 0 ? 'Snooze ' + snoozeLabel : 'Mark Resolved';
+    toast(
+      (snoozeMs > 0 ? 'Snooze this blocker for ' + snoozeLabel + '?' : 'Mark this blocker as resolved?') +
+      ' Ignoring may cause incomplete work.',
+      'warning',
+      {
+        autoDismiss: false,
+        actions: [
+          { label: 'Cancel' },
+          { label: actionLabel, onClick: () => ignoreBlocker(blockerId, { snoozeMs, trigger }) },
+        ],
+      },
+    );
+  }
+
+  /** POST /api/blockers/:id/ignore then refresh Mission Intel + Live Status. */
+  async function ignoreBlocker(blockerId, { snoozeMs = 0, trigger = null } = {}) {
+    if (blockerIgnoreSubmitting) return;
+    blockerIgnoreSubmitting = true;
+    if (trigger) trigger.disabled = true;
+    try {
+      const res = await fetch('/api/blockers/' + encodeURIComponent(blockerId) + '/ignore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ snoozeMs: snoozeMs || 0 }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      logMission('Blocker ignored', { id: blockerId, snoozeMs: snoozeMs || null });
+      toast(data.message || 'Blocker updated', 'success');
+      await refreshBoardState({ source: 'blocker-ignore' });
+    } catch (e) {
+      toast('Could not ignore blocker: ' + e.message, 'error');
+      logMission('Blocker ignore failed', { id: blockerId, error: e.message });
+    } finally {
+      blockerIgnoreSubmitting = false;
+      if (trigger) trigger.disabled = false;
+    }
+  }
+
   function renderBoardPanel() {
     const el = document.getElementById('board-panel');
     if (!el) return;
 
+    // Prefer structured report for interactive blocker controls (ignore / snooze).
+    const report = boardStatus?.report;
+    if (report) {
+      const roster = (report.roster || []).map(r => {
+        const cls = r.state === 'complete' ? 'complete' : r.state === 'active' ? 'active' : r.state === 'blocked' ? 'blocked' : '';
+        const icon = r.state === 'complete' ? '✓' : r.state === 'active' ? '●' : r.state === 'blocked' ? '⚠' : '○';
+        return `<span class="board-callsign ${cls}">${r.callsign} ${icon}</span>`;
+      }).join('');
+      const blockers = (report.blockers || []).map(renderBlockerItemHtml).join('');
+      const ignoredSection = renderIgnoredBlockersSection(report.ignoredBlockers || []);
+      const gitSummary = renderGitIntelSummary(runState?.tasks || []);
+      const ignoredCount = report.counts?.ignoredBlockers ?? (report.ignoredBlockers || []).length;
+      el.innerHTML = `
+        <div><strong>Mission:</strong> ${escHtml((report.goal || report.missionObjective || '—').slice(0, 120))}</div>
+        <div style="margin-top:.35rem;color:var(--muted)">Run: ${report.runActive ? 'ACTIVE' : 'idle'} · ${report.counts?.total ?? 0} entries · ${report.counts?.blockers ?? 0} blocker${(report.counts?.blockers ?? 0) === 1 ? '' : 's'}${ignoredCount ? ' · ' + ignoredCount + ' ignored' : ''}</div>
+        ${gitSummary}
+        <div class="board-roster">${roster || '<span class="board-callsign">Roster unavailable</span>'}</div>
+        ${blockers ? `<ul class="board-blocker-list">${blockers}</ul>` : '<div style="color:var(--muted);margin-top:.35rem">No active blockers</div>'}
+        ${ignoredSection}
+      `;
+      bindBlockerPanelActions(el);
+      return;
+    }
+
     const markdown = boardStatus?.markdown || boardStatus?.concise;
     if (markdown && !markdown.startsWith('(Run npm')) {
-      // Simple markdown-ish render: preserve line breaks
       const html = markdown
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
@@ -4679,31 +4898,15 @@
       return;
     }
 
-    const report = boardStatus?.report;
-    if (report) {
-      const roster = (report.roster || []).map(r => {
-        const cls = r.state === 'complete' ? 'complete' : r.state === 'active' ? 'active' : r.state === 'blocked' ? 'blocked' : '';
-        const icon = r.state === 'complete' ? '✓' : r.state === 'active' ? '●' : r.state === 'blocked' ? '⚠' : '○';
-        return `<span class="board-callsign ${cls}">${r.callsign} ${icon}</span>`;
-      }).join('');
-      const blockers = (report.blockers || []).map(b =>
-        `<li>${b.title}${b.content ? ' — ' + b.content.slice(0, 80) : ''}</li>`
-      ).join('');
-      const gitSummary = renderGitIntelSummary(runState?.tasks || []);
-      el.innerHTML = `
-        <div><strong>Mission:</strong> ${(report.goal || report.missionObjective || '—').slice(0, 120)}</div>
-        <div style="margin-top:.35rem;color:var(--muted)">Run: ${report.runActive ? 'ACTIVE' : 'idle'} · ${report.counts?.total ?? 0} entries · ${report.counts?.blockers ?? 0} blockers</div>
-        ${gitSummary}
-        <div class="board-roster">${roster || '<span class="board-callsign">Roster unavailable</span>'}</div>
-        ${blockers ? `<ul class="board-blocker-list">${blockers}</ul>` : '<div style="color:var(--muted);margin-top:.35rem">No blockers</div>'}
-      `;
-      return;
-    }
-
     const fb = boardStatus?.fallback;
     if (fb) {
+      const blockers = (fb.blockers || []).map(renderBlockerItemHtml).join('');
+      const ignoredSection = renderIgnoredBlockersSection(fb.ignoredBlockers || []);
       el.innerHTML = `<div style="color:var(--muted)">${fb.counts?.total ?? 0} entries · ${fb.counts?.blockers ?? 0} blockers</div>
-        <pre style="margin-top:.5rem">${(fb.commandExcerpt || 'Command board not initialized').slice(0, 800)}</pre>`;
+        ${blockers ? `<ul class="board-blocker-list">${blockers}</ul>` : '<div style="color:var(--muted);margin-top:.35rem">No active blockers</div>'}
+        ${ignoredSection}
+        <pre style="margin-top:.5rem">${escHtml((fb.commandExcerpt || 'Command board not initialized').slice(0, 800))}</pre>`;
+      bindBlockerPanelActions(el);
       return;
     }
 
