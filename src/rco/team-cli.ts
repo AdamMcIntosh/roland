@@ -285,8 +285,14 @@ export async function runTeamCli(argv: string[]): Promise<void> {
           out(`  → ${agent}: ${title}`);
         },
 
-        onTaskComplete: (id, agent, output, hadBlocker) => {
-          runState.taskComplete(id, output, hadBlocker);
+        onTaskComplete: (id, agent, output, hadBlocker, git) => {
+          runState.taskComplete(id, output, hadBlocker, git ? {
+            branch: git.branch,
+            phase: git.phase,
+            statusLabel: git.statusLabel,
+            prUrl: git.prUrl,
+            prNumber: git.prNumber,
+          } : undefined);
           const entry = webWaveEntries.get(id);
           if (entry) entry.hadBlocker = hadBlocker;
           out(`  ${hadBlocker ? '⚠️' : '✓'} ${agent}: ${entry?.title ?? ''}`);
@@ -424,8 +430,18 @@ export async function runTeamCli(argv: string[]): Promise<void> {
         noImprove, sequential: !parallel, interactive: false, quiet: true,
         onPlanReady:    (tasks)         => { runState.planReady(tasks); },
         onWaveStart:    (w, tasks)      => { runState.waveStart(w, tasks.map((t) => t.id)); },
-        onTaskStart:    (id)            => { runState.taskStart(id); },
-        onTaskComplete: (id, _a, out, bl) => { runState.taskComplete(id, out, bl); },
+        onTaskStart: (id, _a, _t, git) => {
+          runState.taskStart(id, git ? {
+            branch: git.branch, phase: git.phase, statusLabel: git.statusLabel,
+            prUrl: git.prUrl, prNumber: git.prNumber,
+          } : undefined);
+        },
+        onTaskComplete: (id, _a, out, bl, git) => {
+          runState.taskComplete(id, out, bl, git ? {
+            branch: git.branch, phase: git.phase, statusLabel: git.statusLabel,
+            prUrl: git.prUrl, prNumber: git.prNumber,
+          } : undefined);
+        },
         onWaveReview:   ()              => { runState.waveReviewing(); },
         onWaveComplete: (_w, d)         => { runState.waveComplete(d.pmNotes); },
         onTasksSpawned: (tasks)         => { runState.addTasks(tasks); },
@@ -551,12 +567,18 @@ export async function runTeamCli(argv: string[]): Promise<void> {
           runState.waveStart(waveNumber, tasks.map((t) => t.id));
           tui.update(runState.get());
         },
-        onTaskStart: (id) => {
-          runState.taskStart(id);
+        onTaskStart: (id, _agent, _title, git) => {
+          runState.taskStart(id, git ? {
+            branch: git.branch, phase: git.phase, statusLabel: git.statusLabel,
+            prUrl: git.prUrl, prNumber: git.prNumber,
+          } : undefined);
           tui.update(runState.get());
         },
-        onTaskComplete: (id, _agent, output, hadBlocker) => {
-          runState.taskComplete(id, output, hadBlocker);
+        onTaskComplete: (id, _agent, output, hadBlocker, git) => {
+          runState.taskComplete(id, output, hadBlocker, git ? {
+            branch: git.branch, phase: git.phase, statusLabel: git.statusLabel,
+            prUrl: git.prUrl, prNumber: git.prNumber,
+          } : undefined);
           tui.update(runState.get());
         },
         onWaveReview: () => {
@@ -689,16 +711,22 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     },
 
     // ── Task starting ────────────────────────────────────────────────────────
-    onTaskStart: (id: string, agent: string, title: string) => {
-      runState.taskStart(id);
+    onTaskStart: (id: string, agent: string, title: string, git?) => {
+      runState.taskStart(id, git ? {
+        branch: git.branch, phase: git.phase, statusLabel: git.statusLabel,
+        prUrl: git.prUrl, prNumber: git.prNumber,
+      } : undefined);
       err(
         `  ${c.cyan('→')} ${c.dim(rpad('[' + id + ']', 10))} ${rpad(agent, 22)} ${c.dim(title.slice(0, 50))}`,
       );
     },
 
     // ── Task complete ─────────────────────────────────────────────────────────
-    onTaskComplete: (id: string, agent: string, output: string, hadBlocker: boolean) => {
-      runState.taskComplete(id, output, hadBlocker);
+    onTaskComplete: (id: string, agent: string, output: string, hadBlocker: boolean, git?) => {
+      runState.taskComplete(id, output, hadBlocker, git ? {
+        branch: git.branch, phase: git.phase, statusLabel: git.statusLabel,
+        prUrl: git.prUrl, prNumber: git.prNumber,
+      } : undefined);
       const entry = waveEntries.get(id);
       if (entry) entry.hadBlocker = hadBlocker;
 

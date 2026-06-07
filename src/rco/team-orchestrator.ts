@@ -86,6 +86,11 @@ import {
   type SdkAgentDefinition,
 } from './unsc-agents.js';
 import { finalizeSynthesisOutput } from './mission-complete.js';
+import {
+  TaskGitWorkflow,
+  isExecutorAgent,
+  type TaskGitInfo,
+} from './task-git-workflow.js';
 
 /** Operator escalation threshold — cumulative blockers before surfacing to human command. */
 const OPERATOR_ESCALATION_THRESHOLD = 3;
@@ -199,8 +204,8 @@ export interface TeamOrchestratorOptions {
   /** Fired before each wave's parallel tasks begin executing. */
   onWaveStart?: (waveNumber: number, tasks: TeamTask[]) => void;
   /** Fired just before a single task's agent call is dispatched. */
-  onTaskStart?: (taskId: string, agent: string, title: string) => void;
-  onTaskComplete?: (taskId: string, agent: string, output: string, hadBlocker: boolean) => void;
+  onTaskStart?: (taskId: string, agent: string, title: string, git?: TaskGitInfo) => void;
+  onTaskComplete?: (taskId: string, agent: string, output: string, hadBlocker: boolean, git?: TaskGitInfo) => void;
   onWaveComplete?: (waveNumber: number, decision: ReviewDecision) => void;
   /** Fired just before the PM agent reviews a completed wave. */
   onWaveReview?: (waveNumber: number) => void;
@@ -711,6 +716,26 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
     console.error(`[Team] Project knowledge loaded — ${knowledge.summary}`);
   }
 
+  const projectRoot = process.env.ROLAND_PROJECT_ROOT?.trim()
+    || process.env.ROLAND_ROOT?.trim()
+    || process.cwd();
+  const dashboardPort = process.env.ROLAND_DASHBOARD_PORT ?? '8081';
+  const gitWorkflow = new TaskGitWorkflow({
+    stateDir,
+    projectRoot,
+    goal,
+    runId,
+    blackboard,
+    commandBoard,
+    missionUrl: `http://127.0.0.1:${dashboardPort}`,
+  });
+  const gitCfg = gitWorkflow.getConfig();
+  if (gitCfg.enabled) {
+    console.error('[GIT] Task git workflow enabled for executor tasks');
+  } else {
+    console.error('[GIT] Task git workflow disabled');
+  }
+
   blackboard.post({ type: 'task', title: 'TEAM GOAL', content: goal, status: 'in_progress', author: 'system', priority: 'critical', tags: ['goal'], relatedIds: [] });
 
   const agentsDir = resolveAgentsDir(import.meta.url, agentsDirOverride);
@@ -864,7 +889,16 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
       console.error(`[Team]   📋 [test-author] description[:400]: ${descPreview}`);
     }
 
-    onTaskStart?.(task.id, task.agent, task.title);
+    let taskGitInfo: TaskGitInfo | undefined;
+    if (isExecutorAgent(task.agent)) {
+      try {
+        taskGitInfo = gitWorkflow.onTaskStart(task);
+      } catch (e) {
+        console.error(`[GIT] onTaskStart failed for ${task.id}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+
+    onTaskStart?.(task.id, task.agent, task.title, taskGitInfo);
     missionDag?.markInProgress(task.id, currentWaveNumber);
     syncMissionGraph();
     const taskCallStart = Date.now();
@@ -932,7 +966,15 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
       relatedIds: [],
     });
 
-    onTaskComplete?.(task.id, task.agent, output, hadBlocker);
+    if (isExecutorAgent(task.agent) && !hadBlocker) {
+      try {
+        taskGitInfo = await gitWorkflow.onTaskComplete(task, taskGitInfo);
+      } catch (e) {
+        console.error(`[GIT] onTaskComplete failed for ${task.id}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+
+    onTaskComplete?.(task.id, task.agent, output, hadBlocker, taskGitInfo);
     console.error(`[Team]   ✓ ${task.agent} done: "${task.title}"${hadBlocker ? ' 🚨 (blocker signalled)' : ''}`);
 
     if (!hadBlocker) {

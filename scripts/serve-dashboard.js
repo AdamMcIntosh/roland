@@ -86,6 +86,12 @@ function logState(msg, detail) {
   else console.log(`[STATE] ${logTs()} ${msg}`);
 }
 
+/** Per-task git branch / commit / push / draft PR workflow */
+function logGit(msg, detail) {
+  if (detail !== undefined) console.log(`[GIT] ${logTs()} ${msg}`, detail);
+  else console.log(`[GIT] ${logTs()} ${msg}`);
+}
+
 /** HTTP API request/response tracing for mission-related routes */
 function logApi(method, route, msg, detail) {
   const line = `[API] ${logTs()} ${method} ${route} — ${msg}`;
@@ -446,12 +452,17 @@ function summarizeSupervisorPayload() {
   };
 }
 
+function readTaskGitPayload() {
+  return readJson(path.join(activeStateDir, 'task-git.json'), null);
+}
+
 function pushCurrentState() {
   const runState  = readJson(path.join(activeStateDir, 'run-state.json'),  null);
   const hitlState = readJson(path.join(activeStateDir, 'hitl-state.json'), null);
   const boardStatus = readBoardStatusPayload();
   const missionDag = readMissionDagPayload();
   const projectContext = readProjectContextPayload();
+  const taskGit = readTaskGitPayload();
   const supervisor = summarizeSupervisorPayload();
   broadcast({
     type: 'state-update',
@@ -460,6 +471,7 @@ function pushCurrentState() {
     boardStatus,
     missionDag,
     projectContext,
+    taskGit,
     supervisor,
   });
 }
@@ -1381,7 +1393,7 @@ function readMissionDagPayload() {
 const WATCH_TARGETS = new Set([
   'run-state.json', 'hitl-state.json', 'memory.md', 'hitl.json',
   'blackboard.json', 'command-blackboard.md', 'mission-dag.json', 'mission-meta.json',
-  'supervisor.pid',
+  'supervisor.pid', 'task-git.json',
 ]);
 
 setupStateWatcher();
@@ -1527,6 +1539,16 @@ const server = http.createServer(async (req, res) => {
   if (url === '/api/project-context' && method === 'GET') {
     try {
       jsonOk(res, readProjectContextPayload());
+    } catch (e) { jsonErr(res, e.message, 500); }
+    return;
+  }
+
+  // ── /api/task-git GET ────────────────────────────────────────────────────
+  if (url === '/api/task-git' && method === 'GET') {
+    try {
+      const payload = readTaskGitPayload();
+      logApi('GET', url, 'ok', { tasks: payload?.tasks ? Object.keys(payload.tasks).length : 0 });
+      jsonOk(res, payload ?? { tasks: {}, runId: null, updatedAt: Date.now() });
     } catch (e) { jsonErr(res, e.message, 500); }
     return;
   }
@@ -1824,6 +1846,7 @@ wss.on('connection', (ws) => {
     const boardStatus = readBoardStatusPayload();
     const missionDag = readMissionDagPayload();
     const projectContext = readProjectContextPayload();
+    const taskGit = readTaskGitPayload();
     const supervisor = summarizeSupervisorPayload();
     ws.send(JSON.stringify({
       type: 'state-update',
@@ -1832,6 +1855,7 @@ wss.on('connection', (ws) => {
       boardStatus,
       missionDag,
       projectContext,
+      taskGit,
       supervisor,
     }));
   } catch {}
@@ -1858,7 +1882,8 @@ server.listen(port, host, () => {
   console.log(`  APIs      : ${localBase}/api/usage  ${localBase}/api/run-state`);
   console.log(`              ${localBase}/api/memory  ${localBase}/api/hitl/:cmd`);
   console.log(`              ${localBase}/api/board-status  ${localBase}/api/mission-dag`);
-  console.log(`              ${localBase}/api/project-context  ${localBase}/api/projects`);
+  console.log(`              ${localBase}/api/project-context  ${localBase}/api/task-git`);
+  console.log(`              ${localBase}/api/projects`);
   console.log(`              ${localBase}/api/project-templates  ${localBase}/api/create-project`);
   console.log(`\n  Open the URL above in your browser (Tailscale: use machine IP).\n`);
 });
