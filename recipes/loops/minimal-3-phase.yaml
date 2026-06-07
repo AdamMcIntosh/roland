@@ -1,0 +1,12 @@
+name: minimal-3-phase
+description: >
+  Minimal reference loop for E2E tests — plan, act, verify only.
+phases:
+  - phase: plan
+    label: Plan
+  - phase: act
+    label: Act
+  - phase: verify
+    label: Verify
+maxIterations: 1
+maxRetries: 0

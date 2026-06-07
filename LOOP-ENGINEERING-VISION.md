@@ -140,11 +140,73 @@ See [docs/evolution/README.md](./docs/evolution/README.md) for the current produ
 
 ## Next Steps for Implementation Waves
 
-1. **Define loop phase model** — Extend orchestrator state with `plan | act | verify | critique | retry` and persist phase transitions.
+1. ~~**Define loop phase model**~~ — **Done (Wave 1, task-1).** See implementation notes below.
 2. **Wire verification gates** — Connect `test-executor` and linter checks as mandatory verify steps in reference templates.
 3. **Harden reliability layer** — Close state/supervisor/project-switch bugs before adding new loop surfaces.
 4. **Upgrade dashboard** — Loop phase and verification panel on existing run-state API.
 5. **Ship reference loops** — `code → test → fix` and `research → synthesize → validate` as runnable, documented templates.
+
+---
+
+## Implementation Notes (Wave 1 — Core Loop Phase Model)
+
+**Status:** Shipped in `src/loop-engine/` (2026-06-07).
+
+### Module layout
+
+| Path | Role |
+|------|------|
+| `src/loop-engine/loop-phases.ts` | `Phase` enum + `PhaseConfig` / `LoopTemplate` types |
+| `src/loop-engine/loop-engine.ts` | `LoopEngine` (sequential phase runner + hooks) + `LoopEngineCoordinator` (team-orchestrator lifecycle) |
+| `src/loop-engine/loop-state.ts` | Persists `.roland/loop-state.json` — survives supervisor restarts |
+| `src/loop-engine/loop-templates.ts` | Loads YAML from `recipes/loops/` |
+| `src/loop-engine/phase-handlers/` | Base handlers: Plan, Act, Verify, Critique, Retry, Observe |
+
+### Integration points
+
+- **Blackboard** — each phase handler posts decisions/results/artifacts to RCO blackboard.
+- **Command Blackboard** — loop template and phase transitions appended to Mission Objectives / Key Decisions.
+- **Run state** — `run-state.json` extended with `loopTemplateId`, `loopPhase`, `loopIteration`, `lastVerification` (dashboard-ready).
+- **Team orchestrator** — `TeamOrchestratorOptions.loopTemplate` wires `LoopEngineCoordinator` at planning / wave / synthesis boundaries.
+- **Mission creation** — `roland team "goal" --loop-template standard-code-loop` or `POST /api/mission { loopTemplate: "..." }`.
+
+### Shipped templates (`recipes/loops/`)
+
+| Template | Phases |
+|----------|--------|
+| `standard-code-loop` | plan → act → verify → critique → retry → observe |
+| `research-loop` | plan → act → verify → critique → observe |
+| `minimal-3-phase` | plan → act → verify (E2E test reference) |
+
+### Configuration (`config.yaml`)
+
+```yaml
+loop_engine:
+  default_template: standard-code-loop
+  templates_dir: recipes/loops
+```
+
+### Usage
+
+```bash
+# CLI — attach loop template to a team mission
+roland team "Fix auth regression" --loop-template standard-code-loop --background
+
+# Standalone loop run (tests / programmatic)
+import { LoopEngine, LoopTemplates } from './loop-engine/index.js';
+```
+
+### Known limitations (Wave 1)
+
+- Verify handler is a **stub gate** (blocker-aware pass/fail) — real test-executor / linter wiring is Wave 2.
+- Retry phase does not yet re-queue PM tasks automatically — records intent on blackboard only.
+- No advanced exponential backoff (non-goal for this wave).
+- Dashboard UI panel for loop phase not yet built — fields are in `run-state.json` API.
+
+### Downstream tasks
+
+- **task-2 (Vanguard):** Wired E2E test using `minimal-3-phase` template via `LoopEngine.run()`.
+- **task-3 (Vanguard):** Execute scoped test command from task-2 handoff.
 
 ---
 

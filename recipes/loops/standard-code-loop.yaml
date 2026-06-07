@@ -1,0 +1,24 @@
+name: standard-code-loop
+description: >
+  Canonical software loop — plan work, implement, verify with tests/lint,
+  critique output, retry on failure, observe state before next iteration.
+phases:
+  - phase: plan
+    label: Plan
+    agent: lead-pm
+  - phase: act
+    label: Act
+    agent: executor
+  - phase: verify
+    label: Verify
+    agent: test-executor
+  - phase: critique
+    label: Critique
+    agent: critic
+  - phase: retry
+    label: Retry
+    optional: true
+  - phase: observe
+    label: Observe
+maxIterations: 5
+maxRetries: 3

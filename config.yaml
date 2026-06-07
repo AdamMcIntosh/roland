@@ -19,6 +19,11 @@
 #   light     → standard_model  (composer-2.5: docs, tests, research)
 # Cost strategy: Grok 4.3 for the PM brain; composer-2.5 for every engineer.
 # This section is optional; the defaults below are used if it is omitted.
+# Loop Engineering — phase templates for long-lived self-healing missions
+loop_engine:
+  default_template: standard-code-loop
+  templates_dir: recipes/loops
+
 pm:
   lead_model: "grok-4.3"                # The Lead PM (Grok 4.3 — orchestration + planning)
   fast_model: "composer-2.5"            # Interactive / time-sensitive engineers
