@@ -23,6 +23,7 @@
  *   POST /api/switch-project         → switch active project context
  *   GET  /api/board-status         → UNSC concise summary (blackboard + command board)
  *   POST /api/board-cleanup        → archive stale board entries before a new mission
+ *   POST /api/blockers/:id/ignore  → mark a blackboard blocker ignored or snoozed
  *   GET  /api/models               → available Cursor PM / engineer models
  *   POST /api/mission              → spawn `roland team` in background
  *   GET  /api/supervisor           → background supervisor PID + status
@@ -97,6 +98,12 @@ function logGit(msg, detail) {
 function logGoal(msg, detail) {
   if (detail !== undefined) console.log(`[GOAL] ${logTs()} ${msg}`, detail);
   else console.log(`[GOAL] ${logTs()} ${msg}`);
+}
+
+/** Manual blocker ignore / snooze from the dashboard */
+function logBlocker(msg, detail) {
+  if (detail !== undefined) console.log(`[BLOCKER] ${logTs()} ${msg}`, detail);
+  else console.log(`[BLOCKER] ${logTs()} ${msg}`);
 }
 
 /** HTTP API request/response tracing for mission-related routes */
@@ -584,6 +591,111 @@ function writeBlackboardEntries(entries) {
   }
 }
 
+/** True when a blackboard entry represents an open blocker signal. */
+function isBlockerEntry(entry) {
+  return entry?.type === 'blocker' || entry?.status === 'blocked';
+}
+
+/**
+ * True when the operator has ignored or snoozed a blocker in the dashboard.
+ * Snoozed blockers re-appear automatically once ignoredUntil passes.
+ */
+function isBlockerSuppressed(entry) {
+  if (!entry || !isBlockerEntry(entry)) return false;
+  if (entry.ignored === true) return true;
+  if (entry.ignoredUntil && entry.ignoredUntil > Date.now()) return true;
+  return false;
+}
+
+/** Split blocker entries into active vs operator-suppressed lists. */
+function partitionBlockers(entries) {
+  const blockers = (entries || []).filter(isBlockerEntry);
+  const active = [];
+  const ignored = [];
+  for (const b of blockers) {
+    if (isBlockerSuppressed(b)) ignored.push(b);
+    else active.push(b);
+  }
+  return { active, ignored };
+}
+
+/**
+ * Apply dashboard ignore/snooze filtering to a board-status report payload.
+ * Keeps ignored blockers in ignoredBlockers for the collapsed UI section.
+ */
+function applyBlockerIgnoreFilter(report) {
+  if (!report) return report;
+  const { active, ignored } = partitionBlockers(report.blockers || []);
+  return {
+    ...report,
+    blockers: active,
+    ignoredBlockers: ignored,
+    counts: {
+      ...(report.counts || {}),
+      blockers: active.length,
+      ignoredBlockers: ignored.length,
+    },
+  };
+}
+
+/**
+ * Mark a blackboard blocker as ignored (permanent) or snoozed (temporary).
+ * Writes ignored / ignoredAt / ignoredUntil on the entry — persisted in blackboard.json.
+ */
+function ignoreBlackboardBlocker(blockerId, { snoozeMs = 0 } = {}) {
+  const entries = readBlackboardEntries();
+  const idx = entries.findIndex((e) => e.id === blockerId);
+  if (idx === -1) {
+    const err = new Error(`Blocker not found: ${blockerId}`);
+    err.code = 'NOT_FOUND';
+    throw err;
+  }
+
+  const entry = entries[idx];
+  if (!isBlockerEntry(entry)) {
+    const err = new Error('Entry is not a blocker');
+    err.code = 'NOT_BLOCKER';
+    throw err;
+  }
+
+  const now = Date.now();
+  const updated = {
+    ...entry,
+    rev: (entry.rev || 0) + 1,
+    updatedAt: now,
+    ignoredBy: 'dashboard',
+  };
+
+  if (snoozeMs > 0) {
+    updated.ignoredUntil = now + snoozeMs;
+    delete updated.ignored;
+    delete updated.ignoredAt;
+    logBlocker('Blocker snoozed', {
+      id: blockerId,
+      title: entry.title?.slice(0, 80),
+      snoozeMs,
+      until: new Date(updated.ignoredUntil).toISOString(),
+      stateDir: activeStateDir,
+    });
+  } else {
+    updated.ignored = true;
+    updated.ignoredAt = now;
+    delete updated.ignoredUntil;
+    // Treat as resolved so PM/orchestrator views the blocker as closed
+    if (updated.status !== 'archived') updated.status = 'done';
+    logBlocker('Blocker ignored (marked resolved)', {
+      id: blockerId,
+      title: entry.title?.slice(0, 80),
+      stateDir: activeStateDir,
+      projectRoot: activeProjectRoot,
+    });
+  }
+
+  entries[idx] = updated;
+  writeBlackboardEntries(entries);
+  return updated;
+}
+
 /** Record a dashboard mission launch on the blackboard for immediate UI visibility. */
 function appendMissionLaunchEntry({ goal, runName, priority, pid }) {
   const entries = readBlackboardEntries();
@@ -765,12 +877,26 @@ function readBoardStatusPayload() {
     const cmdPath = path.join(activeStateDir, 'command-blackboard.md');
     const entries = readJson(bbPath, []);
     const active = Array.isArray(entries) ? entries.filter(e => e.status !== 'archived') : [];
-    const blockers = active.filter(e => e.type === 'blocker' || e.status === 'blocked');
+    const { active: openBlockers, ignored: ignoredBlockers } = partitionBlockers(active);
     let commandExcerpt = '';
     try { commandExcerpt = fs.readFileSync(cmdPath, 'utf-8').split('\n').slice(0, 30).join('\n'); } catch {}
+    const mapBlocker = (b) => ({
+      id: b.id,
+      title: b.title,
+      content: (b.content || '').slice(0, 120),
+      ignored: Boolean(b.ignored),
+      ignoredAt: b.ignoredAt ?? null,
+      ignoredUntil: b.ignoredUntil ?? null,
+    });
     return {
-      counts: { total: active.length, blockers: blockers.length, done: active.filter(e => e.status === 'done').length },
-      blockers: blockers.slice(0, 5).map(b => ({ title: b.title, content: (b.content || '').slice(0, 120) })),
+      counts: {
+        total: active.length,
+        blockers: openBlockers.length,
+        ignoredBlockers: ignoredBlockers.length,
+        done: active.filter(e => e.status === 'done').length,
+      },
+      blockers: openBlockers.slice(0, 8).map(mapBlocker),
+      ignoredBlockers: ignoredBlockers.slice(0, 12).map(mapBlocker),
       commandExcerpt,
       updatedAt: Date.now(),
     };
@@ -1914,10 +2040,12 @@ const server = http.createServer(async (req, res) => {
     try {
       const mod = await loadBoardReportModule();
       if (mod) {
-        const report = mod.buildBoardStatusReport(activeStateDir);
+        const rawReport = mod.buildBoardStatusReport(activeStateDir);
+        const report = applyBlockerIgnoreFilter(rawReport);
         const concise = mod.formatConciseUnscSummary(report);
         logApi('GET', url, 'ok (full report)', {
           blockers: report?.blockers?.length ?? 0,
+          ignoredBlockers: report?.ignoredBlockers?.length ?? 0,
           tasks: report?.tasks?.length ?? 0,
         });
         jsonOk(res, { report, concise, markdown: concise, updatedAt: Date.now() });
@@ -1929,6 +2057,55 @@ const server = http.createServer(async (req, res) => {
     } catch (e) {
       logApi('GET', url, `error: ${e.message}`);
       jsonErr(res, e.message, 500);
+    }
+    return;
+  }
+
+  // ── POST /api/blockers/:id/ignore — operator bypass for dashboard blockers ─
+  const blockerIgnoreMatch = url.match(/^\/api\/blockers\/([^/]+)\/ignore$/);
+  if (blockerIgnoreMatch && method === 'POST') {
+    const blockerId = decodeURIComponent(blockerIgnoreMatch[1]);
+    try {
+      const body = await readBody(req);
+      const snoozeMs = Number(body.snoozeMs ?? 0);
+      if (snoozeMs && (!Number.isFinite(snoozeMs) || snoozeMs < 0)) {
+        jsonErr(res, 'snoozeMs must be a non-negative number');
+        return;
+      }
+
+      logBlocker('POST /api/blockers/:id/ignore — request', {
+        blockerId,
+        snoozeMs: snoozeMs || null,
+        stateDir: activeStateDir,
+      });
+
+      const entry = ignoreBlackboardBlocker(blockerId, { snoozeMs });
+      pushCurrentState();
+
+      logApi('POST', url, 'ok', {
+        id: entry.id,
+        ignored: Boolean(entry.ignored),
+        ignoredUntil: entry.ignoredUntil ?? null,
+      });
+
+      jsonOk(res, {
+        ok: true,
+        entry: {
+          id: entry.id,
+          title: entry.title,
+          ignored: Boolean(entry.ignored),
+          ignoredAt: entry.ignoredAt ?? null,
+          ignoredUntil: entry.ignoredUntil ?? null,
+          status: entry.status,
+        },
+        message: snoozeMs > 0
+          ? `Blocker snoozed until ${new Date(entry.ignoredUntil).toLocaleString()}`
+          : 'Blocker marked as ignored',
+      });
+    } catch (e) {
+      logBlocker(`POST /api/blockers/:id/ignore — error: ${e.message}`, { blockerId });
+      const status = e.code === 'NOT_FOUND' ? 404 : e.code === 'NOT_BLOCKER' ? 400 : 500;
+      jsonErr(res, e.message, status);
     }
     return;
   }
@@ -2021,6 +2198,7 @@ server.listen(port, host, () => {
   console.log(`              ${localBase}/api/board-status  ${localBase}/api/mission-dag`);
   console.log(`              ${localBase}/api/project-context  ${localBase}/api/task-git`);
   console.log(`              ${localBase}/api/team-goal`);
+  console.log(`              ${localBase}/api/blockers/:id/ignore`);
   console.log(`              ${localBase}/api/projects`);
   console.log(`              ${localBase}/api/project-templates  ${localBase}/api/create-project`);
   console.log(`\n  Open the URL above in your browser (Tailscale: use machine IP).\n`);
