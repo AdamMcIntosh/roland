@@ -609,6 +609,25 @@
     .toast.toast-visible { opacity: 1; transform: translateY(0) scale(1); }
     .toast-icon { flex-shrink: 0; font-size: 0.9rem; line-height: 1.3; }
     .toast-body { flex: 1; line-height: 1.35; }
+    .toast-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin-top: 0.45rem;
+    }
+    .toast-action-btn {
+      pointer-events: auto;
+      padding: 0.22rem 0.55rem;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.35);
+      background: rgba(255,255,255,0.12);
+      color: inherit;
+      font-size: 0.72rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .toast-action-btn:hover { background: rgba(255,255,255,0.22); }
+    .toast.has-actions { pointer-events: auto; max-width: 360px; }
     .toast-success { background: rgba(16,185,129,.92); color: #fff; }
     .toast-error   { background: rgba(239,68,68,.92);  color: #fff; }
     .toast-warning { background: rgba(245,158,11,.92); color: #fff; }
@@ -810,6 +829,24 @@
       background: rgba(99,102,241,0.2);
       border-color: rgba(99,102,241,0.5);
     }
+    .btn-project-new {
+      flex-shrink: 0;
+      align-self: center;
+      margin-right: 0.15rem;
+      padding: 0.35rem 0.65rem;
+      border-radius: 8px;
+      border: 1px solid rgba(16,185,129,0.35);
+      background: rgba(16,185,129,0.1);
+      color: var(--emerald);
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      min-height: 36px;
+    }
+    .btn-project-new:hover {
+      background: rgba(16,185,129,0.18);
+      border-color: rgba(16,185,129,0.5);
+    }
     .btn-project-switch.compact {
       margin: 0;
       font-size: 0.68rem;
@@ -959,6 +996,102 @@
       font-size: 0.72rem;
       line-height: 1.4;
     }
+    .project-modal-footer {
+      display: flex;
+      gap: 0.45rem;
+      padding: 0.65rem 1rem 0.85rem;
+      border-top: 1px solid var(--border);
+    }
+    .project-modal-footer .btn-project-new {
+      margin: 0;
+      flex: 1;
+      min-height: 44px;
+    }
+
+    /* Create project modal */
+    .create-project-body {
+      padding: 0.75rem 1rem 1rem;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .create-project-field { margin-bottom: 0.75rem; }
+    .create-project-field label,
+    .create-project-field .field-label {
+      display: block;
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.3rem;
+    }
+    .create-project-field input,
+    .create-project-field select {
+      width: 100%;
+      padding: 0.45rem 0.65rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--fg);
+      font-size: 0.82rem;
+      min-height: 44px;
+    }
+    .create-project-field input:focus,
+    .create-project-field select:focus {
+      outline: none;
+      border-color: var(--indigo);
+    }
+    .create-project-hint {
+      font-size: 0.66rem;
+      color: var(--muted);
+      margin-top: 0.25rem;
+      line-height: 1.35;
+    }
+    .create-project-checks {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      margin-top: 0.35rem;
+    }
+    .create-project-check {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.45rem;
+      font-size: 0.78rem;
+      color: var(--fg);
+      cursor: pointer;
+    }
+    .create-project-check input {
+      margin-top: 0.15rem;
+      accent-color: var(--indigo);
+    }
+    .create-project-actions {
+      display: flex;
+      gap: 0.45rem;
+      padding: 0 1rem 1rem;
+      border-top: 1px solid var(--border);
+      padding-top: 0.75rem;
+    }
+    .create-project-actions .btn-primary,
+    .create-project-actions .btn-secondary {
+      flex: 1;
+      min-height: 44px;
+      font-size: 0.8rem;
+    }
+    .create-project-actions .btn-primary:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .create-project-loading {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 0.45rem;
+      padding: 0.5rem 1rem 0.75rem;
+      font-size: 0.74rem;
+      color: var(--muted);
+    }
+    .create-project-loading.visible { display: flex; }
 
     /* Quick action bar */
     .quick-actions {
@@ -1821,6 +1954,7 @@
             </span>
             <span class="project-context-chevron" aria-hidden="true">▾</span>
           </button>
+          <button type="button" class="btn-project-new" id="btn-project-new" aria-haspopup="dialog" aria-controls="create-project-modal">+ New Project</button>
           <button type="button" class="btn-project-switch" id="btn-project-switch" aria-haspopup="dialog" aria-controls="project-switcher-modal">Switch ▾</button>
         </div>
         <div class="project-context-details" id="project-context-details" hidden></div>
@@ -2204,6 +2338,66 @@
       <div class="project-modal-list" id="project-switcher-list" role="listbox" aria-label="Available projects">
         <div class="project-modal-empty">Loading projects…</div>
       </div>
+      <div class="project-modal-footer">
+        <button type="button" class="btn-project-new" id="btn-switcher-new-project">+ New Project</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create project modal -->
+  <div class="project-modal-backdrop" id="create-project-backdrop" role="presentation" hidden>
+    <div class="project-modal" id="create-project-modal" role="dialog" aria-modal="true" aria-labelledby="create-project-title">
+      <div class="project-modal-header">
+        <div>
+          <h3 id="create-project-title">🎖 New Project</h3>
+          <p class="project-modal-sub">Scaffold a Roland-ready workspace</p>
+        </div>
+        <button type="button" class="project-modal-close" id="create-project-close" aria-label="Close">✕</button>
+      </div>
+      <form id="create-project-form" class="create-project-body" autocomplete="off">
+        <div class="create-project-field">
+          <label for="create-project-name">Project name</label>
+          <input type="text" id="create-project-name" name="name" placeholder="my-api" required pattern="[a-zA-Z0-9][a-zA-Z0-9._-]*" />
+          <p class="create-project-hint">Letters, digits, dots, hyphens, underscores — used as the folder name.</p>
+        </div>
+        <div class="create-project-field">
+          <label for="create-project-parent">Parent directory</label>
+          <input type="text" id="create-project-parent" name="parentDir" placeholder="~/projects/" />
+          <p class="create-project-hint" id="create-project-parent-hint">Default: ~/projects/</p>
+        </div>
+        <div class="create-project-field">
+          <label for="create-project-template">Template</label>
+          <select id="create-project-template" name="template"></select>
+        </div>
+        <div class="create-project-field">
+          <span class="field-label">Options</span>
+          <div class="create-project-checks">
+            <label class="create-project-check">
+              <input type="checkbox" id="create-project-init-git" checked />
+              Initialize git repository
+            </label>
+            <label class="create-project-check">
+              <input type="checkbox" id="create-project-init-roland" checked />
+              Create initial <code>.roland/</code> state
+            </label>
+            <label class="create-project-check">
+              <input type="checkbox" id="create-project-install-deps" checked />
+              Install dependencies (<code>npm install</code> in background)
+            </label>
+            <label class="create-project-check">
+              <input type="checkbox" id="create-project-switch-after" checked />
+              Switch dashboard to new project after creation
+            </label>
+          </div>
+        </div>
+      </form>
+      <div class="create-project-loading" id="create-project-loading" aria-live="polite">
+        <span class="spinning">⟳</span> Creating project…
+      </div>
+      <div class="create-project-actions">
+        <button type="button" class="btn-secondary" id="create-project-cancel">Cancel</button>
+        <button type="submit" form="create-project-form" class="btn-primary" id="create-project-submit">Create Project</button>
+      </div>
     </div>
   </div>
 
@@ -2291,8 +2485,11 @@
   let projectContext = null;
   let projectContextExpanded = false;
   let projectsPayload = null;
+  let projectTemplatesPayload = null;
   let projectSwitcherOpen = false;
+  let createProjectOpen = false;
   let projectSwitching = false;
+  let createProjectBusy = false;
   let opsLogOpen = false;
   let tokensChart  = null;
   let modelChart   = null;
@@ -2387,22 +2584,45 @@
   const TOAST_ICONS = { success: '✓', error: '✕', warning: '⚠', info: '◆' };
   const TOAST_MS = { success: 4000, error: 5500, warning: 4500, info: 3200 };
 
-  function toast(message, type = 'info', durationMs) {
+  function toast(message, type = 'info', options = {}) {
     const container = document.getElementById('toast-container');
     const el = document.createElement('div');
-    el.className = 'toast toast-' + type;
+    const actions = Array.isArray(options.actions) ? options.actions : [];
+    el.className = 'toast toast-' + type + (actions.length ? ' has-actions' : '');
+    let bodyHtml = escHtml(message);
+    if (actions.length) {
+      bodyHtml += '<div class="toast-actions">' +
+        actions.map((a, i) =>
+          '<button type="button" class="toast-action-btn" data-action-idx="' + i + '">' + escHtml(a.label) + '</button>'
+        ).join('') +
+        '</div>';
+    }
     el.innerHTML =
       '<span class="toast-icon">' + (TOAST_ICONS[type] || '◆') + '</span>' +
-      '<span class="toast-body">' + escHtml(message) + '</span>';
+      '<span class="toast-body">' + bodyHtml + '</span>';
     container.appendChild(el);
+    if (actions.length) {
+      el.querySelectorAll('.toast-action-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = Number(btn.dataset.actionIdx);
+          const action = actions[idx];
+          if (action?.onClick) action.onClick();
+          el.classList.remove('toast-visible');
+          setTimeout(() => el.remove(), 320);
+        });
+      });
+    }
     requestAnimationFrame(() => {
       requestAnimationFrame(() => el.classList.add('toast-visible'));
     });
-    const ms = durationMs ?? TOAST_MS[type] ?? 3200;
-    setTimeout(() => {
-      el.classList.remove('toast-visible');
-      setTimeout(() => el.remove(), 320);
-    }, ms);
+    const ms = options.durationMs ?? TOAST_MS[type] ?? 3200;
+    const autoDismiss = options.autoDismiss !== false;
+    if (autoDismiss) {
+      setTimeout(() => {
+        el.classList.remove('toast-visible');
+        setTimeout(() => el.remove(), 320);
+      }, actions.length ? Math.max(ms, 8000) : ms);
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -2561,6 +2781,169 @@
     } catch (e) {
       console.warn('Projects fetch failed:', e.message);
       projectsPayload = { projects: [], activePath: projectContext?.cwd ?? null };
+    }
+  }
+
+  async function fetchProjectTemplates() {
+    try {
+      const res = await fetch('/api/project-templates');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      projectTemplatesPayload = await res.json();
+    } catch (e) {
+      console.warn('Project templates fetch failed:', e.message);
+      projectTemplatesPayload = null;
+    }
+  }
+
+  function closeCreateProjectModal() {
+    createProjectOpen = false;
+    const backdrop = document.getElementById('create-project-backdrop');
+    if (backdrop) {
+      backdrop.classList.remove('open');
+      backdrop.hidden = true;
+    }
+    setCreateProjectLoading(false);
+  }
+
+  async function openCreateProjectModal() {
+    closeProjectSwitcher();
+    closeAllModelPickers();
+    createProjectOpen = true;
+    const backdrop = document.getElementById('create-project-backdrop');
+    if (backdrop) {
+      backdrop.hidden = false;
+      backdrop.classList.add('open');
+    }
+    if (!projectTemplatesPayload) await fetchProjectTemplates();
+    populateCreateProjectForm();
+    setTimeout(() => document.getElementById('create-project-name')?.focus(), 60);
+  }
+
+  function populateCreateProjectForm() {
+    const defaults = projectTemplatesPayload?.defaults ?? {};
+    const templates = Array.isArray(projectTemplatesPayload?.templates)
+      ? projectTemplatesPayload.templates
+      : [];
+
+    const parentEl = document.getElementById('create-project-parent');
+    const parentHint = document.getElementById('create-project-parent-hint');
+    if (parentEl && !parentEl.dataset.userEdited) {
+      parentEl.value = defaults.displayParentDir || defaults.parentDir || '~/projects';
+    }
+    if (parentHint) {
+      parentHint.textContent = 'Default: ' + (defaults.displayParentDir || '~/projects/');
+    }
+
+    const templateEl = document.getElementById('create-project-template');
+    if (templateEl) {
+      templateEl.innerHTML = templates.map(t =>
+        '<option value="' + escHtml(t.id) + '">' + escHtml(t.label) + '</option>'
+      ).join('');
+      if (defaults.template) templateEl.value = defaults.template;
+    }
+
+    const gitEl = document.getElementById('create-project-init-git');
+    const rolandEl = document.getElementById('create-project-init-roland');
+    const depsEl = document.getElementById('create-project-install-deps');
+    const switchEl = document.getElementById('create-project-switch-after');
+    if (gitEl) gitEl.checked = defaults.initGit !== false;
+    if (rolandEl) rolandEl.checked = defaults.initRoland !== false;
+    if (depsEl) depsEl.checked = defaults.installDeps !== false;
+    if (switchEl) switchEl.checked = defaults.switchContext !== false;
+
+    const nameEl = document.getElementById('create-project-name');
+    if (nameEl) nameEl.value = '';
+  }
+
+  function setCreateProjectLoading(loading) {
+    createProjectBusy = loading;
+    const loadingEl = document.getElementById('create-project-loading');
+    const submitEl = document.getElementById('create-project-submit');
+    const cancelEl = document.getElementById('create-project-cancel');
+    if (loadingEl) loadingEl.classList.toggle('visible', loading);
+    if (submitEl) submitEl.disabled = loading;
+    if (cancelEl) cancelEl.disabled = loading;
+  }
+
+  async function submitCreateProject(e) {
+    e.preventDefault();
+    if (createProjectBusy) return;
+
+    const name = document.getElementById('create-project-name')?.value?.trim();
+    const parentDir = document.getElementById('create-project-parent')?.value?.trim();
+    const template = document.getElementById('create-project-template')?.value;
+    const initGit = document.getElementById('create-project-init-git')?.checked ?? true;
+    const initRoland = document.getElementById('create-project-init-roland')?.checked ?? true;
+    const installDeps = document.getElementById('create-project-install-deps')?.checked ?? true;
+    const switchContext = document.getElementById('create-project-switch-after')?.checked ?? true;
+
+    if (!name) {
+      toast('Project name is required', 'error');
+      return;
+    }
+
+    setCreateProjectLoading(true);
+    try {
+      const res = await fetch('/api/create-project', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          parentDir,
+          template,
+          initGit,
+          initRoland,
+          installDeps,
+          switchContext,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+
+      closeCreateProjectModal();
+
+      if (data.switched) {
+        if (data.projectContext) projectContext = data.projectContext;
+        if (data.projects) projectsPayload = data.projects;
+        boardStatus = null;
+        missionDagPayload = null;
+        runState = null;
+        hitlState = null;
+        supervisorInfo = null;
+        missionMeta = null;
+        selectedMissionNodeId = null;
+        lastDagRunId = null;
+        lastDagNodeStatuses = {};
+        await Promise.all([
+          fetchUsage(),
+          fetchRunState(),
+          fetchBoardStatus(),
+          fetchMissionDag(),
+          fetchSupervisor(),
+          fetchProjectContext(),
+          fetchProjects(),
+        ]);
+        renderAll();
+        if (activeTab === 'memory') loadMemoryTab();
+      }
+
+      const label = data.displayPath || data.path || name;
+      let msg = 'Created ' + label;
+      if (data.installDeps) msg += ' — npm install running in background';
+      if (data.switched) {
+        toast(msg + ' · context switched', 'success');
+      } else {
+        toast(msg, 'success', {
+          actions: [{
+            label: 'Switch to new project',
+            onClick: () => switchToProject(data.path),
+          }],
+        });
+      }
+    } catch (err) {
+      toast(err.message || 'Project creation failed', 'error');
+    } finally {
+      setCreateProjectLoading(false);
     }
   }
 
@@ -3260,8 +3643,22 @@
     e.stopPropagation();
     openProjectSwitcher();
   });
+  document.getElementById('btn-project-new')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openCreateProjectModal();
+  });
+  document.getElementById('btn-switcher-new-project')?.addEventListener('click', () => openCreateProjectModal());
   document.getElementById('btn-ops-project-switch')?.addEventListener('click', () => openProjectSwitcher());
   document.getElementById('project-switcher-close')?.addEventListener('click', closeProjectSwitcher);
+  document.getElementById('create-project-close')?.addEventListener('click', closeCreateProjectModal);
+  document.getElementById('create-project-cancel')?.addEventListener('click', closeCreateProjectModal);
+  document.getElementById('create-project-form')?.addEventListener('submit', submitCreateProject);
+  document.getElementById('create-project-parent')?.addEventListener('input', (e) => {
+    e.target.dataset.userEdited = '1';
+  });
+  document.getElementById('create-project-backdrop')?.addEventListener('click', (e) => {
+    if (e.target?.id === 'create-project-backdrop' && !createProjectBusy) closeCreateProjectModal();
+  });
   document.getElementById('project-switcher-backdrop')?.addEventListener('click', (e) => {
     if (e.target?.id === 'project-switcher-backdrop') closeProjectSwitcher();
   });
@@ -3274,7 +3671,10 @@
     switchToProject(btn.dataset.projectPath);
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && projectSwitcherOpen) closeProjectSwitcher();
+    if (e.key === 'Escape') {
+      if (createProjectOpen && !createProjectBusy) closeCreateProjectModal();
+      else if (projectSwitcherOpen) closeProjectSwitcher();
+    }
   });
 
   // ═══════════════════════════════════════════════════════════════════════════

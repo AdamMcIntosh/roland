@@ -17,6 +17,8 @@
  *   GET  /api/mission-dag          → .roland/mission-dag.json (task graph export)
  *   GET  /api/project-context      → cwd, git branch, remote, last commit
  *   GET  /api/projects               → discoverable Roland projects
+ *   GET  /api/project-templates      → scaffold templates for new projects
+ *   POST /api/create-project         → scaffold a new project directory
  *   POST /api/switch-project         → switch active project context
  *   GET  /api/board-status         → UNSC concise summary (blackboard + command board)
  *   POST /api/board-cleanup        → archive stale board entries before a new mission
@@ -732,6 +734,228 @@ function rememberProjectPath(resolvedPath) {
   });
 }
 
+// ── Project creation / scaffolding ────────────────────────────────────────────
+
+const templatesRoot = path.join(__dirname, 'dashboard-templates');
+
+const PROJECT_TEMPLATES = [
+  {
+    id: 'empty',
+    label: 'Empty',
+    description: 'README only — bring your own stack',
+    hasPackageJson: false,
+  },
+  {
+    id: 'node-express-minimal',
+    label: 'Node + Express (minimal)',
+    description: 'ESM Express API with / and /health routes',
+    hasPackageJson: true,
+  },
+  {
+    id: 'node-typescript',
+    label: 'Node + TypeScript',
+    description: 'TypeScript Express API with tsx dev script',
+    hasPackageJson: true,
+  },
+];
+
+function defaultProjectsParentDir() {
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+  return home ? path.join(home, 'projects') : process.cwd();
+}
+
+function sanitizeProjectName(name) {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) throw new Error('Project name is required');
+  if (trimmed === '.' || trimmed === '..') throw new Error('Invalid project name');
+  if (/[/\\]/.test(trimmed)) throw new Error('Project name cannot contain path separators');
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(trimmed)) {
+    throw new Error('Project name must start with a letter or digit and use only letters, digits, dots, hyphens, or underscores');
+  }
+  return trimmed;
+}
+
+function validateParentDirectory(parentDir) {
+  const resolved = path.resolve(expandTilde(String(parentDir || '').trim()) || defaultProjectsParentDir());
+  if (!fs.existsSync(resolved)) {
+    throw new Error(`Parent directory does not exist: ${shortenHome(resolved)}`);
+  }
+  if (!fs.statSync(resolved).isDirectory()) {
+    throw new Error(`Parent path is not a directory: ${shortenHome(resolved)}`);
+  }
+  try {
+    fs.accessSync(resolved, fs.constants.W_OK);
+  } catch {
+    throw new Error(`Parent directory is not writable: ${shortenHome(resolved)}`);
+  }
+  return resolved;
+}
+
+function copyTemplateDir(templateId, destDir, projectName) {
+  const srcRoot = path.join(templatesRoot, templateId);
+  if (!fs.existsSync(srcRoot)) {
+    throw new Error(`Unknown template: ${templateId}`);
+  }
+
+  function walk(rel = '') {
+    const srcPath = path.join(srcRoot, rel);
+    const destPath = path.join(destDir, rel);
+    const stat = fs.statSync(srcPath);
+    if (stat.isDirectory()) {
+      fs.mkdirSync(destPath, { recursive: true });
+      for (const ent of fs.readdirSync(srcPath)) walk(rel ? path.join(rel, ent) : ent);
+      return;
+    }
+    let content = fs.readFileSync(srcPath, 'utf-8');
+    content = content.replace(/\{\{PROJECT_NAME\}\}/g, projectName);
+    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+    fs.writeFileSync(destPath, content, 'utf-8');
+  }
+
+  walk();
+}
+
+function initRolandState(projectPath) {
+  const stateDir = path.join(projectPath, '.roland');
+  fs.mkdirSync(stateDir, { recursive: true });
+
+  const memoryPath = path.join(stateDir, 'memory.md');
+  if (!fs.existsSync(memoryPath)) {
+    fs.writeFileSync(
+      memoryPath,
+      [
+        '# Project Memory',
+        '',
+        '## Architecture Decisions',
+        '',
+        '## Coding Standards',
+        '',
+        '## Past Mistakes',
+        '',
+        '## Preferences',
+        '',
+        '## Project Gotchas',
+        '',
+      ].join('\n'),
+      'utf-8',
+    );
+  }
+
+  const bbPath = path.join(stateDir, 'blackboard.json');
+  if (!fs.existsSync(bbPath)) {
+    fs.writeFileSync(bbPath, '[]', 'utf-8');
+  }
+}
+
+function initGitRepo(projectPath, projectName) {
+  runGitQuiet('init', projectPath);
+  runGitQuiet(`add -A`, projectPath);
+  runGitQuiet(`commit -m "Initial commit: ${projectName}"`, projectPath);
+}
+
+function templateHasPackageJson(templateId) {
+  return PROJECT_TEMPLATES.find(t => t.id === templateId)?.hasPackageJson ?? false;
+}
+
+function spawnNpmInstall(projectPath) {
+  const child = spawn('npm', ['install', '--no-fund', '--no-audit'], {
+    cwd: projectPath,
+    detached: true,
+    stdio: 'ignore',
+    env: process.env,
+  });
+  child.unref();
+  return child.pid ?? null;
+}
+
+function readProjectTemplatesPayload() {
+  const parent = defaultProjectsParentDir();
+  return {
+    templates: PROJECT_TEMPLATES,
+    defaults: {
+      parentDir: parent,
+      displayParentDir: shortenHome(parent),
+      template: 'node-typescript',
+      initGit: true,
+      initRoland: true,
+      installDeps: true,
+      switchContext: true,
+    },
+    updatedAt: Date.now(),
+  };
+}
+
+function createProject(body = {}) {
+  const projectName = sanitizeProjectName(body.name);
+  const templateId = typeof body.template === 'string' ? body.template.trim() : 'empty';
+  if (!PROJECT_TEMPLATES.some(t => t.id === templateId)) {
+    throw new Error(`Unknown template: ${templateId}`);
+  }
+
+  const parentDir = validateParentDirectory(
+    typeof body.parentDir === 'string' && body.parentDir.trim()
+      ? body.parentDir.trim()
+      : defaultProjectsParentDir(),
+  );
+  const projectPath = path.join(parentDir, projectName);
+
+  if (fs.existsSync(projectPath)) {
+    throw new Error(`Project already exists: ${shortenHome(projectPath)}`);
+  }
+
+  const initGit = body.initGit !== false;
+  const initRoland = body.initRoland !== false;
+  const installDeps = body.installDeps !== false && templateHasPackageJson(templateId);
+  const switchContext = body.switchContext !== false;
+
+  fs.mkdirSync(projectPath, { recursive: false });
+  copyTemplateDir(templateId, projectPath, projectName);
+
+  if (initRoland) initRolandState(projectPath);
+  if (initGit) {
+    try {
+      initGitRepo(projectPath, projectName);
+    } catch (e) {
+      runGitQuiet('init', projectPath);
+    }
+  }
+
+  if (!initGit && !initRoland) {
+    initRolandState(projectPath);
+  }
+
+  if (!isValidProjectRoot(projectPath)) {
+    throw new Error('Project created but is not a valid Roland project root');
+  }
+
+  rememberProjectPath(projectPath);
+
+  let installPid = null;
+  if (installDeps) {
+    installPid = spawnNpmInstall(projectPath);
+  }
+
+  let switchResult = null;
+  if (switchContext) {
+    switchResult = switchActiveProject(projectPath, { force: true });
+  }
+
+  return {
+    ok: true,
+    path: projectPath,
+    displayPath: shortenHome(projectPath),
+    name: projectName,
+    template: templateId,
+    initGit,
+    initRoland: initRoland || (!initGit && !initRoland),
+    installDeps,
+    installPid,
+    switched: Boolean(switchResult?.switched ?? switchContext),
+    projectContext: switchResult?.projectContext ?? readProjectContextPayload(),
+    projects: switchResult?.projects ?? readProjectsPayload(),
+  };
+}
+
 if (!readDashboardConfig().lastProjectPath) {
   rememberProjectPath(activeProjectRoot);
 }
@@ -930,6 +1154,24 @@ const server = http.createServer(async (req, res) => {
     try {
       jsonOk(res, readProjectsPayload());
     } catch (e) { jsonErr(res, e.message, 500); }
+    return;
+  }
+
+  // ── /api/project-templates GET ───────────────────────────────────────────
+  if (url === '/api/project-templates' && method === 'GET') {
+    try {
+      jsonOk(res, readProjectTemplatesPayload());
+    } catch (e) { jsonErr(res, e.message, 500); }
+    return;
+  }
+
+  // ── /api/create-project POST ─────────────────────────────────────────────
+  if (url === '/api/create-project' && method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const result = createProject(body);
+      jsonOk(res, result);
+    } catch (e) { jsonErr(res, e.message, 400); }
     return;
   }
 
@@ -1161,5 +1403,6 @@ server.listen(port, host, () => {
   console.log(`              ${localBase}/api/memory  ${localBase}/api/hitl/:cmd`);
   console.log(`              ${localBase}/api/board-status  ${localBase}/api/mission-dag`);
   console.log(`              ${localBase}/api/project-context  ${localBase}/api/projects`);
+  console.log(`              ${localBase}/api/project-templates  ${localBase}/api/create-project`);
   console.log(`\n  Open the URL above in your browser (Tailscale: use machine IP).\n`);
 });
