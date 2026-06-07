@@ -3,7 +3,7 @@ import type { PhaseHandler } from './types.js';
 import { PlanPhaseHandler } from './plan.js';
 import { ActPhaseHandler } from './act.js';
 import { VerifyPhaseHandler } from './verify-phase.js';
-import { CritiquePhaseHandler } from './critique.js';
+import { CritiquePhaseHandler } from './critique-phase.js';
 import { RetryPhaseHandler } from './retry.js';
 import { ObservePhaseHandler } from './observe.js';
 

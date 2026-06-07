@@ -6,7 +6,10 @@
 
 import fs from 'fs';
 import path from 'path';
+import type { LoopCritiqueSnapshot } from './self-improvement/types.js';
 import type { Phase } from './loop-phases.js';
+
+export type { LoopCritiqueSnapshot } from './self-improvement/types.js';
 
 export const LOOP_STATE_FILE = 'loop-state.json';
 
@@ -46,6 +49,10 @@ export interface LoopState {
   startedAt: number;
   updatedAt: number;
   lastVerification?: LoopVerificationSnapshot;
+  /** Most recent critique snapshot for dashboard / retry decisions. */
+  lastCritique?: LoopCritiqueSnapshot;
+  /** Append-only critique history across iterations. */
+  critiqueHistory?: LoopCritiqueSnapshot[];
 }
 
 export function createInitialLoopState(
@@ -85,6 +92,8 @@ export class LoopStateStore {
       lastVerification: this.state.lastVerification
         ? { ...this.state.lastVerification }
         : undefined,
+      lastCritique: this.state.lastCritique ? { ...this.state.lastCritique } : undefined,
+      critiqueHistory: this.state.critiqueHistory?.map((c) => ({ ...c })),
     };
   }
 
@@ -102,7 +111,12 @@ export class LoopStateStore {
 
   completePhase(
     phase: Phase,
-    result: { success: boolean; summary: string; verification?: LoopVerificationSnapshot },
+    result: {
+      success: boolean;
+      summary: string;
+      verification?: LoopVerificationSnapshot;
+      critique?: LoopCritiqueSnapshot;
+    },
   ): void {
     const entry = [...this.state.phaseHistory].reverse().find((t) => t.phase === phase && !t.completedAt);
     const now = Date.now();
@@ -118,13 +132,18 @@ export class LoopStateStore {
         at: now,
       };
     }
+    if (phase === 'critique' && result.critique) {
+      this.state.lastCritique = result.critique;
+      if (!this.state.critiqueHistory) this.state.critiqueHistory = [];
+      this.state.critiqueHistory.push(result.critique);
+    }
     this.state.updatedAt = now;
     this.flush();
   }
 
   incrementIteration(): void {
     this.state.iteration += 1;
-    this.state.retryCount = 0;
+    // retryCount accumulates across iterations until success or escalation.
     this.state.updatedAt = Date.now();
     this.flush();
   }

@@ -12,6 +12,7 @@ export type {
   LoopRunStatus,
   PhaseTransition,
   LoopVerificationSnapshot,
+  LoopCritiqueSnapshot,
 } from './loop-state.js';
 
 export { LoopTemplates, LoopTemplateSchema } from './loop-templates.js';
@@ -46,3 +47,17 @@ export {
   ObservePhaseHandler,
 } from './phase-handlers/index.js';
 export type { PhaseHandler, PhaseHandlerContext, PhaseResult } from './phase-handlers/index.js';
+
+export {
+  CritiqueEngine,
+  resolveRetryStrategy,
+  shouldEscalateToHuman,
+  generateImprovementProposals,
+} from './self-improvement/index.js';
+export type {
+  RetryDecision,
+  CritiqueModel,
+  CritiqueInput,
+  CritiqueOutput,
+  ImprovementProposal,
+} from './self-improvement/index.js';

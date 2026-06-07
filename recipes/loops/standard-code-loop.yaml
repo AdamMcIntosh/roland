@@ -19,9 +19,11 @@ phases:
   - phase: critique
     label: Critique
     agent: critic
+    # Analyzes verify results → retryDecision (proceed | retry | retry_focused | escalate)
   - phase: retry
     label: Retry
     optional: true
+    # Runs when critique decides retry/retry_focused; skipped on proceed
   - phase: observe
     label: Observe
 maxIterations: 5

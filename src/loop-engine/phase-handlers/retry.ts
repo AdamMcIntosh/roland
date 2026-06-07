@@ -6,7 +6,12 @@ export class RetryPhaseHandler implements PhaseHandler {
 
   async execute(ctx: PhaseHandlerContext): Promise<PhaseResult> {
     const retryNum = ctx.state.retryCount + 1;
-    const summary = `Retry attempt ${retryNum} scheduled for iteration ${ctx.iteration}`;
+    const critiqueDecision = ctx.state.lastCritique?.retryDecision;
+    const strategy =
+      critiqueDecision === 'retry_focused'
+        ? 'focused retry on failed checks'
+        : 'full iteration retry';
+    const summary = `Retry attempt ${retryNum} (${strategy}) scheduled for iteration ${ctx.iteration}`;
 
     ctx.blackboard.post({
       type: 'decision',

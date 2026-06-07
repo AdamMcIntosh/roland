@@ -1,6 +1,7 @@
 import type { Blackboard } from '../../rco/blackboard.js';
 import type { CommandBlackboard } from '../../rco/command-blackboard.js';
 import type { Phase, PhaseConfig } from '../loop-phases.js';
+import type { LoopCritiqueSnapshot } from '../self-improvement/types.js';
 import type { LoopState, LoopVerificationSnapshot } from '../loop-state.js';
 
 export interface PhaseResult {
@@ -12,6 +13,8 @@ export interface PhaseResult {
   shouldEscalate?: boolean;
   /** Structured verification output when phase is verify */
   verification?: LoopVerificationSnapshot;
+  /** Structured critique output when phase is critique */
+  critique?: LoopCritiqueSnapshot;
 }
 
 export interface PhaseHandlerContext {
@@ -23,6 +26,8 @@ export interface PhaseHandlerContext {
   waveNumber?: number;
   hadBlockers?: boolean;
   phaseConfig?: PhaseConfig;
+  /** Max retry attempts before escalation (from loop template). */
+  maxRetries?: number;
 }
 
 export interface PhaseHandler {

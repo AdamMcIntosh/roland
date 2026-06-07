@@ -25,6 +25,11 @@ export const LoopEngineConfigSchema = z.object({
       strategies: z.array(VerificationStrategySchema).optional(),
     })
     .optional(),
+  critique: z
+    .object({
+      max_retries: z.number().int().nonnegative().optional(),
+    })
+    .optional(),
 });
 
 export type LoopEngineConfig = z.infer<typeof LoopEngineConfigSchema> & {
@@ -37,13 +42,19 @@ export type LoopEngineConfig = z.infer<typeof LoopEngineConfigSchema> & {
       optional?: boolean;
     }>;
   };
+  critique?: {
+    maxRetries?: number;
+  };
 };
 
 const DEFAULT_CONFIG: LoopEngineConfig = {
   default_template: 'standard-code-loop',
   templates_dir: 'recipes/loops',
   verification: {
-    require_pass_before_critique: true,
+    require_pass_before_critique: false,
+  },
+  critique: {
+    maxRetries: 3,
   },
 };
 
@@ -72,13 +83,22 @@ function normaliseVerification(
 ): LoopEngineConfig['verification'] {
   if (!raw) return DEFAULT_CONFIG.verification;
   return {
-    require_pass_before_critique: raw.require_pass_before_critique ?? true,
+    require_pass_before_critique: raw.require_pass_before_critique ?? false,
     strategies: raw.strategies?.map((s) => ({
       type: s.type,
       command: s.command,
       timeoutMs: s.timeout_ms,
       optional: s.optional,
     })),
+  };
+}
+
+function normaliseCritique(
+  raw: z.infer<typeof LoopEngineConfigSchema>['critique'],
+): LoopEngineConfig['critique'] {
+  if (!raw) return DEFAULT_CONFIG.critique;
+  return {
+    maxRetries: raw.max_retries ?? DEFAULT_CONFIG.critique?.maxRetries ?? 3,
   };
 }
 
@@ -105,6 +125,7 @@ export function loadLoopEngineConfig(): LoopEngineConfig {
       ...DEFAULT_CONFIG,
       ...parsed.data,
       verification: normaliseVerification(parsed.data.verification),
+      critique: normaliseCritique(parsed.data.critique),
     };
     return cached;
   } catch {

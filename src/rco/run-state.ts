@@ -88,6 +88,20 @@ export interface RunState {
       failures?: string[];
     }>;
   };
+  /** Last critique snapshot — summary + retry decision for Mission Intel. */
+  lastCritique?: {
+    summary: string;
+    retryDecision: 'proceed' | 'retry' | 'retry_focused' | 'escalate';
+    model: 'grok' | 'composer';
+    at: number;
+    iteration: number;
+    issueCount?: number;
+    strengths?: string[];
+    issues?: string[];
+    suggestions?: string[];
+  };
+  /** Loop retry counter (dashboard observability). */
+  loopRetryCount?: number;
 }
 
 // ── Writer (used by team-cli / orchestrator callbacks) ────────────────────────
@@ -247,6 +261,7 @@ export class RunStateWriter {
     loopTemplateId?: string;
     loopPhase?: LoopPhase;
     loopIteration?: number;
+    loopRetryCount?: number;
     lastVerification?: {
       pass: boolean;
       summary: string;
@@ -258,6 +273,17 @@ export class RunStateWriter {
         durationMs: number;
         failures?: string[];
       }>;
+    };
+    lastCritique?: {
+      summary: string;
+      retryDecision: 'proceed' | 'retry' | 'retry_focused' | 'escalate';
+      model: 'grok' | 'composer';
+      at: number;
+      iteration: number;
+      issueCount?: number;
+      strengths?: string[];
+      issues?: string[];
+      suggestions?: string[];
     };
   }): void {
     if (fields.loopTemplateId !== undefined) {
@@ -271,6 +297,12 @@ export class RunStateWriter {
     }
     if (fields.lastVerification !== undefined) {
       this.state.lastVerification = fields.lastVerification;
+    }
+    if (fields.lastCritique !== undefined) {
+      this.state.lastCritique = fields.lastCritique;
+    }
+    if (fields.loopRetryCount !== undefined) {
+      this.state.loopRetryCount = fields.loopRetryCount;
     }
     this.flush();
   }
