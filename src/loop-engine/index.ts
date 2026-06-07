@@ -7,11 +7,31 @@ export {
   createInitialLoopState,
   readLoopState,
 } from './loop-state.js';
-export type { LoopState, LoopRunStatus, PhaseTransition } from './loop-state.js';
+export type {
+  LoopState,
+  LoopRunStatus,
+  PhaseTransition,
+  LoopVerificationSnapshot,
+} from './loop-state.js';
 
 export { LoopTemplates, LoopTemplateSchema } from './loop-templates.js';
 export { loadLoopEngineConfig, LoopEngineConfigSchema } from './loop-config.js';
 export type { LoopEngineConfig } from './loop-config.js';
+
+export type {
+  VerificationStrategyType,
+  VerificationResult,
+  StrategyResult,
+  VerificationStrategyConfig,
+} from './verification/index.js';
+export {
+  TestExecutor,
+  resolveStrategies,
+  aggregateVerificationResult,
+  verificationResultToLoopState,
+  DEFAULT_VERIFICATION_STRATEGIES,
+} from './verification/index.js';
+export type { CommandRunner } from './verification/index.js';
 
 export { LoopEngine, LoopEngineCoordinator } from './loop-engine.js';
 export type { LoopEngineOptions, LoopHooks, LoopRunResult } from './loop-engine.js';

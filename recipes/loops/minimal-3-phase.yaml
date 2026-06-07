@@ -8,5 +8,7 @@ phases:
     label: Act
   - phase: verify
     label: Verify
+    verification:
+      - unit
 maxIterations: 1
 maxRetries: 0

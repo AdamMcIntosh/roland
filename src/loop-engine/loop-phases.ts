@@ -24,6 +24,9 @@ export const ALL_PHASES: readonly Phase[] = [
   Phase.Observe,
 ];
 
+/** Verification strategy types selectable in loop templates. */
+export type TemplateVerificationStep = 'unit' | 'integration' | 'smoke' | 'e2e' | 'lint' | 'typecheck';
+
 /** Per-phase configuration within a loop template. */
 export interface PhaseConfig {
   phase: Phase;
@@ -33,6 +36,8 @@ export interface PhaseConfig {
   agent?: string;
   /** Skip this phase when optional and no handler result is required */
   optional?: boolean;
+  /** Verify-phase only — subset of verification strategies to run */
+  verification?: TemplateVerificationStep[];
 }
 
 /** A reusable loop template — loaded from recipes/loops/*.yaml */

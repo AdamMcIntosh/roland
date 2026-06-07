@@ -18,6 +18,9 @@ const PhaseConfigSchema = z.object({
   label: z.string().optional(),
   agent: z.string().optional(),
   optional: z.boolean().optional(),
+  verification: z
+    .array(z.enum(['unit', 'integration', 'smoke', 'e2e', 'lint', 'typecheck']))
+    .optional(),
 });
 
 export const LoopTemplateSchema = z.object({
@@ -72,6 +75,7 @@ export class LoopTemplates {
             label: p.label,
             agent: p.agent,
             optional: p.optional,
+            verification: p.verification,
           })),
           maxIterations: parsed.maxIterations,
           maxRetries: parsed.maxRetries,

@@ -12,6 +12,10 @@ phases:
   - phase: verify
     label: Verify
     agent: test-executor
+    verification:
+      - unit
+      - lint
+      - typecheck
   - phase: critique
     label: Critique
     agent: critic

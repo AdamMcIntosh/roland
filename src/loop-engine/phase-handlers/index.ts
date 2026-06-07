@@ -2,7 +2,7 @@ import type { Phase } from '../loop-phases.js';
 import type { PhaseHandler } from './types.js';
 import { PlanPhaseHandler } from './plan.js';
 import { ActPhaseHandler } from './act.js';
-import { VerifyPhaseHandler } from './verify.js';
+import { VerifyPhaseHandler } from './verify-phase.js';
 import { CritiquePhaseHandler } from './critique.js';
 import { RetryPhaseHandler } from './retry.js';
 import { ObservePhaseHandler } from './observe.js';
@@ -30,3 +30,4 @@ export {
   RetryPhaseHandler,
   ObservePhaseHandler,
 };
+export type { VerifyPhaseHandlerOptions } from './verify-phase.js';

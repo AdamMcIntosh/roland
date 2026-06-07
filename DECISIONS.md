@@ -13,3 +13,7 @@ Build the initi _(run mq41lbgr)_
 
 - Decision: Verify and use the real `supervisor.pid` (via `waitForSupervisorReady`) before writing `mission-meta`, because it prevents false “Mission launched” UX when background supervisor spawn fails.
 - Decision: Centralize “active run-state” filtering in `readActiveRunStateForClient()` and reuse it for both HTTP and WebSocket, because duplicated logic caused HTTP/WS mismatch with stale artifacts.
+
+## 2026-06-07 — [Mission: loop-enginner] -2: Define Core Loop Phase Model & Orchestrator Primiti _(run mq49qp23)_
+
+- [Decision: Implement loop execution as a standalone `src/loop-engine/` module with YAML templates under `recipes/loops/`, then wire it into `run-state.json` via the team CLI/onStateChange path so supervisor/status surfaces can observe loop progress.]

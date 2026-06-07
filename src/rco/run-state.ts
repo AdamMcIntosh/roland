@@ -80,6 +80,13 @@ export interface RunState {
     pass: boolean;
     summary: string;
     at: number;
+    durationMs?: number;
+    strategies?: Array<{
+      type: string;
+      pass: boolean;
+      durationMs: number;
+      failures?: string[];
+    }>;
   };
 }
 
@@ -240,7 +247,18 @@ export class RunStateWriter {
     loopTemplateId?: string;
     loopPhase?: LoopPhase;
     loopIteration?: number;
-    lastVerification?: { pass: boolean; summary: string; at: number };
+    lastVerification?: {
+      pass: boolean;
+      summary: string;
+      at: number;
+      durationMs?: number;
+      strategies?: Array<{
+        type: string;
+        pass: boolean;
+        durationMs: number;
+        failures?: string[];
+      }>;
+    };
   }): void {
     if (fields.loopTemplateId !== undefined) {
       this.state.loopTemplateId = fields.loopTemplateId;

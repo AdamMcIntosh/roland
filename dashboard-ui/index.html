@@ -262,6 +262,20 @@
     .git-intel-panel h4 { margin: 0 0 .35rem; font-size: .72rem; color: var(--indigo); }
     .git-intel-row { display: flex; gap: .35rem; flex-wrap: wrap; align-items: baseline; }
     .git-intel-row + .git-intel-row { margin-top: .25rem; }
+    .loop-intel-panel {
+      margin-top: .65rem; padding: .55rem .65rem; border-radius: 8px;
+      background: rgba(16,185,129,.08); border: 1px solid rgba(16,185,129,.25);
+      font-size: .72rem; line-height: 1.45;
+    }
+    .loop-intel-panel.fail {
+      background: rgba(239,68,68,.08); border-color: rgba(239,68,68,.3);
+    }
+    .loop-intel-panel h4 { margin: 0 0 .35rem; font-size: .72rem; color: var(--emerald); }
+    .loop-intel-panel.fail h4 { color: #fca5a5; }
+    .loop-strategy-row { display: flex; gap: .5rem; flex-wrap: wrap; }
+    .loop-strategy-row + .loop-strategy-row { margin-top: .2rem; }
+    .loop-strategy-pass { color: var(--emerald); }
+    .loop-strategy-fail { color: #fca5a5; }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
     .task-card.status-running .task-icon { animation: blink 1.5s ease-in-out infinite; }
 
@@ -4274,6 +4288,30 @@
     return '<div class="task-git">' + parts.join(' · ') + '</div>';
   }
 
+  function renderLoopIntelSummary(rs) {
+    if (!rs || !rs.loopTemplateId) return '';
+    const phase = rs.loopPhase || '—';
+    const iter = rs.loopIteration != null ? ' · iter ' + rs.loopIteration : '';
+    const lv = rs.lastVerification;
+    const pass = lv ? lv.pass : null;
+    const panelClass = pass === false ? 'loop-intel-panel fail' : 'loop-intel-panel';
+    const statusLabel = pass === true ? '✓ Pass' : pass === false ? '✕ Fail' : '—';
+    let strategyHtml = '';
+    if (lv && Array.isArray(lv.strategies) && lv.strategies.length) {
+      strategyHtml = lv.strategies.map(s => {
+        const cls = s.pass ? 'loop-strategy-pass' : 'loop-strategy-fail';
+        const icon = s.pass ? '✓' : '✕';
+        return '<div class="loop-strategy-row"><span class="' + cls + '">' + icon + ' ' +
+          escHtml(s.type) + '</span><span>' + escHtml(String(s.durationMs || 0)) + 'ms</span></div>';
+      }).join('');
+    }
+    const summary = lv && lv.summary ? '<div style="margin-top:.3rem;color:var(--muted)">' + escHtml(lv.summary.slice(0, 120)) + '</div>' : '';
+    return '<div class="' + panelClass + '"><h4>Loop Engineering</h4>' +
+      '<div><strong>' + escHtml(rs.loopTemplateId) + '</strong> · phase <strong>' + escHtml(phase) + '</strong>' + escHtml(iter) +
+      ' · ' + statusLabel + (lv && lv.durationMs ? ' · ' + escHtml(String(lv.durationMs)) + 'ms' : '') + '</div>' +
+      strategyHtml + summary + '</div>';
+  }
+
   function renderGitIntelSummary(tasks) {
     const withGit = (tasks || []).filter(t => taskGitInfoFor(t.id, t));
     if (!withGit.length) return '';
@@ -4448,6 +4486,7 @@
       bannerHtml +
       renderActiveBlockersBanner() +
       hitlControlsHtml(rs) +
+      renderLoopIntelSummary(rs) +
       renderGitIntelSummary(tasks) +
       (tasks.length ? '<div class="task-grid" style="margin-top:.7rem">' + taskCardsHtml + '</div>' : '');
     bindLiveBlockersLink();
@@ -4872,10 +4911,12 @@
       const blockers = (report.blockers || []).map(renderBlockerItemHtml).join('');
       const ignoredSection = renderIgnoredBlockersSection(report.ignoredBlockers || []);
       const gitSummary = renderGitIntelSummary(runState?.tasks || []);
+      const loopSummary = renderLoopIntelSummary(runState);
       const ignoredCount = report.counts?.ignoredBlockers ?? (report.ignoredBlockers || []).length;
       el.innerHTML = `
         <div><strong>Mission:</strong> ${escHtml((report.goal || report.missionObjective || '—').slice(0, 120))}</div>
         <div style="margin-top:.35rem;color:var(--muted)">Run: ${report.runActive ? 'ACTIVE' : 'idle'} · ${report.counts?.total ?? 0} entries · ${report.counts?.blockers ?? 0} blocker${(report.counts?.blockers ?? 0) === 1 ? '' : 's'}${ignoredCount ? ' · ' + ignoredCount + ' ignored' : ''}</div>
+        ${loopSummary}
         ${gitSummary}
         <div class="board-roster">${roster || '<span class="board-callsign">Roster unavailable</span>'}</div>
         ${blockers ? `<ul class="board-blocker-list">${blockers}</ul>` : '<div style="color:var(--muted);margin-top:.35rem">No active blockers</div>'}
