@@ -591,13 +591,24 @@
       z-index: 9999; pointer-events: none;
     }
     .toast {
-      padding: .55rem 1rem; border-radius: 8px;
-      font-size: .8rem; font-weight: 500;
-      opacity: 0; transform: translateY(8px);
-      transition: opacity .25s, transform .25s;
-      pointer-events: none; max-width: 320px;
+      padding: 0.6rem 1rem 0.6rem 0.85rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      opacity: 0;
+      transform: translateY(10px) scale(0.98);
+      transition: opacity 0.28s ease, transform 0.28s ease;
+      pointer-events: none;
+      max-width: 320px;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.45rem;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.08);
     }
-    .toast.toast-visible { opacity: 1; transform: translateY(0); }
+    .toast.toast-visible { opacity: 1; transform: translateY(0) scale(1); }
+    .toast-icon { flex-shrink: 0; font-size: 0.9rem; line-height: 1.3; }
+    .toast-body { flex: 1; line-height: 1.35; }
     .toast-success { background: rgba(16,185,129,.92); color: #fff; }
     .toast-error   { background: rgba(239,68,68,.92);  color: #fff; }
     .toast-warning { background: rgba(245,158,11,.92); color: #fff; }
@@ -617,6 +628,1153 @@
     .ws-badge.disconnected {
       background: rgba(239,68,68,.1); color: var(--red);
       border-color: rgba(239,68,68,.22);
+    }
+
+    /* ═══════════════════════════════════════════════════════
+       Mobile-first / responsive enhancements
+    ═══════════════════════════════════════════════════════ */
+    @media (max-width: 640px) {
+      .page { padding: 0.75rem 0.85rem 2.5rem; }
+      .header {
+        padding: 0.55rem 0.85rem;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+      }
+      .header-left { flex-wrap: wrap; gap: 0.45rem; }
+      .header-right { width: 100%; justify-content: space-between; }
+      .site-title { font-size: 0.95rem; }
+      .tab-bar { top: auto; padding: 0 0.5rem; -webkit-overflow-scrolling: touch; }
+      .tab-btn { padding: 0.55rem 0.75rem; font-size: 0.78rem; min-height: 44px; }
+      .cards { grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+      .card { padding: 0.65rem 0.75rem; }
+      .card-value { font-size: 1.25rem; }
+      .task-grid { grid-template-columns: 1fr; }
+      .run-row { flex-wrap: wrap; gap: 0.35rem; padding: 0.55rem 0.85rem; }
+      .run-goal { white-space: normal; line-height: 1.35; }
+      .hitl-bar { gap: 0.4rem; }
+      .btn-hitl, .btn-primary, .btn-secondary, .btn-icon {
+        min-height: 44px;
+        padding-top: 0.45rem;
+        padding-bottom: 0.45rem;
+      }
+      .toast { max-width: calc(100vw - 2rem); right: 1rem; left: 1rem; }
+      #toast-container { left: 0; right: 0; align-items: stretch; }
+      .board-panel-scroll { max-height: 38vh; }
+      .board-md { font-size: 0.71rem; line-height: 1.42; }
+      .board-md div { margin: 0.08rem 0; }
+      .board-panel { padding: 0.55rem 0.7rem; font-size: 0.71rem; line-height: 1.42; }
+      .board-callsign { font-size: 0.6rem; padding: 0.12rem 0.35rem; }
+      .board-roster { gap: 0.25rem; margin: 0.35rem 0; }
+      .ops-status { padding: 0.55rem 0.7rem; }
+      .project-context { margin: 0.65rem 0 0.5rem; }
+      .project-context-name { font-size: 0.78rem; }
+      .ops-log-preview { font-size: 0.64rem; max-height: 120px; }
+    }
+
+    @media (max-width: 380px) {
+      .cards { grid-template-columns: 1fr; }
+    }
+
+    /* Project context bar */
+    .project-context {
+      margin: 0.85rem 0 0.65rem;
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .project-context.warning {
+      border-color: rgba(245,158,11,0.45);
+      background: rgba(245,158,11,0.06);
+    }
+    .project-context-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      width: 100%;
+      padding: 0.55rem 0.75rem;
+      background: transparent;
+      border: none;
+      color: var(--fg);
+      text-align: left;
+      font-size: 0.78rem;
+      line-height: 1.35;
+      min-height: 44px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .project-context-bar:hover { background: rgba(255,255,255,0.03); }
+    [data-theme="light"] .project-context-bar:hover { background: rgba(0,0,0,0.03); }
+    .project-context-icon { flex-shrink: 0; font-size: 0.95rem; opacity: 0.85; }
+    .project-context-main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.12rem;
+    }
+    .project-context-name {
+      font-weight: 700;
+      font-size: 0.82rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .project-context-git {
+      font-size: 0.68rem;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .project-context-git .git-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.08rem 0.4rem;
+      border-radius: 10px;
+      background: rgba(99,102,241,0.12);
+      color: var(--indigo);
+      border: 1px solid rgba(99,102,241,0.22);
+      font-weight: 600;
+      font-size: 0.64rem;
+      margin-right: 0.35rem;
+    }
+    .project-context-git .git-badge.none {
+      background: rgba(136,136,170,0.12);
+      color: var(--muted);
+      border-color: var(--border);
+    }
+    .project-context-chevron {
+      flex-shrink: 0;
+      color: var(--muted);
+      font-size: 0.72rem;
+      transition: transform 0.2s;
+    }
+    .project-context.expanded .project-context-chevron { transform: rotate(180deg); }
+    .project-context-details {
+      padding: 0 0.75rem 0.65rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+    .project-context-details dl {
+      margin: 0.55rem 0 0;
+      display: grid;
+      gap: 0.35rem;
+    }
+    .project-context-details dt {
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .project-context-details dd {
+      margin: 0;
+      font-family: ui-monospace, monospace;
+      font-size: 0.7rem;
+      color: var(--fg);
+      word-break: break-all;
+    }
+    .project-context-warn {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.45rem;
+      padding: 0.55rem 0.75rem;
+      font-size: 0.74rem;
+      color: var(--amber);
+      line-height: 1.4;
+    }
+    .project-context-row {
+      display: flex;
+      align-items: stretch;
+      gap: 0.4rem;
+    }
+    .project-context-row .project-context-bar { flex: 1; min-width: 0; }
+    .btn-project-switch {
+      flex-shrink: 0;
+      align-self: center;
+      margin-right: 0.35rem;
+      padding: 0.35rem 0.65rem;
+      border-radius: 8px;
+      border: 1px solid rgba(99,102,241,0.35);
+      background: rgba(99,102,241,0.12);
+      color: var(--indigo);
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      min-height: 36px;
+    }
+    .btn-project-switch:hover {
+      background: rgba(99,102,241,0.2);
+      border-color: rgba(99,102,241,0.5);
+    }
+    .btn-project-switch.compact {
+      margin: 0;
+      font-size: 0.68rem;
+      padding: 0.28rem 0.55rem;
+      min-height: 32px;
+    }
+    .ops-status-right { margin-left: auto; display: flex; align-items: center; gap: 0.4rem; }
+
+    /* Project switcher modal */
+    .project-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 500;
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 0;
+    }
+    .project-modal-backdrop.open { display: flex; }
+    .project-modal {
+      width: min(520px, 100vw);
+      max-height: min(78vh, 640px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px 14px 0 0;
+      box-shadow: 0 -8px 40px rgba(0,0,0,0.35);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    @media (min-width: 641px) {
+      .project-modal-backdrop {
+        align-items: center;
+        padding: 1rem;
+      }
+      .project-modal {
+        border-radius: var(--radius);
+        max-height: min(70vh, 560px);
+      }
+    }
+    .project-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      padding: 0.85rem 1rem 0.55rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .project-modal-header h3 {
+      margin: 0;
+      font-size: 0.88rem;
+      font-weight: 700;
+    }
+    .project-modal-sub {
+      margin: 0.15rem 0 0;
+      font-size: 0.68rem;
+      color: var(--muted);
+      font-weight: 400;
+    }
+    .project-modal-close {
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-size: 1.1rem;
+      padding: 0.25rem 0.45rem;
+      border-radius: 6px;
+      min-height: 36px;
+      min-width: 36px;
+    }
+    .project-modal-close:hover { color: var(--fg); background: var(--surface2); }
+    .project-modal-search-wrap { padding: 0.55rem 1rem; border-bottom: 1px solid var(--border); }
+    .project-modal-search {
+      width: 100%;
+      padding: 0.45rem 0.65rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--fg);
+      font-size: 0.82rem;
+      min-height: 44px;
+    }
+    .project-modal-list {
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      flex: 1;
+      padding: 0.35rem 0;
+    }
+    .project-modal-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+      width: 100%;
+      text-align: left;
+      padding: 0.65rem 1rem;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      background: transparent;
+      color: var(--fg);
+      cursor: pointer;
+      min-height: 56px;
+    }
+    .project-modal-item:hover { background: rgba(99,102,241,0.08); }
+    .project-modal-item.active {
+      background: rgba(99,102,241,0.12);
+      border-left: 3px solid var(--indigo);
+      padding-left: calc(1rem - 3px);
+    }
+    .project-modal-item-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .project-modal-item-name { font-weight: 700; font-size: 0.82rem; }
+    .project-modal-item-badge {
+      font-size: 0.6rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.12rem 0.4rem;
+      border-radius: 10px;
+      background: rgba(16,185,129,0.15);
+      color: var(--emerald);
+      flex-shrink: 0;
+    }
+    .project-modal-item-meta {
+      font-size: 0.68rem;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .project-modal-empty {
+      padding: 2rem 1rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+    .project-modal-warn {
+      margin: 0.55rem 1rem 0;
+      padding: 0.5rem 0.65rem;
+      border-radius: 8px;
+      background: rgba(245,158,11,0.1);
+      border: 1px solid rgba(245,158,11,0.3);
+      color: var(--amber);
+      font-size: 0.72rem;
+      line-height: 1.4;
+    }
+
+    /* Quick action bar */
+    .quick-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin: 0.85rem 0 0.65rem;
+    }
+    .quick-actions .btn-secondary {
+      flex: 1 1 auto;
+      min-width: 7.5rem;
+      text-align: center;
+      font-size: 0.74rem;
+    }
+
+    /* New Mission form */
+    .mission-box {
+      background: linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(16,185,129,0.06) 100%);
+      border: 1px solid rgba(99,102,241,0.35);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 1rem;
+      box-shadow: 0 0 24px rgba(99,102,241,0.08);
+    }
+    .mission-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem 0.35rem;
+      flex-wrap: wrap;
+    }
+    .mission-title {
+      margin: 0;
+      font-size: 0.92rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: var(--fg);
+    }
+    .mission-title span { color: var(--emerald); }
+    .mission-sub { font-size: 0.68rem; color: var(--muted); margin: 0; }
+    .mission-body { padding: 0.35rem 1rem 1rem; display: flex; flex-direction: column; gap: 0.65rem; }
+    .mission-textarea {
+      width: 100%;
+      min-height: 96px;
+      padding: 0.65rem 0.75rem;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      color: var(--fg);
+      font-size: 0.88rem;
+      line-height: 1.45;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .mission-textarea:focus {
+      border-color: var(--indigo);
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+    }
+    .mission-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.55rem;
+    }
+    @media (max-width: 640px) { .mission-row { grid-template-columns: 1fr; } }
+    .mission-field label {
+      display: block;
+      font-size: 0.68rem;
+      color: var(--muted);
+      margin-bottom: 0.25rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .mission-select, .mission-input {
+      width: 100%;
+      padding: 0.48rem 0.65rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--fg);
+      font-size: 0.8rem;
+      outline: none;
+      min-height: 44px;
+    }
+    .mission-select:focus, .mission-input:focus { border-color: var(--indigo); }
+
+    /* Model picker (searchable grouped dropdown) */
+    .model-picker { position: relative; }
+    .model-picker-trigger {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.12rem;
+      padding: 0.48rem 2rem 0.48rem 0.65rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--fg);
+      font-size: 0.8rem;
+      text-align: left;
+      min-height: 44px;
+      cursor: pointer;
+      position: relative;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .model-picker-trigger:hover { border-color: var(--border2); }
+    .model-picker.open .model-picker-trigger,
+    .model-picker-trigger:focus-visible {
+      border-color: var(--indigo);
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+      outline: none;
+    }
+    .model-picker-trigger::after {
+      content: '▾';
+      position: absolute;
+      right: 0.65rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      font-size: 0.72rem;
+      pointer-events: none;
+    }
+    .model-picker-label {
+      font-weight: 600;
+      line-height: 1.25;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      flex-wrap: wrap;
+    }
+    .model-picker-label .star { color: var(--amber); font-size: 0.72rem; }
+    .model-picker-hint {
+      font-size: 0.65rem;
+      color: var(--muted);
+      line-height: 1.3;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .model-picker-dropdown {
+      display: none;
+      position: absolute;
+      z-index: 300;
+      left: 0;
+      right: 0;
+      top: calc(100% + 4px);
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.35);
+      overflow: hidden;
+    }
+    .model-picker.open .model-picker-dropdown { display: flex; flex-direction: column; }
+    .model-picker-search {
+      width: 100%;
+      padding: 0.5rem 0.65rem;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--fg);
+      font-size: 0.78rem;
+      outline: none;
+    }
+    .model-picker-search::placeholder { color: var(--muted); }
+    .model-picker-list {
+      max-height: 260px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+    .model-picker-group-label {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      padding: 0.35rem 0.65rem 0.2rem;
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+    }
+    .model-picker-group-label:first-child { border-top: none; }
+    .model-picker-option {
+      display: flex;
+      flex-direction: column;
+      gap: 0.1rem;
+      width: 100%;
+      padding: 0.45rem 0.65rem;
+      border: none;
+      background: transparent;
+      color: var(--fg);
+      text-align: left;
+      cursor: pointer;
+      font-size: 0.78rem;
+      transition: background 0.1s;
+    }
+    .model-picker-option:hover,
+    .model-picker-option.focused { background: rgba(99,102,241,0.12); }
+    .model-picker-option.selected { background: rgba(99,102,241,0.18); }
+    .model-picker-option-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.4rem;
+    }
+    .model-picker-option-name { font-weight: 600; }
+    .model-picker-option-name .star { color: var(--amber); margin-left: 0.15rem; }
+    .model-picker-option-price {
+      font-size: 0.62rem;
+      color: var(--muted);
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .model-picker-option-desc {
+      font-size: 0.65rem;
+      color: var(--muted);
+      line-height: 1.3;
+    }
+    .model-picker-empty {
+      padding: 0.75rem;
+      text-align: center;
+      font-size: 0.74rem;
+      color: var(--muted);
+    }
+    .mission-toggles {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem 1rem;
+      align-items: center;
+    }
+    .mission-toggle {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.76rem;
+      cursor: pointer;
+      min-height: 44px;
+    }
+    .mission-toggle input { width: 1rem; height: 1rem; accent-color: var(--indigo); }
+    .mission-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    .btn-mission {
+      padding: 0.6rem 1.35rem;
+      background: linear-gradient(135deg, #4f46e5 0%, var(--indigo) 50%, #4338ca 100%);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px;
+      font-size: 0.86rem;
+      font-weight: 700;
+      min-height: 46px;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      box-shadow: 0 2px 12px rgba(99,102,241,0.35), inset 0 1px 0 rgba(255,255,255,0.1);
+      transition: transform 0.12s, opacity 0.12s, box-shadow 0.12s;
+    }
+    .btn-mission:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 18px rgba(99,102,241,0.45), inset 0 1px 0 rgba(255,255,255,0.12);
+    }
+    .btn-mission:active:not(:disabled) { transform: translateY(0); }
+    .btn-mission:disabled { opacity: 0.55; cursor: not-allowed; }
+    .mission-status {
+      font-size: 0.74rem;
+      padding: 0.45rem 0.65rem;
+      border-radius: 7px;
+      display: none;
+    }
+    .mission-status.visible { display: block; }
+    .mission-status.loading {
+      background: rgba(99,102,241,0.12);
+      color: var(--indigo);
+      border: 1px solid rgba(99,102,241,0.25);
+    }
+    .mission-status.success {
+      background: rgba(16,185,129,0.12);
+      color: var(--emerald);
+      border: 1px solid rgba(16,185,129,0.28);
+    }
+    .mission-status.error {
+      background: rgba(239,68,68,0.12);
+      color: var(--red);
+      border: 1px solid rgba(239,68,68,0.28);
+    }
+    .mission-status a { color: inherit; font-weight: 600; text-decoration: underline; }
+
+    .mission-box.mission-active {
+      border-color: rgba(16,185,129,0.45);
+      box-shadow: 0 0 28px rgba(16,185,129,0.1);
+    }
+
+    /* Mission ops status strip */
+    .ops-status {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.7rem 0.9rem;
+      margin-bottom: 0.75rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .ops-status.running {
+      border-color: rgba(16,185,129,0.4);
+      box-shadow: 0 0 16px rgba(16,185,129,0.08);
+    }
+    .ops-status-top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .ops-status-left { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; min-width: 0; }
+    .ops-status-title { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; }
+    .ops-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: 20px;
+      font-size: 0.67rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .ops-badge.idle { background: rgba(136,136,170,0.15); color: var(--muted); border: 1px solid var(--border); }
+    .ops-badge.active {
+      background: rgba(16,185,129,0.15);
+      color: var(--emerald);
+      border: 1px solid rgba(16,185,129,0.35);
+      animation: pulse-badge 2.5s ease-in-out infinite;
+    }
+    @keyframes pulse-badge {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.25); }
+      50% { box-shadow: 0 0 0 4px rgba(16,185,129,0); }
+    }
+    .ops-goal {
+      font-size: 0.8rem;
+      color: var(--fg);
+      margin-top: 0.35rem;
+      line-height: 1.4;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+    .ops-meta {
+      font-size: 0.68rem;
+      color: var(--muted);
+      margin-top: 0.3rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem 0.75rem;
+    }
+    .ops-meta a { color: var(--indigo); text-decoration: none; font-weight: 600; }
+    .ops-meta a:hover { text-decoration: underline; }
+    .ops-progress { margin-top: 0.45rem; }
+    .ops-progress-bar {
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .ops-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--emerald), var(--indigo));
+      border-radius: 2px;
+      transition: width 0.4s ease;
+    }
+    .ops-last {
+      margin-top: 0.55rem;
+      padding-top: 0.55rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.72rem;
+      color: var(--muted);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.35rem 0.65rem;
+    }
+    .ops-last strong { color: var(--fg); font-weight: 600; }
+    .ops-log-preview {
+      margin-top: 0.45rem;
+      padding: 0.45rem 0.55rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      line-height: 1.4;
+      color: var(--muted);
+      max-height: 140px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      display: none;
+    }
+    .ops-log-preview.open { display: block; }
+    .btn-board-refresh {
+      font-size: 0.72rem;
+      padding: 0.28rem 0.6rem;
+      min-height: 32px;
+    }
+    .btn-board-refresh.spinning .refresh-icon { display: inline-block; animation: spin 0.7s linear infinite; }
+    .board-md { font-size: 0.76rem; line-height: 1.5; }
+    .board-md div[style*="font-weight"] { font-size: 0.78rem !important; margin-top: 0.35rem !important; }
+
+    /* Scrollable command board */
+    .board-panel-scroll {
+      max-height: min(52vh, 480px);
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+    .board-panel-scroll .board-md,
+    .board-panel-scroll .idle-state { padding-top: 0.15rem; }
+    .board-panel-scroll::-webkit-scrollbar { width: 6px; }
+    .board-panel-scroll::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.15);
+      border-radius: 3px;
+    }
+
+    /* Mission Intel sub-tabs (Command Board | Mission Graph) */
+    .intel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.65rem 0.85rem;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      border-bottom: 1px solid var(--border);
+    }
+    .intel-subtabs {
+      display: flex;
+      gap: 0.2rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.18rem;
+    }
+    .intel-tab {
+      padding: 0.32rem 0.72rem;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      transition: background 0.15s, color 0.15s;
+    }
+    .intel-tab:hover { color: var(--fg); }
+    .intel-tab.active {
+      background: rgba(99,102,241,0.22);
+      color: var(--indigo);
+    }
+    .intel-panel { display: none; }
+    .intel-panel.active { display: block; }
+
+    /* Mission Graph panel */
+    .mission-graph-panel { padding: 0.75rem 1rem 1rem; font-size: 0.76rem; }
+    .mission-graph-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.45rem;
+      margin-bottom: 0.55rem;
+    }
+    .mission-graph-summary {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.45rem 0.85rem;
+      color: var(--muted);
+      font-size: 0.72rem;
+      flex: 1;
+      min-width: 0;
+    }
+    .mission-graph-summary strong { color: var(--fg); font-weight: 600; }
+    .mission-graph-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.28rem;
+      padding: 0.12rem 0.45rem;
+      border-radius: 999px;
+      font-size: 0.66rem;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+    }
+    .mission-graph-badge.mode-dag { border-color: rgba(99,102,241,0.35); color: var(--indigo); }
+    .mission-graph-badge.mode-flat { border-color: rgba(136,136,170,0.35); color: var(--muted); }
+    .mission-graph-badge.critical { border-color: rgba(245,158,11,0.4); color: var(--amber); }
+    .mission-graph-controls { display: flex; gap: 0.35rem; flex-shrink: 0; }
+    .btn-dag-fit {
+      font-size: 0.68rem;
+      padding: 0.28rem 0.55rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .btn-dag-fit:hover { color: var(--fg); border-color: rgba(99,102,241,0.4); }
+    .mission-graph-viewport {
+      position: relative;
+      overflow: auto;
+      max-height: min(58vh, 520px);
+      min-height: 200px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: linear-gradient(180deg, rgba(15,15,26,0.35) 0%, rgba(26,26,46,0.55) 100%);
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+      touch-action: pan-x pan-y;
+    }
+    [data-theme="light"] .mission-graph-viewport {
+      background: linear-gradient(180deg, rgba(240,240,246,0.5) 0%, rgba(255,255,255,0.9) 100%);
+    }
+    .dag-zoom-layer {
+      transform-origin: 0 0;
+      will-change: transform;
+      display: inline-block;
+      min-width: min-content;
+    }
+    .mission-graph-svg { display: block; }
+    .dag-edge {
+      fill: none;
+      stroke: rgba(136,136,170,0.42);
+      stroke-width: 1.5;
+      marker-end: url(#dag-arrow);
+      transition: stroke 0.25s, stroke-width 0.25s;
+    }
+    .dag-edge.critical {
+      stroke: #f59e0b;
+      stroke-width: 3.25;
+      marker-end: url(#dag-arrow-critical);
+      filter: drop-shadow(0 0 5px rgba(245,158,11,0.55));
+    }
+    .dag-node { cursor: pointer; }
+    .dag-node rect {
+      rx: 8;
+      ry: 8;
+      stroke-width: 1.5;
+      transition: fill 0.3s, stroke 0.3s, filter 0.2s;
+    }
+    .dag-node:hover rect { filter: brightness(1.1); }
+    .dag-node.selected rect { stroke-width: 2.5; filter: brightness(1.12); }
+    .dag-node.critical rect {
+      stroke-width: 2;
+      filter: drop-shadow(0 0 4px rgba(245,158,11,0.35));
+    }
+    .dag-node.status-changed rect {
+      animation: dag-node-pulse 0.65s ease-out;
+    }
+    @keyframes dag-node-pulse {
+      0%   { filter: brightness(1); }
+      40%  { filter: brightness(1.4); }
+      100% { filter: brightness(1); }
+    }
+    .dag-node-label {
+      font-size: 11px;
+      font-weight: 600;
+      fill: var(--fg);
+      pointer-events: none;
+    }
+    .dag-node-sub {
+      font-size: 9.5px;
+      fill: var(--muted);
+      pointer-events: none;
+    }
+    .dag-node-sub.dag-node-title { fill: var(--fg); opacity: 0.88; }
+    .dag-node-status {
+      font-size: 11px;
+      font-weight: 700;
+      pointer-events: none;
+    }
+    .dag-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem 0.75rem;
+      margin-top: 0.65rem;
+      padding: 0.55rem 0.65rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface2);
+      font-size: 0.66rem;
+      color: var(--muted);
+    }
+    .dag-legend-title {
+      width: 100%;
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 0.1rem;
+    }
+    .dag-legend span { display: inline-flex; align-items: center; gap: 0.3rem; }
+    .dag-legend i {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+      border: 1px solid rgba(255,255,255,0.12);
+      font-size: 9px;
+      font-style: normal;
+      font-weight: 700;
+    }
+    .dag-linear { padding: 0.5rem 0; }
+    .dag-linear-msg {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-bottom: 0.55rem;
+      line-height: 1.45;
+    }
+    .dag-linear-track {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.35rem;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: 0.25rem;
+    }
+    .dag-linear-node {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.35rem 0.55rem;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      font-size: 0.7rem;
+      cursor: pointer;
+      max-width: 100%;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .dag-linear-node:hover { border-color: rgba(99,102,241,0.4); }
+    .dag-linear-node.selected { border-color: rgba(99,102,241,0.65); background: rgba(99,102,241,0.1); }
+    .dag-linear-node.critical { border-color: rgba(245,158,11,0.55); }
+    .dag-linear-node.status-changed { animation: dag-node-pulse 0.65s ease-out; }
+    .dag-linear-arrow { color: var(--muted); font-size: 0.75rem; flex-shrink: 0; }
+    .dag-empty-state {
+      text-align: center;
+      padding: 1.75rem 1rem;
+      color: var(--muted);
+    }
+    .dag-empty-state .dag-empty-icon {
+      font-size: 1.6rem;
+      opacity: 0.45;
+      margin-bottom: 0.5rem;
+    }
+    .dag-empty-state h3 {
+      margin: 0 0 0.4rem;
+      font-size: 0.88rem;
+      color: var(--fg);
+      font-weight: 600;
+    }
+    .dag-empty-state p {
+      margin: 0;
+      font-size: 0.74rem;
+      line-height: 1.5;
+      max-width: 28rem;
+      margin-inline: auto;
+    }
+    .dag-empty-state code {
+      font-size: 0.68rem;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+    }
+
+    /* Mission node detail drawer */
+    .mission-node-drawer {
+      position: fixed;
+      inset: 0;
+      z-index: 500;
+      display: flex;
+      justify-content: flex-end;
+      pointer-events: none;
+      visibility: hidden;
+      transition: visibility 0.25s;
+    }
+    .mission-node-drawer.open {
+      pointer-events: auto;
+      visibility: visible;
+    }
+    .mission-node-drawer-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      opacity: 0;
+      transition: opacity 0.25s;
+    }
+    .mission-node-drawer.open .mission-node-drawer-backdrop { opacity: 1; }
+    .mission-node-drawer-panel {
+      position: relative;
+      width: min(360px, 100vw);
+      max-width: 100%;
+      height: 100%;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      box-shadow: -8px 0 32px rgba(0,0,0,0.35);
+      transform: translateX(100%);
+      transition: transform 0.28s ease-out;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .mission-node-drawer.open .mission-node-drawer-panel { transform: translateX(0); }
+    .mission-node-drawer-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.5rem;
+      padding: 0.85rem 1rem 0.65rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .mission-node-drawer-header h3 {
+      margin: 0;
+      font-size: 0.92rem;
+      font-weight: 600;
+      line-height: 1.35;
+      color: var(--fg);
+    }
+    .mission-node-drawer-id {
+      font-size: 0.68rem;
+      color: var(--muted);
+      font-weight: 500;
+      margin-top: 0.2rem;
+    }
+    .mission-node-drawer-close {
+      flex-shrink: 0;
+      width: 2rem;
+      height: 2rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface2);
+      color: var(--muted);
+      font-size: 1.1rem;
+      line-height: 1;
+    }
+    .mission-node-drawer-close:hover { color: var(--fg); }
+    .mission-node-drawer-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.75rem 1rem 1.25rem;
+      -webkit-overflow-scrolling: touch;
+    }
+    .drawer-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      margin-bottom: 0.65rem;
+      border: 1px solid var(--border);
+    }
+    .drawer-field {
+      margin-bottom: 0.65rem;
+    }
+    .drawer-field-label {
+      font-size: 0.62rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-bottom: 0.2rem;
+    }
+    .drawer-field-value {
+      font-size: 0.76rem;
+      line-height: 1.45;
+      color: var(--fg);
+    }
+    .drawer-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-top: 0.85rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--border);
+    }
+    .drawer-actions .detail-link-btn {
+      font-size: 0.68rem;
+      padding: 0.28rem 0.6rem;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      color: var(--indigo);
+    }
+    .drawer-actions .detail-link-btn:hover {
+      border-color: rgba(99,102,241,0.45);
+      background: rgba(99,102,241,0.12);
+    }
+    @media (max-width: 640px) {
+      .intel-header { flex-direction: column; align-items: stretch; }
+      .intel-subtabs { justify-content: center; }
+      .mission-graph-viewport { max-height: 46vh; min-height: 180px; }
+      .dag-node-sub.dag-node-title { display: none; }
+      .dag-node-sub.dag-node-meta { display: none; }
+      .mission-node-drawer-panel { width: 100vw; }
     }
   </style>
 </head>
@@ -651,6 +1809,134 @@
   ══════════════════════════════════════════════════════════════════ -->
   <div id="tab-overview" class="tab-panel active">
     <div class="page">
+
+      <!-- Project context -->
+      <section class="project-context" id="project-context" aria-live="polite">
+        <div class="project-context-row">
+          <button type="button" class="project-context-bar" id="project-context-toggle" aria-expanded="false" aria-controls="project-context-details">
+            <span class="project-context-icon" aria-hidden="true">📁</span>
+            <span class="project-context-main">
+              <span class="project-context-name" id="project-context-name">Loading project…</span>
+              <span class="project-context-git" id="project-context-git"></span>
+            </span>
+            <span class="project-context-chevron" aria-hidden="true">▾</span>
+          </button>
+          <button type="button" class="btn-project-switch" id="btn-project-switch" aria-haspopup="dialog" aria-controls="project-switcher-modal">Switch ▾</button>
+        </div>
+        <div class="project-context-details" id="project-context-details" hidden></div>
+      </section>
+
+      <!-- Quick actions -->
+      <div class="quick-actions">
+        <button class="btn-secondary" id="btn-qa-board" type="button">🎖 Board Status</button>
+        <button class="btn-secondary" id="btn-qa-cleanup" type="button">🧹 Cleanup</button>
+        <button class="btn-secondary" id="btn-qa-refresh" type="button">↻ Refresh</button>
+      </div>
+
+      <!-- Mission ops status -->
+      <section class="ops-status" id="ops-status" aria-live="polite">
+        <div class="ops-status-top">
+          <div class="ops-status-left">
+            <span class="ops-status-title">🎖 Mission Control</span>
+            <span class="ops-badge idle" id="ops-badge">Idle</span>
+          </div>
+          <div class="ops-status-right">
+            <button type="button" class="btn-project-switch compact" id="btn-ops-project-switch" aria-haspopup="dialog">📁 Switch</button>
+          </div>
+        </div>
+        <div class="ops-goal" id="ops-goal">No active background mission</div>
+        <div class="ops-meta" id="ops-meta"></div>
+        <div class="ops-progress" id="ops-progress-wrap" style="display:none">
+          <div class="ops-progress-bar"><div class="ops-progress-fill" id="ops-progress-fill" style="width:0%"></div></div>
+        </div>
+        <pre class="ops-log-preview" id="ops-log-preview" aria-hidden="true"></pre>
+        <div class="ops-last" id="ops-last"></div>
+      </section>
+
+      <!-- New Mission -->
+      <section class="section mission-box" id="mission-section">
+        <div class="mission-header">
+          <div>
+            <h2 class="mission-title">🚀 <span>New Mission</span></h2>
+            <p class="mission-sub">Launch a Roland team run from phone or browser (Tailscale-safe)</p>
+          </div>
+        </div>
+        <div class="mission-body">
+          <div>
+            <label class="form-label" for="mission-goal">Mission objective</label>
+            <textarea
+              id="mission-goal"
+              class="mission-textarea"
+              placeholder="Describe what Roland should build, fix, or investigate…"
+              rows="3"
+              autofocus
+            ></textarea>
+          </div>
+          <div class="mission-row">
+            <div class="mission-field">
+              <label for="mission-pm-model-trigger">Lead PM model</label>
+              <div class="model-picker" id="mission-pm-model-picker" data-role="pm">
+                <button type="button" class="model-picker-trigger" id="mission-pm-model-trigger" aria-haspopup="listbox" aria-expanded="false">
+                  <span class="model-picker-label">Loading…</span>
+                  <span class="model-picker-hint"></span>
+                </button>
+                <div class="model-picker-dropdown" role="listbox">
+                  <input type="search" class="model-picker-search" placeholder="Search models…" autocomplete="off" aria-label="Search Lead PM models" />
+                  <div class="model-picker-list"></div>
+                </div>
+                <input type="hidden" id="mission-pm-model" value="grok-4.3" />
+              </div>
+            </div>
+            <div class="mission-field">
+              <label for="mission-eng-model-trigger">Engineer model</label>
+              <div class="model-picker" id="mission-eng-model-picker" data-role="engineer">
+                <button type="button" class="model-picker-trigger" id="mission-eng-model-trigger" aria-haspopup="listbox" aria-expanded="false">
+                  <span class="model-picker-label">Loading…</span>
+                  <span class="model-picker-hint"></span>
+                </button>
+                <div class="model-picker-dropdown" role="listbox">
+                  <input type="search" class="model-picker-search" placeholder="Search models…" autocomplete="off" aria-label="Search engineer models" />
+                  <div class="model-picker-list"></div>
+                </div>
+                <input type="hidden" id="mission-eng-model" value="composer-2.5" />
+              </div>
+            </div>
+          </div>
+          <div class="mission-row">
+            <div class="mission-field">
+              <label for="mission-run-name">Run name (optional)</label>
+              <input type="text" id="mission-run-name" class="mission-input" placeholder="e.g. auth-refactor" maxlength="80" />
+            </div>
+            <div class="mission-field">
+              <label for="mission-priority">Priority</label>
+              <select id="mission-priority" class="mission-select">
+                <option value="P1">P1 — Critical</option>
+                <option value="P2">P2 — High</option>
+                <option value="P3" selected>P3 — Normal</option>
+                <option value="P4">P4 — Low</option>
+              </select>
+            </div>
+          </div>
+          <div class="mission-toggles">
+            <label class="mission-toggle">
+              <input type="checkbox" id="mission-force-team" />
+              Force full team
+            </label>
+            <label class="mission-toggle">
+              <input type="checkbox" id="mission-notify" checked />
+              Notify on complete
+            </label>
+            <label class="mission-toggle">
+              <input type="checkbox" id="mission-cleanup" checked />
+              Cleanup board first
+            </label>
+          </div>
+          <div class="mission-actions">
+            <button type="button" class="btn-mission" id="btn-start-mission">▶ Start Mission</button>
+          </div>
+          <div class="mission-status" id="mission-status" role="status" aria-live="polite"></div>
+        </div>
+      </section>
 
       <!-- Period filter -->
       <div class="period-row">
@@ -702,15 +1988,28 @@
         </div>
       </section>
 
-      <!-- UNSC Command Board -->
+      <!-- UNSC Mission Intel: Command Board + Mission Graph -->
       <section class="section">
-        <div class="section-box" id="board-section-box">
-          <div class="section-header" style="display:flex;align-items:center;justify-content:space-between;padding-right:.65rem">
-            <h2 style="margin:0">🎖 Command Board</h2>
-            <button class="btn-icon" id="btn-refresh-board" title="Refresh board status">↻</button>
+        <div class="section-box" id="intel-section-box">
+          <div class="intel-header">
+            <h2 style="margin:0">🎖 Mission Intel</h2>
+            <nav class="intel-subtabs" role="tablist" aria-label="Mission intel views">
+              <button type="button" class="intel-tab active" data-intel="board" role="tab" aria-selected="true">Command Board</button>
+              <button type="button" class="intel-tab" data-intel="graph" role="tab" aria-selected="false">Mission Graph</button>
+            </nav>
+            <button class="btn-secondary btn-board-refresh" id="btn-refresh-board" type="button" title="Refresh board and mission graph">
+              <span class="refresh-icon">↻</span> Refresh
+            </button>
           </div>
-          <div class="board-panel" id="board-panel">
-            <div class="idle-state"><span>○</span><span>Loading command board…</span></div>
+          <div id="intel-panel-board" class="intel-panel active" role="tabpanel">
+            <div class="board-panel board-panel-scroll" id="board-panel">
+              <div class="idle-state"><span>○</span><span>Loading command board…</span></div>
+            </div>
+          </div>
+          <div id="intel-panel-graph" class="intel-panel" role="tabpanel" hidden>
+            <div class="mission-graph-panel" id="mission-graph-panel">
+              <div class="idle-state"><span>○</span><span>Loading mission graph…</span></div>
+            </div>
           </div>
         </div>
       </section>
@@ -886,6 +2185,43 @@
   <!-- Toast container -->
   <div id="toast-container"></div>
 
+  <!-- Project switcher modal -->
+  <div class="project-modal-backdrop" id="project-switcher-backdrop" role="presentation" hidden>
+    <div class="project-modal" id="project-switcher-modal" role="dialog" aria-modal="true" aria-labelledby="project-switcher-title">
+      <div class="project-modal-header">
+        <div>
+          <h3 id="project-switcher-title">🎖 Switch Project</h3>
+          <p class="project-modal-sub">Select a Roland project context for missions and intel</p>
+        </div>
+        <button type="button" class="project-modal-close" id="project-switcher-close" aria-label="Close">✕</button>
+      </div>
+      <div class="project-modal-search-wrap">
+        <input type="search" class="project-modal-search" id="project-switcher-search" placeholder="Search projects…" autocomplete="off" />
+      </div>
+      <div class="project-modal-warn" id="project-switcher-mission-warn" hidden>
+        ⚠ A mission is running in the current project. Switching will change dashboard context only — the background run continues in its original project.
+      </div>
+      <div class="project-modal-list" id="project-switcher-list" role="listbox" aria-label="Available projects">
+        <div class="project-modal-empty">Loading projects…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mission node detail drawer (Mission Graph) -->
+  <div id="mission-node-drawer" class="mission-node-drawer" hidden aria-hidden="true">
+    <div class="mission-node-drawer-backdrop" data-action="close-drawer"></div>
+    <aside class="mission-node-drawer-panel" role="dialog" aria-labelledby="mission-drawer-title">
+      <div class="mission-node-drawer-header">
+        <div>
+          <h3 id="mission-drawer-title">Task</h3>
+          <div class="mission-node-drawer-id" id="mission-drawer-id"></div>
+        </div>
+        <button type="button" class="mission-node-drawer-close" data-action="close-drawer" aria-label="Close">×</button>
+      </div>
+      <div class="mission-node-drawer-body" id="mission-node-drawer-content"></div>
+    </aside>
+  </div>
+
   <script>
   // ═══════════════════════════════════════════════════════════════════════════
   //  Constants
@@ -931,6 +2267,15 @@
   let runState     = null;
   let hitlState    = null;
   let boardStatus  = null;
+  let missionDagPayload = null;
+  let selectedMissionNodeId = null;
+  let activeIntelTab = 'board';
+  let missionGraphEverOpened = false;
+  let lastDagNodeStatuses = {};
+  let missionGraphRenderTimer = null;
+  let dagViewState = { scale: 1, tx: 0, ty: 0 };
+  let dagZoomController = null;
+  let lastDagRunId = null;
   let memoryContent = '';
   let memoryEditMode = false;
   let period       = 'today';
@@ -939,6 +2284,16 @@
   let agentSortDir = 'desc';
   let expandedRuns = new Set();      // overview recent runs
   let historyExpanded = new Set();   // history tab
+  let modelCatalog = { models: [], defaults: { pm: 'grok-4.3', engineer: 'composer-2.5' } };
+  let missionSubmitting = false;
+  let supervisorInfo = null;
+  let missionMeta = null;
+  let projectContext = null;
+  let projectContextExpanded = false;
+  let projectsPayload = null;
+  let projectSwitcherOpen = false;
+  let projectSwitching = false;
+  let opsLogOpen = false;
   let tokensChart  = null;
   let modelChart   = null;
 
@@ -1029,19 +2384,25 @@
   //  Toast notifications
   // ═══════════════════════════════════════════════════════════════════════════
 
-  function toast(message, type = 'info') {
+  const TOAST_ICONS = { success: '✓', error: '✕', warning: '⚠', info: '◆' };
+  const TOAST_MS = { success: 4000, error: 5500, warning: 4500, info: 3200 };
+
+  function toast(message, type = 'info', durationMs) {
     const container = document.getElementById('toast-container');
     const el = document.createElement('div');
     el.className = 'toast toast-' + type;
-    el.textContent = message;
+    el.innerHTML =
+      '<span class="toast-icon">' + (TOAST_ICONS[type] || '◆') + '</span>' +
+      '<span class="toast-body">' + escHtml(message) + '</span>';
     container.appendChild(el);
     requestAnimationFrame(() => {
       requestAnimationFrame(() => el.classList.add('toast-visible'));
     });
+    const ms = durationMs ?? TOAST_MS[type] ?? 3200;
     setTimeout(() => {
       el.classList.remove('toast-visible');
-      setTimeout(() => el.remove(), 300);
-    }, 3200);
+      setTimeout(() => el.remove(), 320);
+    }, ms);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1053,7 +2414,7 @@
     if (wsConn && wsConn.readyState <= 1) return;
 
     try {
-      const ws = new WebSocket(`ws://${location.host}`);
+      const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`);
       wsConn = ws;
 
       ws.onopen = () => {
@@ -1069,6 +2430,7 @@
             if (msg.runState  !== undefined) runState  = msg.runState;
             if (msg.hitlState !== undefined) hitlState = msg.hitlState;
             if (msg.boardStatus !== undefined) boardStatus = msg.boardStatus;
+            if (msg.missionDag !== undefined) missionDagPayload = msg.missionDag;
             // Overlay hitl-state.json values into runState for TUI accuracy
             if (runState && hitlState) {
               if (hitlState.paused)       runState.hitlPaused        = true;
@@ -1080,7 +2442,9 @@
             renderLiveIndicator();
             renderCards();
             renderLiveStatus();
+            renderOpsStatus();
             renderBoardPanel();
+            scheduleMissionGraphRender();
             renderRecentRuns();
             if (activeTab === 'actions') renderHitlActionsPanel();
             updateLastUpdated();
@@ -1130,6 +2494,17 @@
     } catch { runState = null; }
   }
 
+  async function fetchSupervisor() {
+    try {
+      const res = await fetch('/api/supervisor');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      supervisorInfo = await res.json();
+      missionMeta = supervisorInfo?.missionMeta ?? missionMeta;
+    } catch (e) {
+      console.warn('Supervisor fetch failed:', e.message);
+    }
+  }
+
   async function fetchBoardStatus() {
     try {
       const res = await fetch('/api/board-status');
@@ -1141,6 +2516,767 @@
     }
   }
 
+  async function fetchMissionDag() {
+    try {
+      const res = await fetch('/api/mission-dag');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      missionDagPayload = await res.json();
+    } catch (e) {
+      console.warn('Mission DAG fetch failed:', e.message);
+      missionDagPayload = null;
+    }
+  }
+
+  async function fetchModels() {
+    try {
+      const res = await fetch('/api/models');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      modelCatalog = await res.json();
+    } catch (e) {
+      console.warn('Models fetch failed:', e.message);
+    }
+  }
+
+  async function fetchProjectContext() {
+    try {
+      const res = await fetch('/api/project-context');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      projectContext = await res.json();
+    } catch (e) {
+      console.warn('Project context fetch failed:', e.message);
+      projectContext = {
+        warning: 'No project context — running in unknown directory',
+        projectName: null,
+        displayPath: null,
+        isGitRepo: false,
+      };
+    }
+  }
+
+  async function fetchProjects() {
+    try {
+      const res = await fetch('/api/projects');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      projectsPayload = await res.json();
+    } catch (e) {
+      console.warn('Projects fetch failed:', e.message);
+      projectsPayload = { projects: [], activePath: projectContext?.cwd ?? null };
+    }
+  }
+
+  function isMissionRunningNow() {
+    if (supervisorInfo?.missionActive) return true;
+    return isRunActive(runState);
+  }
+
+  function closeProjectSwitcher() {
+    projectSwitcherOpen = false;
+    const backdrop = document.getElementById('project-switcher-backdrop');
+    if (backdrop) {
+      backdrop.classList.remove('open');
+      backdrop.hidden = true;
+    }
+  }
+
+  async function openProjectSwitcher() {
+    toggleProjectContextDetails(false);
+    closeAllModelPickers();
+    projectSwitcherOpen = true;
+    const backdrop = document.getElementById('project-switcher-backdrop');
+    if (backdrop) {
+      backdrop.hidden = false;
+      backdrop.classList.add('open');
+    }
+    const searchEl = document.getElementById('project-switcher-search');
+    if (searchEl) searchEl.value = '';
+    await fetchProjects();
+    renderProjectSwitcherList('');
+    const warn = document.getElementById('project-switcher-mission-warn');
+    if (warn) warn.hidden = !isMissionRunningNow();
+    setTimeout(() => searchEl?.focus(), 60);
+  }
+
+  function renderProjectSwitcherList(query) {
+    const listEl = document.getElementById('project-switcher-list');
+    if (!listEl) return;
+    const q = (query || '').toLowerCase().trim();
+    const projects = Array.isArray(projectsPayload?.projects) ? projectsPayload.projects : [];
+    const filtered = q
+      ? projects.filter(p =>
+          [p.name, p.path, p.displayPath, p.branch].filter(Boolean).join(' ').toLowerCase().includes(q)
+        )
+      : projects;
+
+    if (filtered.length === 0) {
+      listEl.innerHTML = '<div class="project-modal-empty">' +
+        (q ? 'No projects match your search.' : 'No Roland projects found under ~/projects — add paths via ROLAND_DASHBOARD_PROJECTS or .roland/config.json') +
+        '</div>';
+      return;
+    }
+
+    listEl.innerHTML = filtered.map(p => {
+      const gitLabel = p.isGit
+        ? ('Git • ' + escHtml(p.branch || 'unknown'))
+        : 'Not a git repo';
+      const rolandLabel = p.hasRoland ? '' : ' · no .roland yet';
+      const activeBadge = p.isActive ? '<span class="project-modal-item-badge">Active</span>' : '';
+      return (
+        '<button type="button" class="project-modal-item' + (p.isActive ? ' active' : '') + '" ' +
+        'data-project-path="' + escHtml(p.path) + '" role="option" aria-selected="' + (p.isActive ? 'true' : 'false') + '">' +
+        '<div class="project-modal-item-top">' +
+        '<span class="project-modal-item-name">' + escHtml(p.displayPath || p.name) + '</span>' +
+        activeBadge +
+        '</div>' +
+        '<span class="project-modal-item-meta">' + gitLabel + escHtml(rolandLabel) + '</span>' +
+        '</button>'
+      );
+    }).join('');
+  }
+
+  async function switchToProject(targetPath) {
+    if (!targetPath || projectSwitching) return;
+    if (projectContext?.cwd && pathMatches(projectContext.cwd, targetPath)) {
+      closeProjectSwitcher();
+      return;
+    }
+
+    let force = false;
+    if (isMissionRunningNow()) {
+      const ok = window.confirm(
+        'A mission is running in the current project.\n\nSwitch dashboard context anyway? The background run will continue in its original project.'
+      );
+      if (!ok) return;
+      force = true;
+    }
+
+    projectSwitching = true;
+    try {
+      const res = await fetch('/api/switch-project', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: targetPath, force }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+
+      if (data.projectContext) projectContext = data.projectContext;
+      if (data.projects) projectsPayload = data.projects;
+
+      boardStatus = null;
+      missionDagPayload = null;
+      runState = null;
+      hitlState = null;
+      supervisorInfo = null;
+      missionMeta = null;
+      selectedMissionNodeId = null;
+      lastDagRunId = null;
+      lastDagNodeStatuses = {};
+
+      await Promise.all([
+        fetchUsage(),
+        fetchRunState(),
+        fetchBoardStatus(),
+        fetchMissionDag(),
+        fetchSupervisor(),
+        fetchProjectContext(),
+        fetchProjects(),
+      ]);
+
+      renderAll();
+      if (activeTab === 'memory') loadMemoryTab();
+      closeProjectSwitcher();
+
+      const label = projectContext?.displayPath || projectContext?.projectName || targetPath;
+      toast('Switched to ' + label, 'success');
+    } catch (e) {
+      toast(e.message || 'Project switch failed', 'error');
+    } finally {
+      projectSwitching = false;
+    }
+  }
+
+  function pathMatches(a, b) {
+    if (!a || !b) return false;
+    return String(a).replace(/\/+$/, '') === String(b).replace(/\/+$/, '');
+  }
+
+  function toggleProjectContextDetails(force) {
+    const section = document.getElementById('project-context');
+    const details = document.getElementById('project-context-details');
+    const toggle = document.getElementById('project-context-toggle');
+    if (!section || !details || !toggle) return;
+    projectContextExpanded = typeof force === 'boolean' ? force : !projectContextExpanded;
+    section.classList.toggle('expanded', projectContextExpanded);
+    details.hidden = !projectContextExpanded;
+    toggle.setAttribute('aria-expanded', projectContextExpanded ? 'true' : 'false');
+  }
+
+  function renderProjectContext() {
+    const section = document.getElementById('project-context');
+    const nameEl = document.getElementById('project-context-name');
+    const gitEl = document.getElementById('project-context-git');
+    const detailsEl = document.getElementById('project-context-details');
+    const toggle = document.getElementById('project-context-toggle');
+    if (!section || !nameEl || !gitEl || !detailsEl) return;
+
+    const ctx = projectContext;
+    const hasWarning = Boolean(ctx?.warning) || !ctx?.projectName;
+
+    section.classList.toggle('warning', hasWarning);
+
+    if (hasWarning) {
+      nameEl.textContent = ctx?.warning || 'No project context — running in unknown directory';
+      gitEl.innerHTML = '';
+      detailsEl.innerHTML =
+        '<div class="project-context-warn">' +
+        '<span aria-hidden="true">⚠</span>' +
+        '<span>Start the dashboard with <code>--project-root</code> or point <code>--state-dir</code> at your project&apos;s <code>.roland/</code> folder.</span>' +
+        '</div>';
+      if (toggle) toggle.style.display = ctx?.cwd ? '' : 'none';
+      return;
+    }
+
+    if (toggle) toggle.style.display = '';
+    const label = ctx.displayPath || ctx.projectName || ctx.cwd || 'Unknown project';
+    nameEl.textContent = label;
+    nameEl.title = ctx.cwd || label;
+
+    let gitHtml = '';
+    if (ctx.isGitRepo) {
+      const branch = ctx.branch || 'detached';
+      gitHtml += '<span class="git-badge">Git repo • ' + escHtml(branch) + '</span>';
+      if (ctx.gitStatusSummary && ctx.gitStatusSummary !== 'clean') {
+        gitHtml += escHtml(ctx.gitStatusSummary);
+      } else if (ctx.gitStatusSummary === 'clean') {
+        gitHtml += 'Working tree clean';
+      }
+    } else {
+      gitHtml += '<span class="git-badge none">Not a git repository</span>';
+    }
+    gitEl.innerHTML = gitHtml;
+
+    const rows = [];
+    rows.push(['Full path', ctx.cwd || '—']);
+    rows.push(['Project', ctx.projectName || '—']);
+    rows.push(['State dir', ctx.stateDir || '—']);
+    if (ctx.isGitRepo) {
+      rows.push(['Branch', ctx.branch || '—']);
+      if (ctx.remote) rows.push(['Remote', ctx.remote]);
+      if (ctx.lastCommit?.sha) {
+        const commitLine = ctx.lastCommit.sha +
+          (ctx.lastCommit.subject ? ' — ' + ctx.lastCommit.subject : '');
+        rows.push(['Last commit', commitLine]);
+      }
+      if (ctx.gitStatusSummary) rows.push(['Git status', ctx.gitStatusSummary]);
+    }
+    detailsEl.innerHTML =
+      '<dl>' +
+      rows.map(([dt, dd]) =>
+        '<div><dt>' + escHtml(dt) + '</dt><dd>' + escHtml(String(dd)) + '</dd></div>'
+      ).join('') +
+      '</dl>';
+  }
+
+  function pickModelDefault(list, preferredIds) {
+    for (const id of preferredIds) {
+      if (list.some(m => m.id === id)) return id;
+    }
+    const rec = list.find(m => m.recommendedFor?.length);
+    if (rec) return rec.id;
+    return list[0]?.id ?? preferredIds[0];
+  }
+
+  function modelMatchesRole(m, role) {
+    if (m.id === 'auto') return true;
+    const roles = m.roles || (m.role ? [m.role] : []);
+    return roles.includes(role) || roles.includes('both');
+  }
+
+  function isRecommendedForRole(m, role) {
+    return Boolean(m.recommendedFor?.includes(role));
+  }
+
+  function formatModelPrice(m) {
+    if (!m.pricing?.label) return m.id === 'auto' ? 'Cursor picks per task' : '';
+    return m.pricing.label + ' (in / out)';
+  }
+
+  function modelSearchText(m) {
+    return [m.id, m.label, m.description, m.pricing?.label, m.group].filter(Boolean).join(' ').toLowerCase();
+  }
+
+  const modelPickers = [];
+
+  function closeAllModelPickers(except) {
+    for (const p of modelPickers) {
+      if (p !== except) p.close();
+    }
+  }
+
+  function createModelPicker(rootEl) {
+    const role = rootEl.dataset.role || 'engineer';
+    const hidden = rootEl.querySelector('input[type="hidden"]');
+    const trigger = rootEl.querySelector('.model-picker-trigger');
+    const labelEl = trigger?.querySelector('.model-picker-label');
+    const hintEl = trigger?.querySelector('.model-picker-hint');
+    const dropdown = rootEl.querySelector('.model-picker-dropdown');
+    const searchInput = rootEl.querySelector('.model-picker-search');
+    const listEl = rootEl.querySelector('.model-picker-list');
+    let selectedId = hidden?.value || '';
+    let focusedIdx = -1;
+
+    function getModelsForRole() {
+      const models = Array.isArray(modelCatalog.models) ? modelCatalog.models : [];
+      return models.filter(m => modelMatchesRole(m, role));
+    }
+
+    function getModelById(id) {
+      return (modelCatalog.models || []).find(m => m.id === id);
+    }
+
+    function setSelected(id) {
+      selectedId = id;
+      if (hidden) hidden.value = id;
+      const m = getModelById(id);
+      if (!m) {
+        if (labelEl) labelEl.textContent = id || 'Select model';
+        if (hintEl) hintEl.textContent = '';
+        return;
+      }
+      const star = isRecommendedForRole(m, role) ? ' <span class="star" title="Recommended">★</span>' : '';
+      if (labelEl) labelEl.innerHTML = escHtml(m.label) + star;
+      if (hintEl) {
+        const price = formatModelPrice(m);
+        hintEl.textContent = price || m.description || '';
+        hintEl.title = m.description || price;
+      }
+    }
+
+    function renderList(filter = '') {
+      if (!listEl) return;
+      const q = filter.trim().toLowerCase();
+      const models = getModelsForRole().filter(m => !q || modelSearchText(m).includes(q));
+      const groups = Array.isArray(modelCatalog.groups) ? modelCatalog.groups : [];
+      const groupOrder = groups.map(g => g.id);
+      const byGroup = new Map();
+      for (const m of models) {
+        const g = m.group || 'other';
+        if (!byGroup.has(g)) byGroup.set(g, []);
+        byGroup.get(g).push(m);
+      }
+
+      let html = '';
+      const orderedGroupIds = [...groupOrder.filter(id => byGroup.has(id)), ...[...byGroup.keys()].filter(id => !groupOrder.includes(id))];
+      let optionIdx = 0;
+      for (const gid of orderedGroupIds) {
+        const items = byGroup.get(gid) || [];
+        if (!items.length) continue;
+        const gLabel = groups.find(g => g.id === gid)?.label || gid;
+        html += '<div class="model-picker-group-label">' + escHtml(gLabel) + '</div>';
+        for (const m of items) {
+          const selected = m.id === selectedId;
+          const star = isRecommendedForRole(m, role) ? '<span class="star" title="Recommended for ' + escHtml(role) + '">★</span>' : '';
+          const price = m.pricing?.label ? escHtml(m.pricing.label) : (m.id === 'auto' ? 'Auto' : '—');
+          html +=
+            '<button type="button" class="model-picker-option' + (selected ? ' selected' : '') + '" data-id="' + escHtml(m.id) + '" data-idx="' + optionIdx + '" role="option" aria-selected="' + selected + '">' +
+            '<span class="model-picker-option-top">' +
+            '<span class="model-picker-option-name">' + escHtml(m.label) + star + '</span>' +
+            '<span class="model-picker-option-price">' + price + '</span>' +
+            '</span>' +
+            (m.description ? '<span class="model-picker-option-desc">' + escHtml(m.description) + '</span>' : '') +
+            '</button>';
+          optionIdx++;
+        }
+      }
+      listEl.innerHTML = html || '<div class="model-picker-empty">No models match your search</div>';
+      focusedIdx = -1;
+    }
+
+    function open() {
+      closeAllModelPickers(picker);
+      rootEl.classList.add('open');
+      trigger?.setAttribute('aria-expanded', 'true');
+      renderList(searchInput?.value || '');
+      setTimeout(() => searchInput?.focus(), 0);
+    }
+
+    function close() {
+      rootEl.classList.remove('open');
+      trigger?.setAttribute('aria-expanded', 'false');
+      if (searchInput) searchInput.value = '';
+      focusedIdx = -1;
+    }
+
+    const picker = { close, setSelected, open };
+
+    trigger?.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (rootEl.classList.contains('open')) close();
+      else open();
+    });
+
+    searchInput?.addEventListener('input', () => renderList(searchInput.value));
+    searchInput?.addEventListener('keydown', (e) => {
+      const opts = [...listEl.querySelectorAll('.model-picker-option')];
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        focusedIdx = Math.min(focusedIdx + 1, opts.length - 1);
+        opts.forEach((o, i) => o.classList.toggle('focused', i === focusedIdx));
+        opts[focusedIdx]?.scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        focusedIdx = Math.max(focusedIdx - 1, 0);
+        opts.forEach((o, i) => o.classList.toggle('focused', i === focusedIdx));
+        opts[focusedIdx]?.scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const pick = opts[focusedIdx] || opts[0];
+        if (pick) {
+          setSelected(pick.dataset.id);
+          close();
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        close();
+        trigger?.focus();
+      }
+    });
+
+    listEl?.addEventListener('click', (e) => {
+      const btn = e.target.closest('.model-picker-option');
+      if (!btn) return;
+      setSelected(btn.dataset.id);
+      close();
+      trigger?.focus();
+    });
+
+    return picker;
+  }
+
+  function populateModelSelects() {
+    const pmPickerRoot = document.getElementById('mission-pm-model-picker');
+    const engPickerRoot = document.getElementById('mission-eng-model-picker');
+    if (!pmPickerRoot || !engPickerRoot) return;
+
+    modelPickers.length = 0;
+    const pmPicker = createModelPicker(pmPickerRoot);
+    const engPicker = createModelPicker(engPickerRoot);
+    modelPickers.push(pmPicker, engPicker);
+
+    const pmModels = (modelCatalog.models || []).filter(m => modelMatchesRole(m, 'pm'));
+    const engModels = (modelCatalog.models || []).filter(m => modelMatchesRole(m, 'engineer'));
+
+    const pmDefault = modelCatalog.defaults?.pm
+      || pickModelDefault(pmModels, ['grok-4.3', 'auto', 'gpt-5.4-nano']);
+    const engDefault = modelCatalog.defaults?.engineer
+      || pickModelDefault(engModels, ['composer-2.5', 'auto', 'composer-2']);
+
+    pmPicker.setSelected(pmDefault);
+    engPicker.setSelected(engDefault);
+  }
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.model-picker')) closeAllModelPickers(null);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeAllModelPickers(null);
+  });
+
+  function scrollToBoard() {
+    document.getElementById('board-section-box')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async function toggleOpsLogs() {
+    const preview = document.getElementById('ops-log-preview');
+    if (!preview) return;
+    opsLogOpen = !opsLogOpen;
+    if (!opsLogOpen) {
+      preview.classList.remove('open');
+      preview.setAttribute('aria-hidden', 'true');
+      return;
+    }
+    try {
+      const res = await fetch('/api/supervisor/logs?lines=35');
+      const data = await res.json();
+      preview.textContent = data.tail?.trim() || '(Log empty or unavailable — run `roland bg-logs`)';
+      preview.classList.add('open');
+      preview.setAttribute('aria-hidden', 'false');
+    } catch {
+      preview.textContent = '(Could not load logs)';
+      preview.classList.add('open');
+    }
+  }
+
+  function renderOpsStatus() {
+    const section = document.getElementById('ops-status');
+    const badge   = document.getElementById('ops-badge');
+    const goalEl  = document.getElementById('ops-goal');
+    const metaEl  = document.getElementById('ops-meta');
+    const progWrap = document.getElementById('ops-progress-wrap');
+    const progFill = document.getElementById('ops-progress-fill');
+    const lastEl  = document.getElementById('ops-last');
+    const missionBox = document.getElementById('mission-section');
+    if (!section || !badge || !goalEl) return;
+
+    const sup = supervisorInfo;
+    const run = sup?.run;
+    const rec = sup?.record;
+    const alive = sup?.alive;
+    const active = isRunActive(runState) || sup?.missionActive || run?.active;
+
+    section.classList.toggle('running', active);
+    missionBox?.classList.toggle('mission-active', active);
+
+    if (active) {
+      badge.className = 'ops-badge active';
+      badge.textContent = '● Active';
+      const goal = runState?.goal || run?.goal || rec?.goal || missionMeta?.goal || 'Mission in progress';
+      goalEl.textContent = goal;
+      goalEl.title = goal;
+
+      const parts = [];
+      const statusLabels = {
+        planning: 'Planning', running: 'Running', reviewing: 'Reviewing',
+        synthesizing: 'Synthesizing', done: 'Done', error: 'Error',
+      };
+      if (alive && rec?.pid) parts.push('PID ' + rec.pid);
+      if (run?.status) parts.push(statusLabels[run.status] || run.status);
+      if (run?.currentWave) parts.push('Wave ' + run.currentWave);
+      if (run?.totalTasks) parts.push((run.completedTasks ?? 0) + '/' + run.totalTasks + ' tasks');
+      if (run?.startedAt) parts.push(elapsedSince(run.startedAt) + ' elapsed');
+      metaEl.innerHTML =
+        parts.map(p => '<span>' + p + '</span>').join('') +
+        ' <a href="#" id="ops-view-board">View Board</a>' +
+        (rec?.logFile ? ' · <a href="#" id="ops-view-logs">View Logs</a>' : '');
+
+      if (progWrap && progFill && (run?.totalTasks > 0 || runState?.totalTasks > 0)) {
+        const pct = run?.progressPct ?? (runState?.totalTasks
+          ? Math.min(Math.round((Math.min(runState.completedTasks, runState.totalTasks) / runState.totalTasks) * 100), 100)
+          : 0);
+        progWrap.style.display = 'block';
+        progFill.style.width = pct + '%';
+      } else if (progWrap) {
+        progWrap.style.display = 'none';
+      }
+    } else {
+      badge.className = 'ops-badge idle';
+      badge.textContent = 'Idle';
+      goalEl.textContent = 'No active background mission';
+      goalEl.removeAttribute('title');
+      metaEl.innerHTML = '<span>Ready for new orders</span> <a href="#" id="ops-view-board">View Board</a>';
+      if (progWrap) progWrap.style.display = 'none';
+      if (!opsLogOpen) {
+        document.getElementById('ops-log-preview')?.classList.remove('open');
+      }
+    }
+
+    document.getElementById('ops-view-board')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      scrollToBoard();
+    });
+    document.getElementById('ops-view-logs')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      toggleOpsLogs();
+    });
+
+    if (lastEl) {
+      const meta = missionMeta || sup?.missionMeta;
+      const lastRun = usageData.length
+        ? [...usageData].sort((a, b) => b.timestamp - a.timestamp)[0]
+        : null;
+
+      if (meta?.startedAt && !active) {
+        const label = meta.runName ? escHtml(meta.runName) : escHtml((meta.goal || '').slice(0, 60));
+        lastEl.innerHTML =
+          '<span>Last launch:</span> <strong>' + label + '</strong>' +
+          ' · ' + escHtml(timeAgo(meta.startedAt)) +
+          ' · <a href="#" id="ops-last-board">View Board</a>';
+      } else if (lastRun && !active) {
+        lastEl.innerHTML =
+          '<span>Last mission:</span> <strong>' + escHtml(lastRun.goal.slice(0, 55)) + (lastRun.goal.length > 55 ? '…' : '') + '</strong>' +
+          ' · ' + escHtml(formatDate(lastRun.timestamp) + ' ' + formatTime(lastRun.timestamp)) +
+          ' · <a href="#" id="ops-last-board">View Board</a>';
+      } else if (active && meta?.startedAt) {
+        lastEl.innerHTML =
+          '<span>Launched:</span> ' + escHtml(formatDate(meta.startedAt) + ' ' + formatTime(meta.startedAt)) +
+          (meta.runName ? ' · <strong>' + escHtml(meta.runName) + '</strong>' : '');
+      } else {
+        lastEl.innerHTML = '';
+      }
+
+      document.getElementById('ops-last-board')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        scrollToBoard();
+      });
+    }
+  }
+
+  function focusMissionGoal() {
+    if (activeTab !== 'overview') return;
+    const ta = document.getElementById('mission-goal');
+    if (ta && document.activeElement !== ta) {
+      try { ta.focus({ preventScroll: true }); } catch { ta.focus(); }
+    }
+  }
+
+  function setMissionStatus(kind, html) {
+    const el = document.getElementById('mission-status');
+    if (!el) return;
+    el.className = 'mission-status visible ' + (kind || '');
+    el.innerHTML = html;
+  }
+
+  function clearMissionStatus() {
+    const el = document.getElementById('mission-status');
+    if (!el) { return; }
+    el.className = 'mission-status';
+    el.innerHTML = '';
+  }
+
+  async function startMission() {
+    if (missionSubmitting) return;
+    const goalEl = document.getElementById('mission-goal');
+    const goal = (goalEl?.value || '').trim();
+    if (!goal) {
+      toast('Enter a mission objective first', 'warning');
+      goalEl?.focus();
+      return;
+    }
+
+    const btn = document.getElementById('btn-start-mission');
+    missionSubmitting = true;
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Launching…'; }
+    setMissionStatus('loading', '<span class="spinning">⏳</span> Starting background team mission…');
+
+    const payload = {
+      goal,
+      pmModel: document.getElementById('mission-pm-model')?.value,
+      engineerModel: document.getElementById('mission-eng-model')?.value,
+      priority: document.getElementById('mission-priority')?.value || 'P3',
+      runName: document.getElementById('mission-run-name')?.value?.trim() || '',
+      forceTeam: document.getElementById('mission-force-team')?.checked || false,
+      notify: document.getElementById('mission-notify')?.checked || false,
+      cleanup: document.getElementById('mission-cleanup')?.checked || false,
+    };
+
+    try {
+      const res = await fetch('/api/mission', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+
+      setMissionStatus(
+        'success',
+        '✅ Mission launched' +
+        (data.pid ? ` (PID ${data.pid})` : '') +
+        '. <a href="#" id="mission-board-link">View Command Board ↓</a> · ' +
+        '<a href="#" id="mission-refresh-link">Refresh status</a>'
+      );
+
+      document.getElementById('mission-board-link')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        document.getElementById('board-section-box')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      document.getElementById('mission-refresh-link')?.addEventListener('click', async (e) => {
+        e.preventDefault();
+        await refreshDashboard();
+      });
+
+      toast('Mission started in background', 'success');
+      missionMeta = {
+        goal,
+        runName: payload.runName || null,
+        startedAt: Date.now(),
+        pid: data.pid,
+      };
+      await Promise.all([pollRunState(), fetchSupervisor(), fetchProjectContext()]);
+      renderOpsStatus();
+      renderProjectContext();
+    } catch (e) {
+      setMissionStatus('error', '✕ ' + escHtml(e.message));
+      toast('Mission failed: ' + e.message, 'error');
+    } finally {
+      missionSubmitting = false;
+      if (btn) { btn.disabled = false; btn.textContent = '▶ Start Mission'; }
+    }
+  }
+
+  async function runBoardCleanup() {
+    const goal = (document.getElementById('mission-goal')?.value || '').trim();
+    if (!confirm('Archive stale board entries from prior missions?\n\nActive goal-relevant items are preserved.')) return;
+    try {
+      const res = await fetch('/api/board-cleanup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ goal, dryRun: false }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      toast('Board cleanup complete', 'success');
+      await fetchBoardStatus();
+      renderBoardPanel();
+    } catch (e) {
+      toast('Cleanup failed: ' + e.message, 'error');
+    }
+  }
+
+  async function refreshDashboard() {
+    await Promise.all([
+      fetchUsage(),
+      fetchRunState(),
+      fetchBoardStatus(),
+      fetchSupervisor(),
+      fetchProjectContext(),
+      fetchProjects(),
+      fetchMissionDag(),
+    ]);
+    renderAll();
+    if (activeTab === 'history') renderHistory();
+    if (activeTab === 'actions') { renderHitlActionsPanel(); renderRecentGoals(); }
+    updateLastUpdated();
+    toast('Dashboard refreshed', 'info');
+  }
+
+  document.getElementById('btn-start-mission')?.addEventListener('click', startMission);
+  document.getElementById('mission-goal')?.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      startMission();
+    }
+  });
+  document.getElementById('btn-qa-board')?.addEventListener('click', async () => {
+    await fetchBoardStatus();
+    renderBoardPanel();
+    document.getElementById('board-section-box')?.scrollIntoView({ behavior: 'smooth' });
+    toast('Board status updated', 'info');
+  });
+  document.getElementById('btn-qa-cleanup')?.addEventListener('click', runBoardCleanup);
+  document.getElementById('btn-qa-refresh')?.addEventListener('click', refreshDashboard);
+  document.getElementById('project-context-toggle')?.addEventListener('click', () => toggleProjectContextDetails());
+  document.getElementById('btn-project-switch')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openProjectSwitcher();
+  });
+  document.getElementById('btn-ops-project-switch')?.addEventListener('click', () => openProjectSwitcher());
+  document.getElementById('project-switcher-close')?.addEventListener('click', closeProjectSwitcher);
+  document.getElementById('project-switcher-backdrop')?.addEventListener('click', (e) => {
+    if (e.target?.id === 'project-switcher-backdrop') closeProjectSwitcher();
+  });
+  document.getElementById('project-switcher-search')?.addEventListener('input', (e) => {
+    renderProjectSwitcherList(e.target.value);
+  });
+  document.getElementById('project-switcher-list')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.project-modal-item');
+    if (!btn?.dataset.projectPath) return;
+    switchToProject(btn.dataset.projectPath);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && projectSwitcherOpen) closeProjectSwitcher();
+  });
+
   // ═══════════════════════════════════════════════════════════════════════════
   //  Tab Switching
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1150,6 +3286,7 @@
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + tab));
 
+    if (tab === 'overview') focusMissionGoal();
     if (tab === 'memory')  loadMemoryTab();
     if (tab === 'history') renderHistory();
     if (tab === 'actions') { renderHitlActionsPanel(); renderRecentGoals(); }
@@ -1607,10 +3744,576 @@
     el.innerHTML = '<div class="idle-state"><span>○</span><span>No command board data — run a team mission first</span></div>';
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  Mission Graph panel
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const DAG_STATUS_STYLE = {
+    pending:     { fill: 'rgba(136,136,170,0.12)', stroke: 'rgba(136,136,170,0.45)', icon: '○', label: 'Pending',  legendBg: 'rgba(136,136,170,0.25)' },
+    ready:       { fill: 'rgba(99,102,241,0.12)', stroke: 'rgba(99,102,241,0.45)', icon: '◎', label: 'Ready',    legendBg: 'rgba(99,102,241,0.28)' },
+    in_progress: { fill: 'rgba(99,102,241,0.22)', stroke: 'rgba(99,102,241,0.85)', icon: '→', label: 'In progress', legendBg: 'rgba(99,102,241,0.38)' },
+    done:        { fill: 'rgba(16,185,129,0.15)', stroke: 'rgba(16,185,129,0.55)', icon: '✓', label: 'Done',     legendBg: 'rgba(16,185,129,0.35)' },
+    blocked:     { fill: 'rgba(245,158,11,0.15)', stroke: 'rgba(245,158,11,0.65)', icon: '⏸', label: 'Blocked', legendBg: 'rgba(245,158,11,0.35)' },
+    skipped:     { fill: 'rgba(136,136,170,0.08)', stroke: 'rgba(136,136,170,0.3)', icon: '⚠', label: 'Skipped', legendBg: 'rgba(136,136,170,0.18)' },
+  };
+
+  const MISSION_GRAPH_RENDER_DEBOUNCE_MS = 180;
+
+  function scheduleMissionGraphRender() {
+    if (activeIntelTab !== 'graph') return;
+    clearTimeout(missionGraphRenderTimer);
+    missionGraphRenderTimer = setTimeout(() => renderMissionGraphPanel(), MISSION_GRAPH_RENDER_DEBOUNCE_MS);
+  }
+
+  function isMobileGraph() {
+    return window.matchMedia('(max-width: 640px)').matches;
+  }
+
+  function truncateTitle(title, max) {
+    if (!title) return '';
+    return title.length > max ? title.slice(0, max - 1) + '…' : title;
+  }
+
+  function nodeStatusChanged(nodeId, status) {
+    const prev = lastDagNodeStatuses[nodeId];
+    return prev !== undefined && prev !== status;
+  }
+
+  function snapshotDagStatuses(dag) {
+    const snap = {};
+    for (const n of dag.nodes) snap[n.id] = n.status;
+    lastDagNodeStatuses = snap;
+  }
+
+  function estimateNodeDuration(node, rt) {
+    if (node.completedAt && node.startedAt) return node.completedAt - node.startedAt;
+    if (rt?.completedAt && rt?.startedAt) return rt.completedAt - rt.startedAt;
+    if (node.startedAt && node.status === 'in_progress') return Date.now() - node.startedAt;
+    const est = node.metadata?.estimatedMinutes;
+    if (typeof est === 'number' && est > 0) return est * 60_000;
+    return null;
+  }
+
+  function renderDagLegend() {
+    const items = ['done', 'in_progress', 'ready', 'pending', 'blocked', 'skipped'];
+    const chips = items.map(key => {
+      const st = DAG_STATUS_STYLE[key];
+      return `<span><i style="background:${st.legendBg}">${st.icon}</i> ${st.label}</span>`;
+    }).join('');
+    return `<div class="dag-legend"><div class="dag-legend-title">Status legend</div>${chips}<span><i style="background:rgba(245,158,11,0.45);border-color:rgba(245,158,11,0.5)">—</i> Critical path</span></div>`;
+  }
+
+  function renderDagEmptyState() {
+    const msg = missionDagPayload?.message;
+    const isWaveOnly = !missionDagPayload?.dag;
+    return `
+      <div class="dag-empty-state">
+        <div class="dag-empty-icon">◇</div>
+        <h3>${isWaveOnly ? 'DAG planning not enabled for this mission' : 'No tasks in mission graph'}</h3>
+        <p>${isWaveOnly
+          ? 'Using wave mode — tasks run in parallel waves without an explicit dependency graph. Enable DAG planning with <code>ROLAND_MISSION_DAG=1</code> or launch a complex multi-step goal.'
+          : escHtml(msg || 'Start a team mission to populate the graph.')}</p>
+      </div>`;
+  }
+
+  function getMissionDag() {
+    return missionDagPayload?.dag ?? null;
+  }
+
+  function dagProgressPct(dag) {
+    const p = dag?.progress;
+    if (!p || !p.total) return 0;
+    return Math.round((p.done / p.total) * 100);
+  }
+
+  function computeDagLayers(nodes, edges) {
+    const ids = nodes.map(n => n.id);
+    const inDeg = new Map(ids.map(id => [id, 0]));
+    const adj = new Map(ids.map(id => [id, []]));
+    for (const e of edges) {
+      if (!adj.has(e.from) || !inDeg.has(e.to)) continue;
+      adj.get(e.from).push(e.to);
+      inDeg.set(e.to, (inDeg.get(e.to) || 0) + 1);
+    }
+    const layer = new Map(ids.map(id => [id, 0]));
+    const queue = ids.filter(id => (inDeg.get(id) || 0) === 0);
+    const visited = new Set();
+    while (queue.length) {
+      const id = queue.shift();
+      if (visited.has(id)) continue;
+      visited.add(id);
+      for (const next of adj.get(id) || []) {
+        layer.set(next, Math.max(layer.get(next) || 0, (layer.get(id) || 0) + 1));
+        const deg = (inDeg.get(next) || 0) - 1;
+        inDeg.set(next, deg);
+        if (deg <= 0) queue.push(next);
+      }
+    }
+    for (const id of ids) {
+      if (!visited.has(id)) layer.set(id, layer.get(id) || 0);
+    }
+    return layer;
+  }
+
+  function topologicalNodeOrder(nodes, edges) {
+    const layer = computeDagLayers(nodes, edges);
+    return [...nodes].sort((a, b) => {
+      const la = layer.get(a.id) || 0;
+      const lb = layer.get(b.id) || 0;
+      if (la !== lb) return la - lb;
+      return a.id.localeCompare(b.id);
+    });
+  }
+
+  function layoutDagNodes(dag) {
+    const NODE_W = 152;
+    const NODE_H = 58;
+    const GAP_X = 56;
+    const GAP_Y = 28;
+    const PAD = 24;
+    const layerMap = computeDagLayers(dag.nodes, dag.edges || []);
+    const layers = new Map();
+    for (const node of dag.nodes) {
+      const l = layerMap.get(node.id) || 0;
+      if (!layers.has(l)) layers.set(l, []);
+      layers.get(l).push(node);
+    }
+    for (const [, list] of layers) {
+      list.sort((a, b) => a.id.localeCompare(b.id));
+    }
+    const positions = new Map();
+    let maxLayer = 0;
+    let maxRows = 1;
+    for (const [l, list] of [...layers.entries()].sort((a, b) => a[0] - b[0])) {
+      maxLayer = Math.max(maxLayer, l);
+      maxRows = Math.max(maxRows, list.length);
+      list.forEach((node, idx) => {
+        positions.set(node.id, {
+          x: PAD + l * (NODE_W + GAP_X),
+          y: PAD + idx * (NODE_H + GAP_Y),
+          w: NODE_W,
+          h: NODE_H,
+        });
+      });
+    }
+    const width = PAD * 2 + (maxLayer + 1) * NODE_W + maxLayer * GAP_X;
+    const height = PAD * 2 + maxRows * NODE_H + (maxRows - 1) * GAP_Y;
+    return { positions, width, height, NODE_W, NODE_H };
+  }
+
+  function edgePath(from, to, positions) {
+    const a = positions.get(from);
+    const b = positions.get(to);
+    if (!a || !b) return '';
+    const x1 = a.x + a.w;
+    const y1 = a.y + a.h / 2;
+    const x2 = b.x;
+    const y2 = b.y + b.h / 2;
+    const mx = (x1 + x2) / 2;
+    return `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
+  }
+
+  function isCriticalEdge(dag, from, to) {
+    const path = dag.criticalPath || [];
+    for (let i = 0; i < path.length - 1; i++) {
+      if (path[i] === from && path[i + 1] === to) return true;
+    }
+    return false;
+  }
+
+  function runTaskForNode(nodeId) {
+    return (runState?.tasks || []).find(t => t.id === nodeId) || null;
+  }
+
+  function openMissionNodeDrawer(dag, nodeId) {
+    const node = dag.nodes.find(n => n.id === nodeId);
+    if (!node) return;
+    selectedMissionNodeId = nodeId;
+    const drawer = document.getElementById('mission-node-drawer');
+    const titleEl = document.getElementById('mission-drawer-title');
+    const idEl = document.getElementById('mission-drawer-id');
+    const bodyEl = document.getElementById('mission-node-drawer-content');
+    if (!drawer || !bodyEl) return;
+
+    const st = DAG_STATUS_STYLE[node.status] || DAG_STATUS_STYLE.pending;
+    const rt = runTaskForNode(nodeId);
+    const downstream = (dag.edges || []).filter(e => e.from === nodeId).map(e => e.to);
+    const onCritical = (dag.criticalPath || []).includes(nodeId);
+    const dur = estimateNodeDuration(node, rt);
+    const durLabel = dur != null
+      ? (node.status === 'in_progress' ? `Elapsed: ${formatDuration(dur)}` : `Duration: ${formatDuration(dur)}`)
+      : '—';
+
+    if (titleEl) titleEl.textContent = node.title || node.id;
+    if (idEl) idEl.textContent = node.id;
+
+    bodyEl.innerHTML = `
+      <div class="drawer-status-pill" style="background:${st.fill};border-color:${st.stroke};color:var(--fg)">
+        <span>${st.icon}</span><span>${st.label}</span>
+        ${onCritical ? '<span style="color:var(--amber)">· Critical path</span>' : ''}
+      </div>
+      <div class="drawer-field">
+        <div class="drawer-field-label">Agent</div>
+        <div class="drawer-field-value">${escHtml(node.agent)}</div>
+      </div>
+      <div class="drawer-field">
+        <div class="drawer-field-label">Description</div>
+        <div class="drawer-field-value">${escHtml(node.description || 'No description')}</div>
+      </div>
+      <div class="drawer-field">
+        <div class="drawer-field-label">Depends on</div>
+        <div class="drawer-field-value">${node.dependsOn?.length ? node.dependsOn.map(escHtml).join(', ') : '—'}</div>
+      </div>
+      ${downstream.length ? `<div class="drawer-field"><div class="drawer-field-label">Unlocks</div><div class="drawer-field-value">${downstream.map(escHtml).join(', ')}</div></div>` : ''}
+      <div class="drawer-field">
+        <div class="drawer-field-label">Priority · Wave · Time</div>
+        <div class="drawer-field-value">${escHtml(node.priority || '—')} · ${node.wave != null ? 'Wave ' + node.wave : '—'} · ${durLabel}</div>
+      </div>
+      ${rt ? `<div class="drawer-field"><div class="drawer-field-label">Runtime status</div><div class="drawer-field-value">${escHtml(rt.status)}</div></div>` : ''}
+      <div class="drawer-actions">
+        <button type="button" class="detail-link-btn" data-action="show-board">Command Board</button>
+        ${rt?.outputPreview ? `<button type="button" class="detail-link-btn" data-action="show-output">Output preview</button>` : ''}
+      </div>`;
+
+    const alreadyOpen = drawer.classList.contains('open');
+    drawer.hidden = false;
+    drawer.setAttribute('aria-hidden', 'false');
+    if (!alreadyOpen) requestAnimationFrame(() => drawer.classList.add('open'));
+    else drawer.classList.add('open');
+
+    bodyEl.querySelector('[data-action="show-board"]')?.addEventListener('click', () => {
+      closeMissionNodeDrawer();
+      switchIntelTab('board');
+    });
+    bodyEl.querySelector('[data-action="show-output"]')?.addEventListener('click', () => {
+      if (rt?.outputPreview) toast(rt.outputPreview.slice(0, 320), 'info', 6000);
+    });
+
+    // Highlight selected node in graph without full re-render
+    document.querySelectorAll('.dag-node, .dag-linear-node').forEach(el => {
+      el.classList.toggle('selected', el.getAttribute('data-node-id') === nodeId);
+    });
+  }
+
+  function closeMissionNodeDrawer() {
+    const drawer = document.getElementById('mission-node-drawer');
+    if (!drawer) return;
+    drawer.classList.remove('open');
+    drawer.setAttribute('aria-hidden', 'true');
+    setTimeout(() => { if (!drawer.classList.contains('open')) drawer.hidden = true; }, 280);
+    document.querySelectorAll('.dag-node.selected, .dag-linear-node.selected').forEach(el => el.classList.remove('selected'));
+  }
+
+  document.getElementById('mission-node-drawer')?.addEventListener('click', (e) => {
+    if (e.target.closest('[data-action="close-drawer"]')) closeMissionNodeDrawer();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeMissionNodeDrawer();
+  });
+
+  function bindMissionGraphInteractions(dag) {
+    const panel = document.getElementById('mission-graph-panel');
+    if (!panel) return;
+
+    panel.querySelectorAll('.dag-node, .dag-linear-node').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = el.getAttribute('data-node-id');
+        if (!id) return;
+        openMissionNodeDrawer(dag, id);
+      });
+    });
+
+    panel.querySelector('[data-action="fit-dag"]')?.addEventListener('click', () => {
+      dagZoomController?.fitToView();
+    });
+  }
+
+  function initDagZoomPan(viewport, layer, svgW, svgH) {
+    if (!viewport || !layer) return null;
+
+    let scale = dagViewState.scale || 1;
+    let tx = dagViewState.tx || 0;
+    let ty = dagViewState.ty || 0;
+    let pinching = false;
+    let lastPinchDist = 0;
+    let panning = false;
+    let panStart = { x: 0, y: 0, sl: 0, st: 0 };
+
+    function clampScale(s) {
+      return Math.min(3, Math.max(0.35, s));
+    }
+
+    function applyTransform() {
+      layer.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+      dagViewState = { scale, tx, ty };
+    }
+
+    function fitToView() {
+      const pad = 12;
+      const vw = Math.max(viewport.clientWidth, 1);
+      const vh = Math.max(viewport.clientHeight, 1);
+      scale = clampScale(Math.min((vw - pad * 2) / svgW, (vh - pad * 2) / svgH, 1));
+      tx = pad + Math.max(0, (vw - svgW * scale) / 2);
+      ty = pad + Math.max(0, (vh - svgH * scale) / 2);
+      applyTransform();
+      viewport.scrollLeft = 0;
+      viewport.scrollTop = 0;
+    }
+
+    function zoomAt(factor, cx, cy) {
+      const prev = scale;
+      scale = clampScale(scale * factor);
+      const ratio = scale / prev;
+      tx = cx - (cx - tx) * ratio;
+      ty = cy - (cy - ty) * ratio;
+      applyTransform();
+    }
+
+    applyTransform();
+
+    viewport.addEventListener('wheel', (e) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const rect = viewport.getBoundingClientRect();
+      const cx = e.clientX - rect.left + viewport.scrollLeft;
+      const cy = e.clientY - rect.top + viewport.scrollTop;
+      zoomAt(e.deltaY > 0 ? 0.92 : 1.08, cx, cy);
+    }, { passive: false });
+
+    viewport.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || e.target.closest('.dag-node')) return;
+      if (!e.altKey) return;
+      panning = true;
+      panStart = { x: e.clientX, y: e.clientY, sl: viewport.scrollLeft, st: viewport.scrollTop };
+      viewport.setPointerCapture(e.pointerId);
+    });
+    viewport.addEventListener('pointermove', (e) => {
+      if (!panning) return;
+      viewport.scrollLeft = panStart.sl - (e.clientX - panStart.x);
+      viewport.scrollTop = panStart.st - (e.clientY - panStart.y);
+    });
+    viewport.addEventListener('pointerup', () => { panning = false; });
+    viewport.addEventListener('pointercancel', () => { panning = false; });
+
+    viewport.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        pinching = true;
+        const [a, b] = e.touches;
+        lastPinchDist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      }
+    }, { passive: true });
+
+    viewport.addEventListener('touchmove', (e) => {
+      if (!pinching || e.touches.length !== 2) return;
+      e.preventDefault();
+      const [a, b] = e.touches;
+      const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      if (lastPinchDist > 0) {
+        const rect = viewport.getBoundingClientRect();
+        const cx = (a.clientX + b.clientX) / 2 - rect.left + viewport.scrollLeft;
+        const cy = (a.clientY + b.clientY) / 2 - rect.top + viewport.scrollTop;
+        zoomAt(dist / lastPinchDist, cx, cy);
+      }
+      lastPinchDist = dist;
+    }, { passive: false });
+
+    viewport.addEventListener('touchend', () => {
+      pinching = false;
+      lastPinchDist = 0;
+    });
+
+    return { fitToView };
+  }
+
+  function renderGraphToolbar(dag, showFit) {
+    const pct = dagProgressPct(dag);
+    const p = dag.progress || {};
+    const isFlat = dag.planningMode === 'flat';
+    return `
+      <div class="mission-graph-toolbar">
+        <div class="mission-graph-summary">
+          <span><strong>${p.done ?? 0}/${p.total ?? 0}</strong> done (${pct}%)</span>
+          <span class="mission-graph-badge ${isFlat ? 'mode-flat' : 'mode-dag'}">${isFlat ? 'Wave mode' : 'DAG mode'}</span>
+          ${dag.criticalPath?.length ? `<span class="mission-graph-badge critical">Critical path: ${dag.criticalPath.length} tasks</span>` : ''}
+          ${p.inProgress ? `<span>${p.inProgress} active</span>` : ''}
+          ${p.blocked ? `<span style="color:var(--amber)">${p.blocked} blocked</span>` : ''}
+        </div>
+        ${showFit ? `<div class="mission-graph-controls"><button type="button" class="btn-dag-fit" data-action="fit-dag" title="Fit graph to viewport">⊡ Fit to View</button></div>` : ''}
+      </div>`;
+  }
+
+  function renderLinearDagView(dag) {
+    const critical = new Set(dag.criticalPath || []);
+    const mobile = isMobileGraph();
+    const ordered = [...dag.nodes].sort((a, b) => {
+      const wa = a.wave ?? 999;
+      const wb = b.wave ?? 999;
+      if (wa !== wb) return wa - wb;
+      return a.id.localeCompare(b.id);
+    });
+    const chips = [];
+    ordered.forEach((node, idx) => {
+      const st = DAG_STATUS_STYLE[node.status] || DAG_STATUS_STYLE.pending;
+      const crit = critical.has(node.id) ? ' critical' : '';
+      const changed = nodeStatusChanged(node.id, node.status) ? ' status-changed' : '';
+      const titleHint = mobile ? ` title="${escHtml(node.title)}"` : '';
+      const titleSpan = mobile ? '' : `<span style="color:var(--muted)">${escHtml(truncateTitle(node.title, 18))}</span>`;
+      chips.push(
+        `<button type="button" class="dag-linear-node${crit}${changed}" data-node-id="${escHtml(node.id)}"${titleHint}>` +
+        `<span>${st.icon}</span><span>${escHtml(node.id)}</span>${titleSpan}<span style="color:var(--muted)">${escHtml(node.agent)}</span></button>`
+      );
+      if (idx < ordered.length - 1) {
+        const next = ordered[idx + 1];
+        const sep = (node.wave ?? 0) < (next.wave ?? 0) ? '→' : '·';
+        chips.push(`<span class="dag-linear-arrow">${sep}</span>`);
+      }
+    });
+    return `
+      ${renderGraphToolbar(dag, false)}
+      <div class="dag-linear">
+        <div class="dag-linear-msg">DAG planning not enabled for this mission — using wave mode. Tasks shown in wave order; tap a node for details.</div>
+        <div class="dag-linear-track">${chips.join('')}</div>
+      </div>
+      ${renderDagLegend()}`;
+  }
+
+  function renderSvgDagView(dag) {
+    const { positions, width, height } = layoutDagNodes(dag);
+    const critical = new Set(dag.criticalPath || []);
+    const mobile = isMobileGraph();
+    const titleMax = mobile ? 0 : 22;
+
+    let edgesSvg = '';
+    for (const e of dag.edges || []) {
+      const d = edgePath(e.from, e.to, positions);
+      if (!d) continue;
+      const crit = isCriticalEdge(dag, e.from, e.to) ? ' critical' : '';
+      edgesSvg += `<path class="dag-edge${crit}" d="${d}"/>`;
+    }
+
+    let nodesSvg = '';
+    for (const node of dag.nodes) {
+      const pos = positions.get(node.id);
+      if (!pos) continue;
+      const st = DAG_STATUS_STYLE[node.status] || DAG_STATUS_STYLE.pending;
+      const onCrit = critical.has(node.id);
+      const changed = nodeStatusChanged(node.id, node.status) ? ' status-changed' : '';
+      const title = titleMax ? truncateTitle(node.title, titleMax) : '';
+      nodesSvg += `
+        <g class="dag-node${onCrit ? ' critical' : ''}${changed}" data-node-id="${escHtml(node.id)}" transform="translate(${pos.x},${pos.y})">
+          <title>${escHtml(node.title)} · ${escHtml(node.agent)}</title>
+          <rect width="${pos.w}" height="${pos.h}" fill="${st.fill}" stroke="${onCrit ? '#f59e0b' : st.stroke}"/>
+          <text class="dag-node-status" x="10" y="17" fill="${st.stroke}">${st.icon}</text>
+          <text class="dag-node-label" x="26" y="17">${escHtml(node.id)}</text>
+          ${title ? `<text class="dag-node-sub dag-node-title" x="10" y="34">${escHtml(title)}</text>` : ''}
+          <text class="dag-node-sub dag-node-meta" x="10" y="${title ? 48 : 36}">${escHtml(node.agent)} · ${escHtml(node.priority || '')}</text>
+        </g>`;
+    }
+
+    return `
+      ${renderGraphToolbar(dag, true)}
+      <div class="mission-graph-viewport" id="dag-viewport">
+        <div class="dag-zoom-layer" id="dag-zoom-layer" style="width:${width}px;height:${height}px">
+          <svg class="mission-graph-svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Mission task dependency graph">
+            <defs>
+              <marker id="dag-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+                <path d="M0,0 L7,3 L0,6 Z" fill="rgba(136,136,170,0.55)"/>
+              </marker>
+              <marker id="dag-arrow-critical" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+                <path d="M0,0 L7,3 L0,6 Z" fill="#f59e0b"/>
+              </marker>
+            </defs>
+            ${edgesSvg}
+            ${nodesSvg}
+          </svg>
+        </div>
+      </div>
+      ${renderDagLegend()}`;
+  }
+
+  function renderMissionGraphPanel() {
+    const el = document.getElementById('mission-graph-panel');
+    if (!el || activeIntelTab !== 'graph') return;
+
+    const dag = getMissionDag();
+    if (!dag || !Array.isArray(dag.nodes) || dag.nodes.length === 0) {
+      el.innerHTML = renderDagEmptyState();
+      dagZoomController = null;
+      return;
+    }
+
+    const useLinear = dag.planningMode === 'flat' || !(dag.edges || []).length;
+    const drawerWasOpen = selectedMissionNodeId && document.getElementById('mission-node-drawer')?.classList.contains('open');
+    if (dag.runId && dag.runId !== lastDagRunId) {
+      dagViewState = { scale: 1, tx: 0, ty: 0 };
+      lastDagRunId = dag.runId;
+    }
+
+    el.innerHTML = useLinear ? renderLinearDagView(dag) : renderSvgDagView(dag);
+    bindMissionGraphInteractions(dag);
+    snapshotDagStatuses(dag);
+
+    if (!useLinear) {
+      const viewport = document.getElementById('dag-viewport');
+      const layer = document.getElementById('dag-zoom-layer');
+      const layout = layoutDagNodes(dag);
+      const isFirstRender = dagViewState.scale === 1 && dagViewState.tx === 0 && dagViewState.ty === 0;
+      dagZoomController = initDagZoomPan(viewport, layer, layout.width, layout.height);
+      if (isFirstRender) dagZoomController?.fitToView();
+    } else {
+      dagZoomController = null;
+    }
+
+    if (drawerWasOpen && selectedMissionNodeId) {
+      openMissionNodeDrawer(dag, selectedMissionNodeId);
+    }
+  }
+
+  async function activateMissionGraphTab() {
+    missionGraphEverOpened = true;
+    if (!missionDagPayload) await fetchMissionDag();
+    renderMissionGraphPanel();
+  }
+
+  function switchIntelTab(tab) {
+    activeIntelTab = tab;
+    document.querySelectorAll('.intel-tab').forEach(btn => {
+      const on = btn.dataset.intel === tab;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    document.querySelectorAll('.intel-panel').forEach(panel => {
+      const on = panel.id === `intel-panel-${tab}`;
+      panel.classList.toggle('active', on);
+      panel.hidden = !on;
+    });
+    if (tab === 'graph') activateMissionGraphTab();
+    else closeMissionNodeDrawer();
+  }
+
+  document.querySelectorAll('.intel-tab').forEach(btn => {
+    btn.addEventListener('click', () => switchIntelTab(btn.dataset.intel || 'board'));
+  });
+
   document.getElementById('btn-refresh-board')?.addEventListener('click', async () => {
-    await fetchBoardStatus();
-    renderBoardPanel();
-    updateLastUpdated();
+    const btn = document.getElementById('btn-refresh-board');
+    btn?.classList.add('spinning');
+    btn?.setAttribute('disabled', 'true');
+    try {
+      const fetches = [fetchBoardStatus()];
+      if (activeIntelTab === 'graph' || missionGraphEverOpened) fetches.push(fetchMissionDag());
+      await Promise.all(fetches);
+      renderBoardPanel();
+      if (activeIntelTab === 'graph') renderMissionGraphPanel();
+      updateLastUpdated();
+      toast('Mission intel updated', 'success', 2800);
+    } catch (e) {
+      toast('Refresh failed', 'error');
+    } finally {
+      btn?.classList.remove('spinning');
+      btn?.removeAttribute('disabled');
+    }
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1619,10 +4322,13 @@
 
   function renderAll() {
     const filtered = filterRuns(usageData, period);
+    renderProjectContext();
     renderLiveIndicator();
     renderCards();
     renderLiveStatus();
+    renderOpsStatus();
     renderBoardPanel();
+    scheduleMissionGraphRender();
     renderRecentRuns();
     renderTokensChart(filtered);
     renderModelChart(filtered);
@@ -2014,11 +4720,15 @@
   // ═══════════════════════════════════════════════════════════════════════════
 
   async function pollRunState() {
-    await Promise.all([fetchRunState(), fetchBoardStatus()]);
+    const fetches = [fetchRunState(), fetchBoardStatus(), fetchSupervisor()];
+    if (missionGraphEverOpened && activeIntelTab === 'graph') fetches.push(fetchMissionDag());
+    await Promise.all(fetches);
     renderLiveIndicator();
     renderCards();
     renderLiveStatus();
+    renderOpsStatus();
     renderBoardPanel();
+    scheduleMissionGraphRender();
     renderRecentRuns();
     if (activeTab === 'actions') renderHitlActionsPanel();
     if (activeTab === 'history') renderHistory();
@@ -2121,8 +4831,18 @@
 
   // Initial load
   (async () => {
-    await Promise.all([fetchUsage(), fetchRunState(), fetchBoardStatus()]);
+    await Promise.all([
+      fetchUsage(),
+      fetchRunState(),
+      fetchBoardStatus(),
+      fetchModels(),
+      fetchSupervisor(),
+      fetchProjectContext(),
+      fetchProjects(),
+    ]);
+    populateModelSelects();
     renderAll();
+    focusMissionGoal();
   })();
 
   // Start polling intervals (fast + slow)

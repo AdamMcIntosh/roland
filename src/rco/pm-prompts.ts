@@ -1,7 +1,7 @@
 /**
  * Lead PM prompts for team-mode orchestration.
  *
- * The Lead PM runs on gpt-5.4-nano and acts as Engineering Manager.
+ * The Lead PM runs on grok-4.3 (or ROLAND_PM_MODEL override) and acts as Engineering Manager.
  * It never writes code — it decomposes goals, dispatches tasks, reviews
  * outputs, and synthesizes results. Three prompts cover the full PM loop:
  *
@@ -34,6 +34,8 @@ export interface PlanningContext {
   projectKnowledge?: string;
   /** Keyword-scored excerpt from `.roland/command-blackboard.md` (UNSC mission state). */
   commandBlackboard?: string;
+  /** When true, Lead PM receives DAG decomposition instructions (complex goals or ROLAND_MISSION_DAG=1). */
+  dagPlanningEnabled?: boolean;
 }
 
 export interface SynthesisContext extends PlanningContext {
@@ -44,7 +46,28 @@ export interface SynthesisContext extends PlanningContext {
  * Planning prompt: the Lead PM reads the goal, the current Blackboard, and
  * the team roster, then outputs a structured task plan as a JSON code block.
  */
+const DAG_PLANNING_SECTION = `
+## DAG Mission Planning (enabled for this goal)
+
+Structure this run as an explicit **Directed Acyclic Graph (DAG)** of tasks:
+
+- Each task is a **node**; \`dependsOn\` defines **directed edges** (upstream → downstream).
+- Nodes whose dependencies are all complete may run **in parallel** in the same wave.
+- Use \`dependsOn\` for every hard sequencing requirement — do not rely on task order in the JSON array.
+- Identify the **critical path** (longest dependency chain) in \`dagNotes\`.
+- List **parallel lanes** in \`dagNotes\` when multiple nodes share the same upstream.
+
+In your JSON plan set \`"planningMode": "dag"\` and include \`dagNotes\` with:
+- Critical path: \`task-1 → task-2 → …\`
+- Parallel lanes after each merge point (if any)
+- Failure recovery: which downstream nodes are blocked if a critical-path node fails
+
+For simple goals with ≤2 tasks and no branching, you may use \`"planningMode": "flat"\` instead — the orchestrator still tracks dependencies via \`dependsOn\`.
+`;
+
 export function buildLeadPMPlanningPrompt(ctx: PlanningContext): string {
+  const dagSection = ctx.dagPlanningEnabled ? `${DAG_PLANNING_SECTION}\n---\n\n` : '';
+
   const rosterList = ctx.roster
     .filter((a) => {
       const n = (a.name ?? '').toLowerCase();
@@ -95,7 +118,7 @@ ${ctx.inboxMessages ? `---\n\n## Your Inbox\n\n${ctx.inboxMessages}\n` : ''}
 
 ---
 
-## Task Scoping Rules
+${dagSection}## Task Scoping Rules
 
 Follow these rules **before writing a single task**. Violating a HARD RULE is a planning error.
 
@@ -285,6 +308,28 @@ Omit only for trivial one-line edits — and state why in \`pmNotes\`.
 
 ---
 
+### HARD RULE — Vanguard test quality mandate
+
+Every \`test-author\` task \`description\` MUST include this block verbatim:
+
+\`\`\`
+⚠️ VANGUARD TEST QUALITY — MANDATORY:
+1. **Pattern adherence:** Read 2–3 peer test files or smoke scripts (e.g. scripts/test-*.mjs, sibling *.test.ts) before writing. Mirror structure, imports, mocks, and assertion style — extend, do not reinvent.
+2. **Assumptions first:** Open output with ## Assumptions — goal, files, done-when, Patterns (peers cited), Pipeline scope (logging/CORS/errors via HTTP), Edge cases.
+3. **Wired path:** Tests hit the app through HTTP (supertest/fetch/WebApplicationFactory) — not isolated helper unit tests alone. Middleware pipeline must be exercised when in scope.
+4. **Redaction & correlation:** For request logging, send Authorization/Cookie headers and assert [Redacted] in emitted log JSON; assert reqId/requestId/traceId when implementation provides them.
+5. **Error paths:** Cover 4xx/5xx with structured error bodies — no stack traces or raw exception text in client responses.
+6. **Author handoff:** End with ## Vanguard — Author Handoff — exact test file paths, scoped run command (npx vitest run … or node scripts/test-….mjs), coverage intent, preflight notes.
+\`\`\`
+
+Omit only for pure documentation tasks with zero test work — and state why in \`pmNotes\`.
+
+Every \`test-executor\` task \`description\` MUST remind:
+
+> "Run only the scoped command from test-author's ## Vanguard — Author Handoff. Triage failures: implementation bug → BLOCKER to sparrow; test bug → BLOCKER to test-author. Report pass/fail counts and file:line for every failure."
+
+---
+
 ### HARD RULE — keep tests in sync with implementation changes
 
 Any task that fixes or changes implementation behavior MUST also update or remove test assertions that relied on the old behavior — in the same task, or in an explicit follow-up \`test-author\` task with \`dependsOn\` pointing at the executor task. Never leave a passing implementation alongside a test that asserts old (incorrect) behavior.
@@ -366,9 +411,13 @@ One line: \`"N tasks because: [one clause per task explaining why it cannot be m
       "priority": "medium"
     }
   ],
+  "planningMode": "dag",
+  "dagNotes": "Critical path: task-1 → task-2. Parallel: none.",
   "pmNotes": "Blackboard cleanup: [stale keys or 'none']. Sequencing rationale. Deferred work as follow-up roland team commands."
 }
 \`\`\`
+
+Set \`planningMode\` to \`"dag"\` when using DAG decomposition above, or \`"flat"\` for simple linear plans (default if omitted). Include \`dagNotes\` when \`planningMode\` is \`"dag"\`.
 
 Agent names must match your roster exactly. Use lower-kebab-case (e.g. \`executor\`, \`architect\`, \`test-author\`, \`test-executor\`, \`doc-writer\`).
 `;
@@ -627,6 +676,9 @@ Answer each question explicitly. If you cannot answer confidently, that item bec
 
 **Testing:**
 - [ ] Are tests present for the wired path (not just isolated unit tests of helpers)?
+- [ ] Do tests exercise the middleware pipeline (request logging, CORS, error handling) via HTTP when those layers were in scope?
+- [ ] Are redaction/correlation assertions present for logging tests (Authorization/Cookie → \`[Redacted]\`, reqId/traceId when applicable)?
+- [ ] Did test-author end with \`## Vanguard — Author Handoff\` (exact files + scoped run command)?
 - [ ] Did test-executor complete without failures? (If not, the run is NOT synthesis-ready — list failing tests.)
 - [ ] Are test assertions consistent with the implementation that was delivered?
 
@@ -879,6 +931,7 @@ For **every executor task** in this wave, answer these questions before choosing
 2. **Are production hardening items present?** Check: EF Core migrations committed, no hardcoded secrets, input validation returns ProblemDetails, rate limiting applied, ILogger<T> structured logging in place, CancellationToken propagated, all error paths return ProblemDetails. **Skip this check for minimal/local tasks** (comment edits, one-line changes) unless the wave explicitly delivered a new API or service.
 3. **Are tests covering the wired path?** A test that only unit-tests a helper in isolation does not prove the endpoint works.
 4. **Sparrow quality bar met?** Did the executor open with \`## Assumptions\` (Patterns + Edge cases cited)? Mirror peer files instead of new conventions? Include guard clauses / safe header handling where inputs are read? Use structured logging with child logger + durationMs when logging was in scope? For pino-http: are custom \`serializers\` wired on \`pinoHttp()\` options (not only the parent logger) so redaction runs at emission time — smoke script must assert \`[Redacted]\` for Authorization/Cookie? End with \`## Sparrow — Task Complete\` including Wiring and Defensive?
+5. **Vanguard quality bar met?** (test tasks only) Did test-author open with \`## Assumptions\` citing peer smoke/test patterns? Do tests hit the wired HTTP pipeline (not helpers-only)? Are redaction/correlation assertions present when logging was in scope? Are CORS preflight, error paths, and malformed-header edge cases covered? Did test-author end with \`## Vanguard — Author Handoff\` (exact paths + scoped command)? Did test-executor run that command and report pass/fail with triage?
 
 If **any answer is "no" or "unclear"**, you MUST respond with \`"decision": "adjust"\` and spawn a follow-up executor task to complete the wiring. Partial delivery is a release blocker.
 
