@@ -36,6 +36,7 @@
 import http from 'http';
 import fs   from 'fs';
 import path from 'path';
+import { randomUUID } from 'crypto';
 import { spawn, execSync } from 'child_process';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { WebSocketServer } from 'ws';
@@ -46,6 +47,29 @@ import {
 } from '../dist/rco/cursor-models.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// ── Structured logging (production-friendly prefixes) ─────────────────────────
+
+function logTs() { return new Date().toISOString(); }
+
+/** Server lifecycle and static asset messages */
+function logDashboard(msg, detail) {
+  if (detail !== undefined) console.log(`[DASHBOARD] ${logTs()} ${msg}`, detail);
+  else console.log(`[DASHBOARD] ${logTs()} ${msg}`);
+}
+
+/** Mission spawn, blackboard writes, supervisor state */
+function logMission(msg, detail) {
+  if (detail !== undefined) console.log(`[MISSION] ${logTs()} ${msg}`, detail);
+  else console.log(`[MISSION] ${logTs()} ${msg}`);
+}
+
+/** HTTP API request/response tracing for mission-related routes */
+function logApi(method, route, msg, detail) {
+  const line = `[API] ${logTs()} ${method} ${route} — ${msg}`;
+  if (detail !== undefined) console.log(line, detail);
+  else console.log(line);
+}
 
 // ── CLI args ──────────────────────────────────────────────────────────────────
 
@@ -462,6 +486,63 @@ function buildMissionGoal(rawGoal, { priority, runName, forceTeam }) {
   if (forceTeam) parts.push('force team:');
   if (parts.length) goal = `${parts.join(' ')} ${goal}`.trim();
   return goal;
+}
+
+/** Read blackboard.json as an array — always returns an array. */
+function readBlackboardEntries() {
+  const bbPath = path.join(activeStateDir, 'blackboard.json');
+  const raw = readJson(bbPath, []);
+  return Array.isArray(raw) ? raw : [];
+}
+
+/**
+ * Persist blackboard.json synchronously with mkdir + error handling.
+ * Throws on write failure so callers can surface a 500 to the client.
+ */
+function writeBlackboardEntries(entries) {
+  const bbPath = path.join(activeStateDir, 'blackboard.json');
+  fs.mkdirSync(activeStateDir, { recursive: true });
+  try {
+    fs.writeFileSync(bbPath, JSON.stringify(entries, null, 2), 'utf-8');
+  } catch (e) {
+    logMission(`Failed to write blackboard.json: ${e.message}`, { path: bbPath, count: entries.length });
+    throw e;
+  }
+}
+
+/** Record a dashboard mission launch on the blackboard for immediate UI visibility. */
+function appendMissionLaunchEntry({ goal, runName, priority, pid }) {
+  const entries = readBlackboardEntries();
+  const beforeCount = entries.filter(e => e.status !== 'archived').length;
+  const now = Date.now();
+  const title = runName?.trim()
+    ? `Mission launched: ${runName.trim()}`
+    : 'Mission launched from dashboard';
+
+  entries.push({
+    id: randomUUID(),
+    type: 'decision',
+    title,
+    content: [
+      'Dashboard started a background team mission.',
+      `Goal: ${goal}`,
+      `Priority: ${priority || 'P3'}`,
+      pid ? `Supervisor PID: ${pid}` : null,
+    ].filter(Boolean).join('\n'),
+    status: 'done',
+    author: 'dashboard',
+    priority: priority === 'P1' ? 'critical' : priority === 'P2' ? 'high' : 'medium',
+    tags: ['mission-launch', 'dashboard'],
+    relatedIds: [],
+    rev: 1,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  writeBlackboardEntries(entries);
+  const afterCount = entries.filter(e => e.status !== 'archived').length;
+  logMission(`Blackboard updated for mission launch`, { beforeCount, afterCount, title });
+  return { beforeCount, afterCount, title };
 }
 
 async function loadBoardCleanupModule() {
@@ -1030,7 +1111,10 @@ function readMissionDagPayload() {
 
 // ── File watcher (debounced push) ─────────────────────────────────────────────
 
-const WATCH_TARGETS = new Set(['run-state.json', 'hitl-state.json', 'memory.md', 'hitl.json', 'blackboard.json', 'command-blackboard.md', 'mission-dag.json']);
+const WATCH_TARGETS = new Set([
+  'run-state.json', 'hitl-state.json', 'memory.md', 'hitl.json',
+  'blackboard.json', 'command-blackboard.md', 'mission-dag.json', 'mission-meta.json',
+]);
 
 setupStateWatcher();
 
@@ -1049,6 +1133,15 @@ const server = http.createServer(async (req, res) => {
   if (url === '/api/run-state' && method === 'GET') {
     const file = path.join(activeStateDir, 'run-state.json');
     fs.readFile(file, (err, data) => {
+      if (err) logApi('GET', url, 'no run-state file', { code: err.code });
+      else {
+        try {
+          const rs = JSON.parse(data.toString());
+          logApi('GET', url, 'ok', { runId: rs?.runId ?? null, status: rs?.status ?? null });
+        } catch {
+          logApi('GET', url, 'parse error');
+        }
+      }
       setCors(res);
       res.setHeader('Content-Type', 'application/json');
       res.statusCode = 200;
@@ -1125,7 +1218,10 @@ const server = http.createServer(async (req, res) => {
 
   // ── /api/blackboard GET ──────────────────────────────────────────────────
   if (url === '/api/blackboard' && method === 'GET') {
-    jsonOk(res, readJson(path.join(activeStateDir, 'blackboard.json'), {}));
+    const entries = readBlackboardEntries();
+    const active = entries.filter(e => e.status !== 'archived');
+    logApi('GET', url, 'ok', { total: entries.length, active: active.length });
+    jsonOk(res, entries);
     return;
   }
 
@@ -1137,7 +1233,9 @@ const server = http.createServer(async (req, res) => {
 
   // ── /api/mission-meta GET ────────────────────────────────────────────────
   if (url === '/api/mission-meta' && method === 'GET') {
-    jsonOk(res, { meta: readMissionMeta() });
+    const meta = readMissionMeta();
+    logApi('GET', url, 'ok', { goal: meta?.goal?.slice(0, 60) ?? null, startedAt: meta?.startedAt ?? null });
+    jsonOk(res, { meta });
     return;
   }
 
@@ -1199,6 +1297,12 @@ const server = http.createServer(async (req, res) => {
     const alive = rec?.pid ? isProcessAlive(rec.pid) : false;
     const runSummary = summarizeRunState();
     const missionMeta = readMissionMeta();
+    logApi('GET', url, 'ok', {
+      alive,
+      pid: rec?.pid ?? null,
+      runStatus: runSummary?.status ?? null,
+      missionActive: Boolean(alive || runSummary?.active),
+    });
     jsonOk(res, {
       record: rec,
       alive,
@@ -1248,11 +1352,23 @@ const server = http.createServer(async (req, res) => {
   if (url === '/api/mission' && method === 'POST') {
     try {
       const body = await readBody(req);
+      logMission('POST /api/mission — request received', {
+        goal: typeof body.goal === 'string' ? body.goal.slice(0, 120) : null,
+        runName: body.runName ?? null,
+        priority: body.priority ?? 'P3',
+        cleanup: Boolean(body.cleanup),
+      });
+
       const rawGoal = typeof body.goal === 'string' ? body.goal.trim() : '';
-      if (!rawGoal) { jsonErr(res, 'goal is required'); return; }
+      if (!rawGoal) {
+        logMission('POST /api/mission — rejected: missing goal');
+        jsonErr(res, 'goal is required');
+        return;
+      }
 
       const supervisor = readSupervisorRecord();
       if (supervisor?.pid && isProcessAlive(supervisor.pid)) {
+        logMission(`POST /api/mission — rejected: supervisor already running PID ${supervisor.pid}`);
         jsonErr(res, `A background mission is already running (PID ${supervisor.pid}). Stop it with \`roland bg-stop\` or wait for completion.`, 409);
         return;
       }
@@ -1261,6 +1377,7 @@ const server = http.createServer(async (req, res) => {
       const ACTIVE = new Set(['planning', 'running', 'reviewing', 'synthesizing']);
       const runFresh = runState?.updatedAt && (Date.now() - runState.updatedAt) < 600_000;
       if (runState?.runId && ACTIVE.has(runState.status) && runFresh) {
+        logMission(`POST /api/mission — rejected: active run ${runState.runId} (${runState.status})`);
         jsonErr(res, `A team mission is already active (${runState.status}). Wait for completion or use HITL controls.`, 409);
         return;
       }
@@ -1273,15 +1390,23 @@ const server = http.createServer(async (req, res) => {
       const notify = Boolean(body.notify);
       const cleanup = Boolean(body.cleanup);
 
+      const bbBefore = readBlackboardEntries().filter(e => e.status !== 'archived').length;
+      logMission('Blackboard before mission launch', { activeEntries: bbBefore });
+
       if (cleanup) {
         const mod = await loadBoardCleanupModule();
-        if (mod) mod.cleanupBoardsForNewMission(activeStateDir, rawGoal, { goal: rawGoal });
+        if (mod) {
+          logMission('Running board cleanup before launch', { goal: rawGoal.slice(0, 80) });
+          mod.cleanupBoardsForNewMission(activeStateDir, rawGoal, { goal: rawGoal });
+        }
       }
 
       const effectiveGoal = buildMissionGoal(rawGoal, { priority, runName, forceTeam });
       const { pid } = spawnTeamMission(effectiveGoal, { pmModel, engineerModel, notify, clean: cleanup });
 
+      const missionId = randomUUID();
       writeMissionMeta({
+        id: missionId,
         goal: rawGoal,
         effectiveGoal,
         runName: runName || null,
@@ -1293,16 +1418,41 @@ const server = http.createServer(async (req, res) => {
         startedAt: Date.now(),
       });
 
+      let bbAfter = bbBefore;
+      try {
+        const bbResult = appendMissionLaunchEntry({ goal: rawGoal, runName, priority, pid });
+        bbAfter = bbResult.afterCount;
+      } catch (bbErr) {
+        logMission(`Blackboard write failed (mission still spawned): ${bbErr.message}`);
+      }
+
+      // Push WebSocket update so connected clients see the launch immediately
+      pushCurrentState();
+
+      const title = runName || rawGoal.slice(0, 60);
+      logMission(`Started mission: ${missionId} — ${title} at ${new Date().toISOString()}`, {
+        pid,
+        priority,
+        blackboardBefore: bbBefore,
+        blackboardAfter: bbAfter,
+        stateDir: activeStateDir,
+      });
+
       jsonOk(res, {
         ok: true,
+        missionId,
         pid,
         goal: rawGoal,
         effectiveGoal,
+        startedAt: Date.now(),
         message: 'Mission launched in background',
         logHint: 'roland bg-logs --follow',
         boardStatusUrl: '/api/board-status',
       });
-    } catch (e) { jsonErr(res, e.message, 500); }
+    } catch (e) {
+      logMission(`POST /api/mission — error: ${e.message}`);
+      jsonErr(res, e.message, 500);
+    }
     return;
   }
 
@@ -1321,11 +1471,20 @@ const server = http.createServer(async (req, res) => {
       if (mod) {
         const report = mod.buildBoardStatusReport(activeStateDir);
         const concise = mod.formatConciseUnscSummary(report);
+        logApi('GET', url, 'ok (full report)', {
+          blockers: report?.blockers?.length ?? 0,
+          tasks: report?.tasks?.length ?? 0,
+        });
         jsonOk(res, { report, concise, markdown: concise, updatedAt: Date.now() });
         return;
       }
-      jsonOk(res, { fallback: readBoardStatusPayload(), markdown: '(Run npm run build for full board-status API)' });
-    } catch (e) { jsonErr(res, e.message, 500); }
+      const fallback = readBoardStatusPayload();
+      logApi('GET', url, 'ok (fallback payload)', fallback?.counts ?? null);
+      jsonOk(res, { fallback, markdown: '(Run npm run build for full board-status API)' });
+    } catch (e) {
+      logApi('GET', url, `error: ${e.message}`);
+      jsonErr(res, e.message, 500);
+    }
     return;
   }
 
@@ -1389,6 +1548,7 @@ wss.on('connection', (ws) => {
 server.listen(port, host, () => {
   const localBase = `http://127.0.0.1:${port}`;
   const bindBase  = host === '0.0.0.0' ? localBase : `http://${host}:${port}`;
+  logDashboard('Roland Dashboard 2.0 listening', { port, host, stateDir: activeStateDir, project: activeProjectRoot });
   console.log(`\n  🎛  Roland Dashboard 2.0`);
   console.log(`  ─────────────────────────────────────────`);
   console.log(`  UI        : ${bindBase}`);
