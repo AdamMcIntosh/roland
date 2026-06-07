@@ -64,6 +64,12 @@ function logMission(msg, detail) {
   else console.log(`[MISSION] ${logTs()} ${msg}`);
 }
 
+/** Project switch, create, and mission migration */
+function logProject(msg, detail) {
+  if (detail !== undefined) console.log(`[PROJECT] ${logTs()} ${msg}`, detail);
+  else console.log(`[PROJECT] ${logTs()} ${msg}`);
+}
+
 /** HTTP API request/response tracing for mission-related routes */
 function logApi(method, route, msg, detail) {
   const line = `[API] ${logTs()} ${method} ${route} — ${msg}`;
@@ -406,12 +412,39 @@ function broadcast(payload) {
   }
 }
 
+function summarizeSupervisorPayload() {
+  const rec = readSupervisorRecord();
+  const alive = rec?.pid ? isProcessAlive(rec.pid) : false;
+  const run = summarizeRunState();
+  const meta = readMissionMeta();
+  return {
+    record: rec,
+    alive,
+    logFile: rec?.logFile ?? null,
+    run,
+    missionMeta: meta,
+    missionActive: Boolean(alive || run?.active),
+    projectRoot: activeProjectRoot,
+    stateDir: activeStateDir,
+  };
+}
+
 function pushCurrentState() {
   const runState  = readJson(path.join(activeStateDir, 'run-state.json'),  null);
   const hitlState = readJson(path.join(activeStateDir, 'hitl-state.json'), null);
   const boardStatus = readBoardStatusPayload();
   const missionDag = readMissionDagPayload();
-  broadcast({ type: 'state-update', runState, hitlState, boardStatus, missionDag });
+  const projectContext = readProjectContextPayload();
+  const supervisor = summarizeSupervisorPayload();
+  broadcast({
+    type: 'state-update',
+    runState,
+    hitlState,
+    boardStatus,
+    missionDag,
+    projectContext,
+    supervisor,
+  });
 }
 
 async function loadBoardReportModule() {
@@ -583,6 +616,8 @@ function spawnTeamMission(effectiveGoal, options = {}) {
   const env = {
     ...process.env,
     ROLAND_STATE_DIR: activeStateDir,
+    ROLAND_PROJECT_ROOT: activeProjectRoot,
+    ROLAND_ROOT: activeProjectRoot,
     ROLAND_SIMPLE_TUI: '1',
   };
   if (pmModel && pmModel !== 'auto' && VALID_MODEL_IDS.has(pmModel)) env.ROLAND_PM_MODEL = pmModel;
@@ -597,6 +632,11 @@ function spawnTeamMission(effectiveGoal, options = {}) {
     stdio: 'ignore',
   });
   child.unref();
+  logMission('Spawned background team mission', {
+    pid: child.pid ?? null,
+    projectRoot: activeProjectRoot,
+    stateDir: activeStateDir,
+  });
   return { pid: child.pid ?? null };
 }
 
@@ -721,6 +761,7 @@ function summarizeProjectEntry(dir) {
     dirLastModified(resolved),
     dirLastModified(rolandDir),
   );
+  const missionActive = isMissionActiveInStateDir(rolandDir);
   return {
     name: path.basename(resolved),
     path: resolved,
@@ -730,6 +771,7 @@ function summarizeProjectEntry(dir) {
     hasRoland: projectHasRoland(resolved),
     lastModified,
     isActive: resolved === path.resolve(activeProjectRoot),
+    missionActive,
   };
 }
 
@@ -803,6 +845,149 @@ function isMissionActiveInStateDir(dir) {
 
 function isMissionActive() {
   return isMissionActiveInStateDir(activeStateDir);
+}
+
+/** Read mission payload from a specific state dir (for migration). */
+function extractMigrationPayload(stateDir) {
+  const missionMeta = readJson(path.join(stateDir, 'mission-meta.json'), null);
+  const runState = readJson(path.join(stateDir, 'run-state.json'), null);
+  const supervisor = readJson(path.join(stateDir, 'supervisor.pid'), null);
+
+  const goal = missionMeta?.effectiveGoal || missionMeta?.goal || runState?.goal || supervisor?.goal;
+  if (!goal) return null;
+
+  return {
+    goal,
+    rawGoal: missionMeta?.goal || goal,
+    effectiveGoal: missionMeta?.effectiveGoal || goal,
+    runName: missionMeta?.runName ?? null,
+    priority: missionMeta?.priority || 'P3',
+    forceTeam: Boolean(missionMeta?.forceTeam),
+    pmModel: missionMeta?.pmModel,
+    engineerModel: missionMeta?.engineerModel,
+    fromProjectRoot: missionMeta?.projectRoot || null,
+    previousMissionId: missionMeta?.id || null,
+  };
+}
+
+/** Send HITL abort to a background mission in the given state dir. */
+function abortMissionInStateDir(stateDir) {
+  const supervisor = readJson(path.join(stateDir, 'supervisor.pid'), null);
+  if (!supervisor?.pid || !isProcessAlive(supervisor.pid)) return false;
+
+  fs.mkdirSync(stateDir, { recursive: true });
+  const queueFile = path.join(stateDir, 'hitl.json');
+  const queue = readJson(queueFile, []);
+  const arr = Array.isArray(queue) ? queue : [];
+  arr.push({ cmd: 'abort', timestamp: Date.now() });
+  fs.writeFileSync(queueFile, JSON.stringify(arr, null, 2), 'utf-8');
+
+  const stateFile = path.join(stateDir, 'hitl-state.json');
+  const s = readJson(stateFile, { paused: false, updatedAt: 0 });
+  s.abortPending = true;
+  s.updatedAt = Date.now();
+  fs.writeFileSync(stateFile, JSON.stringify(s, null, 2), 'utf-8');
+
+  logProject('Abort sent for mission migration', { stateDir, pid: supervisor.pid });
+  return true;
+}
+
+/** Record mission migration on the active project's blackboard. */
+function appendMigrationEntry({ fromProjectRoot, goal, pid }) {
+  const entries = readBlackboardEntries();
+  const now = Date.now();
+  entries.push({
+    id: randomUUID(),
+    type: 'decision',
+    title: 'Mission migrated to this project',
+    content: [
+      'Dashboard migrated an active background mission into this project context.',
+      fromProjectRoot ? `From: ${shortenHome(fromProjectRoot)}` : null,
+      `Goal: ${goal}`,
+      pid ? `New supervisor PID: ${pid}` : null,
+    ].filter(Boolean).join('\n'),
+    status: 'done',
+    author: 'dashboard',
+    priority: 'high',
+    tags: ['mission-migration', 'dashboard'],
+    relatedIds: [],
+    rev: 1,
+    createdAt: now,
+    updatedAt: now,
+  });
+  writeBlackboardEntries(entries);
+}
+
+/**
+ * Re-spawn an active mission in the current activeProjectRoot after a project switch.
+ * Caller must have already switched activeProjectRoot / activeStateDir to the target.
+ */
+function spawnMigratedMission(payload, fromProjectRoot) {
+  const effectiveGoal = payload.effectiveGoal || payload.goal;
+  const { pid } = spawnTeamMission(effectiveGoal, {
+    pmModel: payload.pmModel,
+    engineerModel: payload.engineerModel,
+    notify: false,
+    clean: false,
+  });
+
+  const missionId = randomUUID();
+  writeMissionMeta({
+    id: missionId,
+    goal: payload.rawGoal,
+    effectiveGoal,
+    runName: payload.runName,
+    priority: payload.priority || 'P3',
+    forceTeam: payload.forceTeam || false,
+    pmModel: payload.pmModel,
+    engineerModel: payload.engineerModel,
+    pid,
+    projectRoot: activeProjectRoot,
+    stateDir: activeStateDir,
+    startedAt: Date.now(),
+    migratedFrom: fromProjectRoot,
+    migratedAt: Date.now(),
+    previousMissionId: payload.previousMissionId,
+  });
+
+  try {
+    appendMigrationEntry({ fromProjectRoot, goal: payload.rawGoal, pid });
+  } catch (e) {
+    logProject(`Blackboard migration entry failed: ${e.message}`);
+  }
+
+  logProject('Mission respawned in target project', {
+    from: fromProjectRoot,
+    to: activeProjectRoot,
+    pid,
+    goal: payload.rawGoal.slice(0, 80),
+  });
+
+  return { missionId, pid, goal: payload.rawGoal, migrated: true };
+}
+
+/**
+ * Migrate an active mission from one project's .roland/ to another project root.
+ * Aborts the source supervisor and respawns in the target (active context must be target).
+ */
+function migrateActiveMission(fromStateDir, fromProjectRoot, toProjectRoot) {
+  if (!isMissionActiveInStateDir(fromStateDir)) {
+    return { migrated: false, reason: 'no_active_mission' };
+  }
+
+  const payload = extractMigrationPayload(fromStateDir);
+  if (!payload) {
+    return { migrated: false, reason: 'no_goal' };
+  }
+
+  logProject('Migrating active mission', {
+    from: fromProjectRoot,
+    to: toProjectRoot,
+    goal: payload.rawGoal.slice(0, 80),
+  });
+
+  abortMissionInStateDir(fromStateDir);
+  return spawnMigratedMission(payload, fromProjectRoot);
 }
 
 function rememberProjectPath(resolvedPath) {
@@ -1010,6 +1195,7 @@ function createProject(body = {}) {
   }
 
   rememberProjectPath(projectPath);
+  logProject('Created project', { path: projectPath, template: templateId, switchContext });
 
   let installPid = null;
   if (installDeps) {
@@ -1018,7 +1204,14 @@ function createProject(body = {}) {
 
   let switchResult = null;
   if (switchContext) {
-    switchResult = switchActiveProject(projectPath, { force: true });
+    const migrateMission = isMissionActive();
+    if (migrateMission) {
+      logProject('Create-project with active mission — will migrate after switch', {
+        from: activeProjectRoot,
+        to: projectPath,
+      });
+    }
+    switchResult = switchActiveProject(projectPath, { force: true, migrateMission });
   }
 
   return {
@@ -1032,6 +1225,7 @@ function createProject(body = {}) {
     installDeps,
     installPid,
     switched: Boolean(switchResult?.switched ?? switchContext),
+    migration: switchResult?.migration ?? null,
     projectContext: switchResult?.projectContext ?? readProjectContextPayload(),
     projects: switchResult?.projects ?? readProjectsPayload(),
   };
@@ -1061,7 +1255,7 @@ function setupStateWatcher() {
   }
 }
 
-function switchActiveProject(targetPath, { force = false } = {}) {
+function switchActiveProject(targetPath, { force = false, migrateMission = false } = {}) {
   const resolved = path.resolve(expandTilde(String(targetPath || '').trim()));
   if (!resolved) throw new Error('path is required');
   if (!isValidProjectRoot(resolved)) {
@@ -1071,6 +1265,7 @@ function switchActiveProject(targetPath, { force = false } = {}) {
   }
 
   if (path.resolve(resolved) === path.resolve(activeProjectRoot)) {
+    logProject('Switch skipped — already active', { projectRoot: resolved });
     return { switched: false, projectContext: readProjectContextPayload(), projects: readProjectsPayload() };
   }
 
@@ -1082,15 +1277,38 @@ function switchActiveProject(targetPath, { force = false } = {}) {
     throw err;
   }
 
+  const fromRoot = activeProjectRoot;
+  const fromStateDir = activeStateDir;
+  let migration = null;
+
+  logProject('Switching project context', {
+    from: fromRoot,
+    to: resolved,
+    force,
+    migrateMission,
+  });
+
   activeProjectRoot = resolved;
   activeStateDir = path.join(resolved, '.roland');
   fs.mkdirSync(activeStateDir, { recursive: true });
   rememberProjectPath(resolved);
   setupStateWatcher();
+
+  if (migrateMission && path.resolve(fromStateDir) !== path.resolve(activeStateDir)) {
+    migration = migrateActiveMission(fromStateDir, fromRoot, resolved);
+  }
+
   pushCurrentState();
+
+  logProject('Project context switched', {
+    projectRoot: activeProjectRoot,
+    stateDir: activeStateDir,
+    migrated: Boolean(migration?.migrated),
+  });
 
   return {
     switched: true,
+    migration,
     projectContext: readProjectContextPayload(),
     projects: readProjectsPayload(),
   };
@@ -1114,6 +1332,7 @@ function readMissionDagPayload() {
 const WATCH_TARGETS = new Set([
   'run-state.json', 'hitl-state.json', 'memory.md', 'hitl.json',
   'blackboard.json', 'command-blackboard.md', 'mission-dag.json', 'mission-meta.json',
+  'supervisor.pid',
 ]);
 
 setupStateWatcher();
@@ -1279,7 +1498,10 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const targetPath = typeof body.path === 'string' ? body.path.trim() : '';
       if (!targetPath) { jsonErr(res, 'path is required'); return; }
-      const result = switchActiveProject(targetPath, { force: Boolean(body.force) });
+      const result = switchActiveProject(targetPath, {
+        force: Boolean(body.force),
+        migrateMission: Boolean(body.migrateMission),
+      });
       jsonOk(res, { ok: true, ...result });
     } catch (e) {
       if (e.code === 'MISSION_ACTIVE') {
@@ -1293,24 +1515,15 @@ const server = http.createServer(async (req, res) => {
 
   // ── /api/supervisor GET ──────────────────────────────────────────────────
   if (url === '/api/supervisor' && method === 'GET') {
-    const rec = readSupervisorRecord();
-    const alive = rec?.pid ? isProcessAlive(rec.pid) : false;
-    const runSummary = summarizeRunState();
-    const missionMeta = readMissionMeta();
+    const payload = summarizeSupervisorPayload();
     logApi('GET', url, 'ok', {
-      alive,
-      pid: rec?.pid ?? null,
-      runStatus: runSummary?.status ?? null,
-      missionActive: Boolean(alive || runSummary?.active),
+      alive: payload.alive,
+      pid: payload.record?.pid ?? null,
+      runStatus: payload.run?.status ?? null,
+      missionActive: payload.missionActive,
+      projectRoot: payload.projectRoot,
     });
-    jsonOk(res, {
-      record: rec,
-      alive,
-      logFile: rec?.logFile ?? null,
-      run: runSummary,
-      missionMeta,
-      missionActive: Boolean(alive || runSummary?.active),
-    });
+    jsonOk(res, payload);
     return;
   }
 
@@ -1415,6 +1628,8 @@ const server = http.createServer(async (req, res) => {
         pmModel,
         engineerModel,
         pid,
+        projectRoot: activeProjectRoot,
+        stateDir: activeStateDir,
         startedAt: Date.now(),
       });
 
@@ -1436,6 +1651,7 @@ const server = http.createServer(async (req, res) => {
         blackboardBefore: bbBefore,
         blackboardAfter: bbAfter,
         stateDir: activeStateDir,
+        projectRoot: activeProjectRoot,
       });
 
       jsonOk(res, {
@@ -1537,7 +1753,17 @@ wss.on('connection', (ws) => {
     const hitlState = readJson(path.join(activeStateDir, 'hitl-state.json'), null);
     const boardStatus = readBoardStatusPayload();
     const missionDag = readMissionDagPayload();
-    ws.send(JSON.stringify({ type: 'state-update', runState, hitlState, boardStatus, missionDag }));
+    const projectContext = readProjectContextPayload();
+    const supervisor = summarizeSupervisorPayload();
+    ws.send(JSON.stringify({
+      type: 'state-update',
+      runState,
+      hitlState,
+      boardStatus,
+      missionDag,
+      projectContext,
+      supervisor,
+    }));
   } catch {}
   ws.on('close', () => wsClients.delete(ws));
   ws.on('error', () => wsClients.delete(ws));

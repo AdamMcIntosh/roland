@@ -984,6 +984,12 @@
       justify-content: space-between;
       gap: 0.5rem;
     }
+    .project-modal-item-badges {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      flex-shrink: 0;
+    }
     .project-modal-item-name { font-weight: 700; font-size: 0.82rem; }
     .project-modal-item-badge {
       font-size: 0.6rem;
@@ -995,6 +1001,10 @@
       background: rgba(16,185,129,0.15);
       color: var(--emerald);
       flex-shrink: 0;
+    }
+    .project-modal-item-badge.mission {
+      background: rgba(245,158,11,0.18);
+      color: #f59e0b;
     }
     .project-modal-item-meta {
       font-size: 0.68rem;
@@ -2358,7 +2368,7 @@
         <input type="search" class="project-modal-search" id="project-switcher-search" placeholder="Search projects…" autocomplete="off" />
       </div>
       <div class="project-modal-warn" id="project-switcher-mission-warn" hidden>
-        ⚠ A mission is running in the current project. Switching will change dashboard context only — the background run continues in its original project.
+        ⚠ A mission is running in the current project. Switching will migrate the mission to the target project (stop + restart in new context).
       </div>
       <div class="project-modal-list" id="project-switcher-list" role="listbox" aria-label="Available projects">
         <div class="project-modal-empty">Loading projects…</div>
@@ -2791,11 +2801,14 @@
               runId: msg.runState?.runId ?? null,
               status: msg.runState?.status ?? null,
               boardUpdated: Boolean(msg.boardStatus),
+              project: msg.projectContext?.displayPath ?? null,
             });
             if (msg.runState  !== undefined) runState  = msg.runState;
             if (msg.hitlState !== undefined) hitlState = msg.hitlState;
             if (msg.boardStatus !== undefined) boardStatus = msg.boardStatus;
             if (msg.missionDag !== undefined) missionDagPayload = msg.missionDag;
+            if (msg.projectContext !== undefined) applyProjectContextPayload(msg.projectContext);
+            if (msg.supervisor !== undefined) applySupervisorPayload(msg.supervisor);
             // Overlay hitl-state.json values into runState for TUI accuracy
             if (runState && hitlState) {
               if (hitlState.paused)       runState.hitlPaused        = true;
@@ -2861,15 +2874,63 @@
     } catch { runState = null; }
   }
 
+  function applySupervisorPayload(sup) {
+    if (!sup) return;
+    supervisorInfo = sup;
+    missionMeta = sup.missionMeta ?? missionMeta;
+  }
+
+  function applyProjectContextPayload(ctx) {
+    if (!ctx) return;
+    const prevCwd = projectContext?.cwd;
+    projectContext = ctx;
+    if (prevCwd && ctx.cwd && !pathMatches(prevCwd, ctx.cwd)) {
+      logDashboard('Project context changed — re-attaching supervisor', {
+        from: prevCwd,
+        to: ctx.cwd,
+      });
+      void reattachSupervisorState('project-context-change');
+    }
+  }
+
+  async function reattachSupervisorState(source = 'manual') {
+    logMission('Re-attaching supervisor state', { source });
+    boardStatus = null;
+    missionDagPayload = null;
+    runState = null;
+    hitlState = null;
+    supervisorInfo = null;
+    missionMeta = null;
+    selectedMissionNodeId = null;
+    lastDagRunId = null;
+    lastDagNodeStatuses = {};
+    await Promise.all([
+      fetchUsage(),
+      fetchRunState(),
+      fetchBoardStatus(),
+      fetchMissionDag(),
+      fetchSupervisor(),
+      fetchProjectContext(),
+      fetchProjects(),
+    ]);
+    renderAll();
+    if (activeTab === 'memory') loadMemoryTab();
+    logMission('Supervisor re-attach complete', {
+      source,
+      missionActive: isMissionActive(),
+      project: projectContext?.displayPath ?? null,
+    });
+  }
+
   async function fetchSupervisor() {
     try {
       const res = await fetch('/api/supervisor');
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      supervisorInfo = await res.json();
-      missionMeta = supervisorInfo?.missionMeta ?? missionMeta;
+      applySupervisorPayload(await res.json());
       logApi('GET /api/supervisor', {
         alive: supervisorInfo?.alive,
         missionActive: supervisorInfo?.missionActive,
+        projectRoot: supervisorInfo?.projectRoot ?? null,
         startedAt: missionMeta?.startedAt ?? null,
       });
     } catch (e) {
@@ -3059,33 +3120,18 @@
       if (data.switched) {
         if (data.projectContext) projectContext = data.projectContext;
         if (data.projects) projectsPayload = data.projects;
-        boardStatus = null;
-        missionDagPayload = null;
-        runState = null;
-        hitlState = null;
-        supervisorInfo = null;
-        missionMeta = null;
-        selectedMissionNodeId = null;
-        lastDagRunId = null;
-        lastDagNodeStatuses = {};
-        await Promise.all([
-          fetchUsage(),
-          fetchRunState(),
-          fetchBoardStatus(),
-          fetchMissionDag(),
-          fetchSupervisor(),
-          fetchProjectContext(),
-          fetchProjects(),
-        ]);
-        renderAll();
-        if (activeTab === 'memory') loadMemoryTab();
+        await reattachSupervisorState('create-project');
       }
 
       const label = data.displayPath || data.path || name;
       let msg = 'Created ' + label;
       if (data.installDeps) msg += ' — npm install running in background';
       if (data.switched) {
-        toast(msg + ' · context switched', 'success');
+        if (data.migration?.migrated) {
+          toast(msg + ' · context switched · mission migrated', 'success');
+        } else {
+          toast(msg + ' · context switched', 'success');
+        }
       } else {
         toast(msg, 'success', {
           actions: [{
@@ -3157,12 +3203,13 @@
         : 'Not a git repo';
       const rolandLabel = p.hasRoland ? '' : ' · no .roland yet';
       const activeBadge = p.isActive ? '<span class="project-modal-item-badge">Active</span>' : '';
+      const missionBadge = p.missionActive ? '<span class="project-modal-item-badge mission">Mission</span>' : '';
       return (
         '<button type="button" class="project-modal-item' + (p.isActive ? ' active' : '') + '" ' +
         'data-project-path="' + escHtml(p.path) + '" role="option" aria-selected="' + (p.isActive ? 'true' : 'false') + '">' +
         '<div class="project-modal-item-top">' +
         '<span class="project-modal-item-name">' + escHtml(p.displayPath || p.name) + '</span>' +
-        activeBadge +
+        '<span class="project-modal-item-badges">' + activeBadge + missionBadge + '</span>' +
         '</div>' +
         '<span class="project-modal-item-meta">' + gitLabel + escHtml(rolandLabel) + '</span>' +
         '</button>'
@@ -3178,12 +3225,16 @@
     }
 
     let force = false;
+    let migrateMission = false;
     if (isMissionRunningNow()) {
       const ok = window.confirm(
-        'A mission is running in the current project.\n\nSwitch dashboard context anyway? The background run will continue in its original project.'
+        'A mission is running in the current project.\n\n' +
+        'Switch and migrate the mission to the new project? ' +
+        'The current run will be stopped and restarted in the target project context.'
       );
       if (!ok) return;
       force = true;
+      migrateMission = true;
     }
 
     projectSwitching = true;
@@ -3191,7 +3242,7 @@
       const res = await fetch('/api/switch-project', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: targetPath, force }),
+        body: JSON.stringify({ path: targetPath, force, migrateMission }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
@@ -3199,32 +3250,16 @@
       if (data.projectContext) projectContext = data.projectContext;
       if (data.projects) projectsPayload = data.projects;
 
-      boardStatus = null;
-      missionDagPayload = null;
-      runState = null;
-      hitlState = null;
-      supervisorInfo = null;
-      missionMeta = null;
-      selectedMissionNodeId = null;
-      lastDagRunId = null;
-      lastDagNodeStatuses = {};
+      await reattachSupervisorState('project-switch');
 
-      await Promise.all([
-        fetchUsage(),
-        fetchRunState(),
-        fetchBoardStatus(),
-        fetchMissionDag(),
-        fetchSupervisor(),
-        fetchProjectContext(),
-        fetchProjects(),
-      ]);
-
-      renderAll();
-      if (activeTab === 'memory') loadMemoryTab();
       closeProjectSwitcher();
 
       const label = projectContext?.displayPath || projectContext?.projectName || targetPath;
-      toast('Switched to ' + label, 'success');
+      if (data.migration?.migrated) {
+        toast('Switched to ' + label + ' · mission migrated', 'success');
+      } else {
+        toast('Switched to ' + label, 'success');
+      }
     } catch (e) {
       toast(e.message || 'Project switch failed', 'error');
     } finally {
@@ -3577,6 +3612,8 @@
         synthesizing: 'Synthesizing', done: 'Done', error: 'Error',
       };
       if (alive && rec?.pid) parts.push('PID ' + rec.pid);
+      const projLabel = projectContext?.projectName || projectContext?.displayPath;
+      if (projLabel) parts.push(escHtml(projLabel));
       if (run?.status) parts.push(statusLabels[run.status] || run.status);
       if (run?.currentWave) parts.push('Wave ' + run.currentWave);
       if (run?.totalTasks) parts.push((run.completedTasks ?? 0) + '/' + run.totalTasks + ' tasks');
