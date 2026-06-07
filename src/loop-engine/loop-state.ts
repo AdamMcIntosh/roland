@@ -38,6 +38,17 @@ export interface LoopVerificationSnapshot {
   strategies?: LoopVerificationStrategySnapshot[];
 }
 
+/** Snapshot from retry phase — persisted for dashboard / resume. */
+export interface LoopRetrySnapshot {
+  attempt: number;
+  strategy: 'full' | 'focused';
+  focusAreas: string[];
+  failedFiles: string[];
+  backoffMs: number;
+  at: number;
+  iteration: number;
+}
+
 export interface LoopState {
   templateId: string;
   goal: string;
@@ -51,8 +62,12 @@ export interface LoopState {
   lastVerification?: LoopVerificationSnapshot;
   /** Most recent critique snapshot for dashboard / retry decisions. */
   lastCritique?: LoopCritiqueSnapshot;
+  /** Most recent retry snapshot for dashboard / focused retry scope. */
+  lastRetry?: LoopRetrySnapshot;
   /** Append-only critique history across iterations. */
   critiqueHistory?: LoopCritiqueSnapshot[];
+  /** Append-only retry history across iterations. */
+  retryHistory?: LoopRetrySnapshot[];
 }
 
 export function createInitialLoopState(
@@ -78,11 +93,38 @@ export class LoopStateStore {
   private readonly filePath: string;
   private state: LoopState;
 
-  constructor(stateDir: string, initial: LoopState) {
+  constructor(stateDir: string, initial: LoopState, opts: { skipInitialFlush?: boolean } = {}) {
     fs.mkdirSync(stateDir, { recursive: true });
     this.filePath = path.join(stateDir, LOOP_STATE_FILE);
     this.state = initial;
-    this.flush();
+    if (!opts.skipInitialFlush) {
+      this.flush();
+    }
+  }
+
+  /** Load existing loop-state.json when resuming, else create fresh state. */
+  static loadOrCreate(
+    stateDir: string,
+    templateId: string,
+    goal: string,
+    firstPhase: Phase,
+    resume: boolean,
+  ): LoopStateStore {
+    if (resume) {
+      const existing = readLoopState(stateDir);
+      if (
+        existing &&
+        existing.status === 'running' &&
+        existing.templateId === templateId &&
+        existing.goal === goal
+      ) {
+        console.error(
+          `[Loop][state] Resuming from loop-state.json iteration=${existing.iteration} retryCount=${existing.retryCount}`,
+        );
+        return new LoopStateStore(stateDir, existing, { skipInitialFlush: true });
+      }
+    }
+    return new LoopStateStore(stateDir, createInitialLoopState(templateId, goal, firstPhase));
   }
 
   get(): LoopState {
@@ -93,7 +135,9 @@ export class LoopStateStore {
         ? { ...this.state.lastVerification }
         : undefined,
       lastCritique: this.state.lastCritique ? { ...this.state.lastCritique } : undefined,
+      lastRetry: this.state.lastRetry ? { ...this.state.lastRetry } : undefined,
       critiqueHistory: this.state.critiqueHistory?.map((c) => ({ ...c })),
+      retryHistory: this.state.retryHistory?.map((r) => ({ ...r })),
     };
   }
 
@@ -116,6 +160,7 @@ export class LoopStateStore {
       summary: string;
       verification?: LoopVerificationSnapshot;
       critique?: LoopCritiqueSnapshot;
+      retry?: LoopRetrySnapshot;
     },
   ): void {
     const entry = [...this.state.phaseHistory].reverse().find((t) => t.phase === phase && !t.completedAt);
@@ -136,6 +181,11 @@ export class LoopStateStore {
       this.state.lastCritique = result.critique;
       if (!this.state.critiqueHistory) this.state.critiqueHistory = [];
       this.state.critiqueHistory.push(result.critique);
+    }
+    if (phase === 'retry' && result.retry) {
+      this.state.lastRetry = result.retry;
+      if (!this.state.retryHistory) this.state.retryHistory = [];
+      this.state.retryHistory.push(result.retry);
     }
     this.state.updatedAt = now;
     this.flush();

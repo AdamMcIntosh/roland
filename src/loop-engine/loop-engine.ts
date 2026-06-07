@@ -1,9 +1,11 @@
 /**
  * LoopEngine — runs loop phases sequentially with hooks and persistence.
  *
- * Two modes:
- *   1. Standalone `run()` — executes all template phases in order (E2E tests).
- *   2. Coordinator-driven — team-orchestrator calls lifecycle hooks per wave.
+ * Modes:
+ *   1. `runFullLoop()` — full Plan → Act → Verify → Critique → Retry orchestration with
+ *      configurable max iterations, timeout, resume, and exponential backoff.
+ *   2. `run()` — alias for `runFullLoop()` (backward compatible).
+ *   3. Coordinator-driven — team-orchestrator calls lifecycle hooks per wave.
  */
 
 import type { Blackboard } from '../rco/blackboard.js';
@@ -18,10 +20,11 @@ import {
 } from './loop-state.js';
 import {
   createDefaultHandlers,
+  RetryPhaseHandler,
   type PhaseHandler,
   type PhaseResult,
 } from './phase-handlers/index.js';
-import { resolveCritiqueThresholds } from './loop-config.js';
+import { loadLoopEngineConfig, resolveCritiqueThresholds } from './loop-config.js';
 
 export interface LoopHooks {
   onPhaseStart?: (phase: Phase, iteration: number) => void;
@@ -41,12 +44,20 @@ export interface LoopEngineOptions {
   hooks?: LoopHooks;
   /** Elevated retry/escalation thresholds for E2E and dev (also ROLAND_LOOP_TEST_MODE=1). */
   isTestMode?: boolean;
+  /** Resume from existing loop-state.json when status is running and goal/template match. */
+  resumeFromState?: boolean;
+  /** Wall-clock timeout for the full loop (ms). Template/config override. */
+  timeoutMs?: number;
+  /** Skip exponential backoff delays (tests). */
+  skipBackoff?: boolean;
 }
 
 export interface LoopRunResult {
   status: LoopRunStatus;
   state: LoopState;
   phasesCompleted: number;
+  iterationsRun: number;
+  timedOut?: boolean;
 }
 
 export class LoopEngine {
@@ -58,21 +69,43 @@ export class LoopEngine {
   private readonly blackboard: Blackboard;
   private readonly commandBoard?: CommandBlackboard;
   private readonly critiqueThresholds: ReturnType<typeof resolveCritiqueThresholds>;
+  private readonly timeoutMs: number;
+  private readonly loopStartedAt: number;
 
   constructor(opts: LoopEngineOptions) {
     const firstPhase = opts.template.phases[0]?.phase ?? P.Plan;
+    const cfg = loadLoopEngineConfig();
     this.template = opts.template;
     this.goal = opts.goal;
     this.blackboard = opts.blackboard;
     this.commandBoard = opts.commandBoard;
     this.handlers = opts.handlers ?? createDefaultHandlers();
+    if (opts.skipBackoff && !opts.handlers) {
+      this.handlers.set(P.Retry, new RetryPhaseHandler({ skipDelay: true }));
+    }
     this.hooks = opts.hooks ?? {};
     this.critiqueThresholds = resolveCritiqueThresholds(opts.template, {
       isTestMode: opts.isTestMode,
     });
-    this.store = new LoopStateStore(
+    this.timeoutMs =
+      opts.timeoutMs ??
+      opts.template.timeoutMs ??
+      cfg.timeoutMs ??
+      1_800_000;
+    this.loopStartedAt = Date.now();
+
+    this.store = LoopStateStore.loadOrCreate(
       opts.stateDir,
-      createInitialLoopState(opts.template.name, opts.goal, firstPhase),
+      opts.template.name,
+      opts.goal,
+      firstPhase,
+      Boolean(opts.resumeFromState),
+    );
+
+    console.error(
+      `[Loop][engine] template="${opts.template.name}" maxIterations=${opts.template.maxIterations ?? 1} ` +
+        `maxRetries=${this.critiqueThresholds.maxRetries} timeoutMs=${this.timeoutMs} ` +
+        `resume=${Boolean(opts.resumeFromState)}`,
     );
     this.emitState();
   }
@@ -85,64 +118,139 @@ export class LoopEngine {
     return this.template;
   }
 
-  /** Run all configured phases sequentially (standalone / test mode). */
+  /** Backward-compatible alias — delegates to runFullLoop(). */
   async run(context: { hadBlockers?: boolean; waveNumber?: number } = {}): Promise<LoopRunResult> {
+    return this.runFullLoop(context);
+  }
+
+  /**
+   * Full loop orchestration: Plan → Act → Verify → Critique → Retry → next iteration or complete.
+   * Supports configurable max iterations, wall-clock timeout, state resume, and retry escalation.
+   */
+  async runFullLoop(
+    context: { hadBlockers?: boolean; waveNumber?: number } = {},
+  ): Promise<LoopRunResult> {
     const maxIter = this.template.maxIterations ?? 1;
     let phasesCompleted = 0;
+    let iterationsRun = 0;
+    const startIter = this.store.get().iteration;
 
-    for (let iter = 1; iter <= maxIter; iter++) {
-      if (iter > 1) {
+    for (let iter = startIter; iter <= maxIter; iter++) {
+      if (iter > startIter) {
         this.store.incrementIteration();
         this.hooks.onLoopIterationStart?.(iter);
       }
 
-      let shouldRetryLoop = false;
-
-      for (const phaseConfig of this.template.phases) {
-        if (phaseConfig.optional && phaseConfig.phase === P.Retry && !shouldRetryLoop) {
-          continue;
-        }
-
-        const result = await this.runPhase(phaseConfig, {
-          iteration: iter,
-          hadBlockers: context.hadBlockers,
-          waveNumber: context.waveNumber,
-        });
-        phasesCompleted++;
-
-        if (result.shouldEscalate) {
-          this.store.setStatus('escalated');
-          this.hooks.onLoopComplete?.(this.store.get(), 'escalated');
-          return { status: 'escalated', state: this.store.get(), phasesCompleted };
-        }
-
-        // Critique phase owns retry decisions; Verify only records gate results.
-        if (phaseConfig.phase === P.Critique) {
-          if (result.shouldRetry) shouldRetryLoop = true;
-        } else if (phaseConfig.phase === P.Verify && !result.success) {
-          // Verify failure without critique phase — fall back to retry.
-          const hasCritique = this.template.phases.some((p) => p.phase === P.Critique);
-          if (!hasCritique) shouldRetryLoop = true;
-        } else if (result.shouldRetry) {
-          shouldRetryLoop = true;
-        }
+      if (this.isTimedOut()) {
+        console.error(`[Loop][engine] timeout after ${this.timeoutMs}ms at iteration=${iter}`);
+        this.store.setStatus('failed');
+        this.hooks.onLoopComplete?.(this.store.get(), 'failed');
+        return {
+          status: 'failed',
+          state: this.store.get(),
+          phasesCompleted,
+          iterationsRun,
+          timedOut: true,
+        };
       }
 
-      const state = this.store.get();
-      if (!shouldRetryLoop) break;
+      iterationsRun++;
+
+      console.error(
+        `[Loop][engine] iteration ${iter}/${maxIter} retryCount=${this.store.get().retryCount}`,
+      );
+
+      const iterationOutcome = await this.runIterationPhases(iter, context);
+      phasesCompleted += iterationOutcome.phasesCompleted;
+
+      if (iterationOutcome.terminalStatus) {
+        this.hooks.onLoopComplete?.(this.store.get(), iterationOutcome.terminalStatus);
+        return {
+          status: iterationOutcome.terminalStatus,
+          state: this.store.get(),
+          phasesCompleted,
+          iterationsRun,
+        };
+      }
+
+      if (!iterationOutcome.shouldRetryLoop) break;
 
       const { maxRetries } = this.critiqueThresholds;
-      if (state.retryCount >= maxRetries) {
+      if (this.store.get().retryCount >= maxRetries) {
+        console.error(
+          `[Loop][engine] retry budget exhausted retryCount=${this.store.get().retryCount} maxRetries=${maxRetries}`,
+        );
         this.store.setStatus('escalated');
         this.hooks.onLoopComplete?.(this.store.get(), 'escalated');
-        return { status: 'escalated', state: this.store.get(), phasesCompleted };
+        return {
+          status: 'escalated',
+          state: this.store.get(),
+          phasesCompleted,
+          iterationsRun,
+        };
       }
+
       this.store.incrementRetry();
+      console.error(
+        `[Loop][engine] scheduling next iteration after retry increment retryCount=${this.store.get().retryCount}`,
+      );
     }
 
     this.store.setStatus('completed');
     this.hooks.onLoopComplete?.(this.store.get(), 'completed');
-    return { status: 'completed', state: this.store.get(), phasesCompleted };
+    return {
+      status: 'completed',
+      state: this.store.get(),
+      phasesCompleted,
+      iterationsRun,
+    };
+  }
+
+  private async runIterationPhases(
+    iter: number,
+    context: { hadBlockers?: boolean; waveNumber?: number },
+  ): Promise<{
+    phasesCompleted: number;
+    shouldRetryLoop: boolean;
+    terminalStatus?: LoopRunStatus;
+  }> {
+    let phasesCompleted = 0;
+    let shouldRetryLoop = false;
+
+    for (const phaseConfig of this.template.phases) {
+      if (this.isTimedOut()) {
+        this.store.setStatus('failed');
+        return { phasesCompleted, shouldRetryLoop: false, terminalStatus: 'failed' };
+      }
+
+      if (phaseConfig.optional && phaseConfig.phase === P.Retry && !shouldRetryLoop) {
+        console.error(`[Loop][engine] skipping optional Retry phase (no retry needed)`);
+        continue;
+      }
+
+      const result = await this.runPhase(phaseConfig, {
+        iteration: iter,
+        hadBlockers: context.hadBlockers,
+        waveNumber: context.waveNumber,
+      });
+      phasesCompleted++;
+
+      if (result.shouldEscalate) {
+        this.store.setStatus('escalated');
+        return { phasesCompleted, shouldRetryLoop: false, terminalStatus: 'escalated' };
+      }
+
+      if (phaseConfig.phase === P.Critique) {
+        if (result.shouldRetry) shouldRetryLoop = true;
+      } else if (phaseConfig.phase === P.Verify && !result.success) {
+        const hasCritique = this.template.phases.some((p) => p.phase === P.Critique);
+        if (!hasCritique) shouldRetryLoop = true;
+      } else if (result.shouldRetry) {
+        shouldRetryLoop = true;
+      }
+    }
+
+    return { phasesCompleted, shouldRetryLoop };
   }
 
   /** Execute a single phase by config. */
@@ -151,6 +259,9 @@ export class LoopEngine {
     ctx: { iteration: number; hadBlockers?: boolean; waveNumber?: number },
   ): Promise<PhaseResult> {
     const phase = phaseConfig.phase;
+    console.error(
+      `[Loop][engine] phase transition → ${phase} iteration=${ctx.iteration} retryCount=${this.store.get().retryCount}`,
+    );
     this.store.transitionTo(phase);
     this.emitState();
     this.hooks.onPhaseStart?.(phase, ctx.iteration);
@@ -167,27 +278,44 @@ export class LoopEngine {
       return result;
     }
 
-    const result = await handler.execute({
-      goal: this.goal,
-      state: this.store.get(),
-      blackboard: this.blackboard,
-      commandBoard: this.commandBoard,
-      iteration: ctx.iteration,
-      waveNumber: ctx.waveNumber,
-      hadBlockers: ctx.hadBlockers,
-      phaseConfig,
-      maxRetries: this.critiqueThresholds.maxRetries,
-      escalationThreshold: this.critiqueThresholds.escalationThreshold,
-    });
+    let result: PhaseResult;
+    try {
+      result = await handler.execute({
+        goal: this.goal,
+        state: this.store.get(),
+        blackboard: this.blackboard,
+        commandBoard: this.commandBoard,
+        iteration: ctx.iteration,
+        waveNumber: ctx.waveNumber,
+        hadBlockers: ctx.hadBlockers,
+        phaseConfig,
+        maxRetries: this.critiqueThresholds.maxRetries,
+        escalationThreshold: this.critiqueThresholds.escalationThreshold,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[Loop][engine] phase ${phase} handler error — defensive recovery`, { error: message });
+      result = {
+        success: false,
+        summary: `Phase ${phase} error: ${message}`,
+        shouldEscalate: phase === P.Retry || phase === P.Critique,
+      };
+    }
 
     this.store.completePhase(phase, {
       success: result.success,
       summary: result.summary,
       verification: result.verification,
       critique: result.critique,
+      retry: result.retry,
     });
     this.emitState();
     this.hooks.onPhaseComplete?.(phase, result);
+
+    console.error(
+      `[Loop][engine] phase complete ${phase} success=${result.success} ` +
+        `shouldRetry=${Boolean(result.shouldRetry)} shouldEscalate=${Boolean(result.shouldEscalate)}`,
+    );
     return result;
   }
 
@@ -207,6 +335,10 @@ export class LoopEngine {
 
   hasPhase(phase: Phase): boolean {
     return this.template.phases.some((p) => p.phase === phase);
+  }
+
+  private isTimedOut(): boolean {
+    return Date.now() - this.loopStartedAt >= this.timeoutMs;
   }
 
   private emitState(): void {

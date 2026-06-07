@@ -2,7 +2,7 @@ import type { Blackboard } from '../../rco/blackboard.js';
 import type { CommandBlackboard } from '../../rco/command-blackboard.js';
 import type { Phase, PhaseConfig } from '../loop-phases.js';
 import type { LoopCritiqueSnapshot } from '../self-improvement/types.js';
-import type { LoopState, LoopVerificationSnapshot } from '../loop-state.js';
+import type { LoopRetrySnapshot, LoopState, LoopVerificationSnapshot } from '../loop-state.js';
 
 export interface PhaseResult {
   success: boolean;
@@ -15,6 +15,8 @@ export interface PhaseResult {
   verification?: LoopVerificationSnapshot;
   /** Structured critique output when phase is critique */
   critique?: LoopCritiqueSnapshot;
+  /** Structured retry output when phase is retry */
+  retry?: LoopRetrySnapshot;
 }
 
 export interface PhaseHandlerContext {

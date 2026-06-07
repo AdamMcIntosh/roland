@@ -35,6 +35,14 @@ function syncLoopStateToRun(runState: RunStateWriter, loopState: LoopState): voi
     loopPhase: loopState.currentPhase,
     loopIteration: loopState.iteration,
     loopRetryCount: loopState.retryCount,
+    loopStatus: loopState.status,
+    loopPhaseHistory: loopState.phaseHistory.slice(-12).map((t) => ({
+      phase: t.phase,
+      success: t.success,
+      summary: t.summary?.slice(0, 80),
+      startedAt: t.startedAt,
+      completedAt: t.completedAt,
+    })),
     lastVerification: loopState.lastVerification,
     lastCritique: loopState.lastCritique
       ? {
@@ -44,6 +52,15 @@ function syncLoopStateToRun(runState: RunStateWriter, loopState: LoopState): voi
           at: loopState.lastCritique.at,
           iteration: loopState.lastCritique.iteration,
           issueCount: loopState.lastCritique.issues?.length,
+        }
+      : undefined,
+    lastRetry: loopState.lastRetry
+      ? {
+          attempt: loopState.lastRetry.attempt,
+          strategy: loopState.lastRetry.strategy,
+          focusAreas: loopState.lastRetry.focusAreas,
+          backoffMs: loopState.lastRetry.backoffMs,
+          at: loopState.lastRetry.at,
         }
       : undefined,
   });

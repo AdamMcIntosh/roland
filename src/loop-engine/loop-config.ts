@@ -42,6 +42,18 @@ export const LoopEngineConfigSchema = z.object({
         .optional(),
     })
     .optional(),
+  retry: z
+    .object({
+      exponential_backoff: z
+        .object({
+          enabled: z.boolean().optional(),
+          base_ms: z.number().int().nonnegative().optional(),
+          max_ms: z.number().int().positive().optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+  timeout_ms: z.number().int().positive().optional(),
 });
 
 export type LoopEngineConfig = z.infer<typeof LoopEngineConfigSchema> & {
@@ -62,6 +74,15 @@ export type LoopEngineConfig = z.infer<typeof LoopEngineConfigSchema> & {
       escalationThreshold?: number;
     };
   };
+  retry?: {
+    exponentialBackoff?: {
+      enabled?: boolean;
+      baseMs?: number;
+      maxMs?: number;
+    };
+  };
+  /** Default wall-clock timeout for full loop runs (ms). */
+  timeoutMs?: number;
 };
 
 export interface CritiqueThresholds {
@@ -79,6 +100,14 @@ const DEFAULT_CONFIG: LoopEngineConfig = {
     maxRetries: DEFAULT_MAX_RETRIES,
     escalationThreshold: DEFAULT_ESCALATION_THRESHOLD,
   },
+  retry: {
+    exponentialBackoff: {
+      enabled: false,
+      baseMs: 2000,
+      maxMs: 60_000,
+    },
+  },
+  timeoutMs: 1_800_000,
 };
 
 let cached: LoopEngineConfig | null = null;
@@ -132,6 +161,19 @@ function normaliseCritique(
           escalationThreshold: raw.test_mode.escalation_threshold,
         }
       : undefined,
+  };
+}
+
+function normaliseRetry(
+  raw: z.infer<typeof LoopEngineConfigSchema>['retry'],
+): LoopEngineConfig['retry'] {
+  if (!raw?.exponential_backoff) return DEFAULT_CONFIG.retry;
+  return {
+    exponentialBackoff: {
+      enabled: raw.exponential_backoff.enabled ?? false,
+      baseMs: raw.exponential_backoff.base_ms ?? DEFAULT_CONFIG.retry?.exponentialBackoff?.baseMs ?? 2000,
+      maxMs: raw.exponential_backoff.max_ms ?? DEFAULT_CONFIG.retry?.exponentialBackoff?.maxMs ?? 60_000,
+    },
   };
 }
 
@@ -190,6 +232,8 @@ export function loadLoopEngineConfig(): LoopEngineConfig {
       ...parsed.data,
       verification: normaliseVerification(parsed.data.verification),
       critique: normaliseCritique(parsed.data.critique),
+      retry: normaliseRetry(parsed.data.retry),
+      timeoutMs: parsed.data.timeout_ms ?? DEFAULT_CONFIG.timeoutMs,
     };
     return cached;
   } catch {

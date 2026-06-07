@@ -15,7 +15,13 @@ phases:
   - phase: critique
     label: Critique synthesis
     agent: critic
+  - phase: retry
+    label: Retry research gaps
+    optional: true
   - phase: observe
     label: Observe & record
 maxIterations: 3
 maxRetries: 2
+escalationThreshold: 3
+testModeMaxRetries: 4
+testModeEscalationThreshold: 5
