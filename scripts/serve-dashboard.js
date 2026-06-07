@@ -14,6 +14,7 @@
  *   GET  /api/hitl-state           → .roland/hitl-state.json
  *   POST /api/hitl/:cmd            → append to .roland/hitl.json  (pause|resume|replan|abort|unblock|inject)
  *   GET  /api/blackboard           → .roland/blackboard.json
+ *   POST /api/team-goal            → append team goal to blackboard + command board
  *   GET  /api/mission-dag          → .roland/mission-dag.json (task graph export)
  *   GET  /api/project-context      → cwd, git branch, remote, last commit
  *   GET  /api/projects               → discoverable Roland projects
@@ -90,6 +91,12 @@ function logState(msg, detail) {
 function logGit(msg, detail) {
   if (detail !== undefined) console.log(`[GIT] ${logTs()} ${msg}`, detail);
   else console.log(`[GIT] ${logTs()} ${msg}`);
+}
+
+/** Dashboard team-goal create / append operations */
+function logGoal(msg, detail) {
+  if (detail !== undefined) console.log(`[GOAL] ${logTs()} ${msg}`, detail);
+  else console.log(`[GOAL] ${logTs()} ${msg}`);
 }
 
 /** HTTP API request/response tracing for mission-related routes */
@@ -610,6 +617,84 @@ function appendMissionLaunchEntry({ goal, runName, priority, pid }) {
   const afterCount = entries.filter(e => e.status !== 'archived').length;
   logMission(`Blackboard updated for mission launch`, { beforeCount, afterCount, title });
   return { beforeCount, afterCount, title };
+}
+
+const VALID_GOAL_PRIORITIES = new Set(['P1', 'P2', 'P3', 'P4']);
+
+function goalPriorityToBlackboard(priority) {
+  switch (priority) {
+    case 'P1': return 'critical';
+    case 'P2': return 'high';
+    case 'P4': return 'low';
+    default: return 'medium';
+  }
+}
+
+async function loadCommandBlackboardModule() {
+  const modPath = path.join(rolandInstallRoot, 'dist', 'rco', 'command-blackboard.js');
+  try {
+    return await import(pathToFileURL(modPath).href);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Append a team goal during an active mission — blackboard.json + Mission Objectives.
+ * Returns the new blackboard entry.
+ */
+async function appendTeamGoalEntry({ goal, priority = 'P3', author = 'dashboard' }) {
+  const trimmed = String(goal || '').trim();
+  if (!trimmed) throw new Error('goal is required');
+
+  const prio = VALID_GOAL_PRIORITIES.has(priority) ? priority : 'P3';
+  const entries = readBlackboardEntries();
+  const now = Date.now();
+  const title = trimmed.length > 80 ? `${trimmed.slice(0, 77)}…` : trimmed;
+
+  const entry = {
+    id: randomUUID(),
+    type: 'task',
+    title: 'TEAM GOAL',
+    content: trimmed,
+    status: 'pending',
+    author,
+    priority: goalPriorityToBlackboard(prio),
+    tags: ['goal', 'dashboard', prio.toLowerCase()],
+    relatedIds: [],
+    rev: 1,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  entries.push(entry);
+  writeBlackboardEntries(entries);
+
+  const cbMod = await loadCommandBlackboardModule();
+  if (cbMod?.CommandBlackboard) {
+    try {
+      const board = new cbMod.CommandBlackboard(activeStateDir);
+      board.appendBullet('Mission Objectives', `[${prio} active] ${trimmed}`);
+    } catch (e) {
+      logGoal(`Command board update failed: ${e.message}`, { stateDir: activeStateDir });
+    }
+  } else {
+    logGoal('CommandBlackboard module unavailable — blackboard entry only', {
+      hint: 'run npm run build',
+    });
+  }
+
+  logGoal('Team goal created', {
+    id: entry.id,
+    priority: prio,
+    title,
+    stateDir: activeStateDir,
+    projectRoot: activeProjectRoot,
+    missionActive: isMissionActive(),
+    activeEntries: entries.filter(e => e.status !== 'archived').length,
+  });
+
+  return entry;
 }
 
 async function loadBoardCleanupModule() {
@@ -1521,6 +1606,58 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ── /api/team-goal POST ──────────────────────────────────────────────────
+  if (url === '/api/team-goal' && method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const goal = typeof body.goal === 'string' ? body.goal.trim() : '';
+      if (!goal) {
+        logGoal('POST /api/team-goal — rejected: missing goal');
+        jsonErr(res, 'goal is required');
+        return;
+      }
+
+      const priority = VALID_GOAL_PRIORITIES.has(body.priority) ? body.priority : 'P3';
+      sanitizeStaleMissionState(activeStateDir, (msg, detail) => logState(msg, detail));
+
+      if (!isMissionActive()) {
+        logGoal('POST /api/team-goal — rejected: no active mission', {
+          stateDir: activeStateDir,
+          projectRoot: activeProjectRoot,
+        });
+        jsonErr(res, 'No active mission — start a team run before adding goals', 409);
+        return;
+      }
+
+      logGoal('POST /api/team-goal — request received', {
+        goal: goal.slice(0, 120),
+        priority,
+        stateDir: activeStateDir,
+      });
+
+      const entry = await appendTeamGoalEntry({ goal, priority });
+      pushCurrentState();
+
+      logApi('POST', url, 'ok', { id: entry.id, priority });
+      jsonOk(res, {
+        ok: true,
+        entry: {
+          id: entry.id,
+          title: entry.title,
+          content: entry.content,
+          status: entry.status,
+          priority: entry.priority,
+          createdAt: entry.createdAt,
+        },
+        message: 'Team goal added to command board',
+      });
+    } catch (e) {
+      logGoal(`POST /api/team-goal — error: ${e.message}`);
+      jsonErr(res, e.message, 500);
+    }
+    return;
+  }
+
   // ── /api/models GET ──────────────────────────────────────────────────────
   if (url === '/api/models' && method === 'GET') {
     jsonOk(res, buildModelsApiPayload());
@@ -1883,6 +2020,7 @@ server.listen(port, host, () => {
   console.log(`              ${localBase}/api/memory  ${localBase}/api/hitl/:cmd`);
   console.log(`              ${localBase}/api/board-status  ${localBase}/api/mission-dag`);
   console.log(`              ${localBase}/api/project-context  ${localBase}/api/task-git`);
+  console.log(`              ${localBase}/api/team-goal`);
   console.log(`              ${localBase}/api/projects`);
   console.log(`              ${localBase}/api/project-templates  ${localBase}/api/create-project`);
   console.log(`\n  Open the URL above in your browser (Tailscale: use machine IP).\n`);
