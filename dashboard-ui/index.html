@@ -98,6 +98,29 @@
 
     .last-updated { font-size: .68rem; color: var(--muted); white-space: nowrap; }
 
+    /* Board sync indicator — shown while fetching mission intel */
+    .sync-badge {
+      font-size: .68rem;
+      padding: .18rem .45rem;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      display: none;
+      align-items: center;
+      gap: .3rem;
+    }
+    .sync-badge.visible {
+      display: inline-flex;
+      color: var(--indigo);
+      border-color: rgba(99,102,241,0.35);
+      background: rgba(99,102,241,0.08);
+    }
+    .sync-badge .sync-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--indigo);
+      animation: pulse-ring 1.2s ease-out infinite;
+    }
+
     /* ═══════════════════════════════════════════════════════
        Tab Bar
     ═══════════════════════════════════════════════════════ */
@@ -1924,6 +1947,8 @@
       <span class="ws-badge disconnected" id="ws-badge" title="WebSocket connection status">WS</span>
     </div>
     <div class="header-right">
+      <span class="sync-badge" id="sync-badge" aria-live="polite"><span class="sync-dot"></span> Syncing…</span>
+      <button class="btn-icon" id="btn-header-refresh-board" type="button" title="Refresh command board">↻ Board</button>
       <button class="btn-icon" id="btn-theme" aria-label="Toggle theme">🌙</button>
       <span class="last-updated" id="last-updated"></span>
     </div>
@@ -2423,9 +2448,33 @@
 
   const USAGE_POLL_MS      = 30_000;
   const RUN_STATE_POLL_MS  = 5_000;
+  const OVERVIEW_POLL_MS   = 3_500;  // faster while on Overview / active mission
+  const MISSION_BOOST_MS   = 3_000;  // aggressive poll after mission start
+  const MISSION_BOOST_DURATION_MS = 90_000;
+  const MISSION_LAUNCH_GRACE_MS = 120_000;
   const WS_RECONNECT_BASE  = 2_000;
   const WS_RECONNECT_MAX   = 30_000;
   const ACTIVE_STALE_MS    = 600_000;
+
+  // Verbose client logging — set false to reduce console noise in production
+  const DASHBOARD_DEBUG = true;
+
+  function logDashboard(msg, detail) {
+    if (!DASHBOARD_DEBUG) return;
+    if (detail !== undefined) console.log('[DASHBOARD]', msg, detail);
+    else console.log('[DASHBOARD]', msg);
+  }
+
+  function logMission(msg, detail) {
+    if (detail !== undefined) console.log('[MISSION]', msg, detail);
+    else console.log('[MISSION]', msg);
+  }
+
+  function logApi(msg, detail) {
+    if (!DASHBOARD_DEBUG) return;
+    if (detail !== undefined) console.log('[API]', msg, detail);
+    else console.log('[API]', msg);
+  }
 
   const MEMORY_SECTIONS = [
     'Architecture Decisions',
@@ -2498,6 +2547,9 @@
   let wsConn = null;
   let wsReconnectDelay = WS_RECONNECT_BASE;
   let wsReconnectTimer = null;
+  let pollTimer = null;
+  let missionBoostPollTimer = null;
+  let boardSyncCount = 0;
 
   // ═══════════════════════════════════════════════════════════════════════════
   //  Format helpers
@@ -2565,6 +2617,93 @@
     return rs != null
       && ACTIVE_STATUSES.has(rs.status)
       && (Date.now() - (rs.updatedAt || 0)) < ACTIVE_STALE_MS;
+  }
+
+  /** True while supervisor is alive or run-state shows an active wave. */
+  function isSupervisorMissionActive() {
+    const sup = supervisorInfo;
+    return Boolean(sup?.alive || sup?.missionActive || sup?.run?.active);
+  }
+
+  /** Grace period after dashboard launch before run-state.json appears. */
+  function isMissionLaunching() {
+    if (isRunActive(runState)) return false;
+    if (isSupervisorMissionActive()) return true;
+    const meta = missionMeta || supervisorInfo?.missionMeta;
+    if (!meta?.startedAt) return false;
+    if ((Date.now() - meta.startedAt) > MISSION_LAUNCH_GRACE_MS) return false;
+    // Recent launch and run-state not yet terminal
+    if (!runState?.runId) return true;
+    return ACTIVE_STATUSES.has(runState.status);
+  }
+
+  /** Unified active check — run-state, supervisor PID, or recent dashboard launch. */
+  function isMissionActive() {
+    return isRunActive(runState) || isMissionLaunching() || isSupervisorMissionActive();
+  }
+
+  /**
+   * Best available "last run" snapshot — prefers mission-meta / run-state over
+   * usage-history so a fresh dashboard launch isn't shown as "8d ago".
+   */
+  function getLatestRunSnapshot() {
+    const fromUsage = usageData.length
+      ? [...usageData].sort((a, b) => b.timestamp - a.timestamp)[0]
+      : null;
+    const meta = missionMeta || supervisorInfo?.missionMeta;
+    const metaTs = meta?.startedAt ?? 0;
+    const runTs = runState?.startedAt ?? runState?.updatedAt ?? 0;
+    const usageTs = fromUsage?.timestamp ?? 0;
+    const bestTs = Math.max(metaTs, runTs, usageTs);
+
+    if (bestTs === metaTs && metaTs > 0) {
+      return {
+        timestamp: metaTs,
+        goal: meta.goal || meta.effectiveGoal || '',
+        label: meta.runName || null,
+        source: 'mission-meta',
+      };
+    }
+    if (bestTs === runTs && runTs > 0 && runState?.goal) {
+      return { timestamp: runTs, goal: runState.goal, label: null, source: 'run-state' };
+    }
+    if (fromUsage) {
+      return { timestamp: fromUsage.timestamp, goal: fromUsage.goal, label: null, source: 'usage' };
+    }
+    return null;
+  }
+
+  function setBoardSyncing(active) {
+    boardSyncCount = Math.max(0, boardSyncCount + (active ? 1 : -1));
+    const badge = document.getElementById('sync-badge');
+    if (badge) badge.classList.toggle('visible', boardSyncCount > 0);
+  }
+
+  function getPollIntervalMs() {
+    if (activeTab === 'overview' || isMissionActive() || isMissionLaunching()) return OVERVIEW_POLL_MS;
+    return RUN_STATE_POLL_MS;
+  }
+
+  function schedulePollRunState() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(pollRunState, getPollIntervalMs());
+    logDashboard('Poll interval set', { ms: getPollIntervalMs(), tab: activeTab });
+  }
+
+  function startMissionBoostPoll() {
+    if (missionBoostPollTimer) clearInterval(missionBoostPollTimer);
+    let elapsed = 0;
+    logMission('Starting boost poll after mission launch', { intervalMs: MISSION_BOOST_MS });
+    missionBoostPollTimer = setInterval(async () => {
+      elapsed += MISSION_BOOST_MS;
+      logDashboard('Mission boost poll tick', { elapsed });
+      await pollRunState();
+      if (elapsed >= MISSION_BOOST_DURATION_MS || isRunActive(runState)) {
+        clearInterval(missionBoostPollTimer);
+        missionBoostPollTimer = null;
+        logMission('Boost poll ended', { runActive: isRunActive(runState) });
+      }
+    }, MISSION_BOOST_MS);
   }
 
   function periodCutoff(p) {
@@ -2641,12 +2780,18 @@
         wsReconnectDelay = WS_RECONNECT_BASE;
         const badge = document.getElementById('ws-badge');
         if (badge) { badge.textContent = 'LIVE'; badge.classList.remove('disconnected'); }
+        logDashboard('WebSocket connected');
       };
 
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
           if (msg.type === 'state-update') {
+            logDashboard('WebSocket state-update', {
+              runId: msg.runState?.runId ?? null,
+              status: msg.runState?.status ?? null,
+              boardUpdated: Boolean(msg.boardStatus),
+            });
             if (msg.runState  !== undefined) runState  = msg.runState;
             if (msg.hitlState !== undefined) hitlState = msg.hitlState;
             if (msg.boardStatus !== undefined) boardStatus = msg.boardStatus;
@@ -2674,6 +2819,7 @@
 
       ws.onclose = ws.onerror = () => {
         wsConn = null;
+        logDashboard('WebSocket disconnected — will reconnect');
         const badge = document.getElementById('ws-badge');
         if (badge) { badge.textContent = 'WS'; badge.classList.add('disconnected'); }
         wsReconnectDelay = Math.min(wsReconnectDelay * 1.5, WS_RECONNECT_MAX);
@@ -2702,6 +2848,7 @@
       const res = await fetch('/api/run-state');
       const json = await res.json();
       runState = (json && json.runId) ? json : null;
+      logApi('GET /api/run-state', { runId: runState?.runId ?? null, status: runState?.status ?? null });
       // Also fetch hitl state for fresh overlay
       const hr = await fetch('/api/hitl-state');
       hitlState = await hr.json();
@@ -2720,6 +2867,11 @@
       if (!res.ok) throw new Error('HTTP ' + res.status);
       supervisorInfo = await res.json();
       missionMeta = supervisorInfo?.missionMeta ?? missionMeta;
+      logApi('GET /api/supervisor', {
+        alive: supervisorInfo?.alive,
+        missionActive: supervisorInfo?.missionActive,
+        startedAt: missionMeta?.startedAt ?? null,
+      });
     } catch (e) {
       console.warn('Supervisor fetch failed:', e.message);
     }
@@ -2730,8 +2882,10 @@
       const res = await fetch('/api/board-status');
       if (!res.ok) throw new Error('HTTP ' + res.status);
       boardStatus = await res.json();
+      logApi('GET /api/board-status', { ok: true, hasMarkdown: Boolean(boardStatus?.markdown) });
     } catch (e) {
       console.warn('Board status fetch failed:', e.message);
+      logApi('GET /api/board-status', { ok: false, error: e.message });
       boardStatus = null;
     }
   }
@@ -3366,7 +3520,7 @@
   });
 
   function scrollToBoard() {
-    document.getElementById('board-section-box')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('intel-section-box')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   async function toggleOpsLogs() {
@@ -3405,7 +3559,7 @@
     const run = sup?.run;
     const rec = sup?.record;
     const alive = sup?.alive;
-    const active = isRunActive(runState) || sup?.missionActive || run?.active;
+    const active = isMissionActive();
 
     section.classList.toggle('running', active);
     missionBox?.classList.toggle('mission-active', active);
@@ -3464,9 +3618,7 @@
 
     if (lastEl) {
       const meta = missionMeta || sup?.missionMeta;
-      const lastRun = usageData.length
-        ? [...usageData].sort((a, b) => b.timestamp - a.timestamp)[0]
-        : null;
+      const latest = getLatestRunSnapshot();
 
       if (meta?.startedAt && !active) {
         const label = meta.runName ? escHtml(meta.runName) : escHtml((meta.goal || '').slice(0, 60));
@@ -3474,10 +3626,11 @@
           '<span>Last launch:</span> <strong>' + label + '</strong>' +
           ' · ' + escHtml(timeAgo(meta.startedAt)) +
           ' · <a href="#" id="ops-last-board">View Board</a>';
-      } else if (lastRun && !active) {
+      } else if (latest && !active) {
+        const label = latest.label || latest.goal;
         lastEl.innerHTML =
-          '<span>Last mission:</span> <strong>' + escHtml(lastRun.goal.slice(0, 55)) + (lastRun.goal.length > 55 ? '…' : '') + '</strong>' +
-          ' · ' + escHtml(formatDate(lastRun.timestamp) + ' ' + formatTime(lastRun.timestamp)) +
+          '<span>Last mission:</span> <strong>' + escHtml(label.slice(0, 55)) + (label.length > 55 ? '…' : '') + '</strong>' +
+          ' · ' + escHtml(formatDate(latest.timestamp) + ' ' + formatTime(latest.timestamp)) +
           ' · <a href="#" id="ops-last-board">View Board</a>';
       } else if (active && meta?.startedAt) {
         lastEl.innerHTML =
@@ -3516,6 +3669,35 @@
     el.innerHTML = '';
   }
 
+  async function refreshBoardState(options = {}) {
+    const source = options.source || 'manual';
+    logMission('Refreshing board state', { source });
+    setBoardSyncing(true);
+    try {
+      await Promise.all([
+        fetchRunState(),
+        fetchBoardStatus(),
+        fetchSupervisor(),
+        fetchMissionDag(),
+      ]);
+      renderLiveIndicator();
+      renderCards();
+      renderLiveStatus();
+      renderOpsStatus();
+      renderBoardPanel();
+      scheduleMissionGraphRender();
+      renderRecentRuns();
+      updateLastUpdated();
+      logMission('Board state refresh complete', { source, missionActive: isMissionActive() });
+      return true;
+    } catch (e) {
+      logMission('Board state refresh failed', { source, error: e.message });
+      return false;
+    } finally {
+      setBoardSyncing(false);
+    }
+  }
+
   async function startMission() {
     if (missionSubmitting) return;
     const goalEl = document.getElementById('mission-goal');
@@ -3542,6 +3724,8 @@
       cleanup: document.getElementById('mission-cleanup')?.checked || false,
     };
 
+    logMission('Mission form submitted', payload);
+
     try {
       const res = await fetch('/api/mission', {
         method: 'POST',
@@ -3549,36 +3733,67 @@
         body: JSON.stringify(payload),
       });
       const data = await res.json();
+      logApi('POST /api/mission response', { ok: res.ok, status: res.status, data });
+
       if (!res.ok) throw new Error(data.error || res.statusText);
+
+      const startedAt = data.startedAt || Date.now();
+      missionMeta = {
+        id: data.missionId,
+        goal,
+        runName: payload.runName || null,
+        startedAt,
+        pid: data.pid,
+        effectiveGoal: data.effectiveGoal,
+      };
 
       setMissionStatus(
         'success',
         '✅ Mission launched' +
         (data.pid ? ` (PID ${data.pid})` : '') +
-        '. <a href="#" id="mission-board-link">View Command Board ↓</a> · ' +
+        '. Syncing board… <a href="#" id="mission-board-link">View Command Board ↓</a> · ' +
         '<a href="#" id="mission-refresh-link">Refresh status</a>'
       );
 
       document.getElementById('mission-board-link')?.addEventListener('click', (e) => {
         e.preventDefault();
-        document.getElementById('board-section-box')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document.getElementById('intel-section-box')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
       document.getElementById('mission-refresh-link')?.addEventListener('click', async (e) => {
         e.preventDefault();
-        await refreshDashboard();
+        await refreshBoardState({ source: 'mission-status-link' });
       });
 
-      toast('Mission started in background', 'success');
-      missionMeta = {
-        goal,
-        runName: payload.runName || null,
-        startedAt: Date.now(),
-        pid: data.pid,
-      };
-      await Promise.all([pollRunState(), fetchSupervisor(), fetchProjectContext()]);
+      toast('Mission started — syncing board…', 'success');
+
+      // Full board refresh + faster polling so UI updates before usage-history is written
+      const refreshed = await refreshBoardState({ source: 'mission-start' });
+      schedulePollRunState();
+      startMissionBoostPoll();
+
+      if (!refreshed) {
+        logMission('Live board refresh failed — reloading page as fallback');
+        toast('Board sync failed — reloading…', 'warning');
+        setTimeout(() => location.reload(), 1200);
+        return;
+      }
+
       renderOpsStatus();
       renderProjectContext();
+
+      // Secondary retry if run-state still hasn't appeared after a few seconds
+      setTimeout(async () => {
+        if (!isMissionActive() && missionMeta?.startedAt && (Date.now() - missionMeta.startedAt) < 30_000) {
+          logMission('Retry board refresh — run-state not yet visible');
+          const ok = await refreshBoardState({ source: 'mission-start-retry' });
+          if (!ok) {
+            logMission('Retry failed — reloading page');
+            location.reload();
+          }
+        }
+      }, 8000);
     } catch (e) {
+      logMission('Mission start failed', { error: e.message });
       setMissionStatus('error', '✕ ' + escHtml(e.message));
       toast('Mission failed: ' + e.message, 'error');
     } finally {
@@ -3633,7 +3848,7 @@
   document.getElementById('btn-qa-board')?.addEventListener('click', async () => {
     await fetchBoardStatus();
     renderBoardPanel();
-    document.getElementById('board-section-box')?.scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('intel-section-box')?.scrollIntoView({ behavior: 'smooth' });
     toast('Board status updated', 'info');
   });
   document.getElementById('btn-qa-cleanup')?.addEventListener('click', runBoardCleanup);
@@ -3690,6 +3905,7 @@
     if (tab === 'memory')  loadMemoryTab();
     if (tab === 'history') renderHistory();
     if (tab === 'actions') { renderHitlActionsPanel(); renderRecentGoals(); }
+    schedulePollRunState();
   }
 
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -3703,9 +3919,13 @@
   function renderLiveIndicator() {
     const dot   = document.getElementById('live-dot');
     const label = document.getElementById('live-label');
-    const active = isRunActive(runState);
+    const active = isMissionActive();
     dot.classList.toggle('active', active);
-    label.textContent = active ? '1 job running' : 'Idle';
+    if (isMissionLaunching() && !isRunActive(runState)) {
+      label.textContent = 'Launching…';
+    } else {
+      label.textContent = active ? '1 job running' : 'Idle';
+    }
   }
 
   function updateLastUpdated() {
@@ -3742,10 +3962,11 @@
     document.getElementById('card-tokens-sub').textContent =
       period !== 'all' ? 'All time: ' + formatTokens(allTok) : '';
 
-    const active = isRunActive(runState) ? 1 : 0;
+    const active = isMissionActive() ? 1 : 0;
     document.getElementById('card-active').textContent    = active;
+    const activeGoal = runState?.goal || missionMeta?.goal || supervisorInfo?.missionMeta?.goal || '';
     document.getElementById('card-active-sub').textContent =
-      active && runState ? runState.goal.slice(0, 40) + (runState.goal.length > 40 ? '…' : '') : '';
+      active && activeGoal ? activeGoal.slice(0, 40) + (activeGoal.length > 40 ? '…' : '') : '';
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -3807,13 +4028,31 @@
     const box = document.getElementById('live-section-box');
     if (!el || !box) return;
 
+    // Launching grace — supervisor spawned but run-state.json not written yet
+    if (isMissionLaunching() && !isRunActive(runState)) {
+      box.classList.add('live-active');
+      const meta = missionMeta || supervisorInfo?.missionMeta;
+      const goal = meta?.goal || 'Mission launching…';
+      el.innerHTML =
+        '<div class="active-job-header">' +
+          '<div class="active-goal">' + escHtml(goal) + '</div>' +
+          '<div class="active-meta">' +
+            '<span class="status-pill planning">⏳ Launching</span>' +
+            '<span>Waiting for run-state…</span>' +
+            (meta?.startedAt ? '<span>' + escHtml(timeAgo(meta.startedAt)) + ' ago</span>' : '') +
+          '</div>' +
+        '</div>' +
+        '<div class="pm-banner planning">Background team mission is starting — board will update automatically.</div>';
+      return;
+    }
+
     if (!isRunActive(runState)) {
       box.classList.remove('live-active');
-      const last = usageData.length
-        ? [...usageData].sort((a,b) => b.timestamp - a.timestamp)[0]
-        : null;
-      const lastLine = last
-        ? '<div class="idle-last">Last run: ' + escHtml(timeAgo(last.timestamp)) + ' — ' + escHtml(last.goal.slice(0,55)) + (last.goal.length > 55 ? '…' : '') + '</div>'
+      const latest = getLatestRunSnapshot();
+      const lastLine = latest
+        ? '<div class="idle-last">Last run: ' + escHtml(timeAgo(latest.timestamp)) + ' — ' +
+          escHtml((latest.label || latest.goal).slice(0, 55)) +
+          ((latest.label || latest.goal).length > 55 ? '…' : '') + '</div>'
         : '';
       el.innerHTML = '<div class="idle-state"><span style="font-size:1rem">○</span><div><div>No active run</div>' + lastLine + '</div></div>';
       return;
@@ -4701,19 +4940,19 @@
     btn?.classList.add('spinning');
     btn?.setAttribute('disabled', 'true');
     try {
-      const fetches = [fetchBoardStatus()];
-      if (activeIntelTab === 'graph' || missionGraphEverOpened) fetches.push(fetchMissionDag());
-      await Promise.all(fetches);
-      renderBoardPanel();
+      const ok = await refreshBoardState({ source: 'intel-refresh-btn' });
       if (activeIntelTab === 'graph') renderMissionGraphPanel();
-      updateLastUpdated();
-      toast('Mission intel updated', 'success', 2800);
-    } catch (e) {
-      toast('Refresh failed', 'error');
+      toast(ok ? 'Mission intel updated' : 'Refresh failed', ok ? 'success' : 'error');
     } finally {
       btn?.classList.remove('spinning');
       btn?.removeAttribute('disabled');
     }
+  });
+
+  document.getElementById('btn-header-refresh-board')?.addEventListener('click', async () => {
+    logMission('Header Refresh Board clicked');
+    const ok = await refreshBoardState({ source: 'header-refresh-btn' });
+    toast(ok ? 'Board refreshed' : 'Board refresh failed', ok ? 'success' : 'error');
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -4747,7 +4986,7 @@
     if (!el) return;
 
     const sorted = [...usageData].sort((a,b) => b.timestamp - a.timestamp);
-    const active = isRunActive(runState);
+    const active = isMissionActive();
 
     // Prepend active run if not in history yet
     let rows = sorted;
@@ -5230,6 +5469,7 @@
   if (themeBtn) themeBtn.textContent = prefersDark ? '☀️' : '🌙';
 
   // Initial load
+  logDashboard('Page load — fetching initial state');
   (async () => {
     await Promise.all([
       fetchUsage(),
@@ -5243,11 +5483,30 @@
     populateModelSelects();
     renderAll();
     focusMissionGoal();
+    logDashboard('Initial load complete', {
+      missionActive: isMissionActive(),
+      lastRun: getLatestRunSnapshot()?.timestamp ?? null,
+    });
   })();
 
-  // Start polling intervals (fast + slow)
-  setInterval(pollRunState, RUN_STATE_POLL_MS);
-  setInterval(pollUsage,    USAGE_POLL_MS);
+  // Dynamic polling — faster on Overview tab and during active missions
+  schedulePollRunState();
+  setInterval(pollUsage, USAGE_POLL_MS);
+
+  // Refresh when tab becomes visible (e.g. phone returns from background)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      logDashboard('Page visible — refreshing state');
+      refreshBoardState({ source: 'visibility' });
+    }
+  });
+
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted) {
+      logDashboard('Page restored from bfcache — full refresh');
+      refreshDashboard();
+    }
+  });
 
   // Connect WebSocket
   connectWs();
