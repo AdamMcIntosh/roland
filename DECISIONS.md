@@ -21,3 +21,7 @@ Build the initi _(run mq41lbgr)_
 ## 2026-06-07 — [Mission: task-4-fix] [P1] Task: Fix Critique Phase Escalation Logic in E2E Test _(run mq4bi663)_
 
 - Selected an escalation model that decouples `maxRetries` (retry budget exhausted) from `escalationThreshold` (consecutive verify failures) to eliminate premature critique escalation and improve testability.
+
+## 2026-06-07 — [Mission: task-5] [P1] Task-5: Implement Retry Phase + Full Loop Orchestration E _(run mq4bv3rh)_
+
+- Ensure all terminal loop status transitions (`completed/failed/escalated`) emit `onStateChange` so coordinator persistence (`run-state.json.loopStatus`) cannot remain stale.
