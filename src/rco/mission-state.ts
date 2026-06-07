@@ -317,3 +317,132 @@ export function cleanupPreviousRuns(
 
   return { sanitized, metaArchived, boardCleanup };
 }
+
+// ── Client-facing active run-state (HTTP + WebSocket parity) ─────────────────
+
+/**
+ * Run-state payload for dashboard clients — null when inactive or stale.
+ * Supervisor liveness keeps run-state visible during slow planning / restarts.
+ */
+export function readActiveRunStateForClient(
+  stateDir: string,
+  now = Date.now(),
+): RunStateRecord | null {
+  const rs = readRunStateRecord(stateDir);
+  if (!rs?.runId) return null;
+  if (isSupervisorAlive(stateDir)) return rs;
+  if (isRunStateActive(stateDir, now)) return rs;
+  return null;
+}
+
+// ── Supervisor readiness polling ────────────────────────────────────────────────
+
+export interface WaitForSupervisorOptions {
+  timeoutMs?: number;
+  pollIntervalMs?: number;
+}
+
+export interface WaitForSupervisorResult {
+  ready: boolean;
+  record: SupervisorRecord | null;
+  waitedMs: number;
+  error?: string;
+}
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Poll until supervisor.pid exists with a live PID, or timeout.
+ * Call after spawning `roland team --background` before writing mission-meta.
+ */
+export async function waitForSupervisorReady(
+  stateDir: string,
+  options: WaitForSupervisorOptions = {},
+): Promise<WaitForSupervisorResult> {
+  const timeoutMs = options.timeoutMs ?? 15_000;
+  const pollIntervalMs = options.pollIntervalMs ?? 200;
+  const started = Date.now();
+
+  while (Date.now() - started < timeoutMs) {
+    const rec = readSupervisorRecord(stateDir);
+    if (rec?.pid && isProcessAlive(rec.pid)) {
+      return { ready: true, record: rec, waitedMs: Date.now() - started };
+    }
+    await sleepMs(pollIntervalMs);
+  }
+
+  const last = readSupervisorRecord(stateDir);
+  return {
+    ready: false,
+    record: last,
+    waitedMs: Date.now() - started,
+    error: last?.pid
+      ? `Supervisor PID ${last.pid} is not running`
+      : 'supervisor.pid was not written — background spawn may have failed',
+  };
+}
+
+// ── Supervisor start failure diagnostics ──────────────────────────────────────
+
+export interface SupervisorStartDiagnostics {
+  message: string;
+  logFile: string | null;
+  logTail: string;
+  hints: string[];
+}
+
+const SUPERVISOR_LOG_DIR = 'logs';
+
+function resolveSupervisorLogFile(stateDir: string): string | null {
+  const rec = readSupervisorRecord(stateDir);
+  if (rec?.logFile && fs.existsSync(rec.logFile)) return rec.logFile;
+
+  const logDir = path.join(stateDir, SUPERVISOR_LOG_DIR);
+  try {
+    const files = fs.readdirSync(logDir)
+      .filter((f) => f.startsWith('bg-') && f.endsWith('.log'))
+      .sort()
+      .reverse();
+    return files.length > 0 ? path.join(logDir, files[0]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function tailSupervisorLog(logFile: string | null, lines = 40): string {
+  if (!logFile || !fs.existsSync(logFile)) return '';
+  try {
+    const content = fs.readFileSync(logFile, 'utf-8');
+    return content.split('\n').slice(-Math.max(1, lines)).join('\n');
+  } catch {
+    return '';
+  }
+}
+
+/** Operator-actionable context when background supervisor fails to start. */
+export function buildSupervisorStartDiagnostics(
+  stateDir: string,
+  context?: string,
+): SupervisorStartDiagnostics {
+  const logFile = resolveSupervisorLogFile(stateDir);
+  const logTail = tailSupervisorLog(logFile);
+  const base = context
+    ?? 'Background supervisor did not become ready — mission was not started';
+  const message = logTail
+    ? `${base}. See log tail below.`
+    : `${base}. Check Roland build and project permissions.`;
+
+  return {
+    message,
+    logFile,
+    logTail,
+    hints: [
+      'Run `npm run build` in the Roland install root if dist/ is missing',
+      logFile ? `Inspect full log: ${logFile}` : 'No background log file found yet',
+      'Retry mission launch from the dashboard or run `roland team "goal" --background`',
+      'Use `roland bg-logs` for the latest supervisor output',
+    ],
+  };
+}

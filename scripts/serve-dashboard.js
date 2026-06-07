@@ -50,9 +50,12 @@ import {
   cleanupPreviousRuns,
   isolateProjectMissionState,
   readActiveMissionMeta,
+  readActiveRunStateForClient,
   readMissionMetaFile,
   isSupervisorAlive,
   isRunStateActive,
+  waitForSupervisorReady,
+  buildSupervisorStartDiagnostics,
 } from '../dist/rco/mission-state.js';
 import { isComplexGoalForDag } from '../dist/rco/mission-dag.js';
 
@@ -374,11 +377,11 @@ function jsonOk(res, data) {
   res.end(JSON.stringify(data));
 }
 
-function jsonErr(res, message, status = 400) {
+function jsonErr(res, message, status = 400, extra = {}) {
   setCors(res);
   res.setHeader('Content-Type', 'application/json');
   res.statusCode = status;
-  res.end(JSON.stringify({ error: message }));
+  res.end(JSON.stringify({ error: message, ...extra }));
 }
 
 /** Read JSON body from an IncomingMessage. Resolves to parsed object. */
@@ -457,7 +460,8 @@ function readTaskGitPayload() {
 }
 
 function pushCurrentState() {
-  const runState  = readJson(path.join(activeStateDir, 'run-state.json'),  null);
+  sanitizeStaleMissionState(activeStateDir, (msg, detail) => logState(msg, detail));
+  const runState  = readActiveRunStateForClient(activeStateDir);
   const hitlState = readJson(path.join(activeStateDir, 'hitl-state.json'), null);
   const boardStatus = readBoardStatusPayload();
   const missionDag = readMissionDagPayload();
@@ -508,11 +512,8 @@ function writeMissionMeta(meta) {
 }
 
 function summarizeRunState() {
-  const rs = readJson(path.join(activeStateDir, 'run-state.json'), null);
+  const rs = readActiveRunStateForClient(activeStateDir);
   if (!rs?.runId) return null;
-  const ACTIVE = new Set(['planning', 'running', 'reviewing', 'synthesizing']);
-  const fresh = rs.updatedAt && (Date.now() - rs.updatedAt) < 600_000;
-  const active = ACTIVE.has(rs.status) && fresh;
   const total = Math.max(rs.totalTasks ?? 0, 0);
   const done = Math.min(rs.completedTasks ?? 0, total);
   return {
@@ -525,7 +526,7 @@ function summarizeRunState() {
     progressPct: total > 0 ? Math.min(Math.round((done / total) * 100), 100) : 0,
     startedAt: rs.startedAt ?? null,
     updatedAt: rs.updatedAt ?? null,
-    active,
+    active: true,
   };
 }
 
@@ -671,7 +672,56 @@ function spawnTeamMission(effectiveGoal, options = {}) {
     projectRoot: activeProjectRoot,
     stateDir: activeStateDir,
   });
-  return { pid: child.pid ?? null };
+  return { pid: child.pid ?? null, spawnPid: child.pid ?? null };
+}
+
+class SupervisorStartError extends Error {
+  constructor(message, diagnostics) {
+    super(message);
+    this.name = 'SupervisorStartError';
+    this.code = 'SUPERVISOR_START_FAILED';
+    this.diagnostics = diagnostics;
+  }
+}
+
+/**
+ * After spawnTeamMission, poll supervisor.pid until live or fail with diagnostics.
+ * Writes mission-meta only when the real supervisor PID is confirmed.
+ */
+async function confirmSupervisorAndWriteMissionMeta(metaFields) {
+  const ready = await waitForSupervisorReady(activeStateDir);
+  if (!ready.ready || !ready.record?.pid) {
+    const diag = buildSupervisorStartDiagnostics(
+      activeStateDir,
+      ready.error ?? 'Background supervisor did not become ready',
+    );
+    logMission('Supervisor readiness failed', {
+      stateDir: activeStateDir,
+      waitedMs: ready.waitedMs,
+      error: ready.error ?? null,
+      logFile: diag.logFile,
+    });
+    throw new SupervisorStartError(diag.message, {
+      ...diag,
+      waitedMs: ready.waitedMs,
+      supervisorError: ready.error ?? null,
+    });
+  }
+
+  writeMissionMeta({
+    ...metaFields,
+    pid: ready.record.pid,
+    logFile: ready.record.logFile ?? null,
+    supervisorStartedAt: ready.record.startedAt ?? Date.now(),
+  });
+
+  logMission('Supervisor confirmed ready', {
+    pid: ready.record.pid,
+    waitedMs: ready.waitedMs,
+    logFile: ready.record.logFile ?? null,
+  });
+
+  return { pid: ready.record.pid, record: ready.record, waitedMs: ready.waitedMs };
 }
 
 function readBoardStatusPayload() {
@@ -951,9 +1001,9 @@ function appendMigrationEntry({ fromProjectRoot, goal, pid }) {
  * Re-spawn an active mission in the current activeProjectRoot after a project switch.
  * Caller must have already switched activeProjectRoot / activeStateDir to the target.
  */
-function spawnMigratedMission(payload, fromProjectRoot) {
+async function spawnMigratedMission(payload, fromProjectRoot) {
   const effectiveGoal = payload.effectiveGoal || payload.goal;
-  const { pid } = spawnTeamMission(effectiveGoal, {
+  spawnTeamMission(effectiveGoal, {
     pmModel: payload.pmModel,
     engineerModel: payload.engineerModel,
     notify: false,
@@ -961,7 +1011,7 @@ function spawnMigratedMission(payload, fromProjectRoot) {
   });
 
   const missionId = randomUUID();
-  writeMissionMeta({
+  const { pid } = await confirmSupervisorAndWriteMissionMeta({
     id: missionId,
     goal: payload.rawGoal,
     effectiveGoal,
@@ -970,7 +1020,6 @@ function spawnMigratedMission(payload, fromProjectRoot) {
     forceTeam: payload.forceTeam || false,
     pmModel: payload.pmModel,
     engineerModel: payload.engineerModel,
-    pid,
     projectRoot: activeProjectRoot,
     stateDir: activeStateDir,
     status: 'active',
@@ -1000,7 +1049,7 @@ function spawnMigratedMission(payload, fromProjectRoot) {
  * Migrate an active mission from one project's .roland/ to another project root.
  * Aborts the source supervisor and respawns in the target (active context must be target).
  */
-function migrateActiveMission(fromStateDir, fromProjectRoot, toProjectRoot) {
+async function migrateActiveMission(fromStateDir, fromProjectRoot, toProjectRoot) {
   if (!isMissionActiveInStateDir(fromStateDir)) {
     return { migrated: false, reason: 'no_active_mission' };
   }
@@ -1181,7 +1230,7 @@ function readProjectTemplatesPayload() {
   };
 }
 
-function createProject(body = {}) {
+async function createProject(body = {}) {
   const projectName = sanitizeProjectName(body.name);
   const templateId = typeof body.template === 'string' ? body.template.trim() : 'empty';
   if (!PROJECT_TEMPLATES.some(t => t.id === templateId)) {
@@ -1241,7 +1290,7 @@ function createProject(body = {}) {
         to: projectPath,
       });
     }
-    switchResult = switchActiveProject(projectPath, { force: true, migrateMission });
+    switchResult = await switchActiveProject(projectPath, { force: true, migrateMission });
   }
 
   return {
@@ -1285,7 +1334,7 @@ function setupStateWatcher() {
   }
 }
 
-function switchActiveProject(targetPath, { force = false, migrateMission = false } = {}) {
+async function switchActiveProject(targetPath, { force = false, migrateMission = false } = {}) {
   const resolved = path.resolve(expandTilde(String(targetPath || '').trim()));
   if (!resolved) throw new Error('path is required');
   if (!isValidProjectRoot(resolved)) {
@@ -1331,7 +1380,22 @@ function switchActiveProject(targetPath, { force = false, migrateMission = false
     });
     sanitizeStaleMissionState(activeStateDir, (msg, detail) => logState(msg, detail));
     if (path.resolve(fromStateDir) !== path.resolve(activeStateDir)) {
-      migration = migrateActiveMission(fromStateDir, fromRoot, resolved);
+      try {
+        migration = await migrateActiveMission(fromStateDir, fromRoot, resolved);
+      } catch (e) {
+        if (e instanceof SupervisorStartError) {
+          migration = {
+            migrated: false,
+            reason: 'supervisor_start_failed',
+            error: e.message,
+            code: e.code,
+            ...e.diagnostics,
+          };
+          logProject('Mission migration failed — supervisor did not start', migration);
+        } else {
+          throw e;
+        }
+      }
     }
   } else {
     const isolation = isolateProjectMissionState(activeStateDir, (msg, detail) => logState(msg, detail));
@@ -1412,37 +1476,16 @@ const server = http.createServer(async (req, res) => {
   // ── /api/run-state ───────────────────────────────────────────────────────
   if (url === '/api/run-state' && method === 'GET') {
     sanitizeStaleMissionState(activeStateDir, (msg, detail) => logState(msg, detail));
-    const file = path.join(activeStateDir, 'run-state.json');
-    fs.readFile(file, (err, data) => {
-      let payload = 'null';
-      if (!err) {
-        try {
-          const rs = JSON.parse(data.toString());
-          const ACTIVE = new Set(['planning', 'running', 'reviewing', 'synthesizing']);
-          const fresh = rs?.updatedAt && (Date.now() - rs.updatedAt) < 600_000;
-          const supervisorAlive = isSupervisorAlive(activeStateDir);
-          const active = rs?.runId && ACTIVE.has(rs.status) && fresh && (supervisorAlive || fresh);
-          if (active) {
-            payload = data.toString();
-            logApi('GET', url, 'ok', { runId: rs?.runId ?? null, status: rs?.status ?? null });
-          } else {
-            logApi('GET', url, 'stale or inactive run-state omitted', {
-              runId: rs?.runId ?? null,
-              status: rs?.status ?? null,
-              supervisorAlive,
-            });
-          }
-        } catch {
-          logApi('GET', url, 'parse error');
-        }
-      } else {
-        logApi('GET', url, 'no run-state file', { code: err.code });
-      }
-      setCors(res);
-      res.setHeader('Content-Type', 'application/json');
-      res.statusCode = 200;
-      res.end(payload);
-    });
+    const rs = readActiveRunStateForClient(activeStateDir);
+    if (rs) {
+      logApi('GET', url, 'ok', { runId: rs.runId ?? null, status: rs.status ?? null });
+    } else {
+      logApi('GET', url, 'no active run-state', { stateDir: activeStateDir });
+    }
+    setCors(res);
+    res.setHeader('Content-Type', 'application/json');
+    res.statusCode = 200;
+    res.end(rs ? JSON.stringify(rs) : 'null');
     return;
   }
 
@@ -1573,7 +1616,7 @@ const server = http.createServer(async (req, res) => {
   if (url === '/api/create-project' && method === 'POST') {
     try {
       const body = await readBody(req);
-      const result = createProject(body);
+      const result = await createProject(body);
       jsonOk(res, result);
     } catch (e) { jsonErr(res, e.message, 400); }
     return;
@@ -1585,7 +1628,7 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req);
       const targetPath = typeof body.path === 'string' ? body.path.trim() : '';
       if (!targetPath) { jsonErr(res, 'path is required'); return; }
-      const result = switchActiveProject(targetPath, {
+      const result = await switchActiveProject(targetPath, {
         force: Boolean(body.force),
         migrateMission: Boolean(body.migrateMission),
       });
@@ -1706,10 +1749,10 @@ const server = http.createServer(async (req, res) => {
       );
 
       const effectiveGoal = buildMissionGoal(rawGoal, { priority, runName, forceTeam });
-      const { pid } = spawnTeamMission(effectiveGoal, { pmModel, engineerModel, notify, clean: cleanup });
+      spawnTeamMission(effectiveGoal, { pmModel, engineerModel, notify, clean: cleanup });
 
       const missionId = randomUUID();
-      writeMissionMeta({
+      const { pid } = await confirmSupervisorAndWriteMissionMeta({
         id: missionId,
         goal: rawGoal,
         effectiveGoal,
@@ -1718,7 +1761,6 @@ const server = http.createServer(async (req, res) => {
         forceTeam,
         pmModel,
         engineerModel,
-        pid,
         projectRoot: activeProjectRoot,
         stateDir: activeStateDir,
         status: 'active',
@@ -1759,6 +1801,13 @@ const server = http.createServer(async (req, res) => {
       });
     } catch (e) {
       logMission(`POST /api/mission — error: ${e.message}`);
+      if (e instanceof SupervisorStartError) {
+        jsonErr(res, e.message, 500, {
+          code: e.code,
+          ...e.diagnostics,
+        });
+        return;
+      }
       jsonErr(res, e.message, 500);
     }
     return;
@@ -1841,7 +1890,8 @@ wss.on('connection', (ws) => {
   wsClients.add(ws);
   // Send the current state snapshot immediately on connection
   try {
-    const runState  = readJson(path.join(activeStateDir, 'run-state.json'),  null);
+    sanitizeStaleMissionState(activeStateDir, (msg, detail) => logState(msg, detail));
+    const runState  = readActiveRunStateForClient(activeStateDir);
     const hitlState = readJson(path.join(activeStateDir, 'hitl-state.json'), null);
     const boardStatus = readBoardStatusPayload();
     const missionDag = readMissionDagPayload();

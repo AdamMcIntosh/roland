@@ -1,0 +1,12 @@
+/home/adammcintosh/projects/roland/FlowForge/src/FlowForge.Domain/bin/Debug/net10.0/FlowForge.Domain.deps.json
+/home/adammcintosh/projects/roland/FlowForge/src/FlowForge.Domain/bin/Debug/net10.0/FlowForge.Domain.dll
+/home/adammcintosh/projects/roland/FlowForge/src/FlowForge.Domain/bin/Debug/net10.0/FlowForge.Domain.pdb
+/home/adammcintosh/projects/roland/FlowForge/src/FlowForge.Domain/obj/Debug/net10.0/FlowForge.Domain.GeneratedMSBuildEditorConfig.editorconfig
+/home/adammcintosh/projects/roland/FlowForge/src/FlowForge.Domain/obj/Debug/net10.0/FlowForge.Domain.AssemblyInfoInputs.cache
+/home/adammcintosh/projects/roland/FlowForge/src/FlowForge.Domain/obj/Debug/net10.0/FlowForge.Domain.AssemblyInfo.cs
+/home/adammcintosh/projects/roland/FlowForge/src/FlowForge.Domain/obj/Debug/net10.0/FlowForge.Domain.csproj.CoreCompileInputs.cache
+/home/adammcintosh/projects/roland/FlowForge/src/FlowForge.Domain/obj/Debug/net10.0/FlowForge.Domain.sourcelink.json
+/home/adammcintosh/projects/roland/FlowForge/src/FlowForge.Domain/obj/Debug/net10.0/FlowForge.Domain.dll
+/home/adammcintosh/projects/roland/FlowForge/src/FlowForge.Domain/obj/Debug/net10.0/refint/FlowForge.Domain.dll
+/home/adammcintosh/projects/roland/FlowForge/src/FlowForge.Domain/obj/Debug/net10.0/FlowForge.Domain.pdb
+/home/adammcintosh/projects/roland/FlowForge/src/FlowForge.Domain/obj/Debug/net10.0/ref/FlowForge.Domain.dll

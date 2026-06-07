@@ -21,6 +21,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { isSupervisorAlive, isRunStateActive } from './mission-state.js';
 
 export const HITL_COMMAND_FILE = 'hitl.json';
 export const HITL_STATE_FILE   = 'hitl-state.json';
@@ -218,15 +219,9 @@ export function printHitlStatus(stateDir: string): void {
   process.stderr.write(`  Pending commands: ${queueLen}\n`);
 }
 
-/** Returns true if a run is currently active (not done or error). */
+/** Returns true when a supervisor or fresh run-state indicates an active mission. */
 export function isRunActive(stateDir: string): boolean {
-  try {
-    const raw = fs.readFileSync(path.join(stateDir, 'run-state.json'), 'utf-8');
-    const st  = JSON.parse(raw) as { status: string };
-    return st.status !== 'done' && st.status !== 'error';
-  } catch {
-    return false;
-  }
+  return isSupervisorAlive(stateDir) || isRunStateActive(stateDir);
 }
 
 /** Returns the goal of the current/last run, or null. */
