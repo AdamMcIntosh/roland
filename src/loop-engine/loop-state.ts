@@ -20,6 +20,21 @@ export interface PhaseTransition {
   summary?: string;
 }
 
+export interface LoopVerificationStrategySnapshot {
+  type: string;
+  pass: boolean;
+  durationMs: number;
+  failures?: string[];
+}
+
+export interface LoopVerificationSnapshot {
+  pass: boolean;
+  summary: string;
+  at: number;
+  durationMs?: number;
+  strategies?: LoopVerificationStrategySnapshot[];
+}
+
 export interface LoopState {
   templateId: string;
   goal: string;
@@ -30,11 +45,7 @@ export interface LoopState {
   status: LoopRunStatus;
   startedAt: number;
   updatedAt: number;
-  lastVerification?: {
-    pass: boolean;
-    summary: string;
-    at: number;
-  };
+  lastVerification?: LoopVerificationSnapshot;
 }
 
 export function createInitialLoopState(
@@ -89,7 +100,10 @@ export class LoopStateStore {
     this.flush();
   }
 
-  completePhase(phase: Phase, result: { success: boolean; summary: string }): void {
+  completePhase(
+    phase: Phase,
+    result: { success: boolean; summary: string; verification?: LoopVerificationSnapshot },
+  ): void {
     const entry = [...this.state.phaseHistory].reverse().find((t) => t.phase === phase && !t.completedAt);
     const now = Date.now();
     if (entry) {
@@ -98,7 +112,7 @@ export class LoopStateStore {
       entry.summary = result.summary;
     }
     if (phase === 'verify') {
-      this.state.lastVerification = {
+      this.state.lastVerification = result.verification ?? {
         pass: result.success,
         summary: result.summary,
         at: now,

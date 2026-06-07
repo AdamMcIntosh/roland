@@ -23,6 +23,21 @@
 loop_engine:
   default_template: standard-code-loop
   templates_dir: recipes/loops
+  verification:
+    # Gate: Critique phase is skipped when verification fails
+    require_pass_before_critique: true
+    strategies:
+      - type: unit
+        command: npm run test:run
+        timeout_ms: 180000
+      - type: lint
+        command: npm run lint
+        timeout_ms: 120000
+        optional: true
+      - type: typecheck
+        command: npm run build
+        timeout_ms: 180000
+        optional: true
 
 pm:
   lead_model: "grok-4.3"                # The Lead PM (Grok 4.3 — orchestration + planning)

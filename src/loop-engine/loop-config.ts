@@ -7,17 +7,44 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
 import { z } from 'zod';
+import { isVerificationStrategyType } from './verification/verification-strategies.js';
+
+const VerificationStrategySchema = z.object({
+  type: z.string().refine(isVerificationStrategyType, { message: 'Invalid verification strategy type' }),
+  command: z.string().min(1),
+  timeout_ms: z.number().int().positive().optional(),
+  optional: z.boolean().optional(),
+});
 
 export const LoopEngineConfigSchema = z.object({
   default_template: z.string().optional(),
   templates_dir: z.string().optional(),
+  verification: z
+    .object({
+      require_pass_before_critique: z.boolean().optional(),
+      strategies: z.array(VerificationStrategySchema).optional(),
+    })
+    .optional(),
 });
 
-export type LoopEngineConfig = z.infer<typeof LoopEngineConfigSchema>;
+export type LoopEngineConfig = z.infer<typeof LoopEngineConfigSchema> & {
+  verification?: {
+    require_pass_before_critique?: boolean;
+    strategies?: Array<{
+      type: string;
+      command: string;
+      timeoutMs?: number;
+      optional?: boolean;
+    }>;
+  };
+};
 
 const DEFAULT_CONFIG: LoopEngineConfig = {
   default_template: 'standard-code-loop',
   templates_dir: 'recipes/loops',
+  verification: {
+    require_pass_before_critique: true,
+  },
 };
 
 let cached: LoopEngineConfig | null = null;
@@ -40,6 +67,21 @@ function resolveConfigPath(): string | null {
   return null;
 }
 
+function normaliseVerification(
+  raw: z.infer<typeof LoopEngineConfigSchema>['verification'],
+): LoopEngineConfig['verification'] {
+  if (!raw) return DEFAULT_CONFIG.verification;
+  return {
+    require_pass_before_critique: raw.require_pass_before_critique ?? true,
+    strategies: raw.strategies?.map((s) => ({
+      type: s.type,
+      command: s.command,
+      timeoutMs: s.timeout_ms,
+      optional: s.optional,
+    })),
+  };
+}
+
 export function loadLoopEngineConfig(): LoopEngineConfig {
   if (cached) return cached;
   const configPath = resolveConfigPath();
@@ -55,7 +97,15 @@ export function loadLoopEngineConfig(): LoopEngineConfig {
       return cached;
     }
     const parsed = LoopEngineConfigSchema.safeParse(section);
-    cached = parsed.success ? { ...DEFAULT_CONFIG, ...parsed.data } : DEFAULT_CONFIG;
+    if (!parsed.success) {
+      cached = DEFAULT_CONFIG;
+      return cached;
+    }
+    cached = {
+      ...DEFAULT_CONFIG,
+      ...parsed.data,
+      verification: normaliseVerification(parsed.data.verification),
+    };
     return cached;
   } catch {
     cached = DEFAULT_CONFIG;

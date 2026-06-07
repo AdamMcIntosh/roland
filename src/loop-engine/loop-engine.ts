@@ -16,6 +16,7 @@ import {
   type LoopState,
   type LoopRunStatus,
 } from './loop-state.js';
+import { loadLoopEngineConfig } from './loop-config.js';
 import {
   createDefaultHandlers,
   type PhaseHandler,
@@ -90,9 +91,21 @@ export class LoopEngine {
       }
 
       let shouldRetryLoop = false;
+      let verifyPassed = true;
+      const requirePassBeforeCritique =
+        loadLoopEngineConfig().verification?.require_pass_before_critique !== false;
 
       for (const phaseConfig of this.template.phases) {
         if (phaseConfig.optional && phaseConfig.phase === P.Retry && !shouldRetryLoop) {
+          continue;
+        }
+
+        if (
+          phaseConfig.phase === P.Critique &&
+          requirePassBeforeCritique &&
+          !verifyPassed
+        ) {
+          console.error('[Loop] Skipping Critique — verification did not pass');
           continue;
         }
 
@@ -109,8 +122,11 @@ export class LoopEngine {
           return { status: 'escalated', state: this.store.get(), phasesCompleted };
         }
 
-        if (!result.success && phaseConfig.phase === P.Verify) {
-          shouldRetryLoop = true;
+        if (phaseConfig.phase === P.Verify) {
+          verifyPassed = result.success;
+          if (!result.success) {
+            shouldRetryLoop = true;
+          }
         }
         if (result.shouldRetry) {
           shouldRetryLoop = true;
@@ -164,9 +180,14 @@ export class LoopEngine {
       iteration: ctx.iteration,
       waveNumber: ctx.waveNumber,
       hadBlockers: ctx.hadBlockers,
+      phaseConfig,
     });
 
-    this.store.completePhase(phase, result);
+    this.store.completePhase(phase, {
+      success: result.success,
+      summary: result.summary,
+      verification: result.verification,
+    });
     this.emitState();
     this.hooks.onPhaseComplete?.(phase, result);
     return result;
@@ -224,11 +245,20 @@ export class LoopEngineCoordinator {
   }
 
   async onWaveComplete(waveNumber: number, hadBlockers: boolean): Promise<void> {
+    let verifyPassed = true;
     if (this.engine.hasPhase(P.Verify)) {
-      await this.engine.runNamedPhase(P.Verify, { waveNumber, hadBlockers });
+      const verifyResult = await this.engine.runNamedPhase(P.Verify, { waveNumber, hadBlockers });
+      verifyPassed = verifyResult?.success ?? true;
     }
+
+    const requirePass =
+      loadLoopEngineConfig().verification?.require_pass_before_critique !== false;
     if (this.engine.hasPhase(P.Critique)) {
-      await this.engine.runNamedPhase(P.Critique, { waveNumber, hadBlockers });
+      if (!requirePass || verifyPassed) {
+        await this.engine.runNamedPhase(P.Critique, { waveNumber, hadBlockers });
+      } else {
+        console.error('[Loop] Skipping Critique — verification did not pass');
+      }
     }
     if (hadBlockers && this.engine.hasPhase(P.Retry)) {
       await this.engine.runNamedPhase(P.Retry, { waveNumber, hadBlockers });
