@@ -32,6 +32,7 @@ import fs               from 'fs';
 import path             from 'path';
 import { fileURLToPath } from 'url';
 import { readRunState }  from './run-state.js';
+import { sanitizeStaleMissionState } from './mission-state.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -118,6 +119,10 @@ function phaseLabel(status: string, wave: number): string {
 // ── bg-status ─────────────────────────────────────────────────────────────────
 
 export function bgStatus(stateDir: string, json = false): void {
+  sanitizeStaleMissionState(stateDir, (msg, detail) => {
+    const extra = detail ? ` ${JSON.stringify(detail)}` : '';
+    process.stderr.write(`[STATE] ${msg}${extra}\n`);
+  });
   const rec      = readSupervisorRecord(stateDir);
   const runState = readRunState(stateDir);
 

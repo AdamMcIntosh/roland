@@ -2480,6 +2480,11 @@
     else console.log('[MISSION]', msg);
   }
 
+  function logState(msg, detail) {
+    if (detail !== undefined) console.log('[STATE]', msg, detail);
+    else console.log('[STATE]', msg);
+  }
+
   function logApi(msg, detail) {
     if (!DASHBOARD_DEBUG) return;
     if (detail !== undefined) console.log('[API]', msg, detail);
@@ -2629,17 +2634,27 @@
       && (Date.now() - (rs.updatedAt || 0)) < ACTIVE_STALE_MS;
   }
 
+  /** True when server payload belongs to the active project context. */
+  function missionContextMatchesProject() {
+    const ctxRoot = projectContext?.cwd;
+    const supRoot = supervisorInfo?.projectRoot;
+    if (!ctxRoot || !supRoot) return true;
+    return pathMatches(ctxRoot, supRoot);
+  }
+
   /** True while supervisor is alive or run-state shows an active wave. */
   function isSupervisorMissionActive() {
+    if (!missionContextMatchesProject()) return false;
     const sup = supervisorInfo;
     return Boolean(sup?.alive || sup?.missionActive || sup?.run?.active);
   }
 
   /** Grace period after dashboard launch before run-state.json appears. */
   function isMissionLaunching() {
+    if (!missionContextMatchesProject()) return false;
     if (isRunActive(runState)) return false;
     if (isSupervisorMissionActive()) return true;
-    const meta = missionMeta || supervisorInfo?.missionMeta;
+    const meta = currentProjectMeta();
     if (!meta?.startedAt) return false;
     if ((Date.now() - meta.startedAt) > MISSION_LAUNCH_GRACE_MS) return false;
     // Recent launch and run-state not yet terminal
@@ -2649,24 +2664,58 @@
 
   /** Unified active check — run-state, supervisor PID, or recent dashboard launch. */
   function isMissionActive() {
+    if (!missionContextMatchesProject()) return false;
     return isRunActive(runState) || isMissionLaunching() || isSupervisorMissionActive();
   }
 
+  function metaBelongsToCurrentProject(meta) {
+    if (!meta) return false;
+    if (meta.status === 'archived' || meta.status === 'completed') return false;
+    const ctxRoot = projectContext?.cwd;
+    if (!ctxRoot || !meta.projectRoot) return true;
+    return pathMatches(meta.projectRoot, ctxRoot);
+  }
+
+  function currentProjectMeta() {
+    const candidates = [missionMeta, supervisorInfo?.missionMeta].filter(Boolean);
+    for (const meta of candidates) {
+      if (metaBelongsToCurrentProject(meta)) return meta;
+    }
+    return null;
+  }
+
   /**
-   * Best available "last run" snapshot — prefers mission-meta / run-state over
-   * usage-history so a fresh dashboard launch isn't shown as "8d ago".
+   * Best available "last run" snapshot — scoped to the active project only.
+   * Prefers live supervisor + mission-meta, then run-state, then usage history.
    */
   function getLatestRunSnapshot() {
+    if (!missionContextMatchesProject()) return null;
+
+    const meta = currentProjectMeta();
+    const supAlive = Boolean(supervisorInfo?.alive && missionContextMatchesProject());
+    const runActive = isRunActive(runState);
+    const runTs = runState?.startedAt ?? runState?.updatedAt ?? 0;
+
+    if (supAlive && meta?.startedAt) {
+      return {
+        timestamp: meta.startedAt,
+        goal: meta.goal || meta.effectiveGoal || '',
+        label: meta.runName || null,
+        source: 'mission-meta',
+      };
+    }
+
+    if (runActive && runTs > 0 && runState?.goal) {
+      return { timestamp: runTs, goal: runState.goal, label: null, source: 'run-state' };
+    }
+
     const fromUsage = usageData.length
       ? [...usageData].sort((a, b) => b.timestamp - a.timestamp)[0]
       : null;
-    const meta = missionMeta || supervisorInfo?.missionMeta;
     const metaTs = meta?.startedAt ?? 0;
-    const runTs = runState?.startedAt ?? runState?.updatedAt ?? 0;
     const usageTs = fromUsage?.timestamp ?? 0;
-    const bestTs = Math.max(metaTs, runTs, usageTs);
 
-    if (bestTs === metaTs && metaTs > 0) {
+    if (metaTs > 0 && meta && !runActive && !supAlive) {
       return {
         timestamp: metaTs,
         goal: meta.goal || meta.effectiveGoal || '',
@@ -2674,12 +2723,11 @@
         source: 'mission-meta',
       };
     }
-    if (bestTs === runTs && runTs > 0 && runState?.goal) {
-      return { timestamp: runTs, goal: runState.goal, label: null, source: 'run-state' };
-    }
+
     if (fromUsage) {
       return { timestamp: fromUsage.timestamp, goal: fromUsage.goal, label: null, source: 'usage' };
     }
+
     return null;
   }
 
@@ -2876,8 +2924,21 @@
 
   function applySupervisorPayload(sup) {
     if (!sup) return;
+    const ctxRoot = projectContext?.cwd;
+    if (ctxRoot && sup.projectRoot && !pathMatches(ctxRoot, sup.projectRoot)) {
+      logState('Ignoring supervisor payload from wrong project', {
+        expected: ctxRoot,
+        got: sup.projectRoot,
+      });
+      return;
+    }
     supervisorInfo = sup;
-    missionMeta = sup.missionMeta ?? missionMeta;
+    missionMeta = sup.missionMeta ?? null;
+    logState('Mission context loaded', {
+      projectRoot: sup.projectRoot ?? null,
+      active: Boolean(sup.missionActive),
+      goal: missionMeta?.goal?.slice(0, 60) ?? null,
+    });
   }
 
   function applyProjectContextPayload(ctx) {
@@ -2895,22 +2956,24 @@
 
   async function reattachSupervisorState(source = 'manual') {
     logMission('Re-attaching supervisor state', { source });
+    logState('Project context reset for re-attach', { source });
     boardStatus = null;
     missionDagPayload = null;
     runState = null;
     hitlState = null;
     supervisorInfo = null;
     missionMeta = null;
+    usageData = [];
     selectedMissionNodeId = null;
     lastDagRunId = null;
     lastDagNodeStatuses = {};
     await Promise.all([
+      fetchProjectContext(),
       fetchUsage(),
       fetchRunState(),
       fetchBoardStatus(),
       fetchMissionDag(),
       fetchSupervisor(),
-      fetchProjectContext(),
       fetchProjects(),
     ]);
     renderAll();
@@ -2919,6 +2982,11 @@
       source,
       missionActive: isMissionActive(),
       project: projectContext?.displayPath ?? null,
+    });
+    logState('Mission context re-attach complete', {
+      source,
+      project: projectContext?.cwd ?? null,
+      missionActive: isMissionActive(),
     });
   }
 
@@ -4068,7 +4136,7 @@
     // Launching grace — supervisor spawned but run-state.json not written yet
     if (isMissionLaunching() && !isRunActive(runState)) {
       box.classList.add('live-active');
-      const meta = missionMeta || supervisorInfo?.missionMeta;
+      const meta = currentProjectMeta();
       const goal = meta?.goal || 'Mission launching…';
       el.innerHTML =
         '<div class="active-job-header">' +
@@ -4482,13 +4550,13 @@
   function renderDagEmptyState() {
     const msg = missionDagPayload?.message;
     const isWaveOnly = !missionDagPayload?.dag;
+    const dagPending = missionDagPayload?.planningMode === 'dag-pending';
+    const defaultWaveMsg = 'Wave mode — parallel task waves. DAG auto-enables for complex multi-step goals.';
     return `
       <div class="dag-empty-state">
         <div class="dag-empty-icon">◇</div>
-        <h3>${isWaveOnly ? 'DAG planning not enabled for this mission' : 'No tasks in mission graph'}</h3>
-        <p>${isWaveOnly
-          ? 'Using wave mode — tasks run in parallel waves without an explicit dependency graph. Enable DAG planning with <code>ROLAND_MISSION_DAG=1</code> or launch a complex multi-step goal.'
-          : escHtml(msg || 'Start a team mission to populate the graph.')}</p>
+        <h3>${dagPending ? 'DAG planning pending' : isWaveOnly ? 'Wave mode' : 'No tasks in mission graph'}</h3>
+        <p>${escHtml(msg || (isWaveOnly ? defaultWaveMsg : 'Start a team mission to populate the graph.'))}</p>
       </div>`;
   }
 
@@ -4848,7 +4916,7 @@
     return `
       ${renderGraphToolbar(dag, false)}
       <div class="dag-linear">
-        <div class="dag-linear-msg">DAG planning not enabled for this mission — using wave mode. Tasks shown in wave order; tap a node for details.</div>
+        <div class="dag-linear-msg">${escHtml(missionDagPayload?.message || 'Wave mode — tasks shown in wave order. DAG auto-enables for complex multi-step goals.')}</div>
         <div class="dag-linear-track">${chips.join('')}</div>
       </div>
       ${renderDagLegend()}`;
