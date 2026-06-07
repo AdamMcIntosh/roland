@@ -6,7 +6,9 @@
  *   - critique summary + retryDecision persisted to loop-state.json
  *   - onStateChange syncs lastCritique + loopRetryCount to run-state.json
  *   - phaseHistory records critique transitions
+ *   - escalationThreshold (4) is independent of maxRetries (3) — no premature HITL at retryCount=2
  *   - After retry budget (maxRetries=3) critique escalates to operator (HITL)
+ *   - isTestMode allows 3+ retry cycles without escalating; verify can pass on retry #3
  *
  * Scoped run: npx vitest run tests/e2e/loop-critique-retry-escalation.test.ts
  */
@@ -75,6 +77,25 @@ function createSelectiveFailRunner(failTypes: Set<string>): CommandRunner {
   };
 }
 
+/** Fail unit for the first N verify phases, then pass (counts unit invocations per phase). */
+function createFailThenPassRunner(failVerifyPhases: number): CommandRunner {
+  let unitInvocations = 0;
+  return async (command) => {
+    const type = strategyTypeFromCommand(command);
+    if (type === 'unit') {
+      unitInvocations++;
+      if (unitInvocations <= failVerifyPhases) {
+        return {
+          exitCode: 1,
+          stdout: '',
+          stderr: 'FAIL unit — AssertionError: expected false to be true',
+        };
+      }
+    }
+    return { exitCode: 0, stdout: `${type} ok\n`, stderr: '' };
+  };
+}
+
 function handlersWithMockVerify(runner: CommandRunner) {
   const map = createDefaultHandlers();
   map.set(Phase.Verify, new VerifyPhaseHandler({ runner }));
@@ -100,6 +121,9 @@ describe('LoopEngine — standard-code-loop critique → retry → escalation E2
     const template = templates.get('standard-code-loop');
     expect(template).toBeDefined();
     expect(template!.maxRetries).toBe(3);
+    expect(template!.escalationThreshold).toBe(4);
+    expect(template!.testModeMaxRetries).toBe(6);
+    expect(template!.testModeEscalationThreshold).toBe(8);
     expect(template!.phases.map((p) => p.phase)).toEqual([
       Phase.Plan,
       Phase.Act,
@@ -155,6 +179,16 @@ describe('LoopEngine — standard-code-loop critique → retry → escalation E2
 
     expect(penultimateCritique.retryDecision).toBe('retry_focused');
     expect(finalCritique.retryDecision).toBe('escalate');
+
+    // Regression: retryCount=2 with 3 consecutive verify failures must NOT escalate
+    // (old bug used maxRetries as escalation threshold → HITL at retryCount=2).
+    const nonEscalateCritiques = result.state.critiqueHistory!.filter(
+      (c) => c.retryDecision !== 'escalate',
+    );
+    expect(nonEscalateCritiques.length).toBe(3);
+    expect(result.state.critiqueHistory!.filter((c) => c.retryDecision === 'escalate').length).toBe(
+      1,
+    );
 
     // ── Verify always precedes Critique in phase starts ───────────────────────
     for (let i = 0; i < phaseStarts.length - 1; i++) {
@@ -231,5 +265,62 @@ describe('LoopEngine — standard-code-loop critique → retry → escalation E2
       issueCount: expect.any(Number),
     });
     expect(persistedRun!.lastCritique!.issueCount).toBeGreaterThan(0);
+  });
+
+  it('test mode completes 3 retry cycles without escalating, then passes on verify retry #3', async () => {
+    const template = templates.get('standard-code-loop');
+    expect(template).toBeDefined();
+
+    const goal = 'E2E: test-mode 3 retries then verify pass';
+    const blackboard = new Blackboard(tmpDir);
+    const runState = new RunStateWriter(tmpDir, goal);
+
+    // Fail first 3 verify phases; 4th verify passes → critique proceed → loop completes.
+    const runner = createFailThenPassRunner(3);
+
+    const engine = new LoopEngine({
+      stateDir: tmpDir,
+      template: template!,
+      goal,
+      blackboard,
+      isTestMode: true,
+      handlers: handlersWithMockVerify(runner),
+      hooks: {
+        onStateChange: (state) => syncLoopStateToRun(runState, state),
+      },
+    });
+
+    const result = await engine.run({ hadBlockers: false });
+
+    expect(result.status).toBe('completed');
+    expect(result.state.status).toBe('completed');
+    expect(result.state.retryCount).toBe(3);
+    expect(result.state.lastVerification?.pass).toBe(true);
+    expect(result.state.lastCritique?.retryDecision).toBe('proceed');
+
+    const escalateCritiques = result.state.critiqueHistory?.filter(
+      (c) => c.retryDecision === 'escalate',
+    );
+    expect(escalateCritiques?.length ?? 0).toBe(0);
+
+    const retryFocusedCritiques = result.state.critiqueHistory?.filter(
+      (c) => c.retryDecision === 'retry_focused',
+    );
+    expect(retryFocusedCritiques?.length).toBe(3);
+
+    const completedRetries = result.state.phaseHistory.filter(
+      (t) => t.phase === Phase.Retry && t.completedAt !== undefined,
+    );
+    expect(completedRetries.length).toBe(3);
+
+    const persistedLoop = readLoopState(tmpDir);
+    expect(persistedLoop?.status).toBe('completed');
+    expect(persistedLoop?.retryCount).toBe(3);
+    expect(persistedLoop?.lastCritique?.retryDecision).toBe('proceed');
+
+    const persistedRun = readRunState(tmpDir);
+    expect(persistedRun?.loopRetryCount).toBe(3);
+    expect(persistedRun?.lastVerification?.pass).toBe(true);
+    expect(persistedRun?.lastCritique?.retryDecision).toBe('proceed');
   });
 });
