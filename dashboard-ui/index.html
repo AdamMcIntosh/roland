@@ -666,11 +666,298 @@
       .board-callsign { font-size: 0.6rem; padding: 0.12rem 0.35rem; }
       .board-roster { gap: 0.25rem; margin: 0.35rem 0; }
       .ops-status { padding: 0.55rem 0.7rem; }
+      .project-context { margin: 0.65rem 0 0.5rem; }
+      .project-context-name { font-size: 0.78rem; }
       .ops-log-preview { font-size: 0.64rem; max-height: 120px; }
     }
 
     @media (max-width: 380px) {
       .cards { grid-template-columns: 1fr; }
+    }
+
+    /* Project context bar */
+    .project-context {
+      margin: 0.85rem 0 0.65rem;
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .project-context.warning {
+      border-color: rgba(245,158,11,0.45);
+      background: rgba(245,158,11,0.06);
+    }
+    .project-context-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      width: 100%;
+      padding: 0.55rem 0.75rem;
+      background: transparent;
+      border: none;
+      color: var(--fg);
+      text-align: left;
+      font-size: 0.78rem;
+      line-height: 1.35;
+      min-height: 44px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .project-context-bar:hover { background: rgba(255,255,255,0.03); }
+    [data-theme="light"] .project-context-bar:hover { background: rgba(0,0,0,0.03); }
+    .project-context-icon { flex-shrink: 0; font-size: 0.95rem; opacity: 0.85; }
+    .project-context-main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.12rem;
+    }
+    .project-context-name {
+      font-weight: 700;
+      font-size: 0.82rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .project-context-git {
+      font-size: 0.68rem;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .project-context-git .git-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.08rem 0.4rem;
+      border-radius: 10px;
+      background: rgba(99,102,241,0.12);
+      color: var(--indigo);
+      border: 1px solid rgba(99,102,241,0.22);
+      font-weight: 600;
+      font-size: 0.64rem;
+      margin-right: 0.35rem;
+    }
+    .project-context-git .git-badge.none {
+      background: rgba(136,136,170,0.12);
+      color: var(--muted);
+      border-color: var(--border);
+    }
+    .project-context-chevron {
+      flex-shrink: 0;
+      color: var(--muted);
+      font-size: 0.72rem;
+      transition: transform 0.2s;
+    }
+    .project-context.expanded .project-context-chevron { transform: rotate(180deg); }
+    .project-context-details {
+      padding: 0 0.75rem 0.65rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+    .project-context-details dl {
+      margin: 0.55rem 0 0;
+      display: grid;
+      gap: 0.35rem;
+    }
+    .project-context-details dt {
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .project-context-details dd {
+      margin: 0;
+      font-family: ui-monospace, monospace;
+      font-size: 0.7rem;
+      color: var(--fg);
+      word-break: break-all;
+    }
+    .project-context-warn {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.45rem;
+      padding: 0.55rem 0.75rem;
+      font-size: 0.74rem;
+      color: var(--amber);
+      line-height: 1.4;
+    }
+    .project-context-row {
+      display: flex;
+      align-items: stretch;
+      gap: 0.4rem;
+    }
+    .project-context-row .project-context-bar { flex: 1; min-width: 0; }
+    .btn-project-switch {
+      flex-shrink: 0;
+      align-self: center;
+      margin-right: 0.35rem;
+      padding: 0.35rem 0.65rem;
+      border-radius: 8px;
+      border: 1px solid rgba(99,102,241,0.35);
+      background: rgba(99,102,241,0.12);
+      color: var(--indigo);
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      min-height: 36px;
+    }
+    .btn-project-switch:hover {
+      background: rgba(99,102,241,0.2);
+      border-color: rgba(99,102,241,0.5);
+    }
+    .btn-project-switch.compact {
+      margin: 0;
+      font-size: 0.68rem;
+      padding: 0.28rem 0.55rem;
+      min-height: 32px;
+    }
+    .ops-status-right { margin-left: auto; display: flex; align-items: center; gap: 0.4rem; }
+
+    /* Project switcher modal */
+    .project-modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 500;
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      padding: 0;
+    }
+    .project-modal-backdrop.open { display: flex; }
+    .project-modal {
+      width: min(520px, 100vw);
+      max-height: min(78vh, 640px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px 14px 0 0;
+      box-shadow: 0 -8px 40px rgba(0,0,0,0.35);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    @media (min-width: 641px) {
+      .project-modal-backdrop {
+        align-items: center;
+        padding: 1rem;
+      }
+      .project-modal {
+        border-radius: var(--radius);
+        max-height: min(70vh, 560px);
+      }
+    }
+    .project-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      padding: 0.85rem 1rem 0.55rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .project-modal-header h3 {
+      margin: 0;
+      font-size: 0.88rem;
+      font-weight: 700;
+    }
+    .project-modal-sub {
+      margin: 0.15rem 0 0;
+      font-size: 0.68rem;
+      color: var(--muted);
+      font-weight: 400;
+    }
+    .project-modal-close {
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-size: 1.1rem;
+      padding: 0.25rem 0.45rem;
+      border-radius: 6px;
+      min-height: 36px;
+      min-width: 36px;
+    }
+    .project-modal-close:hover { color: var(--fg); background: var(--surface2); }
+    .project-modal-search-wrap { padding: 0.55rem 1rem; border-bottom: 1px solid var(--border); }
+    .project-modal-search {
+      width: 100%;
+      padding: 0.45rem 0.65rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--fg);
+      font-size: 0.82rem;
+      min-height: 44px;
+    }
+    .project-modal-list {
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      flex: 1;
+      padding: 0.35rem 0;
+    }
+    .project-modal-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+      width: 100%;
+      text-align: left;
+      padding: 0.65rem 1rem;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      background: transparent;
+      color: var(--fg);
+      cursor: pointer;
+      min-height: 56px;
+    }
+    .project-modal-item:hover { background: rgba(99,102,241,0.08); }
+    .project-modal-item.active {
+      background: rgba(99,102,241,0.12);
+      border-left: 3px solid var(--indigo);
+      padding-left: calc(1rem - 3px);
+    }
+    .project-modal-item-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .project-modal-item-name { font-weight: 700; font-size: 0.82rem; }
+    .project-modal-item-badge {
+      font-size: 0.6rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.12rem 0.4rem;
+      border-radius: 10px;
+      background: rgba(16,185,129,0.15);
+      color: var(--emerald);
+      flex-shrink: 0;
+    }
+    .project-modal-item-meta {
+      font-size: 0.68rem;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .project-modal-empty {
+      padding: 2rem 1rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+    .project-modal-warn {
+      margin: 0.55rem 1rem 0;
+      padding: 0.5rem 0.65rem;
+      border-radius: 8px;
+      background: rgba(245,158,11,0.1);
+      border: 1px solid rgba(245,158,11,0.3);
+      color: var(--amber);
+      font-size: 0.72rem;
+      line-height: 1.4;
     }
 
     /* Quick action bar */
@@ -1523,6 +1810,22 @@
   <div id="tab-overview" class="tab-panel active">
     <div class="page">
 
+      <!-- Project context -->
+      <section class="project-context" id="project-context" aria-live="polite">
+        <div class="project-context-row">
+          <button type="button" class="project-context-bar" id="project-context-toggle" aria-expanded="false" aria-controls="project-context-details">
+            <span class="project-context-icon" aria-hidden="true">📁</span>
+            <span class="project-context-main">
+              <span class="project-context-name" id="project-context-name">Loading project…</span>
+              <span class="project-context-git" id="project-context-git"></span>
+            </span>
+            <span class="project-context-chevron" aria-hidden="true">▾</span>
+          </button>
+          <button type="button" class="btn-project-switch" id="btn-project-switch" aria-haspopup="dialog" aria-controls="project-switcher-modal">Switch ▾</button>
+        </div>
+        <div class="project-context-details" id="project-context-details" hidden></div>
+      </section>
+
       <!-- Quick actions -->
       <div class="quick-actions">
         <button class="btn-secondary" id="btn-qa-board" type="button">🎖 Board Status</button>
@@ -1536,6 +1839,9 @@
           <div class="ops-status-left">
             <span class="ops-status-title">🎖 Mission Control</span>
             <span class="ops-badge idle" id="ops-badge">Idle</span>
+          </div>
+          <div class="ops-status-right">
+            <button type="button" class="btn-project-switch compact" id="btn-ops-project-switch" aria-haspopup="dialog">📁 Switch</button>
           </div>
         </div>
         <div class="ops-goal" id="ops-goal">No active background mission</div>
@@ -1879,6 +2185,28 @@
   <!-- Toast container -->
   <div id="toast-container"></div>
 
+  <!-- Project switcher modal -->
+  <div class="project-modal-backdrop" id="project-switcher-backdrop" role="presentation" hidden>
+    <div class="project-modal" id="project-switcher-modal" role="dialog" aria-modal="true" aria-labelledby="project-switcher-title">
+      <div class="project-modal-header">
+        <div>
+          <h3 id="project-switcher-title">🎖 Switch Project</h3>
+          <p class="project-modal-sub">Select a Roland project context for missions and intel</p>
+        </div>
+        <button type="button" class="project-modal-close" id="project-switcher-close" aria-label="Close">✕</button>
+      </div>
+      <div class="project-modal-search-wrap">
+        <input type="search" class="project-modal-search" id="project-switcher-search" placeholder="Search projects…" autocomplete="off" />
+      </div>
+      <div class="project-modal-warn" id="project-switcher-mission-warn" hidden>
+        ⚠ A mission is running in the current project. Switching will change dashboard context only — the background run continues in its original project.
+      </div>
+      <div class="project-modal-list" id="project-switcher-list" role="listbox" aria-label="Available projects">
+        <div class="project-modal-empty">Loading projects…</div>
+      </div>
+    </div>
+  </div>
+
   <!-- Mission node detail drawer (Mission Graph) -->
   <div id="mission-node-drawer" class="mission-node-drawer" hidden aria-hidden="true">
     <div class="mission-node-drawer-backdrop" data-action="close-drawer"></div>
@@ -1960,6 +2288,11 @@
   let missionSubmitting = false;
   let supervisorInfo = null;
   let missionMeta = null;
+  let projectContext = null;
+  let projectContextExpanded = false;
+  let projectsPayload = null;
+  let projectSwitcherOpen = false;
+  let projectSwitching = false;
   let opsLogOpen = false;
   let tokensChart  = null;
   let modelChart   = null;
@@ -2202,6 +2535,246 @@
     } catch (e) {
       console.warn('Models fetch failed:', e.message);
     }
+  }
+
+  async function fetchProjectContext() {
+    try {
+      const res = await fetch('/api/project-context');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      projectContext = await res.json();
+    } catch (e) {
+      console.warn('Project context fetch failed:', e.message);
+      projectContext = {
+        warning: 'No project context — running in unknown directory',
+        projectName: null,
+        displayPath: null,
+        isGitRepo: false,
+      };
+    }
+  }
+
+  async function fetchProjects() {
+    try {
+      const res = await fetch('/api/projects');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      projectsPayload = await res.json();
+    } catch (e) {
+      console.warn('Projects fetch failed:', e.message);
+      projectsPayload = { projects: [], activePath: projectContext?.cwd ?? null };
+    }
+  }
+
+  function isMissionRunningNow() {
+    if (supervisorInfo?.missionActive) return true;
+    return isRunActive(runState);
+  }
+
+  function closeProjectSwitcher() {
+    projectSwitcherOpen = false;
+    const backdrop = document.getElementById('project-switcher-backdrop');
+    if (backdrop) {
+      backdrop.classList.remove('open');
+      backdrop.hidden = true;
+    }
+  }
+
+  async function openProjectSwitcher() {
+    toggleProjectContextDetails(false);
+    closeAllModelPickers();
+    projectSwitcherOpen = true;
+    const backdrop = document.getElementById('project-switcher-backdrop');
+    if (backdrop) {
+      backdrop.hidden = false;
+      backdrop.classList.add('open');
+    }
+    const searchEl = document.getElementById('project-switcher-search');
+    if (searchEl) searchEl.value = '';
+    await fetchProjects();
+    renderProjectSwitcherList('');
+    const warn = document.getElementById('project-switcher-mission-warn');
+    if (warn) warn.hidden = !isMissionRunningNow();
+    setTimeout(() => searchEl?.focus(), 60);
+  }
+
+  function renderProjectSwitcherList(query) {
+    const listEl = document.getElementById('project-switcher-list');
+    if (!listEl) return;
+    const q = (query || '').toLowerCase().trim();
+    const projects = Array.isArray(projectsPayload?.projects) ? projectsPayload.projects : [];
+    const filtered = q
+      ? projects.filter(p =>
+          [p.name, p.path, p.displayPath, p.branch].filter(Boolean).join(' ').toLowerCase().includes(q)
+        )
+      : projects;
+
+    if (filtered.length === 0) {
+      listEl.innerHTML = '<div class="project-modal-empty">' +
+        (q ? 'No projects match your search.' : 'No Roland projects found under ~/projects — add paths via ROLAND_DASHBOARD_PROJECTS or .roland/config.json') +
+        '</div>';
+      return;
+    }
+
+    listEl.innerHTML = filtered.map(p => {
+      const gitLabel = p.isGit
+        ? ('Git • ' + escHtml(p.branch || 'unknown'))
+        : 'Not a git repo';
+      const rolandLabel = p.hasRoland ? '' : ' · no .roland yet';
+      const activeBadge = p.isActive ? '<span class="project-modal-item-badge">Active</span>' : '';
+      return (
+        '<button type="button" class="project-modal-item' + (p.isActive ? ' active' : '') + '" ' +
+        'data-project-path="' + escHtml(p.path) + '" role="option" aria-selected="' + (p.isActive ? 'true' : 'false') + '">' +
+        '<div class="project-modal-item-top">' +
+        '<span class="project-modal-item-name">' + escHtml(p.displayPath || p.name) + '</span>' +
+        activeBadge +
+        '</div>' +
+        '<span class="project-modal-item-meta">' + gitLabel + escHtml(rolandLabel) + '</span>' +
+        '</button>'
+      );
+    }).join('');
+  }
+
+  async function switchToProject(targetPath) {
+    if (!targetPath || projectSwitching) return;
+    if (projectContext?.cwd && pathMatches(projectContext.cwd, targetPath)) {
+      closeProjectSwitcher();
+      return;
+    }
+
+    let force = false;
+    if (isMissionRunningNow()) {
+      const ok = window.confirm(
+        'A mission is running in the current project.\n\nSwitch dashboard context anyway? The background run will continue in its original project.'
+      );
+      if (!ok) return;
+      force = true;
+    }
+
+    projectSwitching = true;
+    try {
+      const res = await fetch('/api/switch-project', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: targetPath, force }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+
+      if (data.projectContext) projectContext = data.projectContext;
+      if (data.projects) projectsPayload = data.projects;
+
+      boardStatus = null;
+      missionDagPayload = null;
+      runState = null;
+      hitlState = null;
+      supervisorInfo = null;
+      missionMeta = null;
+      selectedMissionNodeId = null;
+      lastDagRunId = null;
+      lastDagNodeStatuses = {};
+
+      await Promise.all([
+        fetchUsage(),
+        fetchRunState(),
+        fetchBoardStatus(),
+        fetchMissionDag(),
+        fetchSupervisor(),
+        fetchProjectContext(),
+        fetchProjects(),
+      ]);
+
+      renderAll();
+      if (activeTab === 'memory') loadMemoryTab();
+      closeProjectSwitcher();
+
+      const label = projectContext?.displayPath || projectContext?.projectName || targetPath;
+      toast('Switched to ' + label, 'success');
+    } catch (e) {
+      toast(e.message || 'Project switch failed', 'error');
+    } finally {
+      projectSwitching = false;
+    }
+  }
+
+  function pathMatches(a, b) {
+    if (!a || !b) return false;
+    return String(a).replace(/\/+$/, '') === String(b).replace(/\/+$/, '');
+  }
+
+  function toggleProjectContextDetails(force) {
+    const section = document.getElementById('project-context');
+    const details = document.getElementById('project-context-details');
+    const toggle = document.getElementById('project-context-toggle');
+    if (!section || !details || !toggle) return;
+    projectContextExpanded = typeof force === 'boolean' ? force : !projectContextExpanded;
+    section.classList.toggle('expanded', projectContextExpanded);
+    details.hidden = !projectContextExpanded;
+    toggle.setAttribute('aria-expanded', projectContextExpanded ? 'true' : 'false');
+  }
+
+  function renderProjectContext() {
+    const section = document.getElementById('project-context');
+    const nameEl = document.getElementById('project-context-name');
+    const gitEl = document.getElementById('project-context-git');
+    const detailsEl = document.getElementById('project-context-details');
+    const toggle = document.getElementById('project-context-toggle');
+    if (!section || !nameEl || !gitEl || !detailsEl) return;
+
+    const ctx = projectContext;
+    const hasWarning = Boolean(ctx?.warning) || !ctx?.projectName;
+
+    section.classList.toggle('warning', hasWarning);
+
+    if (hasWarning) {
+      nameEl.textContent = ctx?.warning || 'No project context — running in unknown directory';
+      gitEl.innerHTML = '';
+      detailsEl.innerHTML =
+        '<div class="project-context-warn">' +
+        '<span aria-hidden="true">⚠</span>' +
+        '<span>Start the dashboard with <code>--project-root</code> or point <code>--state-dir</code> at your project&apos;s <code>.roland/</code> folder.</span>' +
+        '</div>';
+      if (toggle) toggle.style.display = ctx?.cwd ? '' : 'none';
+      return;
+    }
+
+    if (toggle) toggle.style.display = '';
+    const label = ctx.displayPath || ctx.projectName || ctx.cwd || 'Unknown project';
+    nameEl.textContent = label;
+    nameEl.title = ctx.cwd || label;
+
+    let gitHtml = '';
+    if (ctx.isGitRepo) {
+      const branch = ctx.branch || 'detached';
+      gitHtml += '<span class="git-badge">Git repo • ' + escHtml(branch) + '</span>';
+      if (ctx.gitStatusSummary && ctx.gitStatusSummary !== 'clean') {
+        gitHtml += escHtml(ctx.gitStatusSummary);
+      } else if (ctx.gitStatusSummary === 'clean') {
+        gitHtml += 'Working tree clean';
+      }
+    } else {
+      gitHtml += '<span class="git-badge none">Not a git repository</span>';
+    }
+    gitEl.innerHTML = gitHtml;
+
+    const rows = [];
+    rows.push(['Full path', ctx.cwd || '—']);
+    rows.push(['Project', ctx.projectName || '—']);
+    rows.push(['State dir', ctx.stateDir || '—']);
+    if (ctx.isGitRepo) {
+      rows.push(['Branch', ctx.branch || '—']);
+      if (ctx.remote) rows.push(['Remote', ctx.remote]);
+      if (ctx.lastCommit?.sha) {
+        const commitLine = ctx.lastCommit.sha +
+          (ctx.lastCommit.subject ? ' — ' + ctx.lastCommit.subject : '');
+        rows.push(['Last commit', commitLine]);
+      }
+      if (ctx.gitStatusSummary) rows.push(['Git status', ctx.gitStatusSummary]);
+    }
+    detailsEl.innerHTML =
+      '<dl>' +
+      rows.map(([dt, dd]) =>
+        '<div><dt>' + escHtml(dt) + '</dt><dd>' + escHtml(String(dd)) + '</dd></div>'
+      ).join('') +
+      '</dl>';
   }
 
   function pickModelDefault(list, preferredIds) {
@@ -2619,8 +3192,9 @@
         startedAt: Date.now(),
         pid: data.pid,
       };
-      await Promise.all([pollRunState(), fetchSupervisor()]);
+      await Promise.all([pollRunState(), fetchSupervisor(), fetchProjectContext()]);
       renderOpsStatus();
+      renderProjectContext();
     } catch (e) {
       setMissionStatus('error', '✕ ' + escHtml(e.message));
       toast('Mission failed: ' + e.message, 'error');
@@ -2650,7 +3224,15 @@
   }
 
   async function refreshDashboard() {
-    await Promise.all([fetchUsage(), fetchRunState(), fetchBoardStatus(), fetchSupervisor()]);
+    await Promise.all([
+      fetchUsage(),
+      fetchRunState(),
+      fetchBoardStatus(),
+      fetchSupervisor(),
+      fetchProjectContext(),
+      fetchProjects(),
+      fetchMissionDag(),
+    ]);
     renderAll();
     if (activeTab === 'history') renderHistory();
     if (activeTab === 'actions') { renderHitlActionsPanel(); renderRecentGoals(); }
@@ -2673,6 +3255,27 @@
   });
   document.getElementById('btn-qa-cleanup')?.addEventListener('click', runBoardCleanup);
   document.getElementById('btn-qa-refresh')?.addEventListener('click', refreshDashboard);
+  document.getElementById('project-context-toggle')?.addEventListener('click', () => toggleProjectContextDetails());
+  document.getElementById('btn-project-switch')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openProjectSwitcher();
+  });
+  document.getElementById('btn-ops-project-switch')?.addEventListener('click', () => openProjectSwitcher());
+  document.getElementById('project-switcher-close')?.addEventListener('click', closeProjectSwitcher);
+  document.getElementById('project-switcher-backdrop')?.addEventListener('click', (e) => {
+    if (e.target?.id === 'project-switcher-backdrop') closeProjectSwitcher();
+  });
+  document.getElementById('project-switcher-search')?.addEventListener('input', (e) => {
+    renderProjectSwitcherList(e.target.value);
+  });
+  document.getElementById('project-switcher-list')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.project-modal-item');
+    if (!btn?.dataset.projectPath) return;
+    switchToProject(btn.dataset.projectPath);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && projectSwitcherOpen) closeProjectSwitcher();
+  });
 
   // ═══════════════════════════════════════════════════════════════════════════
   //  Tab Switching
@@ -3719,6 +4322,7 @@
 
   function renderAll() {
     const filtered = filterRuns(usageData, period);
+    renderProjectContext();
     renderLiveIndicator();
     renderCards();
     renderLiveStatus();
@@ -4227,7 +4831,15 @@
 
   // Initial load
   (async () => {
-    await Promise.all([fetchUsage(), fetchRunState(), fetchBoardStatus(), fetchModels(), fetchSupervisor()]);
+    await Promise.all([
+      fetchUsage(),
+      fetchRunState(),
+      fetchBoardStatus(),
+      fetchModels(),
+      fetchSupervisor(),
+      fetchProjectContext(),
+      fetchProjects(),
+    ]);
     populateModelSelects();
     renderAll();
     focusMissionGoal();

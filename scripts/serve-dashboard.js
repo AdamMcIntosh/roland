@@ -15,6 +15,9 @@
  *   POST /api/hitl/:cmd            → append to .roland/hitl.json  (pause|resume|replan|abort|unblock|inject)
  *   GET  /api/blackboard           → .roland/blackboard.json
  *   GET  /api/mission-dag          → .roland/mission-dag.json (task graph export)
+ *   GET  /api/project-context      → cwd, git branch, remote, last commit
+ *   GET  /api/projects               → discoverable Roland projects
+ *   POST /api/switch-project         → switch active project context
  *   GET  /api/board-status         → UNSC concise summary (blackboard + command board)
  *   POST /api/board-cleanup        → archive stale board entries before a new mission
  *   GET  /api/models               → available Cursor PM / engineer models
@@ -31,7 +34,7 @@
 import http from 'http';
 import fs   from 'fs';
 import path from 'path';
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { WebSocketServer } from 'ws';
 import {
@@ -54,11 +57,110 @@ function argValue(name) {
   return null;
 }
 
-const stateDir    = path.resolve(argValue('state-dir') ?? '.roland');
 const port        = Number(argValue('port') ?? 8081);
 const host        = argValue('host') ?? '0.0.0.0';
-const projectRoot = path.resolve(argValue('project-root') ?? path.join(__dirname, '..'));
-const rolandEntry = path.join(projectRoot, 'dist', 'index.js');
+const rolandInstallRoot = path.resolve(path.join(__dirname, '..'));
+const rolandEntry = path.join(rolandInstallRoot, 'dist', 'index.js');
+
+const cliStateDirArg    = argValue('state-dir');
+const cliProjectRootArg = argValue('project-root');
+const cliOverridesProject = Boolean(cliStateDirArg || cliProjectRootArg);
+
+function expandTilde(p) {
+  if (!p || !p.startsWith('~')) return p;
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+  return home ? path.join(home, p.slice(1).replace(/^\//, '')) : p;
+}
+
+function resolveInitialStateDir() {
+  return path.resolve(cliStateDirArg ?? '.roland');
+}
+
+function resolveInitialProjectRoot(initialStateDir) {
+  if (cliProjectRootArg) return path.resolve(cliProjectRootArg);
+  for (const key of ['ROLAND_PROJECT_ROOT', 'ROLAND_ROOT']) {
+    const val = process.env[key]?.trim();
+    if (val) return path.resolve(val);
+  }
+  if (path.basename(initialStateDir) === '.roland') return path.dirname(initialStateDir);
+  return rolandInstallRoot;
+}
+
+/** Fixed anchor — dashboard config.json lives here across project switches */
+const anchorProjectRoot = resolveInitialProjectRoot(resolveInitialStateDir());
+const dashboardConfigPath = path.join(anchorProjectRoot, '.roland', 'config.json');
+
+function readDashboardConfig() {
+  const cfg = readJson(dashboardConfigPath, {});
+  return {
+    lastProjectPath: typeof cfg.lastProjectPath === 'string' ? cfg.lastProjectPath : null,
+    knownProjects: Array.isArray(cfg.knownProjects)
+      ? cfg.knownProjects.filter(p => typeof p === 'string')
+      : [],
+    scanDirs: Array.isArray(cfg.scanDirs)
+      ? cfg.scanDirs.filter(p => typeof p === 'string')
+      : [],
+  };
+}
+
+function writeDashboardConfig(patch) {
+  const prev = readDashboardConfig();
+  const next = {
+    ...prev,
+    ...patch,
+    updatedAt: Date.now(),
+  };
+  fs.mkdirSync(path.dirname(dashboardConfigPath), { recursive: true });
+  fs.writeFileSync(dashboardConfigPath, JSON.stringify(next, null, 2), 'utf-8');
+  return next;
+}
+
+function isValidProjectRoot(dir) {
+  try {
+    if (!dir || !fs.existsSync(dir)) return false;
+    if (!fs.statSync(dir).isDirectory()) return false;
+    if (fs.existsSync(path.join(dir, '.roland'))) return true;
+    if (fs.existsSync(path.join(dir, '.git'))) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function projectHasRoland(dir) {
+  return fs.existsSync(path.join(dir, '.roland'));
+}
+
+function bootstrapActiveProject() {
+  const initialStateDir = resolveInitialStateDir();
+  let bootProjectRoot = resolveInitialProjectRoot(initialStateDir);
+  let bootStateDir = initialStateDir;
+
+  if (!cliOverridesProject) {
+    const cfg = readDashboardConfig();
+    if (cfg.lastProjectPath && isValidProjectRoot(cfg.lastProjectPath)) {
+      bootProjectRoot = path.resolve(cfg.lastProjectPath);
+      bootStateDir = path.join(bootProjectRoot, '.roland');
+    }
+  } else if (path.basename(bootStateDir) === '.roland') {
+    bootProjectRoot = path.dirname(bootStateDir);
+  } else if (cliProjectRootArg) {
+    bootStateDir = path.join(bootProjectRoot, '.roland');
+  }
+
+  return { projectRoot: bootProjectRoot, stateDir: bootStateDir };
+}
+
+/** Mutable runtime context — updated by POST /api/switch-project */
+const _boot = bootstrapActiveProject();
+let activeProjectRoot = _boot.projectRoot;
+let activeStateDir    = _boot.stateDir;
+
+function getRolandEntryForProject(projectPath) {
+  const localEntry = path.join(projectPath, 'dist', 'index.js');
+  if (fs.existsSync(localEntry)) return localEntry;
+  return rolandEntry;
+}
 
 /** Model groups for /api/models — ordered for UI display */
 const MODEL_GROUPS = [
@@ -241,9 +343,9 @@ function readBody(req) {
 // ── HITL helpers — mirrors src/rco/hitl.ts write-side logic ──────────────────
 
 function writeHitlCommand(cmd) {
-  fs.mkdirSync(stateDir, { recursive: true });
+  fs.mkdirSync(activeStateDir, { recursive: true });
 
-  const queueFile = path.join(stateDir, 'hitl.json');
+  const queueFile = path.join(activeStateDir, 'hitl.json');
   const queue     = readJson(queueFile, []);
   const arr       = Array.isArray(queue) ? queue : [];
   arr.push({ ...cmd, timestamp: Date.now() });
@@ -253,7 +355,7 @@ function writeHitlCommand(cmd) {
 }
 
 function _syncHitlObserverState(cmdType, queueLen = 0) {
-  const stateFile = path.join(stateDir, 'hitl-state.json');
+  const stateFile = path.join(activeStateDir, 'hitl-state.json');
   const s = readJson(stateFile, { paused: false, updatedAt: 0 });
 
   s.updatedAt    = Date.now();
@@ -279,8 +381,8 @@ function broadcast(payload) {
 }
 
 function pushCurrentState() {
-  const runState  = readJson(path.join(stateDir, 'run-state.json'),  null);
-  const hitlState = readJson(path.join(stateDir, 'hitl-state.json'), null);
+  const runState  = readJson(path.join(activeStateDir, 'run-state.json'),  null);
+  const hitlState = readJson(path.join(activeStateDir, 'hitl-state.json'), null);
   const boardStatus = readBoardStatusPayload();
   const missionDag = readMissionDagPayload();
   broadcast({ type: 'state-update', runState, hitlState, boardStatus, missionDag });
@@ -301,24 +403,24 @@ function isProcessAlive(pid) {
 }
 
 function readSupervisorRecord() {
-  return readJson(path.join(stateDir, 'supervisor.pid'), null);
+  return readJson(path.join(activeStateDir, 'supervisor.pid'), null);
 }
 
 function readMissionMeta() {
-  return readJson(path.join(stateDir, 'mission-meta.json'), null);
+  return readJson(path.join(activeStateDir, 'mission-meta.json'), null);
 }
 
 function writeMissionMeta(meta) {
-  fs.mkdirSync(stateDir, { recursive: true });
+  fs.mkdirSync(activeStateDir, { recursive: true });
   fs.writeFileSync(
-    path.join(stateDir, 'mission-meta.json'),
+    path.join(activeStateDir, 'mission-meta.json'),
     JSON.stringify({ ...meta, updatedAt: Date.now() }, null, 2),
     'utf-8',
   );
 }
 
 function summarizeRunState() {
-  const rs = readJson(path.join(stateDir, 'run-state.json'), null);
+  const rs = readJson(path.join(activeStateDir, 'run-state.json'), null);
   if (!rs?.runId) return null;
   const ACTIVE = new Set(['planning', 'running', 'reviewing', 'synthesizing']);
   const fresh = rs.updatedAt && (Date.now() - rs.updatedAt) < 600_000;
@@ -361,7 +463,7 @@ function buildMissionGoal(rawGoal, { priority, runName, forceTeam }) {
 }
 
 async function loadBoardCleanupModule() {
-  const modPath = path.join(projectRoot, 'dist', 'rco', 'board-cleanup.js');
+  const modPath = path.join(rolandInstallRoot, 'dist', 'rco', 'board-cleanup.js');
   try {
     return await import(pathToFileURL(modPath).href);
   } catch {
@@ -370,8 +472,9 @@ async function loadBoardCleanupModule() {
 }
 
 function spawnTeamMission(effectiveGoal, options = {}) {
-  if (!fs.existsSync(rolandEntry)) {
-    throw new Error(`Roland not built — run \`npm run build\` in ${projectRoot}`);
+  const entry = getRolandEntryForProject(activeProjectRoot);
+  if (!fs.existsSync(entry)) {
+    throw new Error(`Roland not built — run \`npm run build\` in ${rolandInstallRoot}`);
   }
 
   const {
@@ -382,21 +485,21 @@ function spawnTeamMission(effectiveGoal, options = {}) {
   } = options;
 
   const args = [
-    rolandEntry,
+    entry,
     'team',
     effectiveGoal,
     '--background',
     '--quiet',
     '--no-tui',
     '--state-dir',
-    stateDir,
+    activeStateDir,
   ];
   if (notify) args.push('--notify');
   if (clean) args.push('--clean');
 
   const env = {
     ...process.env,
-    ROLAND_STATE_DIR: stateDir,
+    ROLAND_STATE_DIR: activeStateDir,
     ROLAND_SIMPLE_TUI: '1',
   };
   if (pmModel && pmModel !== 'auto' && VALID_MODEL_IDS.has(pmModel)) env.ROLAND_PM_MODEL = pmModel;
@@ -405,7 +508,7 @@ function spawnTeamMission(effectiveGoal, options = {}) {
   }
 
   const child = spawn(process.execPath, args, {
-    cwd: projectRoot,
+    cwd: activeProjectRoot,
     env,
     detached: true,
     stdio: 'ignore',
@@ -416,8 +519,8 @@ function spawnTeamMission(effectiveGoal, options = {}) {
 
 function readBoardStatusPayload() {
   try {
-    const bbPath = path.join(stateDir, 'blackboard.json');
-    const cmdPath = path.join(stateDir, 'command-blackboard.md');
+    const bbPath = path.join(activeStateDir, 'blackboard.json');
+    const cmdPath = path.join(activeStateDir, 'command-blackboard.md');
     const entries = readJson(bbPath, []);
     const active = Array.isArray(entries) ? entries.filter(e => e.status !== 'archived') : [];
     const blockers = active.filter(e => e.type === 'blocker' || e.status === 'blocked');
@@ -434,9 +537,263 @@ function readBoardStatusPayload() {
   }
 }
 
+function shortenHome(p) {
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+  if (home && (p === home || p.startsWith(home + path.sep))) {
+    return '~' + p.slice(home.length);
+  }
+  return p;
+}
+
+function runGitQuiet(args, cwd) {
+  try {
+    return execSync(`git ${args}`, {
+      cwd,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+function readProjectContextPayload() {
+  const cwd = activeProjectRoot;
+  const exists = Boolean(cwd && fs.existsSync(cwd));
+
+  if (!exists) {
+    return {
+      cwd: cwd || null,
+      displayPath: cwd || null,
+      projectName: null,
+      isGitRepo: false,
+      branch: null,
+      remote: null,
+      lastCommit: null,
+      gitStatusSummary: null,
+      stateDir: activeStateDir,
+      updatedAt: Date.now(),
+      warning: 'No project context — running in unknown directory',
+    };
+  }
+
+  const projectName = path.basename(cwd);
+  const displayPath = shortenHome(cwd);
+  const isGitRepo = fs.existsSync(path.join(cwd, '.git'));
+  let branch = null;
+  let remote = null;
+  let lastCommit = null;
+  let gitStatusSummary = null;
+
+  if (isGitRepo) {
+    branch = runGitQuiet('rev-parse --abbrev-ref HEAD', cwd);
+    remote = runGitQuiet('remote get-url origin', cwd)
+      ?? runGitQuiet('remote', cwd);
+    const sha = runGitQuiet('rev-parse --short HEAD', cwd);
+    const subject = runGitQuiet('log -1 --pretty=%s', cwd);
+    if (sha) {
+      lastCommit = {
+        sha,
+        subject: subject || null,
+        date: runGitQuiet('log -1 --pretty=%cI', cwd),
+      };
+    }
+    const porcelain = runGitQuiet('status --porcelain', cwd);
+    if (porcelain !== null) {
+      const changed = porcelain.split('\n').filter(Boolean).length;
+      gitStatusSummary = changed === 0 ? 'clean' : `${changed} changed`;
+    }
+  }
+
+  return {
+    cwd,
+    displayPath,
+    projectName,
+    isGitRepo,
+    branch,
+    remote,
+    lastCommit,
+    gitStatusSummary,
+    stateDir: activeStateDir,
+    updatedAt: Date.now(),
+    warning: null,
+  };
+}
+
+function dirLastModified(dir) {
+  try {
+    if (!fs.existsSync(dir)) return 0;
+    return fs.statSync(dir).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
+function summarizeProjectEntry(dir) {
+  const resolved = path.resolve(dir);
+  const isGit = fs.existsSync(path.join(resolved, '.git'));
+  const branch = isGit ? runGitQuiet('rev-parse --abbrev-ref HEAD', resolved) : null;
+  const rolandDir = path.join(resolved, '.roland');
+  const lastModified = Math.max(
+    dirLastModified(resolved),
+    dirLastModified(rolandDir),
+  );
+  return {
+    name: path.basename(resolved),
+    path: resolved,
+    displayPath: shortenHome(resolved),
+    isGit,
+    branch,
+    hasRoland: projectHasRoland(resolved),
+    lastModified,
+    isActive: resolved === path.resolve(activeProjectRoot),
+  };
+}
+
+function defaultScanDirs(cfg) {
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+  const defaults = home
+    ? [path.join(home, 'projects'), path.join(home, 'code'), path.join(home, 'dev')]
+    : [];
+  const envDirs = (process.env.ROLAND_DASHBOARD_SCAN_DIRS ?? '')
+    .split(/[:;,]/)
+    .map(s => expandTilde(s.trim()))
+    .filter(Boolean);
+  const cfgDirs = (cfg.scanDirs ?? []).map(expandTilde);
+  return [...new Set([...envDirs, ...cfgDirs, ...defaults])];
+}
+
+function discoverProjectPaths() {
+  const cfg = readDashboardConfig();
+  const paths = new Set();
+
+  paths.add(path.resolve(activeProjectRoot));
+  paths.add(path.resolve(anchorProjectRoot));
+  for (const p of cfg.knownProjects) {
+    if (p) paths.add(path.resolve(expandTilde(p)));
+  }
+  if (cfg.lastProjectPath) paths.add(path.resolve(expandTilde(cfg.lastProjectPath)));
+
+  for (const scanRoot of defaultScanDirs(cfg)) {
+    try {
+      if (!fs.existsSync(scanRoot)) continue;
+      for (const ent of fs.readdirSync(scanRoot, { withFileTypes: true })) {
+        if (!ent.isDirectory() || ent.name.startsWith('.')) continue;
+        paths.add(path.join(scanRoot, ent.name));
+      }
+    } catch { /* unreadable scan root */ }
+  }
+
+  const projects = [];
+  for (const p of paths) {
+    if (!isValidProjectRoot(p)) continue;
+    projects.push(summarizeProjectEntry(p));
+  }
+
+  projects.sort((a, b) => {
+    if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+    return (b.lastModified ?? 0) - (a.lastModified ?? 0);
+  });
+
+  return projects;
+}
+
+function readProjectsPayload() {
+  return {
+    activePath: activeProjectRoot,
+    activeDisplayPath: shortenHome(activeProjectRoot),
+    projects: discoverProjectPaths(),
+    configPath: dashboardConfigPath,
+    updatedAt: Date.now(),
+  };
+}
+
+function isMissionActiveInStateDir(dir) {
+  const supervisor = readJson(path.join(dir, 'supervisor.pid'), null);
+  if (supervisor?.pid && isProcessAlive(supervisor.pid)) return true;
+
+  const runState = readJson(path.join(dir, 'run-state.json'), null);
+  const ACTIVE = new Set(['planning', 'running', 'reviewing', 'synthesizing']);
+  const runFresh = runState?.updatedAt && (Date.now() - runState.updatedAt) < 600_000;
+  return Boolean(runState?.runId && ACTIVE.has(runState.status) && runFresh);
+}
+
+function isMissionActive() {
+  return isMissionActiveInStateDir(activeStateDir);
+}
+
+function rememberProjectPath(resolvedPath) {
+  const cfg = readDashboardConfig();
+  const known = new Set(cfg.knownProjects.map(p => path.resolve(expandTilde(p))));
+  known.add(path.resolve(resolvedPath));
+  writeDashboardConfig({
+    lastProjectPath: path.resolve(resolvedPath),
+    knownProjects: [...known],
+  });
+}
+
+if (!readDashboardConfig().lastProjectPath) {
+  rememberProjectPath(activeProjectRoot);
+}
+
+let stateWatcher = null;
+let watchTimer = null;
+
+function setupStateWatcher() {
+  if (stateWatcher) {
+    try { stateWatcher.close(); } catch {}
+    stateWatcher = null;
+  }
+  try {
+    fs.mkdirSync(activeStateDir, { recursive: true });
+    stateWatcher = fs.watch(activeStateDir, { persistent: false }, (_event, filename) => {
+      if (!filename || !WATCH_TARGETS.has(filename)) return;
+      clearTimeout(watchTimer);
+      watchTimer = setTimeout(pushCurrentState, 200);
+    });
+  } catch {
+    // State dir may not exist yet — watcher inactive until switch/create.
+  }
+}
+
+function switchActiveProject(targetPath, { force = false } = {}) {
+  const resolved = path.resolve(expandTilde(String(targetPath || '').trim()));
+  if (!resolved) throw new Error('path is required');
+  if (!isValidProjectRoot(resolved)) {
+    throw new Error(
+      'Invalid project — path must exist and contain a .roland/ folder or be a git repository root',
+    );
+  }
+
+  if (path.resolve(resolved) === path.resolve(activeProjectRoot)) {
+    return { switched: false, projectContext: readProjectContextPayload(), projects: readProjectsPayload() };
+  }
+
+  if (!force && isMissionActive()) {
+    const err = new Error(
+      'A mission is running in the current project. Stop it or confirm switch with force: true.',
+    );
+    err.code = 'MISSION_ACTIVE';
+    throw err;
+  }
+
+  activeProjectRoot = resolved;
+  activeStateDir = path.join(resolved, '.roland');
+  fs.mkdirSync(activeStateDir, { recursive: true });
+  rememberProjectPath(resolved);
+  setupStateWatcher();
+  pushCurrentState();
+
+  return {
+    switched: true,
+    projectContext: readProjectContextPayload(),
+    projects: readProjectsPayload(),
+  };
+}
+
 function readMissionDagPayload() {
   try {
-    const file = path.join(stateDir, 'mission-dag.json');
+    const file = path.join(activeStateDir, 'mission-dag.json');
     if (!fs.existsSync(file)) {
       return { dag: null, message: 'DAG planning not enabled for this mission — using wave mode' };
     }
@@ -450,18 +807,8 @@ function readMissionDagPayload() {
 // ── File watcher (debounced push) ─────────────────────────────────────────────
 
 const WATCH_TARGETS = new Set(['run-state.json', 'hitl-state.json', 'memory.md', 'hitl.json', 'blackboard.json', 'command-blackboard.md', 'mission-dag.json']);
-let watchTimer = null;
 
-try {
-  fs.mkdirSync(stateDir, { recursive: true });
-  fs.watch(stateDir, { persistent: false }, (_event, filename) => {
-    if (!filename || !WATCH_TARGETS.has(filename)) return;
-    clearTimeout(watchTimer);
-    watchTimer = setTimeout(pushCurrentState, 200);
-  });
-} catch {
-  // State dir may not exist yet — that's fine; watch will just be inactive.
-}
+setupStateWatcher();
 
 // ── Request handler ───────────────────────────────────────────────────────────
 
@@ -476,7 +823,7 @@ const server = http.createServer(async (req, res) => {
 
   // ── /api/run-state ───────────────────────────────────────────────────────
   if (url === '/api/run-state' && method === 'GET') {
-    const file = path.join(stateDir, 'run-state.json');
+    const file = path.join(activeStateDir, 'run-state.json');
     fs.readFile(file, (err, data) => {
       setCors(res);
       res.setHeader('Content-Type', 'application/json');
@@ -488,7 +835,7 @@ const server = http.createServer(async (req, res) => {
 
   // ── /api/usage ───────────────────────────────────────────────────────────
   if (url === '/api/usage' && method === 'GET') {
-    const file = path.join(stateDir, 'usage-history.json');
+    const file = path.join(activeStateDir, 'usage-history.json');
     fs.readFile(file, (err, data) => {
       setCors(res);
       res.setHeader('Content-Type', 'application/json');
@@ -500,7 +847,7 @@ const server = http.createServer(async (req, res) => {
 
   // ── /api/usage/summary ───────────────────────────────────────────────────
   if (url === '/api/usage/summary' && method === 'GET') {
-    const file = path.join(stateDir, 'usage-history.json');
+    const file = path.join(activeStateDir, 'usage-history.json');
     fs.readFile(file, (err, data) => {
       setCors(res);
       res.setHeader('Content-Type', 'application/json');
@@ -527,7 +874,7 @@ const server = http.createServer(async (req, res) => {
 
   // ── /api/memory GET ──────────────────────────────────────────────────────
   if (url === '/api/memory' && method === 'GET') {
-    const file = path.join(stateDir, 'memory.md');
+    const file = path.join(activeStateDir, 'memory.md');
     fs.readFile(file, 'utf-8', (err, data) => {
       jsonOk(res, { content: err ? '' : data });
     });
@@ -539,8 +886,8 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = await readBody(req);
       if (typeof body.content !== 'string') throw new Error('content must be a string');
-      fs.mkdirSync(stateDir, { recursive: true });
-      fs.writeFileSync(path.join(stateDir, 'memory.md'), body.content, 'utf-8');
+      fs.mkdirSync(activeStateDir, { recursive: true });
+      fs.writeFileSync(path.join(activeStateDir, 'memory.md'), body.content, 'utf-8');
       jsonOk(res, { ok: true });
     } catch (e) { jsonErr(res, e.message); }
     return;
@@ -548,13 +895,13 @@ const server = http.createServer(async (req, res) => {
 
   // ── /api/hitl-state GET ──────────────────────────────────────────────────
   if (url === '/api/hitl-state' && method === 'GET') {
-    jsonOk(res, readJson(path.join(stateDir, 'hitl-state.json'), {}));
+    jsonOk(res, readJson(path.join(activeStateDir, 'hitl-state.json'), {}));
     return;
   }
 
   // ── /api/blackboard GET ──────────────────────────────────────────────────
   if (url === '/api/blackboard' && method === 'GET') {
-    jsonOk(res, readJson(path.join(stateDir, 'blackboard.json'), {}));
+    jsonOk(res, readJson(path.join(activeStateDir, 'blackboard.json'), {}));
     return;
   }
 
@@ -567,6 +914,40 @@ const server = http.createServer(async (req, res) => {
   // ── /api/mission-meta GET ────────────────────────────────────────────────
   if (url === '/api/mission-meta' && method === 'GET') {
     jsonOk(res, { meta: readMissionMeta() });
+    return;
+  }
+
+  // ── /api/project-context GET ─────────────────────────────────────────────
+  if (url === '/api/project-context' && method === 'GET') {
+    try {
+      jsonOk(res, readProjectContextPayload());
+    } catch (e) { jsonErr(res, e.message, 500); }
+    return;
+  }
+
+  // ── /api/projects GET ────────────────────────────────────────────────────
+  if (url === '/api/projects' && method === 'GET') {
+    try {
+      jsonOk(res, readProjectsPayload());
+    } catch (e) { jsonErr(res, e.message, 500); }
+    return;
+  }
+
+  // ── /api/switch-project POST ─────────────────────────────────────────────
+  if (url === '/api/switch-project' && method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const targetPath = typeof body.path === 'string' ? body.path.trim() : '';
+      if (!targetPath) { jsonErr(res, 'path is required'); return; }
+      const result = switchActiveProject(targetPath, { force: Boolean(body.force) });
+      jsonOk(res, { ok: true, ...result });
+    } catch (e) {
+      if (e.code === 'MISSION_ACTIVE') {
+        jsonErr(res, e.message, 409);
+        return;
+      }
+      jsonErr(res, e.message, 400);
+    }
     return;
   }
 
@@ -610,7 +991,7 @@ const server = http.createServer(async (req, res) => {
         jsonErr(res, 'Board cleanup unavailable — run `npm run build` first', 503);
         return;
       }
-      const result = mod.cleanupBoardsForNewMission(stateDir, goal, { dryRun, goal });
+      const result = mod.cleanupBoardsForNewMission(activeStateDir, goal, { dryRun, goal });
       jsonOk(res, {
         ok: true,
         dryRun,
@@ -634,7 +1015,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const runState = readJson(path.join(stateDir, 'run-state.json'), null);
+      const runState = readJson(path.join(activeStateDir, 'run-state.json'), null);
       const ACTIVE = new Set(['planning', 'running', 'reviewing', 'synthesizing']);
       const runFresh = runState?.updatedAt && (Date.now() - runState.updatedAt) < 600_000;
       if (runState?.runId && ACTIVE.has(runState.status) && runFresh) {
@@ -652,7 +1033,7 @@ const server = http.createServer(async (req, res) => {
 
       if (cleanup) {
         const mod = await loadBoardCleanupModule();
-        if (mod) mod.cleanupBoardsForNewMission(stateDir, rawGoal, { goal: rawGoal });
+        if (mod) mod.cleanupBoardsForNewMission(activeStateDir, rawGoal, { goal: rawGoal });
       }
 
       const effectiveGoal = buildMissionGoal(rawGoal, { priority, runName, forceTeam });
@@ -696,7 +1077,7 @@ const server = http.createServer(async (req, res) => {
     try {
       const mod = await loadBoardReportModule();
       if (mod) {
-        const report = mod.buildBoardStatusReport(stateDir);
+        const report = mod.buildBoardStatusReport(activeStateDir);
         const concise = mod.formatConciseUnscSummary(report);
         jsonOk(res, { report, concise, markdown: concise, updatedAt: Date.now() });
         return;
@@ -751,8 +1132,8 @@ wss.on('connection', (ws) => {
   wsClients.add(ws);
   // Send the current state snapshot immediately on connection
   try {
-    const runState  = readJson(path.join(stateDir, 'run-state.json'),  null);
-    const hitlState = readJson(path.join(stateDir, 'hitl-state.json'), null);
+    const runState  = readJson(path.join(activeStateDir, 'run-state.json'),  null);
+    const hitlState = readJson(path.join(activeStateDir, 'hitl-state.json'), null);
     const boardStatus = readBoardStatusPayload();
     const missionDag = readMissionDagPayload();
     ws.send(JSON.stringify({ type: 'state-update', runState, hitlState, boardStatus, missionDag }));
@@ -774,10 +1155,11 @@ server.listen(port, host, () => {
     console.log(`  Tailscale : http://<your-tailscale-ip>:${port}`);
   }
   console.log(`  WebSocket : ws://${host === '0.0.0.0' ? '127.0.0.1' : host}:${port}`);
-  console.log(`  State dir : ${stateDir}`);
-  console.log(`  Project   : ${projectRoot}`);
+  console.log(`  State dir : ${activeStateDir}`);
+  console.log(`  Project   : ${activeProjectRoot}`);
   console.log(`  APIs      : ${localBase}/api/usage  ${localBase}/api/run-state`);
   console.log(`              ${localBase}/api/memory  ${localBase}/api/hitl/:cmd`);
   console.log(`              ${localBase}/api/board-status  ${localBase}/api/mission-dag`);
+  console.log(`              ${localBase}/api/project-context  ${localBase}/api/projects`);
   console.log(`\n  Open the URL above in your browser (Tailscale: use machine IP).\n`);
 });
