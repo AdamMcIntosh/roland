@@ -1,0 +1,21 @@
+name: research-loop
+description: >
+  Research workflow — plan investigation, gather intel, verify findings,
+  critique synthesis quality, retry gaps, observe before next cycle.
+phases:
+  - phase: plan
+    label: Plan research
+    agent: lead-pm
+  - phase: act
+    label: Research & synthesize
+    agent: researcher
+  - phase: verify
+    label: Validate findings
+    agent: critic
+  - phase: critique
+    label: Critique synthesis
+    agent: critic
+  - phase: observe
+    label: Observe & record
+maxIterations: 3
+maxRetries: 2

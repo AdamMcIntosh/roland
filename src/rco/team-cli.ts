@@ -27,6 +27,7 @@ import { SimpleTuiRenderer, isSimpleTui } from '../dashboard/simple-tui.js';
 import { Notifier } from './notifier.js';
 import { HitlQueue } from './hitl.js';
 import { spawnBackground } from './supervisor.js';
+import type { LoopState } from '../loop-engine/index.js';
 
 // ── Terminal helpers ──────────────────────────────────────────────────────────
 
@@ -64,6 +65,15 @@ const err = (s = '') => process.stderr.write(s + '\n');
  * Delete blackboard.json and messages.json from stateDir.
  * Preserves memory.md — project memory is intentionally cross-run.
  */
+function syncLoopStateToRun(runState: RunStateWriter, loopState: LoopState): void {
+  runState.updateLoopState({
+    loopTemplateId: loopState.templateId,
+    loopPhase: loopState.currentPhase,
+    loopIteration: loopState.iteration,
+    lastVerification: loopState.lastVerification,
+  });
+}
+
 function cleanState(stateDir: string): void {
   const targets = ['blackboard.json', 'messages.json'];
   const removed: string[] = [];
@@ -95,6 +105,7 @@ export interface TeamCliArgs {
   webhookUrl?: string;
   agentsDir?: string;
   parallel: boolean;
+  loopTemplate?: string;
 }
 
 export function parseTeamArgs(argv: string[]): TeamCliArgs {
@@ -115,6 +126,7 @@ export function parseTeamArgs(argv: string[]): TeamCliArgs {
   let parallel   = process.env.ROLAND_SEQUENTIAL !== '1';
   let webhookUrl: string | undefined;
   let agentsDir: string | undefined;
+  let loopTemplate: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -133,10 +145,11 @@ export function parseTeamArgs(argv: string[]): TeamCliArgs {
     if (a === '--parallel' || a === '-p')              { parallel = true; continue; }
     if (a === '--sequential')                           { parallel = false; continue; }
     if (a === '--webhook' && args[i + 1])                { webhookUrl = args[++i]; notify = true; continue; }
+    if (a === '--loop-template' && args[i + 1])          { loopTemplate = args[++i]; continue; }
     if (!a.startsWith('-') && !goal)                     { goal = a; continue; }
   }
 
-  return { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel };
+  return { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel, loopTemplate };
 }
 
 // ── Web-mode helpers ──────────────────────────────────────────────────────────
@@ -180,7 +193,7 @@ function firstSentences(body: string, maxChars = 200): string {
 // ── Main CLI logic (exported so index.ts can delegate without re-running main) ─
 
 export async function runTeamCli(argv: string[]): Promise<void> {
-  const { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel } = parseTeamArgs(argv);
+  const { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel, loopTemplate } = parseTeamArgs(argv);
 
   if (!goal) {
     err(c.bold('Roland — PM Team Mode'));
@@ -209,6 +222,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     err('    --web                   Streaming terminal-style output for web/chat — live progress, no ANSI');
     err('    --sequential            One agent at a time  ' + c.dim('(safe mode for unstable connections; overrides ROLAND_SEQUENTIAL=1)'));
     err('    --parallel              Force parallel even if ROLAND_SEQUENTIAL=1  ' + c.dim('(parallel is the default)'));
+    err('    --loop-template <id>    Attach a loop template (e.g. standard-code-loop)  ' + c.dim('(Loop Engineering)'));
     err('');
     process.exit(1);
   }
@@ -264,6 +278,8 @@ export async function runTeamCli(argv: string[]): Promise<void> {
         goal, stateDir, agentsDir, hitlQueue,
         noImprove: true,
         sequential: !parallel, interactive: false,
+        loopTemplate,
+        onLoopStateChange: (s) => syncLoopStateToRun(runState, s),
 
         onPlanReady: (tasks) => {
           runState.planReady(tasks);
@@ -428,6 +444,8 @@ export async function runTeamCli(argv: string[]): Promise<void> {
       const result = await runTeam({
         goal, stateDir, agentsDir, hitlQueue,
         noImprove, sequential: !parallel, interactive: false, quiet: true,
+        loopTemplate,
+        onLoopStateChange: (s) => syncLoopStateToRun(runState, s),
         onPlanReady:    (tasks)         => { runState.planReady(tasks); },
         onWaveStart:    (w, tasks)      => { runState.waveStart(w, tasks.map((t) => t.id)); },
         onTaskStart: (id, _a, _t, git) => {
@@ -552,6 +570,11 @@ export async function runTeamCli(argv: string[]): Promise<void> {
         agentsDir,
         hitlQueue,
         noImprove, sequential: !parallel, interactive: false,
+        loopTemplate,
+        onLoopStateChange: (s) => {
+          syncLoopStateToRun(runState, s);
+          tui.update(runState.get());
+        },
         onBlockerDetected: (taskId, agent, description, waveNumber) => {
           void notifier.notify({
             event: 'blocker', goal,
@@ -668,6 +691,8 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     noImprove,
     sequential: !parallel,
     interactive: Boolean((process.stderr as NodeJS.WriteStream).isTTY) && !noImprove,
+    loopTemplate,
+    onLoopStateChange: (s) => syncLoopStateToRun(runState, s),
     onBlockerDetected: (taskId, agent, description, waveNumber) => {
       void notifier.notify({
         event: 'blocker', goal,

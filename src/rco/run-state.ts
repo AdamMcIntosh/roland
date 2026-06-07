@@ -14,6 +14,15 @@ export const RUN_STATE_FILE = 'run-state.json';
 export type TaskStatus = 'pending' | 'running' | 'done' | 'error' | 'blocked';
 export type RunStatus = 'planning' | 'running' | 'reviewing' | 'synthesizing' | 'done' | 'error';
 
+/** Loop Engineering phase — mirrors src/loop-engine/loop-phases.ts */
+export type LoopPhase =
+  | 'plan'
+  | 'act'
+  | 'verify'
+  | 'critique'
+  | 'retry'
+  | 'observe';
+
 /** Git branch / PR metadata for executor tasks (populated by task-git-workflow). */
 export interface TaskGitState {
   branch?: string;
@@ -60,6 +69,18 @@ export interface RunState {
   connectionDropped?: boolean;
   /** Human-readable detail about the connection drop (wave, agent count, etc.). */
   connectionDropMessage?: string;
+  /** Active loop template id when Loop Engineering is enabled. */
+  loopTemplateId?: string;
+  /** Current loop phase (dashboard observability). */
+  loopPhase?: LoopPhase;
+  /** Outer loop iteration counter. */
+  loopIteration?: number;
+  /** Last verification gate result. */
+  lastVerification?: {
+    pass: boolean;
+    summary: string;
+    at: number;
+  };
 }
 
 // ── Writer (used by team-cli / orchestrator callbacks) ────────────────────────
@@ -211,6 +232,28 @@ export class RunStateWriter {
     this.state.status = 'error';
     this.state.errorMessage = message;
     this.state.activeTaskIds = [];
+    this.flush();
+  }
+
+  /** Sync loop-engine state into run-state.json for dashboard / bg-status. */
+  updateLoopState(fields: {
+    loopTemplateId?: string;
+    loopPhase?: LoopPhase;
+    loopIteration?: number;
+    lastVerification?: { pass: boolean; summary: string; at: number };
+  }): void {
+    if (fields.loopTemplateId !== undefined) {
+      this.state.loopTemplateId = fields.loopTemplateId;
+    }
+    if (fields.loopPhase !== undefined) {
+      this.state.loopPhase = fields.loopPhase;
+    }
+    if (fields.loopIteration !== undefined) {
+      this.state.loopIteration = fields.loopIteration;
+    }
+    if (fields.lastVerification !== undefined) {
+      this.state.lastVerification = fields.lastVerification;
+    }
     this.flush();
   }
 

@@ -1,0 +1,28 @@
+import type { Blackboard } from '../../rco/blackboard.js';
+import type { CommandBlackboard } from '../../rco/command-blackboard.js';
+import type { Phase } from '../loop-phases.js';
+import type { LoopState } from '../loop-state.js';
+
+export interface PhaseResult {
+  success: boolean;
+  summary: string;
+  /** When true, loop should enter retry phase */
+  shouldRetry?: boolean;
+  /** When true, loop should escalate to operator */
+  shouldEscalate?: boolean;
+}
+
+export interface PhaseHandlerContext {
+  goal: string;
+  state: LoopState;
+  blackboard: Blackboard;
+  commandBoard?: CommandBlackboard;
+  iteration: number;
+  waveNumber?: number;
+  hadBlockers?: boolean;
+}
+
+export interface PhaseHandler {
+  readonly phase: Phase;
+  execute(ctx: PhaseHandlerContext): Promise<PhaseResult>;
+}

@@ -55,6 +55,12 @@ import {
   type MissionPlanningMode,
 } from './mission-dag.js';
 import { loadAllAgents, resolveAgentsDir } from './loadConfig.js';
+import {
+  LoopEngine,
+  LoopEngineCoordinator,
+  LoopTemplates,
+  type LoopHooks,
+} from '../loop-engine/index.js';
 import { toCursorModelId } from './model-routing.js';
 import { parseWorkerSignals } from './worker-signals.js';
 import type { AgentYaml } from './types.js';
@@ -266,6 +272,13 @@ export interface TeamOrchestratorOptions {
   sequential?: boolean;
   /** When true, suppress SDK shell-exec close-timeout noise on stderr. */
   quiet?: boolean;
+  /**
+   * Loop template id (e.g. "standard-code-loop", "research-loop").
+   * When set, LoopEngine tracks phase transitions and persists to loop-state.json.
+   */
+  loopTemplate?: string;
+  /** Fired when loop phase state changes (wire to RunStateWriter.updateLoopState). */
+  onLoopStateChange?: LoopHooks['onStateChange'];
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -636,6 +649,8 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     onCircuitBreak,
     sequential = false,
     quiet = false,
+    loopTemplate,
+    onLoopStateChange,
   } = opts;
 
   const restoreStderr = quiet ? createShellExecStderrFilter() : undefined;
@@ -651,6 +666,8 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
       onCircuitBreak,
       sequential,
       quiet,
+      loopTemplate,
+      onLoopStateChange,
     });
   } finally {
     restoreStderr?.();
@@ -668,6 +685,8 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
     noImprove = false, interactive = false, rl,
     onCircuitBreak,
     sequential = false,
+    loopTemplate,
+    onLoopStateChange,
   } = opts;
 
   // ── Usage tracking ────────────────────────────────────────────────────────
@@ -737,6 +756,39 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
   }
 
   blackboard.post({ type: 'task', title: 'TEAM GOAL', content: goal, status: 'in_progress', author: 'system', priority: 'critical', tags: ['goal'], relatedIds: [] });
+
+  // ── Loop Engine (optional template) ───────────────────────────────────────
+  let loopCoordinator: LoopEngineCoordinator | undefined;
+  if (loopTemplate) {
+    const templates = new LoopTemplates();
+    const template = templates.get(loopTemplate);
+    if (!template) {
+      console.error(`[Loop] Template "${loopTemplate}" not found — continuing without loop engine`);
+      commandBoard.appendBullet('Open Intel', `[LOOP] Template "${loopTemplate}" not found — mission runs without loop phases`);
+    } else {
+      const engine = new LoopEngine({
+        stateDir,
+        template,
+        goal,
+        blackboard,
+        commandBoard,
+        hooks: { onStateChange: onLoopStateChange },
+      });
+      loopCoordinator = new LoopEngineCoordinator(engine);
+      await loopCoordinator.onMissionStart();
+      commandBoard.appendBullet('Mission Objectives', `Loop template: ${template.name} (${template.phases.map((p) => p.phase).join(' → ')})`);
+      blackboard.post({
+        type: 'artifact',
+        title: `Loop template: ${template.name}`,
+        content: template.description || template.phases.map((p) => p.phase).join(' → '),
+        status: 'in_progress',
+        author: 'loop-engine',
+        priority: 'medium',
+        tags: ['loop', 'template'],
+        relatedIds: [],
+      });
+    }
+  }
 
   const agentsDir = resolveAgentsDir(import.meta.url, agentsDirOverride);
   const rosterMap = loadAllAgents(agentsDir, { excludeVariants: true });
@@ -1049,6 +1101,7 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
   }
   commandBoard.setAgentStatus({ callsign: 'Roland', state: 'active', lastUpdated: Date.now(), note: `Wave control — ${plan.tasks.length} task(s)` });
   onPlanReady?.(plan.tasks);
+  await loopCoordinator?.onPlanningComplete();
 
   // ── Display memory citations (show user learning-in-action) ───────────────
   if (memorySnapshot) {
@@ -1094,6 +1147,7 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
     console.error(`[Team] ${modeLabel} — ${ready.map((t) => t.id).join(', ')}`);
     syncMissionGraph();
     onWaveStart?.(waveNumber, ready);
+    await loopCoordinator?.onWaveStart(waveNumber);
 
     // Reset circuit breaker for this wave (clears error count and open flag)
     waveCircuit.reset();
@@ -1261,6 +1315,7 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
       }
 
       onWaveComplete?.(waveNumber, decision);
+      await loopCoordinator?.onWaveComplete(waveNumber, hasBlockers);
 
       if (decision.decision === 'continue') {
         console.error(`[Team] PM: wave ${waveNumber} approved — continuing`);
@@ -1299,6 +1354,7 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
 
   // ── Phase 3: Lead PM synthesis ────────────────────────────────────────────
   console.error('[Team] Phase 3: Lead PM synthesis...');
+  await loopCoordinator?.onSynthesisStart();
   onSynthesizing?.();
 
   const synthesisCtx = {

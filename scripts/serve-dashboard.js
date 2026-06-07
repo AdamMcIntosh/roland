@@ -830,6 +830,7 @@ function spawnTeamMission(effectiveGoal, options = {}) {
     engineerModel,
     notify = false,
     clean = false,
+    loopTemplate,
   } = options;
 
   const args = [
@@ -844,6 +845,7 @@ function spawnTeamMission(effectiveGoal, options = {}) {
   ];
   if (notify) args.push('--notify');
   if (clean) args.push('--clean');
+  if (loopTemplate) args.push('--loop-template', loopTemplate);
 
   const env = {
     ...process.env,
@@ -1995,6 +1997,7 @@ const server = http.createServer(async (req, res) => {
       const engineerModel = typeof body.engineerModel === 'string' ? body.engineerModel : DEFAULT_ENGINEER_MODEL;
       const notify = Boolean(body.notify);
       const cleanup = Boolean(body.cleanup);
+      const loopTemplate = typeof body.loopTemplate === 'string' ? body.loopTemplate.trim() : '';
 
       const bbBefore = readBlackboardEntries().filter(e => e.status !== 'archived').length;
       logMission('Blackboard before mission launch', { activeEntries: bbBefore });
@@ -2012,7 +2015,13 @@ const server = http.createServer(async (req, res) => {
       );
 
       const effectiveGoal = buildMissionGoal(rawGoal, { priority, runName, forceTeam });
-      spawnTeamMission(effectiveGoal, { pmModel, engineerModel, notify, clean: cleanup });
+      spawnTeamMission(effectiveGoal, {
+        pmModel,
+        engineerModel,
+        notify,
+        clean: cleanup,
+        loopTemplate: loopTemplate || undefined,
+      });
 
       const missionId = randomUUID();
       const { pid } = await confirmSupervisorAndWriteMissionMeta({
@@ -2024,6 +2033,7 @@ const server = http.createServer(async (req, res) => {
         forceTeam,
         pmModel,
         engineerModel,
+        loopTemplate: loopTemplate || null,
         projectRoot: activeProjectRoot,
         stateDir: activeStateDir,
         status: 'active',
@@ -2057,6 +2067,7 @@ const server = http.createServer(async (req, res) => {
         pid,
         goal: rawGoal,
         effectiveGoal,
+        loopTemplate: loopTemplate || null,
         startedAt: Date.now(),
         message: 'Mission launched in background',
         logHint: 'roland bg-logs --follow',

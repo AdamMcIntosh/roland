@@ -3496,9 +3496,13 @@ What would you like to work on?`;
 
         // Spawn detached — unref so the MCP server doesn't wait for it
         const { spawn } = await import('child_process');
+        const spawnArgs = [entryPoint, 'team', goal.trim(), '--background'];
+        const loopTemplate = typeof args.loop_template === 'string' ? args.loop_template.trim() : '';
+        if (loopTemplate) spawnArgs.push('--loop-template', loopTemplate);
+
         const child = spawn(
           process.execPath,
-          [entryPoint, 'team', goal.trim(), '--background'],
+          spawnArgs,
           {
             cwd: projectRoot,
             detached: true,
@@ -3538,6 +3542,10 @@ What would you like to work on?`;
           state_dir: {
             type: 'string',
             description: 'Path to .roland state directory (default: .roland/ in project root). Omit to use the project default.',
+          },
+          loop_template: {
+            type: 'string',
+            description: 'Optional loop template id (e.g. standard-code-loop, research-loop, minimal-3-phase). Attaches Loop Engineering phase tracking.',
           },
         },
         required: ['goal'],
