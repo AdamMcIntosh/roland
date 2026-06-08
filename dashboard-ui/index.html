@@ -1221,6 +1221,151 @@
       min-height: 44px;
     }
 
+    /* GitHub repos modal */
+    .btn-project-github {
+      padding: 0.35rem 0.65rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--fg);
+      font-size: 0.72rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      min-height: 36px;
+    }
+    .btn-project-github:hover {
+      border-color: var(--indigo);
+      background: rgba(99,102,241,0.08);
+    }
+    .github-modal-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.55rem 1rem;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .github-modal-status {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-size: 0.72rem;
+      color: var(--muted);
+      flex: 1;
+      min-width: 0;
+    }
+    .github-modal-status img {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+    }
+    .github-connect-form {
+      padding: 0.75rem 1rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+    }
+    .github-connect-form input {
+      width: 100%;
+      padding: 0.45rem 0.65rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--fg);
+      font-size: 0.78rem;
+    }
+    .github-connect-actions {
+      display: flex;
+      gap: 0.45rem;
+      flex-wrap: wrap;
+    }
+    .github-repo-item {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.65rem;
+      width: 100%;
+      padding: 0.65rem 1rem;
+      border: none;
+      border-bottom: 1px solid var(--border);
+      background: transparent;
+      color: inherit;
+      text-align: left;
+      cursor: default;
+    }
+    .github-repo-item:hover { background: rgba(99,102,241,0.06); }
+    .github-repo-main { min-width: 0; flex: 1; }
+    .github-repo-name {
+      font-weight: 700;
+      font-size: 0.8rem;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+    }
+    .github-repo-desc {
+      font-size: 0.68rem;
+      color: var(--muted);
+      margin-top: 0.2rem;
+      line-height: 1.35;
+    }
+    .github-repo-meta {
+      font-size: 0.64rem;
+      color: var(--muted);
+      margin-top: 0.25rem;
+    }
+    .github-repo-badge {
+      font-size: 0.58rem;
+      font-weight: 600;
+      padding: 0.1rem 0.35rem;
+      border-radius: 999px;
+      background: var(--surface2);
+      color: var(--muted);
+    }
+    .github-repo-badge.local {
+      background: rgba(34,197,94,0.12);
+      color: var(--green, #22c55e);
+    }
+    .github-repo-action {
+      flex-shrink: 0;
+      padding: 0.35rem 0.65rem;
+      border-radius: 8px;
+      border: 1px solid var(--indigo);
+      background: var(--indigo);
+      color: #fff;
+      font-size: 0.68rem;
+      font-weight: 600;
+      cursor: pointer;
+      min-height: 32px;
+    }
+    .github-repo-action:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .github-repo-action.secondary {
+      background: transparent;
+      color: var(--indigo);
+    }
+    .github-modal-warn {
+      margin: 0.55rem 1rem 0;
+      padding: 0.55rem 0.65rem;
+      border-radius: 8px;
+      background: rgba(245,158,11,0.1);
+      border: 1px solid rgba(245,158,11,0.3);
+      color: var(--amber);
+      font-size: 0.7rem;
+      line-height: 1.4;
+    }
+    .github-modal-footer {
+      display: flex;
+      gap: 0.45rem;
+      padding: 0.65rem 1rem 0.85rem;
+      border-top: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+
     /* Create project modal */
     .create-project-body {
       padding: 0.75rem 1rem 1rem;
@@ -2169,6 +2314,7 @@
             </span>
             <span class="project-context-chevron" aria-hidden="true">▾</span>
           </button>
+          <button type="button" class="btn-project-github" id="btn-project-github" aria-haspopup="dialog" aria-controls="github-repos-modal">GitHub</button>
           <button type="button" class="btn-project-new" id="btn-project-new" aria-haspopup="dialog" aria-controls="create-project-modal">+ New Project</button>
           <button type="button" class="btn-project-switch" id="btn-project-switch" aria-haspopup="dialog" aria-controls="project-switcher-modal">Switch ▾</button>
         </div>
@@ -2575,7 +2721,54 @@
         <div class="project-modal-empty">Loading projects…</div>
       </div>
       <div class="project-modal-footer">
+        <button type="button" class="btn-project-github" id="btn-switcher-github">GitHub Repos</button>
         <button type="button" class="btn-project-new" id="btn-switcher-new-project">+ New Project</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GitHub repos modal -->
+  <div class="project-modal-backdrop" id="github-repos-backdrop" role="presentation" hidden>
+    <div class="project-modal" id="github-repos-modal" role="dialog" aria-modal="true" aria-labelledby="github-repos-title" style="max-width: 42rem;">
+      <div class="project-modal-header">
+        <div>
+          <h3 id="github-repos-title">GitHub Repos</h3>
+          <p class="project-modal-sub">Discover remote repos and clone into your workspace</p>
+        </div>
+        <button type="button" class="project-modal-close" id="github-repos-close" aria-label="Close">✕</button>
+      </div>
+      <div class="github-modal-toolbar" id="github-modal-toolbar">
+        <div class="github-modal-status" id="github-modal-status">Checking GitHub…</div>
+        <button type="button" class="btn-secondary" id="github-repos-refresh" title="Refresh repo list">↻ Refresh</button>
+      </div>
+      <div class="github-modal-warn" id="github-reconnect-warn" hidden>
+        Your GitHub connection has expired or is no longer valid.
+        <button type="button" class="btn-secondary" id="github-reconnect-btn" style="margin-left:0.5rem;">Reconnect</button>
+      </div>
+      <div id="github-connect-panel" hidden>
+        <form id="github-connect-form" class="github-connect-form" autocomplete="off">
+          <label for="github-pat-input" class="field-label">Personal Access Token</label>
+          <input type="password" id="github-pat-input" placeholder="ghp_…" autocomplete="off" />
+          <p class="create-project-hint">
+            Needs <code>repo</code> and <code>read:user</code> scopes.
+            <a href="https://github.com/settings/tokens/new?scopes=repo,read:user&description=Roland+Dashboard" target="_blank" rel="noopener noreferrer">Create token ↗</a>
+          </p>
+          <div class="github-connect-actions">
+            <button type="submit" class="btn-primary" id="github-connect-submit">Connect GitHub</button>
+            <button type="button" class="btn-secondary" id="github-connect-cancel">Cancel</button>
+          </div>
+          <p class="create-project-hint" id="github-connect-error" hidden style="color:var(--red);"></p>
+        </form>
+      </div>
+      <div class="project-modal-search-wrap" id="github-repos-search-wrap" hidden>
+        <input type="search" class="project-modal-search" id="github-repos-search" placeholder="Search repositories…" autocomplete="off" />
+      </div>
+      <div class="project-modal-list" id="github-repos-list" role="listbox" aria-label="GitHub repositories">
+        <div class="project-modal-empty">Connect GitHub to browse repositories.</div>
+      </div>
+      <div class="github-modal-footer" id="github-repos-footer" hidden>
+        <button type="button" class="btn-secondary" id="github-load-more">Load more</button>
+        <button type="button" class="btn-secondary" id="github-disconnect">Disconnect</button>
       </div>
     </div>
   </div>
@@ -2757,8 +2950,17 @@
   let projectTemplatesPayload = null;
   let projectSwitcherOpen = false;
   let createProjectOpen = false;
+  let githubReposOpen = false;
   let projectSwitching = false;
   let createProjectBusy = false;
+  let githubStatus = { connected: false };
+  let githubRepos = [];
+  let githubReposPage = 1;
+  let githubReposHasMore = false;
+  let githubReposLoading = false;
+  let githubReposBusy = false;
+  let githubConnectBusy = false;
+  let githubSearchTimer = null;
   let opsLogOpen = false;
   let tokensChart  = null;
   let modelChart   = null;
@@ -3562,6 +3764,311 @@
     return String(a).replace(/\/+$/, '') === String(b).replace(/\/+$/, '');
   }
 
+  function githubRelativeTime(iso) {
+    if (!iso) return '';
+    const ms = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(ms / 60_000);
+    if (m < 60) return m + 'm ago';
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + 'h ago';
+    const d = Math.floor(h / 24);
+    if (d < 30) return d + 'd ago';
+    return Math.floor(d / 30) + 'mo ago';
+  }
+
+  function closeGitHubReposModal() {
+    githubReposOpen = false;
+    const backdrop = document.getElementById('github-repos-backdrop');
+    if (backdrop) {
+      backdrop.classList.remove('open');
+      backdrop.hidden = true;
+    }
+  }
+
+  async function fetchGitHubStatus() {
+    try {
+      const res = await fetch('/api/github/status');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      githubStatus = await res.json();
+    } catch (e) {
+      console.warn('GitHub status fetch failed:', e.message);
+      githubStatus = { connected: false };
+    }
+  }
+
+  function renderGitHubModalChrome() {
+    const statusEl = document.getElementById('github-modal-status');
+    const connectPanel = document.getElementById('github-connect-panel');
+    const searchWrap = document.getElementById('github-repos-search-wrap');
+    const footer = document.getElementById('github-repos-footer');
+    const reconnectWarn = document.getElementById('github-reconnect-warn');
+    const refreshBtn = document.getElementById('github-repos-refresh');
+
+    if (reconnectWarn) reconnectWarn.hidden = !githubStatus.needsReconnect;
+    if (refreshBtn) refreshBtn.disabled = !githubStatus.connected || githubReposLoading;
+
+    if (!githubStatus.connected) {
+      if (statusEl) {
+        statusEl.innerHTML = githubStatus.envToken
+          ? '<span>Using <code>GITHUB_TOKEN</code> from environment</span>'
+          : '<span>Not connected — add a PAT to browse private repos</span>';
+      }
+      if (connectPanel) connectPanel.hidden = Boolean(githubStatus.envToken);
+      if (searchWrap) searchWrap.hidden = true;
+      if (footer) footer.hidden = true;
+      return;
+    }
+
+    const login = githubStatus.login ? '@' + escHtml(githubStatus.login) : 'Connected';
+    const avatar = githubStatus.avatarUrl
+      ? '<img src="' + escHtml(githubStatus.avatarUrl) + '" alt="" />'
+      : '';
+    const source = githubStatus.authSource === 'env' ? ' · env token' : '';
+    if (statusEl) statusEl.innerHTML = avatar + '<span>' + login + source + '</span>';
+    if (connectPanel) connectPanel.hidden = true;
+    if (searchWrap) searchWrap.hidden = false;
+    if (footer) footer.hidden = false;
+    const disconnectBtn = document.getElementById('github-disconnect');
+    if (disconnectBtn) disconnectBtn.hidden = githubStatus.authSource === 'env';
+  }
+
+  function renderGitHubReposList() {
+    const listEl = document.getElementById('github-repos-list');
+    if (!listEl) return;
+
+    if (!githubStatus.connected) {
+      listEl.innerHTML = '<div class="project-modal-empty">Connect GitHub to browse repositories.</div>';
+      return;
+    }
+    if (githubReposLoading && githubRepos.length === 0) {
+      listEl.innerHTML = '<div class="project-modal-empty">Loading repositories…</div>';
+      return;
+    }
+    if (!githubRepos.length) {
+      listEl.innerHTML = '<div class="project-modal-empty">No repositories found.</div>';
+      return;
+    }
+
+    listEl.innerHTML = githubRepos.map((r) => {
+      const privateBadge = r.isPrivate ? '<span class="github-repo-badge">private</span>' : '';
+      const localBadge = r.isLocal ? '<span class="github-repo-badge local">local</span>' : '';
+      const desc = r.description ? '<div class="github-repo-desc">' + escHtml(r.description) + '</div>' : '';
+      const meta = [
+        r.language ? escHtml(r.language) : '',
+        r.updatedAt ? 'Updated ' + githubRelativeTime(r.updatedAt) : '',
+      ].filter(Boolean).join(' · ');
+      const actionLabel = r.isLocal ? 'Open' : 'Clone & Open';
+      const actionClass = r.isLocal ? 'github-repo-action secondary' : 'github-repo-action';
+      return (
+        '<div class="github-repo-item" data-repo-owner="' + escHtml(r.owner) + '" data-repo-name="' + escHtml(r.name) + '">' +
+        '<div class="github-repo-main">' +
+        '<div class="github-repo-name">' + escHtml(r.fullName) + privateBadge + localBadge + '</div>' +
+        desc +
+        (meta ? '<div class="github-repo-meta">' + meta + '</div>' : '') +
+        '</div>' +
+        '<button type="button" class="' + actionClass + '" data-clone-repo="1">' + actionLabel + '</button>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  async function loadGitHubRepos({ append = false, refresh = false } = {}) {
+    if (!githubStatus.connected) {
+      renderGitHubReposList();
+      return;
+    }
+
+    const page = append ? githubReposPage + 1 : 1;
+    const q = document.getElementById('github-repos-search')?.value?.trim() ?? '';
+    githubReposLoading = true;
+    renderGitHubModalChrome();
+
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        per_page: '50',
+      });
+      if (q) params.set('q', q);
+      if (refresh) params.set('refresh', 'true');
+
+      const res = await fetch('/api/github/repos?' + params.toString());
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+
+      githubReposPage = page;
+      githubReposHasMore = Boolean(data.hasMore);
+      githubRepos = append ? githubRepos.concat(data.repos || []) : (data.repos || []);
+      renderGitHubReposList();
+
+      const loadMoreBtn = document.getElementById('github-load-more');
+      if (loadMoreBtn) {
+        loadMoreBtn.disabled = !githubReposHasMore;
+        loadMoreBtn.textContent = githubReposHasMore ? 'Load more' : 'No more repos';
+      }
+    } catch (e) {
+      const listEl = document.getElementById('github-repos-list');
+      if (listEl) {
+        listEl.innerHTML = '<div class="project-modal-empty" style="color:var(--red);">' + escHtml(e.message || 'Failed to load repos') + '</div>';
+      }
+      toast(e.message || 'Failed to load GitHub repos', 'error');
+    } finally {
+      githubReposLoading = false;
+      renderGitHubModalChrome();
+    }
+  }
+
+  async function openGitHubReposModal() {
+    toggleProjectContextDetails(false);
+    closeAllModelPickers();
+    closeProjectSwitcher();
+    githubReposOpen = true;
+    githubRepos = [];
+    githubReposPage = 1;
+
+    const backdrop = document.getElementById('github-repos-backdrop');
+    if (backdrop) {
+      backdrop.hidden = false;
+      backdrop.classList.add('open');
+    }
+
+    const searchEl = document.getElementById('github-repos-search');
+    if (searchEl) searchEl.value = '';
+
+    await fetchGitHubStatus();
+    renderGitHubModalChrome();
+    await loadGitHubRepos({ refresh: true });
+    setTimeout(() => searchEl?.focus(), 60);
+  }
+
+  async function submitGitHubConnect(e) {
+    e?.preventDefault();
+    if (githubConnectBusy) return;
+
+    const pat = document.getElementById('github-pat-input')?.value?.trim();
+    const errEl = document.getElementById('github-connect-error');
+    if (!pat) {
+      if (errEl) { errEl.textContent = 'Token is required'; errEl.hidden = false; }
+      return;
+    }
+
+    githubConnectBusy = true;
+    if (errEl) errEl.hidden = true;
+    const submitBtn = document.getElementById('github-connect-submit');
+    if (submitBtn) submitBtn.disabled = true;
+
+    try {
+      const res = await fetch('/api/github/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pat }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+
+      githubStatus = {
+        connected: true,
+        login: data.login,
+        avatarUrl: data.avatarUrl,
+        authSource: 'stored',
+      };
+      document.getElementById('github-pat-input').value = '';
+      renderGitHubModalChrome();
+      toast('Connected as @' + (data.login || 'GitHub user'), 'success');
+      await loadGitHubRepos({ refresh: true });
+    } catch (err) {
+      if (errEl) {
+        errEl.textContent = err.message || 'Connect failed';
+        errEl.hidden = false;
+      }
+      toast(err.message || 'GitHub connect failed', 'error');
+    } finally {
+      githubConnectBusy = false;
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  }
+
+  async function disconnectGitHub() {
+    if (!window.confirm('Disconnect GitHub? Cloned projects remain; new clones require reconnecting.')) return;
+    try {
+      const res = await fetch('/api/github/disconnect', { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'HTTP ' + res.status);
+      }
+      githubStatus = { connected: false };
+      githubRepos = [];
+      renderGitHubModalChrome();
+      renderGitHubReposList();
+      toast('GitHub disconnected', 'info');
+    } catch (e) {
+      toast(e.message || 'Disconnect failed', 'error');
+    }
+  }
+
+  async function cloneOrOpenGitHubRepo(owner, repo) {
+    if (!owner || !repo || githubReposBusy) return;
+
+    let force = false;
+    let migrateMission = false;
+    if (isMissionRunningNow()) {
+      const ok = window.confirm(
+        'A mission is running in the current project.\n\n' +
+        'Clone/open and migrate the mission to the target project?'
+      );
+      if (!ok) return;
+      force = true;
+      migrateMission = true;
+    }
+
+    githubReposBusy = true;
+    const listEl = document.getElementById('github-repos-list');
+    if (listEl) listEl.querySelectorAll('[data-clone-repo]').forEach((b) => { b.disabled = true; });
+
+    try {
+      const res = await fetch('/api/github/clone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          owner,
+          repo,
+          switchContext: true,
+          initRoland: true,
+          installDeps: true,
+          force,
+          migrateMission,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'HTTP ' + res.status);
+
+      if (data.projectContext) projectContext = data.projectContext;
+      if (data.projects) projectsPayload = data.projects;
+
+      if (data.switched) {
+        await reattachSupervisorState('github-clone');
+      }
+
+      closeGitHubReposModal();
+
+      const label = data.displayPath || data.path || (owner + '/' + repo);
+      if (data.cloned) {
+        let msg = 'Cloned ' + label;
+        if (data.installPid) msg += ' · npm install running';
+        if (data.switched) msg += ' · context switched';
+        toast(msg, 'success');
+      } else {
+        toast('Opened ' + label, 'success');
+      }
+
+      await loadGitHubRepos({ refresh: true });
+    } catch (e) {
+      toast(e.message || 'Clone failed', 'error');
+    } finally {
+      githubReposBusy = false;
+      renderGitHubReposList();
+    }
+  }
+
   function toggleProjectContextDetails(force) {
     const section = document.getElementById('project-context');
     const details = document.getElementById('project-context-details');
@@ -4204,6 +4711,14 @@
     openCreateProjectModal();
   });
   document.getElementById('btn-switcher-new-project')?.addEventListener('click', () => openCreateProjectModal());
+  document.getElementById('btn-project-github')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openGitHubReposModal();
+  });
+  document.getElementById('btn-switcher-github')?.addEventListener('click', () => {
+    closeProjectSwitcher();
+    openGitHubReposModal();
+  });
   document.getElementById('btn-ops-project-switch')?.addEventListener('click', () => openProjectSwitcher());
   document.getElementById('project-switcher-close')?.addEventListener('click', closeProjectSwitcher);
   document.getElementById('create-project-close')?.addEventListener('click', closeCreateProjectModal);
@@ -4226,9 +4741,40 @@
     if (!btn?.dataset.projectPath) return;
     switchToProject(btn.dataset.projectPath);
   });
+  document.getElementById('github-repos-close')?.addEventListener('click', closeGitHubReposModal);
+  document.getElementById('github-connect-cancel')?.addEventListener('click', closeGitHubReposModal);
+  document.getElementById('github-connect-form')?.addEventListener('submit', submitGitHubConnect);
+  document.getElementById('github-repos-refresh')?.addEventListener('click', () => loadGitHubRepos({ refresh: true }));
+  document.getElementById('github-load-more')?.addEventListener('click', () => loadGitHubRepos({ append: true }));
+  document.getElementById('github-disconnect')?.addEventListener('click', disconnectGitHub);
+  document.getElementById('github-reconnect-btn')?.addEventListener('click', async () => {
+    await fetch('/api/github/disconnect', { method: 'DELETE' });
+    githubStatus = { connected: false, needsReconnect: false };
+    renderGitHubModalChrome();
+    renderGitHubReposList();
+    document.getElementById('github-connect-panel').hidden = false;
+    document.getElementById('github-pat-input')?.focus();
+  });
+  document.getElementById('github-repos-backdrop')?.addEventListener('click', (e) => {
+    if (e.target?.id === 'github-repos-backdrop' && !githubReposBusy && !githubConnectBusy) {
+      closeGitHubReposModal();
+    }
+  });
+  document.getElementById('github-repos-search')?.addEventListener('input', () => {
+    clearTimeout(githubSearchTimer);
+    githubSearchTimer = setTimeout(() => loadGitHubRepos({ refresh: true }), 300);
+  });
+  document.getElementById('github-repos-list')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-clone-repo]');
+    if (!btn) return;
+    const row = btn.closest('[data-repo-owner]');
+    if (!row) return;
+    cloneOrOpenGitHubRepo(row.dataset.repoOwner, row.dataset.repoName);
+  });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       if (createProjectOpen && !createProjectBusy) closeCreateProjectModal();
+      else if (githubReposOpen && !githubReposBusy && !githubConnectBusy) closeGitHubReposModal();
       else if (projectSwitcherOpen) closeProjectSwitcher();
     }
   });

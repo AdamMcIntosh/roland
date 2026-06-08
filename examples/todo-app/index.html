@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Roland Todo</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app__header">
+        <h1 class="app__title">Roland Todo</h1>
+        <p class="app__subtitle">Add tasks, mark them done, and keep them across reloads.</p>
+      </header>
+
+      <form id="todo-form" class="todo-form" autocomplete="off">
+        <label class="todo-form__label" for="todo-input">New todo</label>
+        <div class="todo-form__row">
+          <input
+            id="todo-input"
+            class="todo-form__input"
+            type="text"
+            name="todo"
+            placeholder="What needs to be done?"
+            maxlength="500"
+            required
+          />
+          <button type="submit" class="btn btn--primary">Add</button>
+        </div>
+      </form>
+
+      <nav class="filters" aria-label="Filter todos">
+        <button type="button" class="filter-btn filter-btn--active" data-filter="all">All</button>
+        <button type="button" class="filter-btn" data-filter="active">Active</button>
+        <button type="button" class="filter-btn" data-filter="completed">Completed</button>
+      </nav>
+
+      <section class="todo-panel" aria-live="polite">
+        <ul id="todo-list" class="todo-list"></ul>
+        <p id="empty-state" class="empty-state" hidden>No todos yet. Add one above.</p>
+      </section>
+
+      <footer class="app__footer">
+        <p id="todo-count" class="todo-count">0 items</p>
+        <button type="button" id="clear-completed" class="btn btn--ghost" hidden>
+          Clear completed
+        </button>
+      </footer>
+    </main>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>
