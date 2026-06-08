@@ -32,6 +32,8 @@ export const LoopTemplateSchema = z.object({
   escalationThreshold: z.number().int().positive().optional(),
   testModeMaxRetries: z.number().int().nonnegative().optional(),
   testModeEscalationThreshold: z.number().int().positive().optional(),
+  timeout_ms: z.number().int().positive().optional(),
+  exponential_backoff: z.boolean().optional(),
 });
 
 export class LoopTemplates {
@@ -85,6 +87,8 @@ export class LoopTemplates {
           escalationThreshold: parsed.escalationThreshold,
           testModeMaxRetries: parsed.testModeMaxRetries,
           testModeEscalationThreshold: parsed.testModeEscalationThreshold,
+          timeoutMs: parsed.timeout_ms,
+          exponentialBackoff: parsed.exponential_backoff,
         };
         map.set(template.name, template);
       } catch {

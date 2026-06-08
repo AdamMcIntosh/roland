@@ -10,6 +10,9 @@
  *   - After retry budget (maxRetries=3) critique escalates to operator (HITL)
  *   - isTestMode allows 3+ retry cycles without escalating; verify can pass on retry #3
  *
+ * Team-cli / coordinator wiring (parseTeamArgs, LoopEngineCoordinator, run-state sync):
+ *   see tests/e2e/loop-full-team-coordinator.test.ts
+ *
  * Scoped run: npx vitest run tests/e2e/loop-critique-retry-escalation.test.ts
  */
 
@@ -33,11 +36,20 @@ import { RunStateWriter, readRunState, RUN_STATE_FILE } from '../../src/rco/run-
 import { clearLoopEngineConfigCache } from '../../src/loop-engine/loop-config.js';
 
 function syncLoopStateToRun(runState: RunStateWriter, loopState: LoopState): void {
+  const recentHistory = loopState.phaseHistory.slice(-12).map((t) => ({
+    phase: t.phase,
+    success: t.success,
+    summary: t.summary?.slice(0, 80),
+    startedAt: t.startedAt,
+    completedAt: t.completedAt,
+  }));
   runState.updateLoopState({
     loopTemplateId: loopState.templateId,
     loopPhase: loopState.currentPhase,
     loopIteration: loopState.iteration,
     loopRetryCount: loopState.retryCount,
+    loopStatus: loopState.status,
+    loopPhaseHistory: recentHistory,
     lastVerification: loopState.lastVerification,
     lastCritique: loopState.lastCritique
       ? {
@@ -50,6 +62,15 @@ function syncLoopStateToRun(runState: RunStateWriter, loopState: LoopState): voi
           strengths: loopState.lastCritique.strengths,
           issues: loopState.lastCritique.issues,
           suggestions: loopState.lastCritique.suggestions,
+        }
+      : undefined,
+    lastRetry: loopState.lastRetry
+      ? {
+          attempt: loopState.lastRetry.attempt,
+          strategy: loopState.lastRetry.strategy,
+          focusAreas: loopState.lastRetry.focusAreas,
+          backoffMs: loopState.lastRetry.backoffMs,
+          at: loopState.lastRetry.at,
         }
       : undefined,
   });

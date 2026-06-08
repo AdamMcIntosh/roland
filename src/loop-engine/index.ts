@@ -13,6 +13,7 @@ export type {
   PhaseTransition,
   LoopVerificationSnapshot,
   LoopCritiqueSnapshot,
+  LoopRetrySnapshot,
 } from './loop-state.js';
 
 export { LoopTemplates, LoopTemplateSchema } from './loop-templates.js';
@@ -87,6 +88,8 @@ export {
   RetryPhaseHandler,
   ObservePhaseHandler,
 } from './phase-handlers/index.js';
+export type { VerifyPhaseHandlerOptions } from './phase-handlers/verify-phase.js';
+export type { RetryPhaseHandlerOptions } from './phase-handlers/retry-phase.js';
 export type { PhaseHandler, PhaseHandlerContext, PhaseResult } from './phase-handlers/index.js';
 
 export {

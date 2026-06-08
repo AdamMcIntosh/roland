@@ -286,15 +286,19 @@
       padding: .15rem .45rem; border-radius: 6px; font-size: .65rem; cursor: pointer;
       border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04);
     }
-    .loop-phase-chip.active { border-color: var(--emerald); color: var(--emerald); }
+    .loop-phase-chip.active, .loop-phase-chip.running { border-color: var(--emerald); color: var(--emerald); animation: loop-pulse 1.2s ease-in-out infinite; }
     .loop-phase-chip.fail { border-color: #fca5a5; color: #fca5a5; }
-    .loop-phase-chip.ok { border-color: rgba(16,185,129,.4); }
+    .loop-phase-chip.ok, .loop-phase-chip.pass { border-color: rgba(16,185,129,.4); color: var(--emerald); }
     .loop-phase-detail {
       margin-top: .35rem; padding: .35rem .5rem; border-radius: 6px;
       background: rgba(0,0,0,.2); font-size: .68rem; color: var(--muted);
       display: none;
     }
     .loop-phase-detail.open { display: block; }
+    .loop-phase-timeline { margin-top: .45rem; padding-top: .35rem; border-top: 1px solid rgba(255,255,255,.08); }
+    .loop-phase-timeline h5 { margin: 0 0 .25rem; font-size: .68rem; color: var(--muted); font-weight: 600; }
+    .loop-progress-bar { height: 3px; background: rgba(255,255,255,.08); border-radius: 2px; margin-top: .35rem; overflow: hidden; }
+    .loop-progress-fill { height: 100%; background: var(--emerald); transition: width .4s ease; }
     .loop-metrics-row { display: flex; gap: .65rem; flex-wrap: wrap; margin-top: .35rem; font-size: .68rem; }
     .loop-metrics-row span strong { color: var(--text); }
     .loop-error-actions { margin-top: .4rem; display: flex; gap: .4rem; flex-wrap: wrap; }
@@ -303,6 +307,7 @@
       background: rgba(16,185,129,.15); color: var(--emerald);
     }
     .loop-health-badge.degraded, .loop-health-badge.escalated { background: rgba(239,68,68,.15); color: #fca5a5; }
+    @keyframes loop-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
     .task-card.status-running .task-icon { animation: blink 1.5s ease-in-out infinite; }
 

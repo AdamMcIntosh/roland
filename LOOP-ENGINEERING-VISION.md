@@ -141,10 +141,11 @@ See [docs/evolution/README.md](./docs/evolution/README.md) for the current produ
 ## Next Steps for Implementation Waves
 
 1. ~~**Define loop phase model**~~ — **Done (Wave 1, task-1).** See implementation notes below.
-2. **Wire verification gates** — Connect `test-executor` and linter checks as mandatory verify steps in reference templates.
-3. **Harden reliability layer** — Close state/supervisor/project-switch bugs before adding new loop surfaces.
-4. **Upgrade dashboard** — Loop phase and verification panel on existing run-state API.
-5. **Ship reference loops** — `code → test → fix` and `research → synthesize → validate` as runnable, documented templates.
+2. ~~**Wire verification gates**~~ — **Done (Wave 2–3).** TestExecutor + strategies in verify phase.
+3. ~~**Implement critique + retry loop**~~ — **Done (Wave 4–5).** CritiqueEngine + RetryPhaseHandler + `runFullLoop()`.
+4. **Harden reliability layer** — Close state/supervisor/project-switch bugs before adding new loop surfaces.
+5. ~~**Upgrade dashboard**~~ — **Done (Wave 5).** Loop phase timeline + retry intel in Mission Intel panel.
+6. **Ship reference loops** — `code → test → fix` and `research → synthesize → validate` as runnable, documented templates.
 
 ---
 
@@ -198,7 +199,36 @@ import { LoopEngine, LoopTemplates } from './loop-engine/index.js';
 
 ### Known limitations (Wave 1 — superseded by task-6)
 
-See **Maturity (task-6)** below for current state.
+See **Maturity (task-6)** below for current state. Wave 2–5 shipped verification gates, critique/retry orchestration, and dashboard loop visibility.
+
+---
+
+## Implementation Notes (Wave 5 — Retry Phase + Full Loop Orchestration)
+
+**Status:** Shipped in `src/loop-engine/` (2026-06-07).
+
+### New / enhanced modules
+
+| Path | Role |
+|------|------|
+| `src/loop-engine/phase-handlers/retry-phase.ts` | Smart retry handler — focused scope, exponential backoff, HITL escalation |
+| `src/loop-engine/loop-engine.ts` | `runFullLoop()` — multi-iteration orchestration with timeout, resume, structured logging |
+| `src/loop-engine/loop-state.ts` | `LoopStateStore.loadOrCreate()` — resume from `.roland/loop-state.json`; `lastRetry` / `retryHistory` |
+| `src/loop-engine/loop-config.ts` | `timeout_ms`, `retry.exponential_backoff` config section |
+| `dashboard-ui/index.html` | Phase timeline chips, retry snapshot, live progress bar |
+
+### Capabilities shipped
+
+| Capability | Status |
+|------------|--------|
+| Full loop execution (`runFullLoop()`) | ✅ Plan → Act → Verify → Critique → Retry → next iteration or complete |
+| Configurable max iterations / timeout | ✅ Template + `config.yaml` `loop_engine.timeout_ms` |
+| State persistence across restarts | ✅ `resumeFromState` + `LoopStateStore.loadOrCreate()` |
+| Focused retry on failed checks | ✅ `retry_focused` decision → scoped verification targets on blackboard |
+| Exponential backoff (optional) | ✅ Config-driven; disabled by default for dev speed |
+| Human escalation after max retries | ✅ Critique + Retry phases → `escalated` status + HITL blackboard entry |
+| Dashboard loop visibility | ✅ Iteration, phase timeline, retry count, live progress |
+| Escalation threshold fix | ✅ Consecutive verify-failure HITL no longer fires at `retryCount=maxRetries-1` |
 
 ---
 

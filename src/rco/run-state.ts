@@ -102,6 +102,24 @@ export interface RunState {
   };
   /** Loop retry counter (dashboard observability). */
   loopRetryCount?: number;
+  /** Loop run status mirrored from loop-state.json. */
+  loopStatus?: 'running' | 'completed' | 'failed' | 'escalated';
+  /** Compact phase timeline for dashboard (most recent transitions). */
+  loopPhaseHistory?: Array<{
+    phase: string;
+    success?: boolean;
+    summary?: string;
+    startedAt: number;
+    completedAt?: number;
+  }>;
+  /** Last retry snapshot — strategy, focus areas, backoff. */
+  lastRetry?: {
+    attempt: number;
+    strategy: 'full' | 'focused';
+    focusAreas: string[];
+    backoffMs: number;
+    at: number;
+  };
 }
 
 // ── Writer (used by team-cli / orchestrator callbacks) ────────────────────────
@@ -262,6 +280,14 @@ export class RunStateWriter {
     loopPhase?: LoopPhase;
     loopIteration?: number;
     loopRetryCount?: number;
+    loopStatus?: 'running' | 'completed' | 'failed' | 'escalated';
+    loopPhaseHistory?: Array<{
+      phase: string;
+      success?: boolean;
+      summary?: string;
+      startedAt: number;
+      completedAt?: number;
+    }>;
     lastVerification?: {
       pass: boolean;
       summary: string;
@@ -285,6 +311,13 @@ export class RunStateWriter {
       issues?: string[];
       suggestions?: string[];
     };
+    lastRetry?: {
+      attempt: number;
+      strategy: 'full' | 'focused';
+      focusAreas: string[];
+      backoffMs: number;
+      at: number;
+    };
   }): void {
     if (fields.loopTemplateId !== undefined) {
       this.state.loopTemplateId = fields.loopTemplateId;
@@ -303,6 +336,15 @@ export class RunStateWriter {
     }
     if (fields.loopRetryCount !== undefined) {
       this.state.loopRetryCount = fields.loopRetryCount;
+    }
+    if (fields.loopStatus !== undefined) {
+      this.state.loopStatus = fields.loopStatus;
+    }
+    if (fields.loopPhaseHistory !== undefined) {
+      this.state.loopPhaseHistory = fields.loopPhaseHistory;
+    }
+    if (fields.lastRetry !== undefined) {
+      this.state.lastRetry = fields.lastRetry;
     }
     this.flush();
   }

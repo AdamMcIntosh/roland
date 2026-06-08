@@ -35,7 +35,8 @@ export function shouldEscalateToHuman(ctx: EscalationContext): boolean {
     return true;
   }
 
-  // Defer verify-failure escalation until the penultimate retry — let retry budget run first.
+  // Only escalate on consecutive verify failures before the final retry attempt.
+  // Preserves one full retry cycle at retryCount=maxRetries-1 (regression: HITL at retryCount=2).
   if (
     ctx.consecutiveVerifyFailures >= threshold &&
     ctx.retryCount > 0 &&
