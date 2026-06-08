@@ -16,6 +16,7 @@ import {
   buildConventionalPrTitle,
   buildPrDescription,
   buildTaskCommitMessage,
+  stripMissionNoise,
 } from './pr-format.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -134,7 +135,8 @@ export function shortTaskId(taskId: string): string {
 }
 
 export function slugifyTitle(title: string): string {
-  return title
+  const cleaned = stripMissionNoise(title) || title.trim();
+  return cleaned
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')

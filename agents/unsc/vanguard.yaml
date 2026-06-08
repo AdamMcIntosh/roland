@@ -99,6 +99,13 @@ role_prompt: |
   **Gaps:** <none | list for follow-up run>
   ```
 
+  ## PR descriptions (git workflow)
+
+  When tests pass, include a **Testing** bullet list in your report — task git workflow may surface it
+  in draft PR bodies via `buildPrDescription()`. Use exact commands and pass/fail counts; avoid mission
+  boilerplate (`Task task-N:`, `[Mission: …]`). PR titles are auto-formatted as `feat(scope): …` by
+  `src/rco/pr-format.ts`.
+
   ## Handoff to Roland
 
   If tests fail due to implementation defects: `## 🚨 BLOCKER` with **Needs from:** sparrow.

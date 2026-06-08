@@ -67,19 +67,35 @@ const LEGACY_TITLE_PATTERNS = [
   /^Task[-_]\d+:/i,
 ];
 
+/** Leading prefixes stripped iteratively (order matters — task before inline mission). */
+const NOISE_PREFIX_PATTERNS: RegExp[] = [
+  /^\[P\d+\s+active\]\s*/i,
+  /^\[Mission:\s*[^\]]+\]\s*Team\s+Goal:\s*/i,
+  /^Team\s+Goal:\s*/i,
+  /^Task\s+task[-_]?\d+:\s*/i,
+  /^Task[-_]?\d+:\s*/i,
+  /^Roland:\s*/i,
+  /^\[Mission:\s*[^\]]+\]\s*/i,
+];
+
+/** Inline mission tags anywhere in the string (e.g. after `Task task-N:` was removed). */
+const INLINE_MISSION_PATTERN = /\[Mission:\s*[^\]]+\]\s*/gi;
+
 /** Strip mission/task boilerplate from free text. */
 export function stripMissionNoise(text: string): string {
   if (!text?.trim()) return '';
-  return text
-    .replace(/^\[P\d+\s+active\]\s*/i, '')
-    .replace(/^\[Mission:\s*[^\]]+\]\s*/gi, '')
-    .replace(/^\[Mission:\s*[^\]]+\]\s*Team\s+Goal:\s*/gi, '')
-    .replace(/^Team\s+Goal:\s*/i, '')
-    .replace(/^Task\s+task[-_]?\d+:\s*/i, '')
-    .replace(/^Task[-_]?\d+:\s*/i, '')
-    .replace(/^Roland:\s*/i, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  let result = text.trim();
+  // Repeat until stable — e.g. `Task task-1: [Mission: x]` needs task strip then mission strip.
+  for (let pass = 0; pass < 8; pass++) {
+    let next = result;
+    for (const re of NOISE_PREFIX_PATTERNS) {
+      next = next.replace(re, '');
+    }
+    if (next === result) break;
+    result = next;
+  }
+  result = result.replace(INLINE_MISSION_PATTERN, '');
+  return result.replace(/\s+/g, ' ').trim();
 }
 
 /** Infer conventional-commit type from task wording. */
@@ -162,7 +178,7 @@ export function migrateLegacyPrTitle(title: string, body?: string): string | nul
 function bulletizeDescription(description: string): string[] {
   const lines = description
     .split('\n')
-    .map((l) => l.trim())
+    .map((l) => stripMissionNoise(l.trim()))
     .filter(Boolean);
   if (lines.length === 0) return ['Task deliverable as described in the mission plan.'];
   if (lines.length === 1) return [lines[0]];

@@ -13,6 +13,12 @@ describe('task-git-workflow', () => {
     expect(slugifyTitle('')).toBe('task');
   });
 
+  it('slugifyTitle strips mission/task noise before slugging', () => {
+    expect(
+      slugifyTitle('Task task-1: [Mission: PR-cleanup] Implement clean PR title convention'),
+    ).toBe('implement-clean-pr-title-convention');
+  });
+
   it('shortTaskId strips task prefix', () => {
     expect(shortTaskId('task-3')).toBe('3');
     expect(shortTaskId('task-12-fix-auth')).toBe('12-fix-auth');
