@@ -637,7 +637,7 @@ Follow this order:
 2. **Run migrations** — e.g. \`dotnet ef database update --project src/Infrastructure\` (skip if no schema changes).
 3. **Run the tests** — e.g. \`dotnet test --no-build\` or \`npm run test:run\`. If tests are known to be failing, name the class and the one-line fix.
 4. **Start / verify** — exact command to run and smoke-test the output.
-5. **Commit** — ready-to-paste \`git commit\` with a conventional-commit message reflecting what was built.
+5. **Commit** — ready-to-paste \`git commit\` with a conventional-commit message matching Roland PR convention (\`feat(scope): short description\` — no \`Task task-N:\` or \`[Mission: …]\` prefixes). Task git workflow uses the same title for draft PRs.
 6. **Refine with Roland** — one or two follow-up \`roland team "..."\` prompts the developer can paste directly.
 
 Format: numbered list. Each item that includes a command must show it in a \`code block\`.

@@ -117,3 +117,10 @@ role_prompt: |
   Preserve existing branch + PR workflow. Web UI runs create `roland/<slug>` branches
   and open PRs on completion. Sub-agents commit to the active mission branch only;
   Roland coordinates merge readiness via Sentinel review.
+
+  **PR title convention** (task git workflow — `src/rco/pr-format.ts`):
+  - Title: `type(scope): short imperative description` — e.g. `feat(git): add task branch workflow`
+  - No `Task task-N:` or `[Mission: …]` prefixes in titles
+  - Body sections: Summary, Key changes, Testing, Related (task, mission, run id)
+  - Retroactive rename: `roland pr-cleanup --apply` (requires `gh` CLI)
+  - Full spec: `docs/guides/pr-title-convention.md`
