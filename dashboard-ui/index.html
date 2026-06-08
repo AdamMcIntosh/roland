@@ -27,6 +27,9 @@
       --card-bg:     rgba(99,102,241,0.08);
       --card-border: rgba(99,102,241,0.22);
       --radius:      10px;
+      --touch-min:   44px;
+      --page-pad-x:  1.25rem;
+      --header-stack-bp: 640px;
     }
     [data-theme="light"] {
       --bg:          #f0f0f6;
@@ -60,16 +63,30 @@
     /* ═══════════════════════════════════════════════════════
        Layout
     ═══════════════════════════════════════════════════════ */
-    .page { max-width: 1200px; margin: 0 auto; padding: 1rem 1.25rem 2.5rem; }
+    html { overflow-x: clip; }
+    @supports not (overflow-x: clip) {
+      html { overflow-x: hidden; }
+    }
+    body { overflow-x: clip; max-width: 100vw; }
+    @supports not (overflow-x: clip) {
+      body { overflow-x: hidden; }
+    }
+    img, canvas, svg, video { max-width: 100%; height: auto; }
+    .page { max-width: min(1200px, 100%); margin: 0 auto; padding: 1rem var(--page-pad-x) 2.5rem; }
+    .shell-sticky {
+      position: sticky;
+      top: 0;
+      z-index: 200;
+      background: var(--surface);
+    }
 
     /* ═══════════════════════════════════════════════════════
        Header
     ═══════════════════════════════════════════════════════ */
     .header {
       display: flex; align-items: center; justify-content: space-between;
-      padding: .65rem 1.25rem;
+      padding: .65rem var(--page-pad-x);
       background: var(--surface); border-bottom: 1px solid var(--border);
-      position: sticky; top: 0; z-index: 200;
     }
     .header-left  { display: flex; align-items: center; gap: .85rem; }
     .header-right { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
@@ -127,9 +144,8 @@
     .tab-bar {
       display: flex; gap: 0;
       background: var(--surface); border-bottom: 1px solid var(--border);
-      padding: 0 1.25rem;
+      padding: 0 var(--page-pad-x);
       overflow-x: auto; white-space: nowrap;
-      position: sticky; top: 45px; z-index: 190;
       scrollbar-width: none;
     }
     .tab-bar::-webkit-scrollbar { display: none; }
@@ -856,26 +872,42 @@
        Mobile-first / responsive enhancements
     ═══════════════════════════════════════════════════════ */
     @media (max-width: 640px) {
-      .page { padding: 0.75rem 0.85rem 2.5rem; }
+      :root { --page-pad-x: 0.85rem; }
+      .page { padding: 0.75rem var(--page-pad-x) 2.5rem; }
       .header {
-        padding: 0.55rem 0.85rem;
+        padding: 0.55rem var(--page-pad-x);
         flex-wrap: wrap;
         gap: 0.45rem;
       }
-      .header-left { flex-wrap: wrap; gap: 0.45rem; }
-      .header-right { width: 100%; justify-content: space-between; }
+      .header-left { flex: 1 1 auto; min-width: 0; flex-wrap: wrap; gap: 0.45rem; }
+      .header-right {
+        width: 100%;
+        justify-content: flex-start;
+        gap: 0.35rem;
+        flex-wrap: wrap;
+      }
+      .last-updated {
+        flex: 1 1 100%;
+        white-space: normal;
+        font-size: 0.65rem;
+        order: 4;
+      }
+      #btn-header-refresh-board { order: 1; }
+      #btn-theme { order: 2; }
+      #sync-badge { order: 3; flex: 1 1 auto; }
       .site-title { font-size: 0.95rem; }
-      .tab-bar { top: auto; padding: 0 0.5rem; -webkit-overflow-scrolling: touch; }
-      .tab-btn { padding: 0.55rem 0.75rem; font-size: 0.78rem; min-height: 44px; }
+      .tab-bar { padding: 0 0.5rem; -webkit-overflow-scrolling: touch; }
+      .tab-btn { padding: 0.55rem 0.75rem; font-size: 0.78rem; min-height: var(--touch-min); }
       .cards { grid-template-columns: 1fr 1fr; gap: 0.5rem; }
       .card { padding: 0.65rem 0.75rem; }
       .card-value { font-size: 1.25rem; }
       .task-grid { grid-template-columns: 1fr; }
-      .run-row { flex-wrap: wrap; gap: 0.35rem; padding: 0.55rem 0.85rem; }
+      .task-title { white-space: normal; }
+      .run-row { flex-wrap: wrap; gap: 0.35rem; padding: 0.55rem var(--page-pad-x); }
       .run-goal { white-space: normal; line-height: 1.35; }
       .hitl-bar { gap: 0.4rem; }
       .btn-hitl, .btn-primary, .btn-secondary, .btn-icon {
-        min-height: 44px;
+        min-height: var(--touch-min);
         padding-top: 0.45rem;
         padding-bottom: 0.45rem;
       }
@@ -888,20 +920,85 @@
       .board-callsign { font-size: 0.6rem; padding: 0.12rem 0.35rem; }
       .board-roster { gap: 0.25rem; margin: 0.35rem 0; }
       .ops-status { padding: 0.55rem 0.7rem; }
+      .ops-status-top { flex-direction: column; align-items: stretch; }
+      .ops-status-right { margin-left: 0; width: 100%; }
+      #btn-ops-project-switch { display: none; }
+      .btn-project-switch.compact { min-height: var(--touch-min); width: 100%; }
       .project-context { margin: 0.65rem 0 0.5rem; }
       .project-context-name { font-size: 0.78rem; }
+      .project-context-row .project-context-bar { flex: 1 1 100%; }
+      .project-context-actions { width: 100%; }
+      .project-context-actions .btn-project-github,
+      .project-context-actions .btn-project-new,
+      .project-context-actions .btn-project-switch {
+        flex: 1 1 calc(33.333% - 0.3rem);
+        min-width: 5.5rem;
+        justify-content: center;
+        margin: 0;
+      }
+      .project-context-git { white-space: normal; word-break: break-all; }
+      .btn-project-github,
+      .btn-project-new,
+      .btn-project-switch { font-size: 0.74rem; white-space: normal; }
+      .quick-actions .btn-secondary {
+        flex: 1 1 calc(50% - 0.25rem);
+        min-width: 0;
+      }
+      .loop-phase-chip {
+        min-height: var(--touch-min);
+        display: inline-flex;
+        align-items: center;
+        padding: 0.35rem 0.55rem;
+        font-size: 0.7rem;
+      }
+      .loop-metrics-row { gap: 0.45rem 0.65rem; }
+      .loop-error-actions .btn-hitl { flex: 1 1 calc(50% - 0.2rem); min-height: var(--touch-min); }
+      .active-goal { font-size: 0.9rem; word-break: break-word; }
+      .intel-header .btn-board-refresh { width: 100%; min-height: var(--touch-min); }
+      .intel-tab { padding: 0.45rem 0.85rem; min-height: var(--touch-min); }
+      #intel-section-box .section-header,
+      .section-header[style*="display:flex"] {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 0.5rem;
+      }
+      .btn-export { width: 100%; min-height: var(--touch-min); text-align: center; }
+      .github-repo-item { flex-direction: column; align-items: stretch; }
+      .github-repo-action { width: 100%; min-height: var(--touch-min); text-align: center; }
+      .github-modal-toolbar { flex-direction: column; align-items: stretch; }
+      .github-modal-toolbar .btn-secondary { width: 100%; min-height: var(--touch-min); }
       .ops-log-preview { font-size: 0.64rem; max-height: 120px; }
     }
 
     @media (max-width: 380px) {
       .cards { grid-template-columns: 1fr; }
+      .last-updated { display: none; }
+      .project-context-actions { flex-direction: column; }
+      .project-context-actions .btn-project-github,
+      .project-context-actions .btn-project-new,
+      .project-context-actions .btn-project-switch {
+        width: 100%;
+        flex: none;
+      }
+      .quick-actions .btn-secondary { flex: 1 1 100%; }
+    }
+
+    @media (min-width: 641px) and (max-width: 760px) {
+      .project-context-row { flex-wrap: wrap; }
+      .project-context-actions { flex: 1 1 100%; }
+    }
+
+    @media (max-width: 896px) and (orientation: landscape) {
+      .board-panel-scroll { max-height: 38vh; }
+      .mission-graph-viewport { max-height: 46vh; min-height: 180px; }
+      .ops-log-preview { max-height: 100px; }
     }
 
     /* Project context bar */
     .project-context {
       margin: 0.85rem 0 0.65rem;
       border-radius: var(--radius);
-      overflow: hidden;
+      overflow: visible;
       border: 1px solid var(--border);
       background: var(--surface);
     }
@@ -1010,23 +1107,41 @@
     }
     .project-context-row {
       display: flex;
+      flex-wrap: wrap;
       align-items: stretch;
       gap: 0.4rem;
     }
     .project-context-row .project-context-bar { flex: 1; min-width: 0; }
+    .project-context-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      flex: 1 1 100%;
+      justify-content: flex-start;
+    }
+    @media (min-width: 641px) {
+      .project-context-actions { flex: 0 0 auto; flex-wrap: nowrap; }
+    }
+    .btn-project-github,
+    .btn-project-new,
+    .btn-project-switch {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: var(--touch-min);
+      padding: 0.45rem 0.75rem;
+      font-size: 0.74rem;
+    }
     .btn-project-switch {
       flex-shrink: 0;
       align-self: center;
       margin-right: 0.35rem;
-      padding: 0.35rem 0.65rem;
       border-radius: 8px;
       border: 1px solid rgba(99,102,241,0.35);
       background: rgba(99,102,241,0.12);
       color: var(--indigo);
-      font-size: 0.72rem;
       font-weight: 700;
       letter-spacing: 0.02em;
-      min-height: 36px;
     }
     .btn-project-switch:hover {
       background: rgba(99,102,241,0.2);
@@ -1036,15 +1151,12 @@
       flex-shrink: 0;
       align-self: center;
       margin-right: 0.15rem;
-      padding: 0.35rem 0.65rem;
       border-radius: 8px;
       border: 1px solid rgba(16,185,129,0.35);
       background: rgba(16,185,129,0.1);
       color: var(--emerald);
-      font-size: 0.72rem;
       font-weight: 700;
       letter-spacing: 0.02em;
-      min-height: 36px;
     }
     .btn-project-new:hover {
       background: rgba(16,185,129,0.18);
@@ -1223,16 +1335,13 @@
 
     /* GitHub repos modal */
     .btn-project-github {
-      padding: 0.35rem 0.65rem;
       border-radius: 8px;
       border: 1px solid var(--border);
       background: var(--surface2);
       color: var(--fg);
-      font-size: 0.72rem;
       font-weight: 600;
       cursor: pointer;
       white-space: nowrap;
-      min-height: 36px;
     }
     .btn-project-github:hover {
       border-color: var(--indigo);
@@ -2271,31 +2380,33 @@
 </head>
 <body>
 
-  <!-- ── Header ─────────────────────────────────────────────────────────────── -->
-  <header class="header">
-    <div class="header-left">
-      <h1 class="site-title"><span>Roland</span></h1>
-      <div class="live-indicator">
-        <div class="live-dot" id="live-dot"></div>
-        <span id="live-label">Idle</span>
+  <div class="shell-sticky">
+    <!-- ── Header ───────────────────────────────────────────────────────────── -->
+    <header class="header">
+      <div class="header-left">
+        <h1 class="site-title"><span>Roland</span></h1>
+        <div class="live-indicator">
+          <div class="live-dot" id="live-dot"></div>
+          <span id="live-label">Idle</span>
+        </div>
+        <span class="ws-badge disconnected" id="ws-badge" title="WebSocket connection status">WS</span>
       </div>
-      <span class="ws-badge disconnected" id="ws-badge" title="WebSocket connection status">WS</span>
-    </div>
-    <div class="header-right">
-      <span class="sync-badge" id="sync-badge" aria-live="polite"><span class="sync-dot"></span> Syncing…</span>
-      <button class="btn-icon" id="btn-header-refresh-board" type="button" title="Refresh command board">↻ Board</button>
-      <button class="btn-icon" id="btn-theme" aria-label="Toggle theme">🌙</button>
-      <span class="last-updated" id="last-updated"></span>
-    </div>
-  </header>
+      <div class="header-right">
+        <span class="sync-badge" id="sync-badge" aria-live="polite"><span class="sync-dot"></span> Syncing…</span>
+        <button class="btn-icon" id="btn-header-refresh-board" type="button" title="Refresh command board" aria-label="Refresh command board">↻ Board</button>
+        <button class="btn-icon" id="btn-theme" aria-label="Toggle theme">🌙</button>
+        <span class="last-updated" id="last-updated"></span>
+      </div>
+    </header>
 
-  <!-- ── Tab Bar ────────────────────────────────────────────────────────────── -->
-  <nav class="tab-bar">
-    <button class="tab-btn active" data-tab="overview">📊 Overview</button>
-    <button class="tab-btn" data-tab="history">📋 History</button>
-    <button class="tab-btn" data-tab="memory">🧠 Memory</button>
-    <button class="tab-btn" data-tab="actions">⚡ Actions</button>
-  </nav>
+    <!-- ── Tab Bar ──────────────────────────────────────────────────────────── -->
+    <nav class="tab-bar">
+      <button class="tab-btn active" data-tab="overview">📊 Overview</button>
+      <button class="tab-btn" data-tab="history">📋 History</button>
+      <button class="tab-btn" data-tab="memory">🧠 Memory</button>
+      <button class="tab-btn" data-tab="actions">⚡ Actions</button>
+    </nav>
+  </div>
 
   <!-- ══════════════════════════════════════════════════════════════
        TAB: Overview
@@ -2314,9 +2425,11 @@
             </span>
             <span class="project-context-chevron" aria-hidden="true">▾</span>
           </button>
-          <button type="button" class="btn-project-github" id="btn-project-github" aria-haspopup="dialog" aria-controls="github-repos-modal">GitHub</button>
-          <button type="button" class="btn-project-new" id="btn-project-new" aria-haspopup="dialog" aria-controls="create-project-modal">+ New Project</button>
-          <button type="button" class="btn-project-switch" id="btn-project-switch" aria-haspopup="dialog" aria-controls="project-switcher-modal">Switch ▾</button>
+          <div class="project-context-actions" role="group" aria-label="Project actions">
+            <button type="button" class="btn-project-github" id="btn-project-github" aria-haspopup="dialog" aria-controls="github-repos-modal">GitHub</button>
+            <button type="button" class="btn-project-new" id="btn-project-new" aria-haspopup="dialog" aria-controls="create-project-modal">+ New Project</button>
+            <button type="button" class="btn-project-switch" id="btn-project-switch" aria-haspopup="dialog" aria-controls="project-switcher-modal">Switch ▾</button>
+          </div>
         </div>
         <div class="project-context-details" id="project-context-details" hidden></div>
       </section>
