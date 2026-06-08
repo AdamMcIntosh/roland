@@ -2647,6 +2647,7 @@
     </aside>
   </div>
 
+  <script src="js/loop-engine.js"></script>
   <script>
   // ═══════════════════════════════════════════════════════════════════════════
   //  Constants
@@ -2662,8 +2663,8 @@
   const WS_RECONNECT_MAX   = 30_000;
   const ACTIVE_STALE_MS    = 600_000;
 
-  // Verbose client logging — set false to reduce console noise in production
-  const DASHBOARD_DEBUG = true;
+  // Verbose client logging — set true only when debugging dashboard behavior
+  const DASHBOARD_DEBUG = false;
 
   function logDashboard(msg, detail) {
     if (!DASHBOARD_DEBUG) return;
@@ -2719,7 +2720,6 @@
 
   let usageData    = [];
   let runState     = null;
-  let loopHealth   = null;
   let hitlState    = null;
   let boardStatus  = null;
   let missionDagPayload = null;
@@ -2819,6 +2819,8 @@
     return String(s)
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
+
+  LoopEngine.init({ escHtml });
 
   function modelColor(m) {
     return MODEL_COLORS[m] || '#6b7280';
@@ -3058,7 +3060,7 @@
             if (msg.projectContext !== undefined) applyProjectContextPayload(msg.projectContext);
             if (msg.taskGit !== undefined) taskGitPayload = msg.taskGit;
             if (msg.supervisor !== undefined) applySupervisorPayload(msg.supervisor);
-            if (msg.loopHealth !== undefined) loopHealth = msg.loopHealth;
+            if (msg.loopHealth !== undefined) LoopEngine.setHealth(msg.loopHealth);
             // Overlay hitl-state.json values into runState for TUI accuracy
             if (runState && hitlState) {
               if (hitlState.paused)       runState.hitlPaused        = true;
@@ -3106,14 +3108,6 @@
       usageData = (await res.json()) ?? [];
       if (!Array.isArray(usageData)) usageData = [];
     } catch (e) { console.warn('Usage fetch failed:', e.message); }
-  }
-
-  async function fetchLoopHealth() {
-    try {
-      const res = await fetch('/api/loop-health');
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      loopHealth = await res.json();
-    } catch { loopHealth = null; }
   }
 
   async function fetchRunState() {
@@ -3188,7 +3182,7 @@
       fetchProjectContext(),
       fetchUsage(),
       fetchRunState(),
-      fetchLoopHealth(),
+      LoopEngine.fetchHealth(),
       fetchBoardStatus(),
       fetchMissionDag(),
       fetchSupervisor(),
@@ -4000,7 +3994,7 @@
     try {
       await Promise.all([
         fetchRunState(),
-        fetchLoopHealth(),
+        LoopEngine.fetchHealth(),
         fetchBoardStatus(),
         fetchSupervisor(),
         fetchMissionDag(),
@@ -4151,7 +4145,7 @@
     await Promise.all([
       fetchUsage(),
       fetchRunState(),
-      fetchLoopHealth(),
+      LoopEngine.fetchHealth(),
       fetchBoardStatus(),
       fetchSupervisor(),
       fetchProjectContext(),
@@ -4328,108 +4322,6 @@
     return '<div class="task-git">' + parts.join(' · ') + '</div>';
   }
 
-  function toggleLoopPhaseDetail(id) {
-    const el = document.getElementById(id);
-    if (el) el.classList.toggle('open');
-  }
-  window.toggleLoopPhaseDetail = toggleLoopPhaseDetail;
-
-  function renderLoopIntelSummary(rs, lh) {
-    const health = lh || loopHealth;
-    const templateId = rs?.loopTemplateId || health?.loop?.templateId;
-    if (!templateId && !health?.loop?.active) return '';
-
-    const phase = rs?.loopPhase || health?.loop?.currentPhase || '—';
-    const iter = (rs?.loopIteration ?? health?.loop?.iteration) != null
-      ? ' · iter ' + (rs?.loopIteration ?? health?.loop?.iteration) : '';
-    const lv = rs?.lastVerification;
-    const pass = lv ? lv.pass : (health?.loop?.lastVerificationPass ?? null);
-    const panelClass = pass === false || health?.status === 'escalated'
-      ? 'loop-intel-panel fail' : 'loop-intel-panel';
-    const statusLabel = pass === true ? '✓ Pass' : pass === false ? '✕ Fail' : '—';
-    const healthBadge = health?.status
-      ? '<span class="loop-health-badge ' + escHtml(health.status) + '">' + escHtml(health.status) + '</span>'
-      : '';
-
-    let strategyHtml = '';
-    if (lv && Array.isArray(lv.strategies) && lv.strategies.length) {
-      strategyHtml = lv.strategies.map(s => {
-        const cls = s.pass ? 'loop-strategy-pass' : 'loop-strategy-fail';
-        const icon = s.pass ? '✓' : '✕';
-        return '<div class="loop-strategy-row"><span class="' + cls + '">' + icon + ' ' +
-          escHtml(s.type) + '</span><span>' + escHtml(String(s.durationMs || 0)) + 'ms</span></div>';
-      }).join('');
-    }
-
-    const summary = lv && lv.summary
-      ? '<div style="margin-top:.3rem;color:var(--muted)">' + escHtml(lv.summary.slice(0, 120)) + '</div>'
-      : '';
-
-    const lc = rs?.lastCritique;
-    let critiqueHtml = '';
-    if (lc && lc.retryDecision) {
-      const decCls = lc.retryDecision === 'escalate' ? 'escalate'
-        : (lc.retryDecision === 'retry' || lc.retryDecision === 'retry_focused') ? 'retry' : 'proceed';
-      const decLabel = lc.retryDecision === 'retry_focused' ? 'RETRY (focused)' : lc.retryDecision.toUpperCase();
-      const modelLabel = lc.model === 'composer' ? 'Composer' : 'Grok';
-      const retryNote = (rs?.loopRetryCount ?? health?.loop?.retryCount) != null
-        ? ' · retry ' + (rs?.loopRetryCount ?? health?.loop?.retryCount) : '';
-      const issueNote = lc.issueCount != null ? ' · ' + lc.issueCount + ' issue(s)' : '';
-      critiqueHtml = '<div class="loop-critique-panel">' +
-        '<span class="loop-critique-decision ' + decCls + '">' + escHtml(decLabel) + '</span>' +
-        ' · ' + escHtml(modelLabel) + escHtml(retryNote) + escHtml(issueNote) +
-        (lc.summary ? '<div style="margin-top:.2rem;color:var(--muted)">' + escHtml(lc.summary.slice(0, 140)) + '</div>' : '') +
-        '</div>';
-    }
-
-    const m = health?.metrics;
-    let metricsHtml = '';
-    if (m) {
-      metricsHtml = '<div class="loop-metrics-row">' +
-        '<span>Success <strong>' + escHtml(String(m.successRate)) + '%</strong></span>' +
-        '<span>Avg phase <strong>' + escHtml(String(m.avgPhaseDurationMs)) + 'ms</strong></span>' +
-        '<span>Retries <strong>' + escHtml(String(m.retryCount)) + '</strong></span>' +
-        '<span>ETA <strong>' + escHtml(String(m.estimatedCompletionPct)) + '%</strong></span>' +
-        '</div>';
-    }
-
-    let timelineHtml = '';
-    if (m && Array.isArray(m.phaseDurations) && m.phaseDurations.length) {
-      const chips = m.phaseDurations.map((p, i) => {
-        const chipId = 'loop-phase-detail-' + i;
-        const cls = p.failureCount > 0 ? 'fail' : (p.phase === phase ? 'active' : 'ok');
-        const detail = escHtml(p.phase) + ': ' + p.count + '× avg ' + p.avgMs + 'ms' +
-          (p.failureCount ? ' (' + p.failureCount + ' fail)' : '');
-        return '<span class="loop-phase-chip ' + cls + '" onclick="toggleLoopPhaseDetail(\'' + chipId + '\')">' +
-          escHtml(p.phase) + '</span>' +
-          '<div id="' + chipId + '" class="loop-phase-detail">' + detail + '</div>';
-      }).join('');
-      timelineHtml = '<div class="loop-timeline">' + chips + '</div>';
-    }
-
-    let errorActions = '';
-    if (health?.actions && (health.actions.canResume || health.actions.canReplan || health.status === 'escalated')) {
-      errorActions = '<div class="loop-error-actions">';
-      if (health.actions.canResume) {
-        errorActions += '<button class="btn-hitl btn-resume" onclick="doHitl(\'resume\')">▶ Resume Loop</button>';
-      }
-      if (health.actions.canReplan || health.status === 'escalated') {
-        errorActions += '<button class="btn-hitl btn-replan" onclick="doHitl(\'replan\')">🔄 Replan Loop</button>';
-      }
-      errorActions += '</div>';
-    }
-
-    const diagHtml = health?.diagnostics?.length
-      ? '<div style="margin-top:.3rem;color:#fca5a5;font-size:.68rem">' +
-        escHtml(health.diagnostics.slice(0, 2).join(' · ')) + '</div>'
-      : '';
-
-    return '<div class="' + panelClass + '"><h4>Loop Engineering' + healthBadge + '</h4>' +
-      '<div><strong>' + escHtml(templateId) + '</strong> · phase <strong>' + escHtml(phase) + '</strong>' + escHtml(iter) +
-      ' · ' + statusLabel + (lv && lv.durationMs ? ' · ' + escHtml(String(lv.durationMs)) + 'ms' : '') + '</div>' +
-      metricsHtml + timelineHtml + strategyHtml + summary + critiqueHtml + diagHtml + errorActions + '</div>';
-  }
-
   function renderGitIntelSummary(tasks) {
     const withGit = (tasks || []).filter(t => taskGitInfoFor(t.id, t));
     if (!withGit.length) return '';
@@ -4604,7 +4496,7 @@
       bannerHtml +
       renderActiveBlockersBanner() +
       hitlControlsHtml(rs) +
-      renderLoopIntelSummary(rs) +
+      LoopEngine.renderSummary(rs) +
       renderGitIntelSummary(tasks) +
       (tasks.length ? '<div class="task-grid" style="margin-top:.7rem">' + taskCardsHtml + '</div>' : '');
     bindLiveBlockersLink();
@@ -5029,7 +4921,7 @@
       const blockers = (report.blockers || []).map(renderBlockerItemHtml).join('');
       const ignoredSection = renderIgnoredBlockersSection(report.ignoredBlockers || []);
       const gitSummary = renderGitIntelSummary(runState?.tasks || []);
-      const loopSummary = renderLoopIntelSummary(runState);
+      const loopSummary = LoopEngine.renderSummary(runState);
       const ignoredCount = report.counts?.ignoredBlockers ?? (report.ignoredBlockers || []).length;
       el.innerHTML = `
         <div><strong>Mission:</strong> ${escHtml((report.goal || report.missionObjective || '—').slice(0, 120))}</div>
@@ -6057,7 +5949,7 @@
   // ═══════════════════════════════════════════════════════════════════════════
 
   async function pollRunState() {
-    const fetches = [fetchRunState(), fetchLoopHealth(), fetchBoardStatus(), fetchSupervisor()];
+    const fetches = [fetchRunState(), LoopEngine.fetchHealth(), fetchBoardStatus(), fetchSupervisor()];
     if (missionGraphEverOpened && activeIntelTab === 'graph') fetches.push(fetchMissionDag());
     await Promise.all(fetches);
     renderLiveIndicator();
@@ -6173,7 +6065,7 @@
     await Promise.all([
       fetchUsage(),
       fetchRunState(),
-      fetchLoopHealth(),
+      LoopEngine.fetchHealth(),
       fetchBoardStatus(),
       fetchModels(),
       fetchSupervisor(),

@@ -29,9 +29,10 @@ describe('E2E Phase 4: Release builds', () => {
     expect(fs.existsSync(distIndex)).toBe(true);
   });
 
-  it('build produces dist/rco/cli.js', () => {
-    const cli = path.join(root, 'dist', 'rco', 'cli.js');
-    expect(fs.existsSync(cli)).toBe(true);
+  // CLI entry is src/index.ts → dist/index.js; team mode lives in dist/rco/team-cli.js.
+  it('build produces dist/rco/team-cli.js', () => {
+    const teamCli = path.join(root, 'dist', 'rco', 'team-cli.js');
+    expect(fs.existsSync(teamCli)).toBe(true);
   });
 
   it('build scripts are defined in package.json', () => {

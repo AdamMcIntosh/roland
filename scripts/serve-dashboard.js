@@ -474,7 +474,7 @@ function readTaskGitPayload() {
   return readJson(path.join(activeStateDir, 'task-git.json'), null);
 }
 
-function pushCurrentState() {
+async function pushCurrentState() {
   sanitizeStaleMissionState(activeStateDir, (msg, detail) => logState(msg, detail));
   const runState  = readActiveRunStateForClient(activeStateDir);
   const hitlState = readJson(path.join(activeStateDir, 'hitl-state.json'), null);
@@ -1565,7 +1565,7 @@ function setupStateWatcher() {
     stateWatcher = fs.watch(activeStateDir, { persistent: false }, (_event, filename) => {
       if (!filename || !WATCH_TARGETS.has(filename)) return;
       clearTimeout(watchTimer);
-      watchTimer = setTimeout(pushCurrentState, 200);
+      watchTimer = setTimeout(() => { void pushCurrentState(); }, 200);
     });
   } catch {
     // State dir may not exist yet — watcher inactive until switch/create.
@@ -1644,7 +1644,7 @@ async function switchActiveProject(targetPath, { force = false, migrateMission =
     });
   }
 
-  pushCurrentState();
+  await pushCurrentState();
 
   logProject('Project context switched', {
     projectRoot: activeProjectRoot,
@@ -1833,7 +1833,7 @@ const server = http.createServer(async (req, res) => {
       });
 
       const entry = await appendTeamGoalEntry({ goal, priority });
-      pushCurrentState();
+      await pushCurrentState();
 
       logApi('POST', url, 'ok', { id: entry.id, priority });
       jsonOk(res, {
@@ -2075,7 +2075,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       // Push WebSocket update so connected clients see the launch immediately
-      pushCurrentState();
+      await pushCurrentState();
 
       const title = runName || rawGoal.slice(0, 60);
       logMission(`Started mission: ${missionId} — ${title} at ${new Date().toISOString()}`, {
@@ -2183,7 +2183,7 @@ const server = http.createServer(async (req, res) => {
       });
 
       const entry = ignoreBlackboardBlocker(blockerId, { snoozeMs });
-      pushCurrentState();
+      await pushCurrentState();
 
       logApi('POST', url, 'ok', {
         id: entry.id,

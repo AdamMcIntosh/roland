@@ -3,7 +3,7 @@
  * Spawns scripts/serve-dashboard.js on a free port with a seeded temp state dir.
  */
 
-import { spawn, type ChildProcess } from 'child_process';
+import { spawn, execSync, type ChildProcess } from 'child_process';
 import fs from 'fs';
 import net from 'net';
 import os from 'os';
@@ -18,9 +18,16 @@ import {
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dashboardScript = path.join(repoRoot, 'scripts', 'serve-dashboard.js');
+const distMissionState = path.join(repoRoot, 'dist', 'rco', 'mission-state.js');
 
 const servers: ChildProcess[] = [];
 const tmpDirs: string[] = [];
+
+/** serve-dashboard.js imports compiled modules from dist/ — ensure they exist. */
+function ensureDistBuilt(): void {
+  if (fs.existsSync(distMissionState)) return;
+  execSync('npm run build', { cwd: repoRoot, stdio: 'pipe' });
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -159,22 +166,27 @@ describe('dashboard /api/run-state and WebSocket parity', () => {
   let wsUrl: string;
   let child: ChildProcess;
 
+  beforeAll(() => {
+    ensureDistBuilt();
+  }, 120_000);
+
+  // Dashboard spawn + readiness poll can exceed the default 10s hook timeout on cold CI.
   beforeEach(async () => {
     stateDir = makeStateDir();
     port = await getFreePort();
     baseUrl = `http://127.0.0.1:${port}`;
     wsUrl = `ws://127.0.0.1:${port}`;
     child = spawnDashboard(stateDir, port);
-    await waitForDashboard(baseUrl);
-  });
+    await waitForDashboard(baseUrl, 25_000);
+  }, 30_000);
 
   afterEach(async () => {
     await stopDashboard(child);
+    for (const proc of servers.splice(0)) {
+      if (proc !== child) await stopDashboard(proc);
+    }
     for (const dir of tmpDirs.splice(0)) {
       fs.rmSync(dir, { recursive: true, force: true });
-    }
-    for (const proc of servers.splice(0)) {
-      await stopDashboard(proc);
     }
   });
 
