@@ -497,6 +497,20 @@ async function supervisorWorkerMain(argv: string[]): Promise<void> {
   process.stderr.write(`[Supervisor] Starting: ${goal.slice(0, 60)}\n`);
   process.stderr.write(`[Supervisor] State dir: ${stateDir}\n`);
   process.stderr.write(`[Supervisor] Max restarts: ${MAX_RESTARTS}\n`);
+
+  // Loop recovery intel — checkpoint / loop-state available for orchestrator resume.
+  try {
+    const { tryRecoverLoopState } = await import('../loop-engine/loop-checkpoint.js');
+    const recovery = tryRecoverLoopState(stateDir);
+    if (recovery.recovered) {
+      process.stderr.write(
+        `[Supervisor] Loop recovery available from ${recovery.source} ` +
+          `(phase=${recovery.phase} iter=${recovery.state?.iteration})\n`,
+      );
+    }
+  } catch {
+    // Loop engine not built — supervisor continues without recovery hint.
+  }
   if (needsNotify) process.stderr.write(`[Supervisor] ROLAND_NOTIFY=1 detected — notifications enabled\n`);
   process.stderr.write('\n');
 

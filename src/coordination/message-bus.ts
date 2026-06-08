@@ -31,18 +31,26 @@ export class MessageBus {
   /** Append a message to the bus. */
   send(input: BusSendInput): Message {
     const parsed = BusSendInputSchema.parse(input);
-    const ts = Date.now();
+    const now = Date.now();
+    let stamped = now;
     const message: Message = {
-      id: genId(ts),
+      id: genId(stamped),
       from: parsed.from,
       to: parsed.to,
       topic: parsed.topic ?? 'general',
       body: parsed.body,
       replyTo: parsed.replyTo,
-      ts,
+      ts: stamped,
       deliveredTo: [],
     };
     mutate<BusStore>(this.file, { messages: [] }, (cur) => {
+      // Monotonic ts so `since` filters remain meaningful when sends share a ms.
+      const lastTs = cur.messages.length
+        ? cur.messages[cur.messages.length - 1]!.ts
+        : 0;
+      stamped = Math.max(now, lastTs + 1);
+      message.id = genId(stamped);
+      message.ts = stamped;
       cur.messages.push(message);
       return cur;
     });

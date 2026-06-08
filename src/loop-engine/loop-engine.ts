@@ -25,6 +25,8 @@ import {
   type PhaseResult,
 } from './phase-handlers/index.js';
 import { loadLoopEngineConfig, resolveCritiqueThresholds } from './loop-config.js';
+import { LoopObservability } from './loop-observability.js';
+import { saveLoopCheckpoint, tryRecoverLoopState } from './loop-checkpoint.js';
 
 export interface LoopHooks {
   onPhaseStart?: (phase: Phase, iteration: number) => void;
@@ -44,6 +46,8 @@ export interface LoopEngineOptions {
   hooks?: LoopHooks;
   /** Elevated retry/escalation thresholds for E2E and dev (also ROLAND_LOOP_TEST_MODE=1). */
   isTestMode?: boolean;
+  /** When true, attempt checkpoint / loop-state recovery on construction. */
+  recoverOnStart?: boolean;
   /** Resume from existing loop-state.json when status is running and goal/template match. */
   resumeFromState?: boolean;
   /** Wall-clock timeout for the full loop (ms). Template/config override. */
@@ -69,6 +73,8 @@ export class LoopEngine {
   private readonly blackboard: Blackboard;
   private readonly commandBoard?: CommandBlackboard;
   private readonly critiqueThresholds: ReturnType<typeof resolveCritiqueThresholds>;
+  private readonly observability: LoopObservability;
+  private readonly stateDir: string;
   private readonly timeoutMs: number;
   private readonly loopStartedAt: number;
 
@@ -84,6 +90,8 @@ export class LoopEngine {
       this.handlers.set(P.Retry, new RetryPhaseHandler({ skipDelay: true }));
     }
     this.hooks = opts.hooks ?? {};
+    this.stateDir = opts.stateDir;
+    this.observability = new LoopObservability(opts.stateDir, opts.blackboard);
     this.critiqueThresholds = resolveCritiqueThresholds(opts.template, {
       isTestMode: opts.isTestMode,
     });
@@ -94,18 +102,37 @@ export class LoopEngine {
       1_800_000;
     this.loopStartedAt = Date.now();
 
-    this.store = LoopStateStore.loadOrCreate(
-      opts.stateDir,
-      opts.template.name,
-      opts.goal,
-      firstPhase,
-      Boolean(opts.resumeFromState),
-    );
+    if (opts.recoverOnStart !== false) {
+      const recovery = tryRecoverLoopState(opts.stateDir);
+      if (recovery.recovered && recovery.state) {
+        this.store = new LoopStateStore(opts.stateDir, recovery.state, { skipInitialFlush: true });
+        this.commandBoard?.appendBullet(
+          'Key Decisions',
+          `[LOOP] Recovered from ${recovery.source} at phase ${recovery.phase} (iter ${recovery.state.iteration})`,
+        );
+      } else {
+        this.store = LoopStateStore.loadOrCreate(
+          opts.stateDir,
+          opts.template.name,
+          opts.goal,
+          firstPhase,
+          Boolean(opts.resumeFromState),
+        );
+      }
+    } else {
+      this.store = LoopStateStore.loadOrCreate(
+        opts.stateDir,
+        opts.template.name,
+        opts.goal,
+        firstPhase,
+        false,
+      );
+    }
 
     console.error(
       `[Loop][engine] template="${opts.template.name}" maxIterations=${opts.template.maxIterations ?? 1} ` +
         `maxRetries=${this.critiqueThresholds.maxRetries} timeoutMs=${this.timeoutMs} ` +
-        `resume=${Boolean(opts.resumeFromState)}`,
+        `resume=${Boolean(opts.resumeFromState)} recover=${opts.recoverOnStart !== false}`,
     );
     this.emitState();
   }
@@ -144,6 +171,9 @@ export class LoopEngine {
       if (this.isTimedOut()) {
         console.error(`[Loop][engine] timeout after ${this.timeoutMs}ms at iteration=${iter}`);
         this.store.setStatus('failed');
+        this.emitState();
+        this.observability.persistMetrics(this.store.get());
+        this.observability.postHistoryToBlackboard(this.store.get());
         this.hooks.onLoopComplete?.(this.store.get(), 'failed');
         return {
           status: 'failed',
@@ -164,6 +194,9 @@ export class LoopEngine {
       phasesCompleted += iterationOutcome.phasesCompleted;
 
       if (iterationOutcome.terminalStatus) {
+        this.emitState();
+        this.observability.persistMetrics(this.store.get());
+        this.observability.postHistoryToBlackboard(this.store.get());
         this.hooks.onLoopComplete?.(this.store.get(), iterationOutcome.terminalStatus);
         return {
           status: iterationOutcome.terminalStatus,
@@ -181,6 +214,9 @@ export class LoopEngine {
           `[Loop][engine] retry budget exhausted retryCount=${this.store.get().retryCount} maxRetries=${maxRetries}`,
         );
         this.store.setStatus('escalated');
+        this.emitState();
+        this.observability.persistMetrics(this.store.get());
+        this.observability.postHistoryToBlackboard(this.store.get());
         this.hooks.onLoopComplete?.(this.store.get(), 'escalated');
         return {
           status: 'escalated',
@@ -197,6 +233,9 @@ export class LoopEngine {
     }
 
     this.store.setStatus('completed');
+    this.emitState();
+    this.observability.persistMetrics(this.store.get());
+    this.observability.postHistoryToBlackboard(this.store.get());
     this.hooks.onLoopComplete?.(this.store.get(), 'completed');
     return {
       status: 'completed',
@@ -220,6 +259,7 @@ export class LoopEngine {
     for (const phaseConfig of this.template.phases) {
       if (this.isTimedOut()) {
         this.store.setStatus('failed');
+        this.emitState();
         return { phasesCompleted, shouldRetryLoop: false, terminalStatus: 'failed' };
       }
 
@@ -237,6 +277,7 @@ export class LoopEngine {
 
       if (result.shouldEscalate) {
         this.store.setStatus('escalated');
+        this.emitState();
         return { phasesCompleted, shouldRetryLoop: false, terminalStatus: 'escalated' };
       }
 
@@ -259,6 +300,14 @@ export class LoopEngine {
     ctx: { iteration: number; hadBlockers?: boolean; waveNumber?: number },
   ): Promise<PhaseResult> {
     const phase = phaseConfig.phase;
+    const stateBefore = this.store.get();
+    saveLoopCheckpoint(this.stateDir, phase, stateBefore);
+    this.observability.recordPhaseStart(phase, ctx.iteration, {
+      waveNumber: ctx.waveNumber,
+      hadBlockers: ctx.hadBlockers,
+      retryCount: stateBefore.retryCount,
+    });
+
     console.error(
       `[Loop][engine] phase transition → ${phase} iteration=${ctx.iteration} retryCount=${this.store.get().retryCount}`,
     );
@@ -266,6 +315,7 @@ export class LoopEngine {
     this.emitState();
     this.hooks.onPhaseStart?.(phase, ctx.iteration);
 
+    const phaseStartedAt = Date.now();
     const handler = this.handlers.get(phase);
     if (!handler) {
       const result: PhaseResult = {
@@ -309,6 +359,26 @@ export class LoopEngine {
       critique: result.critique,
       retry: result.retry,
     });
+
+    const durationMs = Date.now() - phaseStartedAt;
+    this.observability.recordPhaseComplete(
+      phase,
+      ctx.iteration,
+      result,
+      durationMs,
+      this.template.name,
+      {
+        waveNumber: ctx.waveNumber,
+        hadBlockers: ctx.hadBlockers,
+        retryCount: this.store.get().retryCount,
+      },
+    );
+    const metrics = this.observability.persistMetrics(this.store.get());
+    if (ctx.iteration % 2 === 0 || phase === P.Critique || phase === P.Verify) {
+      this.observability.postHistoryToBlackboard(this.store.get());
+    }
+    void metrics;
+
     this.emitState();
     this.hooks.onPhaseComplete?.(phase, result);
 
@@ -335,6 +405,10 @@ export class LoopEngine {
 
   hasPhase(phase: Phase): boolean {
     return this.template.phases.some((p) => p.phase === phase);
+  }
+
+  getMetrics() {
+    return this.observability.persistMetrics(this.store.get());
   }
 
   private isTimedOut(): boolean {

@@ -1,0 +1,31 @@
+name: code-quality-loop
+description: >
+  Code quality loop — plan improvements, implement fixes, verify with lint/unit/typecheck,
+  critique quality gaps, retry focused fixes, observe before next cycle.
+phases:
+  - phase: plan
+    label: Plan quality work
+    agent: lead-pm
+  - phase: act
+    label: Implement fixes
+    agent: executor
+  - phase: verify
+    label: Quality gates
+    agent: test-executor
+    verification:
+      - lint
+      - unit
+      - typecheck
+  - phase: critique
+    label: Critique quality
+    agent: critic
+  - phase: retry
+    label: Retry focused fixes
+    optional: true
+  - phase: observe
+    label: Observe metrics
+maxIterations: 4
+maxRetries: 3
+escalationThreshold: 4
+testModeMaxRetries: 6
+testModeEscalationThreshold: 8

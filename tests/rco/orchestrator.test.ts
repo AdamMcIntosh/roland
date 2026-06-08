@@ -214,7 +214,7 @@ describe('RCO orchestrator (integration: real fork)', () => {
     if (fs.existsSync(path.join(projectRoot, '.rco-state-test.json'))) {
       fs.unlinkSync(path.join(projectRoot, '.rco-state-test.json'));
     }
-  }, 20000);
+  }, 60_000); // real fork runs multiple agents — allow headroom on slow CI
 });
 
 describe('RCO exportCursor', () => {

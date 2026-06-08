@@ -281,14 +281,32 @@
     .loop-critique-decision.escalate { color: #fca5a5; }
     .loop-critique-decision.retry { color: #fcd34d; }
     .loop-critique-decision.proceed { color: var(--emerald); }
+    .loop-timeline { display: flex; gap: .25rem; flex-wrap: wrap; margin-top: .45rem; }
+    .loop-phase-chip {
+      padding: .15rem .45rem; border-radius: 6px; font-size: .65rem; cursor: pointer;
+      border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04);
+    }
+    .loop-phase-chip.active, .loop-phase-chip.running { border-color: var(--emerald); color: var(--emerald); animation: loop-pulse 1.2s ease-in-out infinite; }
+    .loop-phase-chip.fail { border-color: #fca5a5; color: #fca5a5; }
+    .loop-phase-chip.ok, .loop-phase-chip.pass { border-color: rgba(16,185,129,.4); color: var(--emerald); }
+    .loop-phase-detail {
+      margin-top: .35rem; padding: .35rem .5rem; border-radius: 6px;
+      background: rgba(0,0,0,.2); font-size: .68rem; color: var(--muted);
+      display: none;
+    }
+    .loop-phase-detail.open { display: block; }
     .loop-phase-timeline { margin-top: .45rem; padding-top: .35rem; border-top: 1px solid rgba(255,255,255,.08); }
     .loop-phase-timeline h5 { margin: 0 0 .25rem; font-size: .68rem; color: var(--muted); font-weight: 600; }
-    .loop-phase-chip { display: inline-flex; align-items: center; gap: .2rem; font-size: .65rem; padding: .12rem .35rem; border-radius: 4px; margin: .1rem .15rem .1rem 0; background: rgba(255,255,255,.06); }
-    .loop-phase-chip.running { border: 1px solid var(--emerald); color: var(--emerald); animation: loop-pulse 1.2s ease-in-out infinite; }
-    .loop-phase-chip.pass { color: var(--emerald); }
-    .loop-phase-chip.fail { color: #fca5a5; }
     .loop-progress-bar { height: 3px; background: rgba(255,255,255,.08); border-radius: 2px; margin-top: .35rem; overflow: hidden; }
     .loop-progress-fill { height: 100%; background: var(--emerald); transition: width .4s ease; }
+    .loop-metrics-row { display: flex; gap: .65rem; flex-wrap: wrap; margin-top: .35rem; font-size: .68rem; }
+    .loop-metrics-row span strong { color: var(--text); }
+    .loop-error-actions { margin-top: .4rem; display: flex; gap: .4rem; flex-wrap: wrap; }
+    .loop-health-badge {
+      font-size: .62rem; padding: .1rem .35rem; border-radius: 4px; margin-left: .35rem;
+      background: rgba(16,185,129,.15); color: var(--emerald);
+    }
+    .loop-health-badge.degraded, .loop-health-badge.escalated { background: rgba(239,68,68,.15); color: #fca5a5; }
     @keyframes loop-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
     .task-card.status-running .task-icon { animation: blink 1.5s ease-in-out infinite; }
@@ -2634,6 +2652,7 @@
     </aside>
   </div>
 
+  <script src="js/loop-engine.js"></script>
   <script>
   // ═══════════════════════════════════════════════════════════════════════════
   //  Constants
@@ -2649,8 +2668,8 @@
   const WS_RECONNECT_MAX   = 30_000;
   const ACTIVE_STALE_MS    = 600_000;
 
-  // Verbose client logging — set false to reduce console noise in production
-  const DASHBOARD_DEBUG = true;
+  // Verbose client logging — set true only when debugging dashboard behavior
+  const DASHBOARD_DEBUG = false;
 
   function logDashboard(msg, detail) {
     if (!DASHBOARD_DEBUG) return;
@@ -2805,6 +2824,8 @@
     return String(s)
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
+
+  LoopEngine.init({ escHtml });
 
   function modelColor(m) {
     return MODEL_COLORS[m] || '#6b7280';
@@ -3044,6 +3065,7 @@
             if (msg.projectContext !== undefined) applyProjectContextPayload(msg.projectContext);
             if (msg.taskGit !== undefined) taskGitPayload = msg.taskGit;
             if (msg.supervisor !== undefined) applySupervisorPayload(msg.supervisor);
+            if (msg.loopHealth !== undefined) LoopEngine.setHealth(msg.loopHealth);
             // Overlay hitl-state.json values into runState for TUI accuracy
             if (runState && hitlState) {
               if (hitlState.paused)       runState.hitlPaused        = true;
@@ -3165,6 +3187,7 @@
       fetchProjectContext(),
       fetchUsage(),
       fetchRunState(),
+      LoopEngine.fetchHealth(),
       fetchBoardStatus(),
       fetchMissionDag(),
       fetchSupervisor(),
@@ -3976,6 +3999,7 @@
     try {
       await Promise.all([
         fetchRunState(),
+        LoopEngine.fetchHealth(),
         fetchBoardStatus(),
         fetchSupervisor(),
         fetchMissionDag(),
@@ -4126,6 +4150,7 @@
     await Promise.all([
       fetchUsage(),
       fetchRunState(),
+      LoopEngine.fetchHealth(),
       fetchBoardStatus(),
       fetchSupervisor(),
       fetchProjectContext(),
@@ -4302,77 +4327,6 @@
     return '<div class="task-git">' + parts.join(' · ') + '</div>';
   }
 
-  function renderLoopIntelSummary(rs) {
-    if (!rs || !rs.loopTemplateId) return '';
-    const phase = rs.loopPhase || '—';
-    const iter = rs.loopIteration != null ? ' · iter ' + rs.loopIteration : '';
-    const statusNote = rs.loopStatus && rs.loopStatus !== 'running'
-      ? ' · ' + rs.loopStatus
-      : (rs.status === 'running' || rs.status === 'reviewing' ? ' · live' : '');
-    const lv = rs.lastVerification;
-    const pass = lv ? lv.pass : null;
-    const panelClass = pass === false ? 'loop-intel-panel fail' : 'loop-intel-panel';
-    const statusLabel = pass === true ? '✓ Pass' : pass === false ? '✕ Fail' : '—';
-    let strategyHtml = '';
-    if (lv && Array.isArray(lv.strategies) && lv.strategies.length) {
-      strategyHtml = lv.strategies.map(s => {
-        const cls = s.pass ? 'loop-strategy-pass' : 'loop-strategy-fail';
-        const icon = s.pass ? '✓' : '✕';
-        return '<div class="loop-strategy-row"><span class="' + cls + '">' + icon + ' ' +
-          escHtml(s.type) + '</span><span>' + escHtml(String(s.durationMs || 0)) + 'ms</span></div>';
-      }).join('');
-    }
-    const summary = lv && lv.summary ? '<div style="margin-top:.3rem;color:var(--muted)">' + escHtml(lv.summary.slice(0, 120)) + '</div>' : '';
-    const lc = rs.lastCritique;
-    let critiqueHtml = '';
-    if (lc && lc.retryDecision) {
-      const decCls = lc.retryDecision === 'escalate' ? 'escalate'
-        : (lc.retryDecision === 'retry' || lc.retryDecision === 'retry_focused') ? 'retry' : 'proceed';
-      const decLabel = lc.retryDecision === 'retry_focused' ? 'RETRY (focused)' : lc.retryDecision.toUpperCase();
-      const modelLabel = lc.model === 'composer' ? 'Composer' : 'Grok';
-      const retryNote = rs.loopRetryCount != null ? ' · retry ' + rs.loopRetryCount : '';
-      const issueNote = lc.issueCount != null ? ' · ' + lc.issueCount + ' issue(s)' : '';
-      critiqueHtml = '<div class="loop-critique-panel">' +
-        '<span class="loop-critique-decision ' + decCls + '">' + escHtml(decLabel) + '</span>' +
-        ' · ' + escHtml(modelLabel) + escHtml(retryNote) + escHtml(issueNote) +
-        (lc.summary ? '<div style="margin-top:.2rem;color:var(--muted)">' + escHtml(lc.summary.slice(0, 140)) + '</div>' : '') +
-        '</div>';
-    }
-    const lr = rs.lastRetry;
-    let retryHtml = '';
-    if (lr && lr.strategy) {
-      const stratLabel = lr.strategy === 'focused'
-        ? 'Focused · ' + escHtml((lr.focusAreas || []).join(', ') || '—')
-        : 'Full retry';
-      const backoffNote = lr.backoffMs > 0 ? ' · backoff ' + lr.backoffMs + 'ms' : '';
-      retryHtml = '<div class="loop-critique-panel" style="margin-top:.25rem">' +
-        '<span class="loop-critique-decision retry">RETRY #' + escHtml(String(lr.attempt)) + '</span>' +
-        ' · ' + stratLabel + escHtml(backoffNote) + '</div>';
-    }
-    let timelineHtml = '';
-    const history = rs.loopPhaseHistory;
-    if (Array.isArray(history) && history.length) {
-      const chips = history.slice(-8).map(h => {
-        const isCurrent = h.phase === rs.loopPhase && !h.completedAt;
-        const cls = isCurrent ? 'running' : h.success === false ? 'fail' : h.success === true ? 'pass' : '';
-        const icon = isCurrent ? '●' : h.success === false ? '✕' : h.success === true ? '✓' : '○';
-        return '<span class="loop-phase-chip ' + cls + '" title="' + escHtml(h.summary || '') + '">' +
-          icon + ' ' + escHtml(h.phase) + '</span>';
-      }).join('');
-      timelineHtml = '<div class="loop-phase-timeline"><h5>Phase timeline</h5>' + chips + '</div>';
-    }
-    const maxIter = 5;
-    const iterNum = rs.loopIteration || 1;
-    const progressPct = Math.min(100, Math.round((iterNum / maxIter) * 100));
-    const progressHtml = rs.loopStatus === 'running' || isRunActive(rs)
-      ? '<div class="loop-progress-bar"><div class="loop-progress-fill" style="width:' + progressPct + '%"></div></div>'
-      : '';
-    return '<div class="' + panelClass + '"><h4>Loop Engineering</h4>' +
-      '<div><strong>' + escHtml(rs.loopTemplateId) + '</strong> · phase <strong>' + escHtml(phase) + '</strong>' + escHtml(iter) +
-      escHtml(statusNote) + ' · ' + statusLabel + (lv && lv.durationMs ? ' · ' + escHtml(String(lv.durationMs)) + 'ms' : '') + '</div>' +
-      progressHtml + strategyHtml + summary + critiqueHtml + retryHtml + timelineHtml + '</div>';
-  }
-
   function renderGitIntelSummary(tasks) {
     const withGit = (tasks || []).filter(t => taskGitInfoFor(t.id, t));
     if (!withGit.length) return '';
@@ -4547,7 +4501,7 @@
       bannerHtml +
       renderActiveBlockersBanner() +
       hitlControlsHtml(rs) +
-      renderLoopIntelSummary(rs) +
+      LoopEngine.renderSummary(rs) +
       renderGitIntelSummary(tasks) +
       (tasks.length ? '<div class="task-grid" style="margin-top:.7rem">' + taskCardsHtml + '</div>' : '');
     bindLiveBlockersLink();
@@ -4972,7 +4926,7 @@
       const blockers = (report.blockers || []).map(renderBlockerItemHtml).join('');
       const ignoredSection = renderIgnoredBlockersSection(report.ignoredBlockers || []);
       const gitSummary = renderGitIntelSummary(runState?.tasks || []);
-      const loopSummary = renderLoopIntelSummary(runState);
+      const loopSummary = LoopEngine.renderSummary(runState);
       const ignoredCount = report.counts?.ignoredBlockers ?? (report.ignoredBlockers || []).length;
       el.innerHTML = `
         <div><strong>Mission:</strong> ${escHtml((report.goal || report.missionObjective || '—').slice(0, 120))}</div>
@@ -6000,7 +5954,7 @@
   // ═══════════════════════════════════════════════════════════════════════════
 
   async function pollRunState() {
-    const fetches = [fetchRunState(), fetchBoardStatus(), fetchSupervisor()];
+    const fetches = [fetchRunState(), LoopEngine.fetchHealth(), fetchBoardStatus(), fetchSupervisor()];
     if (missionGraphEverOpened && activeIntelTab === 'graph') fetches.push(fetchMissionDag());
     await Promise.all(fetches);
     renderLiveIndicator();
@@ -6116,6 +6070,7 @@
     await Promise.all([
       fetchUsage(),
       fetchRunState(),
+      LoopEngine.fetchHealth(),
       fetchBoardStatus(),
       fetchModels(),
       fetchSupervisor(),

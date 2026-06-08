@@ -47,6 +47,12 @@ export class Blackboard {
       ) {
         throw new ConcurrencyError(parsed.key, parsed.expectedRev, existing.rev);
       }
+      // Monotonic updatedAt so rapid posts in the same ms still sort newest-first.
+      const maxUpdated = Object.values(cur.entries).reduce(
+        (max, e) => Math.max(max, e.updatedAt),
+        0,
+      );
+      const stamped = Math.max(now, maxUpdated + 1);
       const entry: BlackboardEntry = {
         key: parsed.key,
         type: parsed.type,
@@ -55,8 +61,8 @@ export class Blackboard {
         author: parsed.author,
         status: parsed.status ?? existing?.status,
         rev: existing ? existing.rev + 1 : 1,
-        createdAt: existing ? existing.createdAt : now,
-        updatedAt: now,
+        createdAt: existing ? existing.createdAt : stamped,
+        updatedAt: stamped,
       };
       cur.entries[parsed.key] = entry;
       result = entry;

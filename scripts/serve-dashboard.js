@@ -22,6 +22,7 @@
  *   POST /api/create-project         → scaffold a new project directory
  *   POST /api/switch-project         → switch active project context
  *   GET  /api/board-status         → UNSC concise summary (blackboard + command board)
+ *   GET  /api/loop-health          → loop observability, metrics, checkpoint diagnostics
  *   POST /api/board-cleanup        → archive stale board entries before a new mission
  *   POST /api/blockers/:id/ignore  → mark a blackboard blocker ignored or snoozed
  *   GET  /api/models               → available Cursor PM / engineer models
@@ -473,7 +474,7 @@ function readTaskGitPayload() {
   return readJson(path.join(activeStateDir, 'task-git.json'), null);
 }
 
-function pushCurrentState() {
+async function pushCurrentState() {
   sanitizeStaleMissionState(activeStateDir, (msg, detail) => logState(msg, detail));
   const runState  = readActiveRunStateForClient(activeStateDir);
   const hitlState = readJson(path.join(activeStateDir, 'hitl-state.json'), null);
@@ -482,6 +483,7 @@ function pushCurrentState() {
   const projectContext = readProjectContextPayload();
   const taskGit = readTaskGitPayload();
   const supervisor = summarizeSupervisorPayload();
+  const loopHealth = await readLoopHealthPayload();
   broadcast({
     type: 'state-update',
     runState,
@@ -491,6 +493,7 @@ function pushCurrentState() {
     projectContext,
     taskGit,
     supervisor,
+    loopHealth,
   });
 }
 
@@ -501,6 +504,28 @@ async function loadBoardReportModule() {
   } catch {
     return null;
   }
+}
+
+async function loadLoopHealthModule() {
+  const modPath = path.join(__dirname, '..', 'dist', 'loop-engine', 'loop-health.js');
+  try {
+    return await import(pathToFileURL(modPath).href);
+  } catch {
+    return null;
+  }
+}
+
+async function readLoopHealthPayload() {
+  const mod = await loadLoopHealthModule();
+  if (!mod?.buildLoopHealthReport) {
+    return {
+      status: 'unknown',
+      healthy: false,
+      message: 'Loop health unavailable — run `npm run build`',
+      timestamp: Date.now(),
+    };
+  }
+  return mod.buildLoopHealthReport(activeStateDir);
 }
 
 function isProcessAlive(pid) {
@@ -1540,7 +1565,7 @@ function setupStateWatcher() {
     stateWatcher = fs.watch(activeStateDir, { persistent: false }, (_event, filename) => {
       if (!filename || !WATCH_TARGETS.has(filename)) return;
       clearTimeout(watchTimer);
-      watchTimer = setTimeout(pushCurrentState, 200);
+      watchTimer = setTimeout(() => { void pushCurrentState(); }, 200);
     });
   } catch {
     // State dir may not exist yet — watcher inactive until switch/create.
@@ -1619,7 +1644,7 @@ async function switchActiveProject(targetPath, { force = false, migrateMission =
     });
   }
 
-  pushCurrentState();
+  await pushCurrentState();
 
   logProject('Project context switched', {
     projectRoot: activeProjectRoot,
@@ -1671,6 +1696,7 @@ const WATCH_TARGETS = new Set([
   'run-state.json', 'hitl-state.json', 'memory.md', 'hitl.json',
   'blackboard.json', 'command-blackboard.md', 'mission-dag.json', 'mission-meta.json',
   'supervisor.pid', 'task-git.json',
+  'loop-state.json', 'loop-metrics.json', 'loop-execution-history.json', 'loop-checkpoint.json',
 ]);
 
 setupStateWatcher();
@@ -1807,7 +1833,7 @@ const server = http.createServer(async (req, res) => {
       });
 
       const entry = await appendTeamGoalEntry({ goal, priority });
-      pushCurrentState();
+      await pushCurrentState();
 
       logApi('POST', url, 'ok', { id: entry.id, priority });
       jsonOk(res, {
@@ -2049,7 +2075,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       // Push WebSocket update so connected clients see the launch immediately
-      pushCurrentState();
+      await pushCurrentState();
 
       const title = runName || rawGoal.slice(0, 60);
       logMission(`Started mission: ${missionId} — ${title} at ${new Date().toISOString()}`, {
@@ -2092,6 +2118,23 @@ const server = http.createServer(async (req, res) => {
     try {
       jsonOk(res, readMissionDagPayload());
     } catch (e) { jsonErr(res, e.message, 500); }
+    return;
+  }
+
+  // ── /api/loop-health GET ─────────────────────────────────────────────────
+  if (url === '/api/loop-health' && method === 'GET') {
+    try {
+      const report = await readLoopHealthPayload();
+      logApi('GET', url, 'ok', {
+        status: report.status ?? null,
+        template: report.loop?.templateId ?? null,
+        phase: report.loop?.currentPhase ?? null,
+      });
+      jsonOk(res, report);
+    } catch (e) {
+      logApi('GET', url, `error: ${e.message}`);
+      jsonErr(res, e.message, 500);
+    }
     return;
   }
 
@@ -2140,7 +2183,7 @@ const server = http.createServer(async (req, res) => {
       });
 
       const entry = ignoreBlackboardBlocker(blockerId, { snoozeMs });
-      pushCurrentState();
+      await pushCurrentState();
 
       logApi('POST', url, 'ok', {
         id: entry.id,
@@ -2214,26 +2257,30 @@ const wss = new WebSocketServer({ server });
 wss.on('connection', (ws) => {
   wsClients.add(ws);
   // Send the current state snapshot immediately on connection
-  try {
-    sanitizeStaleMissionState(activeStateDir, (msg, detail) => logState(msg, detail));
-    const runState  = readActiveRunStateForClient(activeStateDir);
-    const hitlState = readJson(path.join(activeStateDir, 'hitl-state.json'), null);
-    const boardStatus = readBoardStatusPayload();
-    const missionDag = readMissionDagPayload();
-    const projectContext = readProjectContextPayload();
-    const taskGit = readTaskGitPayload();
-    const supervisor = summarizeSupervisorPayload();
-    ws.send(JSON.stringify({
-      type: 'state-update',
-      runState,
-      hitlState,
-      boardStatus,
-      missionDag,
-      projectContext,
-      taskGit,
-      supervisor,
-    }));
-  } catch {}
+  void (async () => {
+    try {
+      sanitizeStaleMissionState(activeStateDir, (msg, detail) => logState(msg, detail));
+      const runState  = readActiveRunStateForClient(activeStateDir);
+      const hitlState = readJson(path.join(activeStateDir, 'hitl-state.json'), null);
+      const boardStatus = readBoardStatusPayload();
+      const missionDag = readMissionDagPayload();
+      const projectContext = readProjectContextPayload();
+      const taskGit = readTaskGitPayload();
+      const supervisor = summarizeSupervisorPayload();
+      const loopHealth = await readLoopHealthPayload();
+      ws.send(JSON.stringify({
+        type: 'state-update',
+        runState,
+        hitlState,
+        boardStatus,
+        missionDag,
+        projectContext,
+        taskGit,
+        supervisor,
+        loopHealth,
+      }));
+    } catch {}
+  })();
   ws.on('close', () => wsClients.delete(ws));
   ws.on('error', () => wsClients.delete(ws));
 });
@@ -2260,6 +2307,7 @@ server.listen(port, host, () => {
   console.log(`              ${localBase}/api/project-context  ${localBase}/api/task-git`);
   console.log(`              ${localBase}/api/team-goal`);
   console.log(`              ${localBase}/api/blockers/:id/ignore`);
+  console.log(`              ${localBase}/api/loop-health`);
   console.log(`              ${localBase}/api/projects`);
   console.log(`              ${localBase}/api/project-templates  ${localBase}/api/create-project`);
   console.log(`\n  Open the URL above in your browser (Tailscale: use machine IP).\n`);
