@@ -1,10 +1,11 @@
 /**
  * CritiqueEngine — rule-based structured critique from verification + phase history.
  *
- * Selects critique model lane (Grok vs Composer) for future LLM integration.
+ * Selects critique model lane (PM default vs Composer) for future LLM integration.
  * Does not invoke LLMs directly — deterministic analysis for loop reliability.
  */
 
+import { DEFAULT_ENGINEER_MODEL, DEFAULT_PM_MODEL } from '../../rco/cursor-models.js';
 import { toCursorModelId } from '../../rco/model-routing.js';
 import { generateImprovementProposals } from './improvement-proposals.js';
 import { resolveRetryStrategy } from './retry-strategies.js';
@@ -47,7 +48,7 @@ export class CritiqueEngine {
 
     // Log model routing for observability (matches team-orchestrator banner pattern).
     const routedModelId = toCursorModelId(
-      model === 'grok' ? 'grok-4.3' : 'composer-2.5',
+      model === 'grok' ? DEFAULT_PM_MODEL : DEFAULT_ENGINEER_MODEL,
       model === 'grok' ? 'critic' : 'executor',
     );
     console.error(
@@ -143,7 +144,7 @@ function collectSuggestions(input: CritiqueInput): string[] {
 }
 
 /**
- * Grok for high-level / multi-failure critique; Composer for localized code issues.
+ * PM default model for high-level / multi-failure critique; Composer for localized code issues.
  */
 function selectCritiqueModel(input: CritiqueInput, issues: string[]): CritiqueModel {
   if (input.hadBlockers) return 'grok';

@@ -2233,7 +2233,7 @@
                   <input type="search" class="model-picker-search" placeholder="Search models…" autocomplete="off" aria-label="Search Lead PM models" />
                   <div class="model-picker-list"></div>
                 </div>
-                <input type="hidden" id="mission-pm-model" value="grok-4.3" />
+                <input type="hidden" id="mission-pm-model" value="gpt-5.4-nano" />
               </div>
             </div>
             <div class="mission-field">
@@ -2710,6 +2710,7 @@
   };
 
   const MODEL_COLORS = {
+    'gpt-5.4-nano':      '#22c55e',
     'grok-4.3':          '#f59e0b',
     'composer-2.5':      '#6366f1',
     'claude-opus-4-7':   '#8b5cf6',
@@ -2744,7 +2745,7 @@
   let agentSortDir = 'desc';
   let expandedRuns = new Set();      // overview recent runs
   let historyExpanded = new Set();   // history tab
-  let modelCatalog = { models: [], defaults: { pm: 'grok-4.3', engineer: 'composer-2.5' } };
+  let modelCatalog = { models: [], defaults: { pm: 'gpt-5.4-nano', engineer: 'composer-2.5' } };
   let missionSubmitting = false;
   let teamGoalSubmitting = false;
   let supervisorInfo = null;
@@ -2825,7 +2826,11 @@
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  LoopEngine.init({ escHtml });
+  LoopEngine.init({
+    escHtml,
+    getPmModelId: () => modelCatalog.defaults?.pm || 'gpt-5.4-nano',
+    getEngModelId: () => modelCatalog.defaults?.engineer || 'composer-2.5',
+  });
 
   function modelColor(m) {
     return MODEL_COLORS[m] || '#6b7280';
@@ -3824,7 +3829,7 @@
     const engModels = (modelCatalog.models || []).filter(m => modelMatchesRole(m, 'engineer'));
 
     const pmDefault = modelCatalog.defaults?.pm
-      || pickModelDefault(pmModels, ['grok-4.3', 'auto', 'gpt-5.4-nano']);
+      || pickModelDefault(pmModels, ['gpt-5.4-nano', 'auto', 'composer-2.5']);
     const engDefault = modelCatalog.defaults?.engineer
       || pickModelDefault(engModels, ['composer-2.5', 'auto', 'composer-2']);
 

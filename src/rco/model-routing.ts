@@ -6,7 +6,7 @@
  * to a valid Cursor SDK model ID.
  *
  * Defaults (when dashboard selects "auto" or no env override):
- *   Lead PM     → grok-4.3       (matches /api/models defaults.pm)
+ *   Lead PM     → gpt-5.4-nano   (matches /api/models defaults.pm)
  *   Engineers   → composer-2.5   (matches /api/models defaults.engineer)
  *
  * Dashboard / CLI overrides:
