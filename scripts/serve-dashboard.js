@@ -233,16 +233,22 @@ function bootstrapActiveProject() {
   let bootProjectRoot = resolveInitialProjectRoot(initialStateDir);
   let bootStateDir = initialStateDir;
 
-  if (!cliOverridesProject) {
-    const cfg = readDashboardConfig();
-    if (cfg.lastProjectPath && isValidProjectRoot(cfg.lastProjectPath)) {
-      bootProjectRoot = path.resolve(cfg.lastProjectPath);
+  // Always restore lastProjectPath when valid — survives CLI flags and server restart.
+  const cfg = readDashboardConfig();
+  if (cfg.lastProjectPath && isValidProjectRoot(cfg.lastProjectPath)) {
+    bootProjectRoot = path.resolve(cfg.lastProjectPath);
+    bootStateDir = path.join(bootProjectRoot, '.roland');
+    logProject('Boot restored persisted project', {
+      projectRoot: bootProjectRoot,
+      source: 'lastProjectPath',
+      cliOverride: cliOverridesProject,
+    });
+  } else if (cliOverridesProject) {
+    if (path.basename(bootStateDir) === '.roland') {
+      bootProjectRoot = path.dirname(bootStateDir);
+    } else if (cliProjectRootArg) {
       bootStateDir = path.join(bootProjectRoot, '.roland');
     }
-  } else if (path.basename(bootStateDir) === '.roland') {
-    bootProjectRoot = path.dirname(bootStateDir);
-  } else if (cliProjectRootArg) {
-    bootStateDir = path.join(bootProjectRoot, '.roland');
   }
 
   return { projectRoot: bootProjectRoot, stateDir: bootStateDir };

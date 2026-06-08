@@ -3205,6 +3205,39 @@
   let createProjectOpen = false;
   let githubReposOpen = false;
   let projectSwitching = false;
+  const ACTIVE_PROJECT_SESSION_KEY = 'roland.activeProjectPath';
+
+  function persistActiveProjectPath(projectPath) {
+    if (!projectPath) return;
+    try {
+      sessionStorage.setItem(ACTIVE_PROJECT_SESSION_KEY, projectPath);
+    } catch (e) {
+      console.warn('Could not persist active project path:', e.message);
+    }
+  }
+
+  function readPersistedActiveProjectPath() {
+    try {
+      return sessionStorage.getItem(ACTIVE_PROJECT_SESSION_KEY);
+    } catch {
+      return null;
+    }
+  }
+
+  /** Keep sessionStorage aligned with server — backend lastProjectPath is source of truth. */
+  function syncClientProjectSessionFromServer() {
+    if (!projectContext?.cwd) return;
+
+    const persisted = readPersistedActiveProjectPath();
+    if (persisted && !pathMatches(persisted, projectContext.cwd)) {
+      logDashboard('Syncing client session to server project context', {
+        server: projectContext.cwd,
+        was: persisted,
+      });
+    }
+    persistActiveProjectPath(projectContext.cwd);
+  }
+
   let createProjectBusy = false;
   let githubStatus = { connected: false };
   let githubRepos = [];
@@ -3620,6 +3653,7 @@
     if (!ctx) return;
     const prevCwd = projectContext?.cwd;
     projectContext = ctx;
+    if (ctx.cwd) persistActiveProjectPath(ctx.cwd);
     renderProjectContext();
     if (prevCwd && ctx.cwd && !pathMatches(prevCwd, ctx.cwd)) {
       logDashboard('Project context changed — re-attaching supervisor', {
@@ -3722,6 +3756,7 @@
       const res = await fetch('/api/project-context');
       if (!res.ok) throw new Error('HTTP ' + res.status);
       projectContext = await res.json();
+      syncClientProjectSessionFromServer();
     } catch (e) {
       console.warn('Project context fetch failed:', e.message);
       projectContext = {
@@ -3865,6 +3900,7 @@
       if (data.switched) {
         if (data.projectContext) projectContext = data.projectContext;
         if (data.projects) projectsPayload = data.projects;
+        if (projectContext?.cwd) persistActiveProjectPath(projectContext.cwd);
         await reattachSupervisorState('create-project');
       }
 
@@ -3994,6 +4030,7 @@
 
       if (data.projectContext) projectContext = data.projectContext;
       if (data.projects) projectsPayload = data.projects;
+      if (projectContext?.cwd) persistActiveProjectPath(projectContext.cwd);
 
       await reattachSupervisorState('project-switch');
 
@@ -4298,6 +4335,7 @@
       if (data.projects) projectsPayload = data.projects;
 
       if (data.switched) {
+        if (projectContext?.cwd) persistActiveProjectPath(projectContext.cwd);
         await reattachSupervisorState('github-clone');
       }
 
@@ -4912,13 +4950,13 @@
   }
 
   async function refreshDashboard() {
+    await fetchProjectContext();
     await Promise.all([
       fetchUsage(),
       fetchRunState(),
       LoopEngine.fetchHealth(),
       fetchBoardStatus(),
       fetchSupervisor(),
-      fetchProjectContext(),
       fetchProjects(),
       fetchMissionDag(),
     ]);
