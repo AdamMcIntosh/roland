@@ -30,3 +30,8 @@ Build the initi _(run mq41lbgr)_
 Des _(run mq4jz8l3)_
 
 - Centralized PM default model selection around `DEFAULT_PM_MODEL = gpt-5.4-nano` and resolved critique/dashboard display labels through routed model IDs to prevent “Grok” branding regressions while keeping internal lane keys stable.
+
+## 2026-06-08 — [Mission: Responsiveness] Team Goal: Restore & Improve Mobile Responsiveness
+Des _(run mq4mtrs6)_
+
+- Use a single sticky wrapper for header + tab bar so sticky behavior remains correct when the header wraps on iOS (avoids brittle fixed offsets).
