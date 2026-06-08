@@ -1,0 +1,291 @@
+import { describe, it, expect } from 'vitest';
+import {
+  stripMissionNoise,
+  inferCommitType,
+  inferScope,
+  formatCommitSubject,
+  buildConventionalPrTitle,
+  buildPrDescription,
+  buildTaskCommitMessage,
+  isLegacyPrTitle,
+  migrateLegacyPrTitle,
+  type PrFormatTaskInput,
+  type PrFormatContext,
+} from '../../src/rco/pr-format.js';
+
+/** Factory — fresh task input per test (no shared mutable state). */
+function makeTask(overrides: Partial<PrFormatTaskInput> = {}): PrFormatTaskInput {
+  return {
+    id: 'task-1',
+    title: 'Implement feature',
+    agent: 'executor',
+    ...overrides,
+  };
+}
+
+function makeContext(overrides: Partial<PrFormatContext> = {}): PrFormatContext {
+  return {
+    goal: 'Improve PR title quality',
+    runId: 'run-abc123',
+    ...overrides,
+  };
+}
+
+describe('stripMissionNoise', () => {
+  it('removes mission, task, and Roland prefixes', () => {
+    expect(
+      stripMissionNoise('Task task-1: [Mission: PR-cleanup] Implement clean PR title/description convention'),
+    ).toBe('Implement clean PR title/description convention');
+    expect(stripMissionNoise('Roland: Add rate limiting to the Express API')).toBe(
+      'Add rate limiting to the Express API',
+    );
+    expect(stripMissionNoise('[Mission: mobile-first] Team Goal: Fix dashboard layout')).toBe(
+      'Fix dashboard layout',
+    );
+  });
+
+  it('removes priority and alternate task-id prefixes', () => {
+    expect(stripMissionNoise('[P2 active] Add health check endpoint')).toBe('Add health check endpoint');
+    expect(stripMissionNoise('Task-3: Wire git workflow')).toBe('Wire git workflow');
+  });
+
+  it('collapses whitespace and returns empty for blank input', () => {
+    expect(stripMissionNoise('  multiple   spaces   here  ')).toBe('multiple spaces here');
+    expect(stripMissionNoise('')).toBe('');
+    expect(stripMissionNoise('   ')).toBe('');
+  });
+});
+
+describe('inferCommitType', () => {
+  it('selects fix, refactor, docs, test, and chore from keywords', () => {
+    expect(inferCommitType('Fix crash in login flow')).toBe('fix');
+    expect(inferCommitType('Refactor loop engine escalation')).toBe('refactor');
+    expect(inferCommitType('Update readme documentation')).toBe('docs');
+    expect(inferCommitType('Add vitest coverage for pr-format')).toBe('test');
+    expect(inferCommitType('Bump deps and update ci config')).toBe('chore');
+  });
+
+  it('defaults to feat when no keyword matches', () => {
+    expect(inferCommitType('Implement clean PR title convention')).toBe('feat');
+  });
+
+  it('does not infer refactor from mission noise before stripping', () => {
+    const noisy = '[Mission: PR-cleanup] Implement clean PR title/description convention';
+    expect(inferCommitType(noisy)).toBe('feat');
+    expect(inferCommitType(stripMissionNoise(noisy))).toBe('feat');
+  });
+});
+
+describe('inferScope', () => {
+  it('maps area keywords to conventional scopes', () => {
+    expect(inferScope('Fix mobile dashboard layout')).toBe('dashboard');
+    expect(inferScope('Implement clean PR title and git branch workflow')).toBe('git');
+    expect(inferScope('Tune loop-engine critique retry')).toBe('loop');
+    expect(inferScope('Update PM team orchestration blackboard')).toBe('pm');
+    expect(inferScope('Wire MCP cursor agent tools')).toBe('mcp');
+    expect(inferScope('Add express API route middleware')).toBe('api');
+    expect(inferScope('Fix JWT auth token session')).toBe('auth');
+  });
+
+  it('falls back to roland when no scope keyword matches', () => {
+    expect(inferScope('Implement generic utility')).toBe('roland');
+  });
+});
+
+describe('formatCommitSubject', () => {
+  it('lowercases imperative subject and strips trailing punctuation', () => {
+    expect(formatCommitSubject('Implement Clean PR Title!')).toBe('implement Clean PR Title');
+    expect(formatCommitSubject('Task task-1: Fix bug in handler.')).toBe('fix bug in handler');
+  });
+
+  it('returns safe default for empty input', () => {
+    expect(formatCommitSubject('')).toBe('update roland task output');
+    expect(formatCommitSubject('   ')).toBe('update roland task output');
+  });
+});
+
+describe('buildConventionalPrTitle', () => {
+  it('produces conventional-commit title without mission prefixes (Sparrow example)', () => {
+    const task = makeTask({
+      title: 'Task task-1: [Mission: PR-cleanup] Implement clean PR title/description convention',
+    });
+    expect(buildConventionalPrTitle(task)).toBe(
+      'feat(git): implement clean PR title/description convention',
+    );
+  });
+
+  it('infers fix type and dashboard scope from task wording', () => {
+    const task = makeTask({
+      title: 'Fix broken mobile dashboard layout on iPhone',
+      description: 'Regression in responsive CSS',
+    });
+    expect(buildConventionalPrTitle(task)).toBe('fix(dashboard): fix broken mobile dashboard layout on iPhone');
+  });
+
+  it('enforces max 72 characters with ellipsis truncation', () => {
+    const longTitle =
+      'Implement comprehensive end-to-end validation for autogenerated pull request titles and descriptions across all Roland missions';
+    const task = makeTask({ title: longTitle });
+    const result = buildConventionalPrTitle(task);
+    expect(result.length).toBeLessThanOrEqual(72);
+    expect(result).toMatch(/^feat\(roland\): /);
+    expect(result.endsWith('…')).toBe(true);
+  });
+
+  it('handles empty title with safe fallback subject', () => {
+    const task = makeTask({ title: '   ' });
+    const result = buildConventionalPrTitle(task);
+    expect(result).toMatch(/^feat\(roland\): update roland task output$/);
+    expect(result.length).toBeLessThanOrEqual(72);
+  });
+});
+
+describe('isLegacyPrTitle', () => {
+  it('detects legacy Roland/mission/task prefixes', () => {
+    expect(isLegacyPrTitle('Task task-1: [Mission: PR-cleanup] Improve titles')).toBe(true);
+    expect(isLegacyPrTitle('Roland: Add rate limiting')).toBe(true);
+    expect(isLegacyPrTitle('[Mission: PR-cleanup] Team Goal: Clean titles')).toBe(true);
+    expect(isLegacyPrTitle('Task-2: Wire git workflow')).toBe(true);
+  });
+
+  it('returns false for conventional or empty titles', () => {
+    expect(isLegacyPrTitle('feat(git): implement clean pr title convention')).toBe(false);
+    expect(isLegacyPrTitle('fix(dashboard): restore mobile layout')).toBe(false);
+    expect(isLegacyPrTitle('')).toBe(false);
+    expect(isLegacyPrTitle('   ')).toBe(false);
+  });
+});
+
+describe('migrateLegacyPrTitle', () => {
+  it('migrates legacy titles to conventional format', () => {
+    const legacy = 'Task task-1: [Mission: PR-cleanup] Implement clean PR title/description convention';
+    expect(migrateLegacyPrTitle(legacy)).toBe(
+      'feat(git): implement clean PR title/description convention',
+    );
+  });
+
+  it('returns null for already-clean titles', () => {
+    const clean = 'feat(git): implement clean pr title convention';
+    expect(migrateLegacyPrTitle(clean)).toBeNull();
+  });
+
+  it('extracts seed from PR body Goal line when title strips to empty', () => {
+    const body = [
+      '## Summary',
+      '**Goal:** [Mission: PR-cleanup] Implement clean PR title convention',
+      '',
+      '## Key changes',
+      '- Formatter module',
+    ].join('\n');
+    expect(migrateLegacyPrTitle('[Mission: PR-cleanup]', body)).toBe(
+      'feat(git): implement clean PR title convention',
+    );
+  });
+
+  it('returns null when migration cannot derive a subject', () => {
+    expect(migrateLegacyPrTitle('Roland:', '')).toBeNull();
+    expect(migrateLegacyPrTitle('', '')).toBeNull();
+  });
+});
+
+describe('buildPrDescription', () => {
+  it('includes required sections in order: Summary, Key changes, Testing, Related', () => {
+    const task = makeTask({
+      id: 'task-2',
+      agent: 'executor',
+      title: 'Implement clean PR title/description convention',
+      description: 'Add formatter module\nWire into task git workflow',
+    });
+    const ctx = makeContext({
+      goal: '[Mission: PR-cleanup] Improve PR Title & Description Quality',
+      runId: 'run-xyz',
+      missionUrl: 'http://127.0.0.1:8081',
+    });
+
+    const body = buildPrDescription(task, ctx);
+
+    const summaryIdx = body.indexOf('## Summary');
+    const keyIdx = body.indexOf('## Key changes');
+    const testingIdx = body.indexOf('## Testing');
+    const relatedIdx = body.indexOf('## Related');
+
+    expect(summaryIdx).toBeGreaterThanOrEqual(0);
+    expect(keyIdx).toBeGreaterThan(summaryIdx);
+    expect(testingIdx).toBeGreaterThan(keyIdx);
+    expect(relatedIdx).toBeGreaterThan(testingIdx);
+
+    expect(body).toContain('Add formatter module');
+    expect(body).toContain('- Add formatter module');
+    expect(body).toContain('- Wire into task git workflow');
+    expect(body).toContain('Roland PM team workflow');
+    expect(body).toContain('**Task:** `task-2` (executor)');
+    expect(body).toContain('Improve PR Title & Description Quality');
+    expect(body).toContain('**Run:** `run-xyz`');
+    expect(body).toContain('http://127.0.0.1:8081');
+    expect(body).toContain('*Draft PR opened by Roland task git workflow.*');
+  });
+
+  it('uses custom testingNotes when provided', () => {
+    const task = makeTask({ description: 'Formatter only' });
+    const ctx = makeContext({ testingNotes: '- npx vitest run tests/unit/pr-format.test.ts — 12/12 pass' });
+    const body = buildPrDescription(task, ctx);
+    expect(body).toContain('npx vitest run tests/unit/pr-format.test.ts');
+    expect(body).not.toContain('Manual review recommended');
+  });
+
+  it('applies safe defaults for empty task description', () => {
+    const task = makeTask({ title: 'Task task-9: Chore bump', description: '' });
+    const body = buildPrDescription(task, makeContext());
+    expect(body).toContain('## Summary');
+    expect(body).toContain('Chore bump');
+    expect(body).toContain('## Key changes');
+    expect(body).toContain('Task task-9: Chore bump');
+  });
+});
+
+describe('buildTaskCommitMessage', () => {
+  it('combines conventional title with task closure footer', () => {
+    const task = makeTask({
+      id: 'task-1',
+      title: 'Task task-1: [Mission: PR-cleanup] Implement clean PR title/description convention',
+    });
+    const message = buildTaskCommitMessage(task);
+    expect(message).toBe(
+      [
+        'feat(git): implement clean PR title/description convention',
+        '',
+        'Closes task task-1',
+        '',
+        'Generated by Roland',
+      ].join('\n'),
+    );
+  });
+});
+
+describe('task-git-workflow wired path', () => {
+  it('mirrors onTaskComplete PR title/body assembly from task-git-workflow.ts', () => {
+    const task = makeTask({
+      id: 'task-1',
+      title: 'Task task-1: [Mission: PR-cleanup] Implement clean PR title/description convention',
+      description: 'Standardize autogenerated PR titles and descriptions.',
+      agent: 'executor',
+    });
+    const ctx: PrFormatContext = {
+      goal: '[Mission: PR-cleanup] Team Goal: Improve PR Title & Description Quality',
+      runId: 'run-mission-pr-cleanup',
+      missionUrl: 'http://127.0.0.1:8081',
+    };
+
+    const prTitle = buildConventionalPrTitle(task);
+    const prBody = buildPrDescription(task, ctx);
+
+    expect(prTitle).toBe('feat(git): implement clean PR title/description convention');
+    expect(isLegacyPrTitle(prTitle)).toBe(false);
+    expect(prBody).toContain('## Summary');
+    expect(prBody).toContain('## Key changes');
+    expect(prBody).toContain('## Testing');
+    expect(prBody).toContain('## Related');
+    expect(prBody).toContain('task-1');
+    expect(prBody).toContain('run-mission-pr-cleanup');
+  });
+});

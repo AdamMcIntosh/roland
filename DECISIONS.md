@@ -35,3 +35,8 @@ Des _(run mq4jz8l3)_
 Des _(run mq4mtrs6)_
 
 - Use a single sticky wrapper for header + tab bar so sticky behavior remains correct when the header wraps on iOS (avoids brittle fixed offsets).
+
+## 2026-06-08 — [Mission: PR-cleanup] Team Goal: Improve PR Title & Description Quality
+Descript _(run mq55c5fn)_
+
+- Use `stripMissionNoise()` normalization before `inferCommitType`/`inferScope` so mission/task boilerplate can’t pollute conventional commit inference; rationale: stable, professional PR titles.
