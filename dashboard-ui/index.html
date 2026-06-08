@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Roland Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
@@ -30,6 +30,18 @@
       --touch-min:   44px;
       --page-pad-x:  1.25rem;
       --header-stack-bp: 640px;
+      --bp-sm:       640px;
+      --bp-md:       760px;
+      --stack-gap:   0.45rem;
+      --safe-top:    env(safe-area-inset-top, 0px);
+      --safe-right:  env(safe-area-inset-right, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --safe-left:   env(safe-area-inset-left, 0px);
+      --shell-sticky-h: 0px;
+      --viewport-h:  100vh;
+    }
+    @supports (height: 100dvh) {
+      :root { --viewport-h: 100dvh; }
     }
     [data-theme="light"] {
       --bg:          #f0f0f6;
@@ -52,7 +64,7 @@
       margin: 0; padding: 0;
       background: var(--bg); color: var(--fg);
       transition: background .2s, color .2s;
-      min-height: 100vh;
+      min-height: var(--viewport-h);
     }
     h2 { font-size: .8rem; margin: 0 0 .6rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
     a  { color: var(--indigo); text-decoration: none; }
@@ -72,13 +84,26 @@
       body { overflow-x: hidden; }
     }
     img, canvas, svg, video { max-width: 100%; height: auto; }
-    .page { max-width: min(1200px, 100%); margin: 0 auto; padding: 1rem var(--page-pad-x) 2.5rem; }
+    .page {
+      max-width: min(1200px, 100%);
+      margin: 0 auto;
+      padding:
+        1rem
+        max(var(--page-pad-x), var(--safe-right))
+        max(2.5rem, var(--safe-bottom))
+        max(var(--page-pad-x), var(--safe-left));
+    }
     .shell-sticky {
       position: sticky;
       top: 0;
       z-index: 200;
       background: var(--surface);
+      padding-top: var(--safe-top);
+      padding-left: var(--safe-left);
+      padding-right: var(--safe-right);
     }
+    .shell-sticky .header { padding-left: var(--page-pad-x); padding-right: var(--page-pad-x); }
+    .shell-sticky .tab-bar { padding-left: var(--page-pad-x); padding-right: var(--page-pad-x); }
 
     /* ═══════════════════════════════════════════════════════
        Header
@@ -805,9 +830,15 @@
        Toast Notifications
     ═══════════════════════════════════════════════════════ */
     #toast-container {
-      position: fixed; bottom: 1.25rem; right: 1.25rem;
-      display: flex; flex-direction: column; gap: .4rem;
-      z-index: 9999; pointer-events: none;
+      position: fixed;
+      bottom: max(1.25rem, var(--safe-bottom));
+      right: max(1.25rem, var(--safe-right));
+      left: max(1.25rem, var(--safe-left));
+      display: flex;
+      flex-direction: column;
+      gap: .4rem;
+      z-index: 9999;
+      pointer-events: none;
     }
     .toast {
       padding: 0.6rem 1rem 0.6rem 0.85rem;
@@ -851,6 +882,49 @@
     .toast-error   { background: rgba(239,68,68,.92);  color: #fff; }
     .toast-warning { background: rgba(245,158,11,.92); color: #fff; }
     .toast-info    { background: rgba(99,102,241,.92); color: #fff; }
+
+    /* ═══════════════════════════════════════════════════════
+       Mobile-first utilities (reuse on new components)
+    ═══════════════════════════════════════════════════════ */
+    .u-min-w-0 { min-width: 0; }
+    .u-text-wrap { overflow-wrap: anywhere; word-break: break-word; }
+    .u-touch {
+      min-height: var(--touch-min);
+      min-width: var(--touch-min);
+    }
+    .u-stack {
+      display: flex;
+      flex-direction: column;
+      gap: var(--stack-gap);
+      align-items: stretch;
+    }
+    .u-stack-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--stack-gap);
+      align-items: center;
+    }
+    .u-stack-row > .u-grow { flex: 1 1 12rem; min-width: 0; }
+    .u-hide-below-sm { display: revert; }
+    .u-show-below-sm { display: none; }
+    @media (max-width: 640px) {
+      .u-hide-below-sm { display: none !important; }
+      .u-show-below-sm { display: revert !important; }
+      .u-stack-sm { display: flex; flex-direction: column; gap: var(--stack-gap); align-items: stretch; }
+      .u-full-sm { width: 100%; }
+      .u-touch-row > * { min-height: var(--touch-min); }
+    }
+
+    /* Section headers that pair title + actions (replaces inline flex styles) */
+    .section-header-flex {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      padding-right: 0.65rem;
+    }
+    .section-header-flex h2 { margin: 0; }
 
     /* ═══════════════════════════════════════════════════════
        Utilities
@@ -911,8 +985,13 @@
         padding-top: 0.45rem;
         padding-bottom: 0.45rem;
       }
-      .toast { max-width: calc(100vw - 2rem); right: 1rem; left: 1rem; }
-      #toast-container { left: 0; right: 0; align-items: stretch; }
+      .toast { max-width: 100%; }
+      #toast-container {
+        left: var(--safe-left);
+        right: var(--safe-right);
+        align-items: stretch;
+        padding: 0 max(0.5rem, var(--safe-right)) 0 max(0.5rem, var(--safe-left));
+      }
       .board-panel-scroll { max-height: 38vh; }
       .board-md { font-size: 0.71rem; line-height: 1.42; }
       .board-md div { margin: 0.08rem 0; }
@@ -968,6 +1047,55 @@
       .github-modal-toolbar { flex-direction: column; align-items: stretch; }
       .github-modal-toolbar .btn-secondary { width: 100%; min-height: var(--touch-min); }
       .ops-log-preview { font-size: 0.64rem; max-height: 120px; }
+      /* iOS Safari: 16px inputs prevent focus zoom */
+      input, select, textarea, .mission-select, .mission-input, .mission-textarea,
+      .history-search, .memory-search, .project-modal-search, .github-connect-form input,
+      .goal-textarea, .pr-input, .inject-input, .model-picker-search, .model-picker-trigger {
+        font-size: max(16px, 0.8rem);
+      }
+      .mission-body { padding: 0.35rem var(--page-pad-x) 1rem; }
+      .mission-header { padding: 0.65rem var(--page-pad-x) 0.35rem; }
+      .mission-actions { width: 100%; }
+      .btn-mission { width: 100%; min-height: var(--touch-min); }
+      .mission-toggles { flex-direction: column; align-items: flex-start; gap: 0.35rem; }
+      .model-picker-dropdown { max-height: min(50dvh, 50vh, 320px); }
+      .model-picker-list { max-height: min(42dvh, 42vh, 260px); }
+      .memory-toolbar { flex-direction: column; align-items: stretch; }
+      .memory-toolbar-actions { width: 100%; }
+      .memory-toolbar-actions .btn-primary,
+      .memory-toolbar-actions .btn-secondary { flex: 1 1 auto; min-height: var(--touch-min); }
+      .history-controls { flex-direction: column; align-items: stretch; }
+      .history-search { width: 100%; min-width: 0; min-height: var(--touch-min); }
+      .inject-row, .pr-input-row { flex-direction: column; align-items: stretch; }
+      .inject-row .btn-inject, .pr-input-row .btn-secondary { width: 100%; min-height: var(--touch-min); }
+      .run-cmd-actions .btn-primary { width: 100%; min-height: var(--touch-min); }
+      .hitl-panel-buttons .btn-hitl { flex: 1 1 calc(50% - 0.2rem); min-height: var(--touch-min); }
+      .goal-chip-text { white-space: normal; }
+      .create-project-actions { flex-direction: column; }
+      .create-project-actions .btn-primary,
+      .create-project-actions .btn-secondary { width: 100%; min-height: var(--touch-min); }
+      .project-modal-footer { flex-direction: column; align-items: stretch; }
+      .project-modal-footer .btn-project-github,
+      .project-modal-footer .btn-project-new { width: 100%; min-height: var(--touch-min); }
+      .intel-subtabs { flex-wrap: wrap; justify-content: center; width: 100%; }
+      .intel-header h2 { text-align: center; width: 100%; }
+      .mission-graph-toolbar { flex-direction: column; align-items: stretch; }
+      .mission-graph-controls { width: 100%; justify-content: stretch; }
+      .mission-graph-controls .btn-dag-fit { flex: 1 1 auto; min-height: var(--touch-min); }
+      .mission-graph-panel { padding: 0.65rem var(--page-pad-x) 0.85rem; }
+      .loop-intel-panel, .git-intel-panel { font-size: 0.74rem; }
+      .loop-timeline { gap: 0.35rem; }
+      .loop-phase-detail { font-size: 0.7rem; line-height: 1.45; }
+      .ops-goal {
+        -webkit-line-clamp: unset;
+        display: block;
+        overflow: visible;
+        word-break: break-word;
+      }
+      .period-row { margin: 0.75rem 0 0.65rem; }
+      .section-header-flex { flex-direction: column; align-items: stretch; }
+      .section-header-flex .btn-export { align-self: stretch; }
+      .tab-panel { scroll-margin-top: var(--shell-sticky-h); }
     }
 
     @media (max-width: 380px) {
@@ -989,9 +1117,13 @@
     }
 
     @media (max-width: 896px) and (orientation: landscape) {
-      .board-panel-scroll { max-height: 38vh; }
-      .mission-graph-viewport { max-height: 46vh; min-height: 180px; }
+      .board-panel-scroll { max-height: min(38dvh, 38vh); }
+      .mission-graph-viewport { max-height: min(46dvh, 46vh); min-height: 180px; }
       .ops-log-preview { max-height: 100px; }
+      .shell-sticky .header { padding-top: 0.4rem; padding-bottom: 0.4rem; }
+      .tab-btn { padding: 0.45rem 0.65rem; }
+      .project-context { margin: 0.5rem 0 0.4rem; }
+      .quick-actions { margin: 0.55rem 0 0.45rem; }
     }
 
     /* Project context bar */
@@ -1183,8 +1315,8 @@
     }
     .project-modal-backdrop.open { display: flex; }
     .project-modal {
-      width: min(520px, 100vw);
-      max-height: min(78vh, 640px);
+      width: min(520px, calc(100vw - var(--safe-left) - var(--safe-right)));
+      max-height: min(78dvh, 78vh, 640px);
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 14px 14px 0 0;
@@ -1192,7 +1324,9 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      padding-bottom: var(--safe-bottom);
     }
+    .project-modal-wide { width: min(42rem, calc(100vw - var(--safe-left) - var(--safe-right))); }
     @media (min-width: 641px) {
       .project-modal-backdrop {
         align-items: center;
@@ -1200,7 +1334,7 @@
       }
       .project-modal {
         border-radius: var(--radius);
-        max-height: min(70vh, 560px);
+        max-height: min(70dvh, 70vh, 560px);
       }
     }
     .project-modal-header {
@@ -1975,7 +2109,7 @@
 
     /* Scrollable command board */
     .board-panel-scroll {
-      max-height: min(52vh, 480px);
+      max-height: min(52dvh, 52vh, 480px);
       overflow-y: auto;
       overflow-x: hidden;
       -webkit-overflow-scrolling: touch;
@@ -1999,6 +2133,7 @@
       flex-wrap: wrap;
       border-bottom: 1px solid var(--border);
     }
+    .intel-header h2 { margin: 0; }
     .intel-subtabs {
       display: flex;
       gap: 0.2rem;
@@ -2075,7 +2210,7 @@
     .mission-graph-viewport {
       position: relative;
       overflow: auto;
-      max-height: min(58vh, 520px);
+      max-height: min(58dvh, 58vh, 520px);
       min-height: 200px;
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -2269,9 +2404,9 @@
     .mission-node-drawer.open .mission-node-drawer-backdrop { opacity: 1; }
     .mission-node-drawer-panel {
       position: relative;
-      width: min(360px, 100vw);
+      width: min(360px, calc(100vw - var(--safe-left) - var(--safe-right)));
       max-width: 100%;
-      height: 100%;
+      height: var(--viewport-h);
       background: var(--surface);
       border-left: 1px solid var(--border);
       box-shadow: -8px 0 32px rgba(0,0,0,0.35);
@@ -2280,6 +2415,7 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      padding-bottom: var(--safe-bottom);
     }
     .mission-node-drawer.open .mission-node-drawer-panel { transform: translateX(0); }
     .mission-node-drawer-header {
@@ -2374,7 +2510,11 @@
       .mission-graph-viewport { max-height: 46vh; min-height: 180px; }
       .dag-node-sub.dag-node-title { display: none; }
       .dag-node-sub.dag-node-meta { display: none; }
-      .mission-node-drawer-panel { width: 100vw; }
+      .mission-node-drawer-panel {
+        width: calc(100vw - var(--safe-left) - var(--safe-right));
+        max-width: none;
+      }
+      .project-modal-close { min-height: var(--touch-min); min-width: var(--touch-min); }
     }
   </style>
 </head>
@@ -2416,7 +2556,7 @@
 
       <!-- Project context -->
       <section class="project-context" id="project-context" aria-live="polite">
-        <div class="project-context-row">
+        <div class="project-context-row u-stack-row">
           <button type="button" class="project-context-bar" id="project-context-toggle" aria-expanded="false" aria-controls="project-context-details">
             <span class="project-context-icon" aria-hidden="true">📁</span>
             <span class="project-context-main">
@@ -2435,7 +2575,7 @@
       </section>
 
       <!-- Quick actions -->
-      <div class="quick-actions">
+      <div class="quick-actions u-stack-row u-touch-row">
         <button class="btn-secondary" id="btn-qa-board" type="button">🎖 Board Status</button>
         <button class="btn-secondary" id="btn-qa-cleanup" type="button">🧹 Cleanup</button>
         <button class="btn-secondary" id="btn-qa-refresh" type="button">↻ Refresh</button>
@@ -2539,8 +2679,8 @@
               Cleanup board first
             </label>
           </div>
-          <div class="mission-actions">
-            <button type="button" class="btn-mission" id="btn-start-mission">▶ Start Mission</button>
+          <div class="mission-actions u-stack">
+            <button type="button" class="btn-mission u-touch" id="btn-start-mission">▶ Start Mission</button>
           </div>
           <div class="mission-status" id="mission-status" role="status" aria-live="polite"></div>
         </div>
@@ -2599,8 +2739,8 @@
       <!-- UNSC Mission Intel: Command Board + Mission Graph -->
       <section class="section">
         <div class="section-box" id="intel-section-box">
-          <div class="intel-header">
-            <h2 style="margin:0">🎖 Mission Intel</h2>
+          <div class="intel-header u-stack-row">
+            <h2>🎖 Mission Intel</h2>
             <nav class="intel-subtabs" role="tablist" aria-label="Mission intel views">
               <button type="button" class="intel-tab active" data-intel="board" role="tab" aria-selected="true">Command Board</button>
               <button type="button" class="intel-tab" data-intel="graph" role="tab" aria-selected="false">Mission Graph</button>
@@ -2666,8 +2806,8 @@
       <!-- Agent Table -->
       <section class="section">
         <div class="section-box">
-          <div class="section-header" style="display:flex;align-items:center;justify-content:space-between;padding-right:.65rem">
-            <h2 style="margin:0">Agent &amp; Model Breakdown</h2>
+          <div class="section-header section-header-flex">
+            <h2>Agent &amp; Model Breakdown</h2>
             <button class="btn-export" id="btn-export-csv">⬇ Export CSV</button>
           </div>
           <div class="table-scroll">
@@ -2842,7 +2982,7 @@
 
   <!-- GitHub repos modal -->
   <div class="project-modal-backdrop" id="github-repos-backdrop" role="presentation" hidden>
-    <div class="project-modal" id="github-repos-modal" role="dialog" aria-modal="true" aria-labelledby="github-repos-title" style="max-width: 42rem;">
+    <div class="project-modal project-modal-wide" id="github-repos-modal" role="dialog" aria-modal="true" aria-labelledby="github-repos-title">
       <div class="project-modal-header">
         <div>
           <h3 id="github-repos-title">GitHub Repos</h3>
@@ -6720,6 +6860,25 @@
   // ═══════════════════════════════════════════════════════════════════════════
   //  Boot sequence
   // ═══════════════════════════════════════════════════════════════════════════
+
+  // Track sticky shell height — avoids brittle fixed top offsets when header wraps
+  function syncShellStickyHeight() {
+    const shell = document.querySelector('.shell-sticky');
+    if (!shell) return;
+    const h = Math.ceil(shell.getBoundingClientRect().height);
+    document.documentElement.style.setProperty('--shell-sticky-h', h + 'px');
+  }
+  const shellStickyEl = document.querySelector('.shell-sticky');
+  if (shellStickyEl && typeof ResizeObserver !== 'undefined') {
+    const shellRo = new ResizeObserver(syncShellStickyHeight);
+    shellRo.observe(shellStickyEl);
+  }
+  window.addEventListener('resize', syncShellStickyHeight, { passive: true });
+  window.addEventListener('orientationchange', syncShellStickyHeight, { passive: true });
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(syncShellStickyHeight).catch(() => {});
+  }
+  syncShellStickyHeight();
 
   // Apply theme
   const prefersDark = !(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
