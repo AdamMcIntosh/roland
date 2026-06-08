@@ -21,6 +21,11 @@
  *   GET  /api/project-templates      → scaffold templates for new projects
  *   POST /api/create-project         → scaffold a new project directory
  *   POST /api/switch-project         → switch active project context
+ *   GET  /api/github/status          → GitHub connection status
+ *   POST /api/github/connect         → store validated PAT
+ *   DELETE /api/github/disconnect    → remove stored PAT
+ *   GET  /api/github/repos           → list authenticated user repos (short TTL cache)
+ *   POST /api/github/clone           → clone repo, init .roland/, npm install, switch context
  *   GET  /api/board-status         → UNSC concise summary (blackboard + command board)
  *   GET  /api/loop-health          → loop observability, metrics, checkpoint diagnostics
  *   POST /api/board-cleanup        → archive stale board entries before a new mission
@@ -61,6 +66,16 @@ import {
   buildSupervisorStartDiagnostics,
 } from '../dist/rco/mission-state.js';
 import { isComplexGoalForDag } from '../dist/rco/mission-dag.js';
+import {
+  classifyGitError,
+  gitErrorFlags,
+  getGitHubUser,
+  listUserRepos,
+  cloneRepo,
+  cloneRepoSsh,
+  repoDirName,
+} from './dashboard-github.js';
+import { encryptPat, decryptPat } from './dashboard-github-crypto.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -96,6 +111,12 @@ function logState(msg, detail) {
 function logGit(msg, detail) {
   if (detail !== undefined) console.log(`[GIT] ${logTs()} ${msg}`, detail);
   else console.log(`[GIT] ${logTs()} ${msg}`);
+}
+
+/** GitHub connect, repo list, and clone operations */
+function logGitHub(msg, detail) {
+  if (detail !== undefined) console.log(`[GITHUB] ${logTs()} ${msg}`, detail);
+  else console.log(`[GITHUB] ${logTs()} ${msg}`);
 }
 
 /** Dashboard team-goal create / append operations */
@@ -172,6 +193,10 @@ function readDashboardConfig() {
     scanDirs: Array.isArray(cfg.scanDirs)
       ? cfg.scanDirs.filter(p => typeof p === 'string')
       : [],
+    githubPatEncrypted: typeof cfg.githubPatEncrypted === 'string' ? cfg.githubPatEncrypted : null,
+    githubLogin: typeof cfg.githubLogin === 'string' ? cfg.githubLogin : null,
+    githubAvatarUrl: typeof cfg.githubAvatarUrl === 'string' ? cfg.githubAvatarUrl : null,
+    githubConnectedAt: typeof cfg.githubConnectedAt === 'number' ? cfg.githubConnectedAt : null,
   };
 }
 
@@ -1317,6 +1342,289 @@ function rememberProjectPath(resolvedPath) {
   });
 }
 
+// ── GitHub discovery + clone ──────────────────────────────────────────────────
+
+const GITHUB_REPOS_CACHE_TTL_MS = 15_000;
+let githubReposCache = { key: '', fetchedAt: 0, payload: null };
+
+function isPatCorrupted(e) {
+  return e?.code === 'PAT_CORRUPTED';
+}
+
+/** Stored PAT, GITHUB_TOKEN env, or null. Throws PAT_CORRUPTED on decrypt failure. */
+function getStoredPat() {
+  const envPat = (process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? '').trim();
+  if (envPat) return envPat;
+
+  const cfg = readDashboardConfig();
+  if (!cfg.githubPatEncrypted) return null;
+  return decryptPat(cfg.githubPatEncrypted, anchorProjectRoot);
+}
+
+function readGitHubStatusPayload() {
+  try {
+    const pat = getStoredPat();
+    if (!pat) {
+      return {
+        connected: false,
+        authSource: null,
+        envToken: Boolean((process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? '').trim()),
+      };
+    }
+
+    const cfg = readDashboardConfig();
+    const authSource = (process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? '').trim()
+      ? 'env'
+      : 'stored';
+
+    return {
+      connected: true,
+      login: cfg.githubLogin ?? null,
+      avatarUrl: cfg.githubAvatarUrl ?? null,
+      authSource,
+      connectedAt: cfg.githubConnectedAt ?? null,
+    };
+  } catch (e) {
+    if (isPatCorrupted(e)) {
+      return { connected: false, needsReconnect: true };
+    }
+    throw e;
+  }
+}
+
+function collectCloneSearchRoots(parentDir) {
+  const cfg = readDashboardConfig();
+  const roots = new Set();
+  if (parentDir) roots.add(path.resolve(expandTilde(parentDir)));
+  roots.add(defaultProjectsParentDir());
+  for (const d of defaultScanDirs(cfg)) roots.add(path.resolve(expandTilde(d)));
+  for (const p of cfg.knownProjects) {
+    if (p) roots.add(path.dirname(path.resolve(expandTilde(p))));
+  }
+  return [...roots];
+}
+
+function findLocalRepoPath(owner, repo, parentDir) {
+  const dirName = repoDirName(owner, repo);
+  for (const root of collectCloneSearchRoots(parentDir)) {
+    const candidate = path.join(root, dirName);
+    if (fs.existsSync(candidate) && fs.existsSync(path.join(candidate, '.git'))) {
+      return path.resolve(candidate);
+    }
+  }
+
+  const cfg = readDashboardConfig();
+  for (const p of cfg.knownProjects) {
+    const resolved = path.resolve(expandTilde(p));
+    if (!fs.existsSync(resolved)) continue;
+    const remote = runGitQuiet('remote get-url origin', resolved);
+    if (!remote) continue;
+    const normalized = remote.toLowerCase();
+    const needle = `${owner.toLowerCase()}/${repo.toLowerCase()}`;
+    if (normalized.includes(`github.com/${needle}`) || normalized.includes(`github.com:${needle}`)) {
+      return resolved;
+    }
+  }
+  return null;
+}
+
+function annotateReposWithLocalPaths(repos, parentDir) {
+  return repos.map((r) => {
+    const localPath = findLocalRepoPath(r.owner, r.name, parentDir);
+    return {
+      ...r,
+      localPath,
+      isLocal: Boolean(localPath),
+    };
+  });
+}
+
+async function fetchGitHubRepos({ page = 1, perPage = 50, q = '', refresh = false, parentDir } = {}) {
+  let pat;
+  try {
+    pat = getStoredPat();
+  } catch (e) {
+    if (isPatCorrupted(e)) {
+      const err = new Error(
+        'GitHub PAT is invalid or corrupted. Please disconnect and reconnect your GitHub account.',
+      );
+      err.code = 'PAT_CORRUPTED';
+      throw err;
+    }
+    throw e;
+  }
+  if (!pat) {
+    const err = new Error('GitHub not connected — connect with a PAT or set GITHUB_TOKEN');
+    err.code = 'GITHUB_NOT_CONNECTED';
+    throw err;
+  }
+
+  const cacheKey = `${pat.slice(0, 8)}:${page}:${perPage}:${q}`;
+  const now = Date.now();
+  if (
+    !refresh &&
+    githubReposCache.payload &&
+    githubReposCache.key === cacheKey &&
+    now - githubReposCache.fetchedAt < GITHUB_REPOS_CACHE_TTL_MS
+  ) {
+    return githubReposCache.payload;
+  }
+
+  let { repos, hasMore } = await listUserRepos(pat, page, perPage);
+  const query = String(q || '').toLowerCase().trim();
+  if (query) {
+    repos = repos.filter(
+      (r) =>
+        r.name.toLowerCase().includes(query) ||
+        (r.description ?? '').toLowerCase().includes(query) ||
+        r.fullName.toLowerCase().includes(query),
+    );
+  }
+
+  const annotated = annotateReposWithLocalPaths(repos, parentDir);
+  const payload = {
+    repos: annotated,
+    hasMore,
+    cachedAt: now,
+    cacheTtlMs: GITHUB_REPOS_CACHE_TTL_MS,
+    refreshed: Boolean(refresh),
+  };
+
+  githubReposCache = { key: cacheKey, fetchedAt: now, payload };
+  return payload;
+}
+
+async function connectGitHub(pat) {
+  const trimmed = String(pat || '').trim();
+  if (!trimmed) throw new Error('pat required');
+
+  const user = await getGitHubUser(trimmed);
+  writeDashboardConfig({
+    githubPatEncrypted: encryptPat(trimmed, anchorProjectRoot),
+    githubLogin: user.login,
+    githubAvatarUrl: user.avatarUrl,
+    githubConnectedAt: Date.now(),
+  });
+  githubReposCache = { key: '', fetchedAt: 0, payload: null };
+  logGitHub('GitHub connected', { login: user.login });
+  return { ok: true, login: user.login, avatarUrl: user.avatarUrl };
+}
+
+function disconnectGitHub() {
+  const cfg = readDashboardConfig();
+  writeDashboardConfig({
+    githubPatEncrypted: null,
+    githubLogin: null,
+    githubAvatarUrl: null,
+    githubConnectedAt: null,
+    lastProjectPath: cfg.lastProjectPath,
+    knownProjects: cfg.knownProjects,
+    scanDirs: cfg.scanDirs,
+  });
+  githubReposCache = { key: '', fetchedAt: 0, payload: null };
+  logGitHub('GitHub disconnected');
+  return { ok: true };
+}
+
+async function cloneGitHubRepo(body = {}) {
+  const owner = typeof body.owner === 'string' ? body.owner.trim() : '';
+  const repo = typeof body.repo === 'string' ? body.repo.trim() : '';
+  if (!owner || !repo) throw new Error('owner and repo are required');
+
+  const parentDir = validateParentDirectory(
+    typeof body.parentDir === 'string' && body.parentDir.trim()
+      ? body.parentDir.trim()
+      : defaultProjectsParentDir(),
+  );
+  const switchContext = body.switchContext !== false;
+  const initRoland = body.initRoland !== false;
+  const installDeps = body.installDeps !== false;
+
+  const existingPath = findLocalRepoPath(owner, repo, parentDir);
+  if (existingPath && isValidProjectRoot(existingPath)) {
+    rememberProjectPath(existingPath);
+    let switchResult = null;
+    if (switchContext) {
+      const migrateMission = isMissionActive();
+      switchResult = await switchActiveProject(existingPath, { force: true, migrateMission });
+    }
+    logGitHub('Repo already local — opened', { owner, repo, path: existingPath });
+    return {
+      ok: true,
+      path: existingPath,
+      displayPath: shortenHome(existingPath),
+      alreadyExists: true,
+      cloned: false,
+      switched: Boolean(switchResult?.switched ?? false),
+      migration: switchResult?.migration ?? null,
+      projectContext: switchResult?.projectContext ?? readProjectContextPayload(),
+      projects: switchResult?.projects ?? readProjectsPayload(),
+    };
+  }
+
+  let pat = null;
+  try {
+    pat = getStoredPat();
+  } catch (e) {
+    if (isPatCorrupted(e)) throw e;
+    throw e;
+  }
+
+  let clonePath;
+  let cloneMethod = 'ssh';
+  try {
+    if (pat) {
+      cloneMethod = 'https';
+      clonePath = await cloneRepo(pat, owner, repo, parentDir);
+    } else {
+      clonePath = await cloneRepoSsh(owner, repo, parentDir);
+    }
+  } catch (e) {
+    if (!pat) {
+      const err = new Error(
+        'Clone failed — connect GitHub with a PAT, set GITHUB_TOKEN, or configure SSH keys for git@github.com',
+      );
+      err.cause = e;
+      throw err;
+    }
+    throw e;
+  }
+
+  if (initRoland) initRolandState(clonePath);
+
+  let installPid = null;
+  if (installDeps && fs.existsSync(path.join(clonePath, 'package.json'))) {
+    installPid = spawnNpmInstall(clonePath);
+  }
+
+  if (!isValidProjectRoot(clonePath)) {
+    throw new Error('Clone succeeded but path is not a valid Roland project root');
+  }
+
+  rememberProjectPath(clonePath);
+  logGitHub('Repo cloned', { owner, repo, path: clonePath, method: cloneMethod });
+
+  let switchResult = null;
+  if (switchContext) {
+    const migrateMission = isMissionActive();
+    switchResult = await switchActiveProject(clonePath, { force: true, migrateMission });
+  }
+
+  return {
+    ok: true,
+    path: clonePath,
+    displayPath: shortenHome(clonePath),
+    alreadyExists: false,
+    cloned: true,
+    cloneMethod,
+    installPid,
+    switched: Boolean(switchResult?.switched ?? switchContext),
+    migration: switchResult?.migration ?? null,
+    projectContext: switchResult?.projectContext ?? readProjectContextPayload(),
+    projects: switchResult?.projects ?? readProjectsPayload(),
+  };
+}
+
 // ── Project creation / scaffolding ────────────────────────────────────────────
 
 const templatesRoot = path.join(__dirname, 'dashboard-templates');
@@ -1934,6 +2242,91 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ── /api/github/status GET ───────────────────────────────────────────────
+  if (url === '/api/github/status' && method === 'GET') {
+    try {
+      jsonOk(res, readGitHubStatusPayload());
+    } catch (e) {
+      jsonErr(res, e.message, 500);
+    }
+    return;
+  }
+
+  // ── /api/github/connect POST ───────────────────────────────────────────────
+  if (url === '/api/github/connect' && method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const result = await connectGitHub(body.pat);
+      jsonOk(res, result);
+    } catch (e) {
+      logGitHub('Connect failed', { error: e.message });
+      const flags = gitErrorFlags(e);
+      const status = flags.needsReconnect ? 401 : 500;
+      jsonErr(res, classifyGitError(e), status, flags);
+    }
+    return;
+  }
+
+  // ── /api/github/disconnect DELETE ────────────────────────────────────────
+  if (url === '/api/github/disconnect' && method === 'DELETE') {
+    try {
+      jsonOk(res, disconnectGitHub());
+    } catch (e) {
+      jsonErr(res, e.message, 500);
+    }
+    return;
+  }
+
+  // ── /api/github/repos GET ────────────────────────────────────────────────
+  if (url === '/api/github/repos' && method === 'GET') {
+    try {
+      const q = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams;
+      const page = Math.max(1, parseInt(q.get('page') ?? '1', 10));
+      const perPage = Math.min(50, parseInt(q.get('per_page') ?? '50', 10));
+      const search = (q.get('q') ?? '').trim();
+      const refresh = q.get('refresh') === 'true' || q.get('refresh') === '1';
+      const parentDir = (q.get('parentDir') ?? '').trim() || defaultProjectsParentDir();
+      const payload = await fetchGitHubRepos({ page, perPage, q: search, refresh, parentDir });
+      logApi('GET', url, 'ok', { count: payload.repos.length, refresh });
+      jsonOk(res, payload);
+    } catch (e) {
+      if (e.code === 'GITHUB_NOT_CONNECTED') {
+        jsonErr(res, e.message, 400);
+        return;
+      }
+      if (e.code === 'PAT_CORRUPTED') {
+        jsonErr(res, e.message, 400, { needsReconnect: true });
+        return;
+      }
+      logGitHub('Repo list failed', { error: e.message });
+      jsonErr(res, classifyGitError(e), 500, gitErrorFlags(e));
+    }
+    return;
+  }
+
+  // ── /api/github/clone POST ───────────────────────────────────────────────
+  if (url === '/api/github/clone' && method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const result = await cloneGitHubRepo(body);
+      logGitHub('Clone/open complete', {
+        owner: body.owner,
+        repo: body.repo,
+        path: result.path,
+        cloned: result.cloned,
+      });
+      jsonOk(res, result);
+    } catch (e) {
+      if (e.code === 'PAT_CORRUPTED') {
+        jsonErr(res, e.message, 400, { needsReconnect: true });
+        return;
+      }
+      logGitHub('Clone failed', { error: e.message });
+      jsonErr(res, e.cause ? e.message : classifyGitError(e), 500, gitErrorFlags(e.cause ?? e));
+    }
+    return;
+  }
+
   // ── /api/supervisor GET ──────────────────────────────────────────────────
   if (url === '/api/supervisor' && method === 'GET') {
     const payload = summarizeSupervisorPayload();
@@ -2310,5 +2703,6 @@ server.listen(port, host, () => {
   console.log(`              ${localBase}/api/loop-health`);
   console.log(`              ${localBase}/api/projects`);
   console.log(`              ${localBase}/api/project-templates  ${localBase}/api/create-project`);
+  console.log(`              ${localBase}/api/github/status  ${localBase}/api/github/repos`);
   console.log(`\n  Open the URL above in your browser (Tailscale: use machine IP).\n`);
 });

@@ -25,3 +25,8 @@ Build the initi _(run mq41lbgr)_
 ## 2026-06-07 — [Mission: task-5] [P1] Task-5: Implement Retry Phase + Full Loop Orchestration E _(run mq4bv3rh)_
 
 - Ensure all terminal loop status transitions (`completed/failed/escalated`) emit `onStateChange` so coordinator persistence (`run-state.json.loopStatus`) cannot remain stale.
+
+## 2026-06-08 — [Mission: model-fix] Team Goal: Fix Model Selection & UI Display Consistency
+Des _(run mq4jz8l3)_
+
+- Centralized PM default model selection around `DEFAULT_PM_MODEL = gpt-5.4-nano` and resolved critique/dashboard display labels through routed model IDs to prevent “Grok” branding regressions while keeping internal lane keys stable.

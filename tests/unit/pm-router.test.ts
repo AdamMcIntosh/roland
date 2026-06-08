@@ -1,6 +1,6 @@
 /**
  * Phase 3 unit tests: Cursor-native lane routing.
- * Proves each persona maps to the right Cursor model (PM→grok-4.3,
+ * Proves each persona maps to the right Cursor model (PM→gpt-5.4-nano,
  * all engineers→composer-2.5), that there are NO OpenRouter slugs, and that
  * policy + lane overrides take effect.
  */
@@ -28,7 +28,8 @@ describe('lane assignment', () => {
 
 describe('modelForLane', () => {
   it('maps lanes to Cursor models under the default policy', () => {
-    expect(modelForLane('pm').model).toBe('grok-4.3');
+    expect(DEFAULT_MODEL_POLICY.pm).toBe('gpt-5.4-nano');
+    expect(modelForLane('pm').model).toBe('gpt-5.4-nano');
     expect(modelForLane('reasoning').model).toBe('composer-2.5');
     expect(modelForLane('coding').model).toBe('composer-2.5');
     expect(modelForLane('light').model).toBe('composer-2.5');
@@ -38,9 +39,9 @@ describe('modelForLane', () => {
 describe('TaskRouter', () => {
   const router = new TaskRouter();
 
-  it('routes the Lead PM to grok-4.3', () => {
+  it('routes the Lead PM to gpt-5.4-nano', () => {
     const d = router.route('orchestrate', 'lead-pm');
-    expect(d.model).toBe('grok-4.3');
+    expect(d.model).toBe('gpt-5.4-nano');
     expect(d.lane).toBe('pm');
     expect(d.provider).toBe('cursor');
   });
