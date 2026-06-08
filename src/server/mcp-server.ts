@@ -56,6 +56,7 @@ import { renderTimeline, renderUsage } from '../pm/render.js';
 import type { PMEventAction } from '../pm/event-log.js';
 import { QualityTracker, initializeQualityTracker } from '../orchestrator/quality-tracker.js';
 import { selectRelevantFiles, bundleFileContents, formatBundleAsMarkdown, DEFAULT_CONTEXT_GATHERING_CONFIG } from '../utils/file-gatherer.js';
+import { DEFAULT_PM_MODEL } from '../rco/cursor-models.js';
 import { resolveAgentsDir as resolveAgentsDirShared } from '../rco/loadConfig.js';
 import { classifyExecutionPath } from '../rco/execution-path.js';
 import type { FileBundle } from '../utils/file-gatherer.js';
@@ -295,7 +296,7 @@ export class McpServer {
     this.leadPm = new LeadPM(this.coordination, {
       policy: pmCfg
         ? {
-            pm: pmCfg.lead_model ?? 'grok-4.3',
+            pm: pmCfg.lead_model ?? DEFAULT_PM_MODEL,
             fast: pmCfg.fast_model ?? 'composer-2.5',
             standard: pmCfg.standard_model ?? 'composer-2.5',
           }

@@ -8,6 +8,8 @@
 
   let loopHealth = null;
   let escHtmlFn = defaultEscHtml;
+  let getPmModelId = () => 'gpt-5.4-nano';
+  let getEngModelId = () => 'composer-2.5';
 
   function defaultEscHtml(s) {
     return String(s ?? '')
@@ -24,6 +26,8 @@
   /** Wire shared dashboard utilities (call once after page utilities load). */
   function init(deps) {
     if (deps && typeof deps.escHtml === 'function') escHtmlFn = deps.escHtml;
+    if (deps && typeof deps.getPmModelId === 'function') getPmModelId = deps.getPmModelId;
+    if (deps && typeof deps.getEngModelId === 'function') getEngModelId = deps.getEngModelId;
   }
 
   function getHealth() {
@@ -86,7 +90,7 @@
       const decCls = lc.retryDecision === 'escalate' ? 'escalate'
         : (lc.retryDecision === 'retry' || lc.retryDecision === 'retry_focused') ? 'retry' : 'proceed';
       const decLabel = lc.retryDecision === 'retry_focused' ? 'RETRY (focused)' : lc.retryDecision.toUpperCase();
-      const modelLabel = lc.model === 'composer' ? 'Composer' : 'Grok';
+      const modelLabel = lc.model === 'composer' ? getEngModelId() : getPmModelId();
       const retryNote = (rs?.loopRetryCount ?? health?.loop?.retryCount) != null
         ? ' · retry ' + (rs?.loopRetryCount ?? health?.loop?.retryCount) : '';
       const issueNote = lc.issueCount != null ? ' · ' + lc.issueCount + ' issue(s)' : '';

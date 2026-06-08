@@ -2,17 +2,18 @@
  * Critique phase — analyzes verification results and phase history, decides retry/escalate.
  *
  * Model routing (future LLM wiring):
- *   - Grok (grok-4.3): high-level / multi-area failures, blockers, architecture
+ *   - PM default model: high-level / multi-area failures, blockers, architecture
  *   - Composer (composer-2.5): code-specific failures (unit, lint, typecheck)
  */
 
+import { DEFAULT_ENGINEER_MODEL, DEFAULT_PM_MODEL } from '../../rco/cursor-models.js';
 import type { PhaseHandler, PhaseHandlerContext, PhaseResult } from './types.js';
 import { Phase } from '../loop-phases.js';
 import {
   CritiqueEngine,
   type CritiqueEngineOptions,
 } from '../self-improvement/critique-engine.js';
-import type { LoopCritiqueSnapshot } from '../self-improvement/types.js';
+import type { CritiqueModel, LoopCritiqueSnapshot } from '../self-improvement/types.js';
 import { DEFAULT_ESCALATION_THRESHOLD } from '../self-improvement/escalation.js';
 
 export class CritiquePhaseHandler implements PhaseHandler {
@@ -76,7 +77,7 @@ export class CritiquePhaseHandler implements PhaseHandler {
     }
 
     const decisionLabel = critique.retryDecision.toUpperCase();
-    const modelLabel = critique.model === 'grok' ? 'Grok (high-level)' : 'Composer (code-specific)';
+    const modelLabel = critiqueModelLabel(critique.model);
 
     ctx.blackboard.post({
       type: 'result',
@@ -132,4 +133,10 @@ export class CritiquePhaseHandler implements PhaseHandler {
       critique,
     };
   }
+}
+
+function critiqueModelLabel(model: CritiqueModel): string {
+  const routed = model === 'grok' ? DEFAULT_PM_MODEL : DEFAULT_ENGINEER_MODEL;
+  const lane = model === 'grok' ? 'high-level' : 'code-specific';
+  return `${routed} (${lane})`;
 }
