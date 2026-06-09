@@ -1,3 +1,5 @@
+> **Note:** This document is a historical roadmap from the early RCO prototype era. For current architecture and capabilities, see [vision.md](./vision.md) and [evolution/README.md](./evolution/README.md).
+
 Once the MVP of RCO is built (based on the Cursor prompt I provided, focusing on the core orchestrator, worker system, execution modes, and dashboard stubs), we'll transition from the TypeScript prototype to a fully Claude Code-integrated tool. This plan assumes the MVP is functional: YAMLs pivoted to Claude models, basic modes (e.g., autonomous-loop, parallel-swarm) implemented with Node child processes, simple WS monitoring, and Cursor export working. The goal is to evolve RCO into a robust OMC competitor—more modular, IDE-hybrid, and user-extensible—while keeping it original and Claude-native.
 I'll structure this as a phased roadmap with timelines (assuming a solo dev or small team; adjust based on resources), key milestones, tasks, risks, and metrics for success. Total estimated time: 4-8 weeks post-MVP, leading to a beta release.
 Phase 1: Validation and Testing (1-2 Weeks)

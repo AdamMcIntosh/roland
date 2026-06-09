@@ -150,17 +150,26 @@ roland board-status --concise
 roland team "goal" --background --no-tui --quiet
 ```
 
-### 3. Dashboard on the tailnet
+### 3. Dashboard on the tailnet (including iPhone)
 
-Default dashboard bind is `127.0.0.1` only. Options:
+The dashboard is **mobile-first** (`dashboard-ui/styles/mobile-responsive.css`) — touch-friendly controls, collapsible panels, and Safari web-app meta tags for iPhone home-screen pinning.
+
+Default bind is `127.0.0.1`. Options for phone access:
 
 | Approach | Notes |
 |----------|-------|
-| **SSH tunnel** | `ssh -L 8081:127.0.0.1:8081 ops@100.x.y.z` then open `http://127.0.0.1:8081` locally |
-| **Tailscale Serve** | `tailscale serve --bg --https=443 http://127.0.0.1:8081` (requires Tailscale HTTPS certs) |
-| **Bind LAN** | Change listen in `scripts/serve-dashboard.js` — **not recommended without auth** |
+| **Tailscale + bind tailnet** | `node scripts/serve-dashboard.js --host 0.0.0.0 --port 8081` then open `http://100.x.y.z:8081` on iPhone Safari. Safe on a private tailnet; do not expose publicly. |
+| **SSH tunnel** | `ssh -L 8081:127.0.0.1:8081 ops@100.x.y.z` then open `http://127.0.0.1:8081` on phone or laptop |
+| **Tailscale Serve** | `tailscale serve --bg --https=443 http://127.0.0.1:8081` (HTTPS on tailnet) |
 
-Recommended: SSH tunnel or Tailscale Serve with HTTPS — do not expose `:8081` on `0.0.0.0` without authentication.
+From the dashboard on your phone you can:
+
+- Launch missions with loop templates
+- Pause / resume / inject HITL directives
+- Connect GitHub and one-click clone repos
+- Monitor loop health and exit conditions
+
+For ASCII-only SSH sessions from Termius or Blink, use `roland team "goal" --simple-tui`.
 
 ### 4. Cursor MCP with remote project on mini PC
 

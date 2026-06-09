@@ -1,8 +1,10 @@
 # Roland Evolution — Architecture & Capabilities
 
-Roland operates as a **UNSC Smart AI supervisor**: a Lead PM orchestrates Halo-themed callsign specialists through the Cursor SDK, a live Command Blackboard, and execution-path triage (Direct chat vs full team mission).
+Roland operates as a **production-grade agent looping harness** and **UNSC Smart AI supervisor**: structured closed-loop iterations (loops.elorm.xyz patterns), a Lead PM for parallel waves, evaluation gates, clean PR conventions, and a mobile-friendly command center.
 
-Phase 1 (Command Blackboard, SDK orchestration, global CLI) and Phase 2 (CLI polish, blackboard hygiene, Sparrow hardening, execution-path triage, GitHub branch workflow) are **complete and wired into production paths**.
+Phases 1–2 (Command Blackboard, SDK orchestration, Sparrow hardening, execution-path triage) and Phase 3 (Closed-Loop Harness, EvaluationGate, loop memory, PR cleanup, dashboard GitHub integration, mobile UI) are **complete and wired into production paths**.
+
+Product vision: [docs/vision.md](../vision.md)
 
 ---
 
@@ -10,6 +12,11 @@ Phase 1 (Command Blackboard, SDK orchestration, global CLI) and Phase 2 (CLI pol
 
 | Capability | Status | Entry point |
 |------------|--------|-------------|
+| **Closed-Loop Harness** | ✅ Production | `roland team --loop-template closed-loop-harness` |
+| **EvaluationGate** | ✅ Production | verify phase in `src/loop-engine/evaluation-gate.ts` |
+| **Exit conditions + reflection** | ✅ Production | `recipes/loops/*.yaml`, `.roland/loops/<id>/` |
+| **Loop templates** (7) | ✅ Production | `recipes/loops/`, `--loop-template` |
+| **Clean PR conventions** | ✅ Production | `pr-format.ts`, `roland pr-cleanup` |
 | PM team execution | ✅ Production | `roland team "goal"` |
 | Interactive chat CLI | ✅ Production | `roland` / `roland chat` |
 | SDK orchestrate mode | ✅ Production | `roland orchestrate "goal"` |
@@ -20,28 +27,29 @@ Phase 1 (Command Blackboard, SDK orchestration, global CLI) and Phase 2 (CLI pol
 | Sparrow hardening | ✅ Production | `agents/unsc/sparrow.yaml`, worker prompts |
 | UNSC callsign map | ✅ Production | `unsc-agents.ts`, legacy alias routing |
 | GitHub PR mode | ✅ Production | `roland pr`, `roland/<slug>` branches |
+| **Dashboard GitHub discovery** | ✅ Production | Connect PAT → browse → clone |
+| **Mobile-responsive dashboard** | ✅ Production | `dashboard-ui/styles/mobile-responsive.css` |
 | HITL controls | ✅ Production | `pause`, `resume`, `inject`, … |
 | Background supervisor | ✅ Production | `--background`, `bg-status`, `bg-logs` |
-| MCP server (47 tools) | ✅ Production | `roland mcp-config --write` |
+| MCP server (47+ tools) | ✅ Production | `roland mcp-config --write` |
 | Project memory + smart recall | ✅ Production | `.roland/memory.md` |
 | Self-improvement loop | ✅ Production | post-synthesis retrospective |
-| Web dashboard | ✅ Production | `npm run serve-dashboard` |
+| Web dashboard 2.0 | ✅ Production | `npm run serve-dashboard` |
 
 ---
 
 ## Architecture diagram
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  Operator — Cursor chat · CLI · Dashboard · SSH HITL          │
-└────────────┬───────────────────────────────┬────────────────────┘
-             │                               │
-             ▼                               ▼
-┌────────────────────────┐      ┌───────────────────────────────┐
-│  MCP server            │      │  CLI (index.ts)               │
-│  triage · roland_run_  │      │  team · orchestrate · board-  │
-│  team · pm_standup ·   │      │  status · board-cleanup · HITL│
-│  board_status · …      │      └───────────────┬───────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│  Operator — Cursor · CLI · Dashboard (mobile) · Tailscale HITL     │
+└────────────┬─────────────────────────────┬───────────────────────────┘
+             │                             │
+             ▼                             ▼
+┌────────────────────────┐   ┌───────────────────────────────────────┐
+│  MCP server            │   │  CLI — team · orchestrate · pr-cleanup  │
+│  triage · roland_run_  │   │  --loop-template · board-status · HITL│
+│  team · board_status   │   └──────────────────┬────────────────────┘
 └────────────┬───────────┘                      │
              │                                  │
              └──────────────┬───────────────────┘
@@ -55,10 +63,10 @@ Phase 1 (Command Blackboard, SDK orchestration, global CLI) and Phase 2 (CLI pol
          ┌──────────────────┼──────────────────┐
          ▼                  ▼                  ▼
 ┌─────────────────┐ ┌───────────────┐ ┌─────────────────┐
-│ Lead PM         │ │ Worker agents │ │ Command         │
-│ grok-4.3        │ │ Sparrow ·     │ │ Blackboard +    │
-│ planning/review │ │ Vanguard ·    │ │ blackboard.json │
-│ synthesis       │ │ Oracle · …    │ │ memory.md       │
+│ ClosedLoop      │ │ Worker agents │ │ State layer     │
+│ EvaluationGate  │ │ Sparrow ·     │ │ blackboard ·    │
+│ LoopMemory      │ │ Vanguard ·    │ │ memory.md ·     │
+│ ExitConditions  │ │ Oracle · …    │ │ loops/<id>/     │
 └─────────────────┘ └───────────────┘ └─────────────────┘
 ```
 
@@ -228,14 +236,36 @@ Full tool list: see [README.md](../../README.md#using-roland-in-cursor).
 
 ---
 
+## Closed-Loop Harness
+
+Production iteration engine in `src/loop-engine/`:
+
+| Component | File | Role |
+|-----------|------|------|
+| ClosedLoop | `closed-loop.ts` | Harness entry point, PR formatting on completion |
+| EvaluationGate | `evaluation-gate.ts` | Weighted verify gates with confidence scoring |
+| ExitConditions | `exit-conditions.ts` | Declarative early-exit rules (AND semantics) |
+| LoopMemory | `loop-memory.ts` | Reflection, streaks, between-iteration history |
+| BetweenIterations | `between-iterations.ts` | Post-iteration shell checks |
+
+Templates: `recipes/loops/` — attach via `--loop-template`.
+
+Guide: [closed-loop-harness.md](../guides/closed-loop-harness.md)
+
+---
+
 ## GitHub automation
 
-Team and orchestrate modes preserve the web UI branch workflow:
+Team and orchestrate modes preserve the branch workflow:
 
 - Mission branches: `roland/<slug>`
 - Sub-agents commit to the active mission branch
-- Sentinel review gate before merge
+- **Clean PR titles** — `type(scope): description` via `pr-format.ts`
+- **PR cleanup** — `roland pr-cleanup --apply` migrates legacy titles/bodies
+- Dashboard: connect PAT → list repos → one-click clone (`scripts/dashboard-github.js`)
 - `roland pr <n> [--fix]` for PR review via `gh` CLI
+
+Guide: [pr-title-convention.md](../guides/pr-title-convention.md)
 
 ---
 
@@ -255,6 +285,9 @@ Every turn — in Cursor or CLI synthesis:
 ## Related guides
 
 - [Main README](../../README.md) — user-facing quick start and CLI reference
-- [Mini PC deployment](../guides/mini-pc-deployment.md) — Tailscale, systemd, headless MCP
+- [Product vision](../vision.md) — north star and architecture
+- [Closed-loop harness](../guides/closed-loop-harness.md) — loops, gates, exit conditions
+- [PR title convention](../guides/pr-title-convention.md) — clean PR formatting
+- [Mini PC deployment](../guides/mini-pc-deployment.md) — Tailscale, mobile, systemd
 - [PM workflow](../guides/pm-workflow.md) — manual PM mode in Cursor
 - [CLAUDE.md](../../CLAUDE.md) — developer conventions and smoke tests
