@@ -82,6 +82,8 @@ export interface RunState {
     summary: string;
     at: number;
     durationMs?: number;
+    confidence?: number;
+    accepted?: boolean;
     strategies?: Array<{
       type: string;
       pass: boolean;
@@ -294,6 +296,8 @@ export class RunStateWriter {
       summary: string;
       at: number;
       durationMs?: number;
+      confidence?: number;
+      accepted?: boolean;
       strategies?: Array<{
         type: string;
         pass: boolean;
