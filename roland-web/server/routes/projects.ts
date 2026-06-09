@@ -7,6 +7,11 @@ import { requireAuth } from '../auth.js';
 import { encrypt, decrypt } from '../crypto.js';
 import { logger } from '../logger.js';
 import { validateGithubPat, gitPull, gitPushBranch, pushBranchAndCreatePR, classifyGitError, gitErrorFlags } from '../github.js';
+import {
+  formatPrFromGoal,
+  isLegacyPrTitle,
+  suggestPrCleanup,
+} from '../../@roland-core/dist/rco/pr-format.js';
 
 function isPatCorrupted(e: unknown): boolean {
   return (e as { code?: string })?.code === 'PAT_CORRUPTED';
@@ -129,15 +134,32 @@ projectsRouter.post('/:id/github/push', async (req, res) => {
 });
 
 // POST /api/projects/:id/github/pr
-// Body: { branch, title, body? }
+// Body: { branch, title?, body?, goal? }
 // Returns: { prUrl, prNumber }
 projectsRouter.post('/:id/github/pr', async (req, res) => {
-  const { branch, title, body } = (req.body ?? {}) as {
-    branch?: string; title?: string; body?: string;
+  const { branch, title, body, goal } = (req.body ?? {}) as {
+    branch?: string; title?: string; body?: string; goal?: string;
   };
-  if (!branch?.trim() || !title?.trim()) {
-    res.status(400).json({ error: 'branch and title required' });
+  if (!branch?.trim()) {
+    res.status(400).json({ error: 'branch required' });
     return;
+  }
+
+  const seed = goal?.trim() || title?.trim();
+  if (!seed) {
+    res.status(400).json({ error: 'goal or title required' });
+    return;
+  }
+
+  let prTitle = title?.trim() || '';
+  let prBody = body?.trim() || '';
+  if (!prTitle || isLegacyPrTitle(prTitle)) {
+    const formatted = formatPrFromGoal(seed, { runId: `web-${req.params.id}` });
+    prTitle = formatted.title;
+    if (!prBody) prBody = formatted.body;
+  } else if (!prBody) {
+    const suggestion = suggestPrCleanup(prTitle, '');
+    prBody = suggestion.body ?? formatPrFromGoal(seed, { runId: `web-${req.params.id}` }).body;
   }
 
   const project = getDb().prepare('SELECT * FROM projects WHERE id=?').get(req.params.id) as any;
@@ -166,8 +188,6 @@ projectsRouter.post('/:id/github/pr', async (req, res) => {
   }
   if (!project?.github_owner) { res.status(400).json({ error: 'Project has no GitHub repo linked' }); return; }
 
-  const prBody = body?.trim() || `## Roland Run\n\n**Goal:** ${title}\n\nGenerated automatically by Roland.`;
-
   try {
     const pr = await pushBranchAndCreatePR(
       project.path,
@@ -175,7 +195,7 @@ projectsRouter.post('/:id/github/pr', async (req, res) => {
       project.github_owner,
       project.github_repo,
       branch.trim(),
-      title.trim(),
+      prTitle,
       prBody,
     );
     res.json({ ok: true, prUrl: pr.url, prNumber: pr.number });

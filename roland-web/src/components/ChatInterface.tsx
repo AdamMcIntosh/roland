@@ -227,8 +227,7 @@ export function ChatInterface({ projectId, onBranchCreated }: Props) {
       method: 'POST',
       body: JSON.stringify({
         branch,
-        title: `Roland: ${lastGoal}`,
-        body: `## Roland Run\n\n**Goal:** ${lastGoal}\n\nGenerated automatically by Roland.`,
+        goal: lastGoal,
       }),
     }, apiKey);
     const d = await res.json().catch(() => ({})) as { prUrl?: string; error?: string; isTransient?: boolean; needsReconnect?: boolean };

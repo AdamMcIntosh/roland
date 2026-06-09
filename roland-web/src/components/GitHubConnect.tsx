@@ -61,13 +61,13 @@ export function GitHubConnect({ project, activeBranch, onUpdate }: Props) {
 
   // ── Create PR ─────────────────────────────────────────────────────────────
   const createPR = async (branch: string) => {
-    const title = `Roland: work on ${project.github_owner}/${project.github_repo}`;
+    const goal = `Sync changes for ${project.github_owner}/${project.github_repo}`;
     setBusy(true);
     clearFeedback();
     setLastAction(() => () => createPR(branch));
     const res = await apiFetch(`/api/projects/${project.id}/github/pr`, {
       method: 'POST',
-      body: JSON.stringify({ branch, title }),
+      body: JSON.stringify({ branch, goal }),
     }, apiKey);
     const d = await res.json().catch(() => ({})) as { prUrl?: string; error?: string; isTransient?: boolean; needsReconnect?: boolean };
     if (res.ok && d.prUrl) {

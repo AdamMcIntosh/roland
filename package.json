@@ -34,6 +34,7 @@
     "qa:all": "npx tsx scripts/qa-scenarios.ts --all",
     "clean": "node scripts/clean-dist.mjs",
     "serve-dashboard": "node scripts/serve-dashboard.js",
+    "pr-cleanup": "node scripts/pr-cleanup.ts",
     "test:mcp": "node scripts/test-mcp-tools.mjs",
     "orchestrate": "node scripts/roland-orchestrate.mjs",
     "postinstall": "node scripts/check-build.mjs",
