@@ -36,6 +36,7 @@ import { RecipeSessionManager, ParsedRecipe, SubagentDef, RecipeStepDef } from '
 import { generateDiff } from '../utils/diff-engine.js';
 import { normaliseGooseModel, spawnGooseSession, isGooseAvailable } from '../utils/goose-runner.js';
 import { gitStatus, gitDiff, gitLog, gitCommit } from '../utils/git-tools.js';
+import { spawnSilent } from '../utils/spawn-silent.js';
 import { analyzeScreenshot } from '../utils/screenshot.js';
 import { getDiffStreamServer, initDiffStreamServer } from './diff-stream.js';
 import {
@@ -3493,26 +3494,15 @@ What would you like to work on?`;
         fs.mkdirSync(logDir, { recursive: true });
         const ts = Date.now();
         const logFile = path.join(logDir, `chat-${ts}.log`);
-        const logFd = fs.openSync(logFile, 'a');
 
-        // Spawn detached — unref so the MCP server doesn't wait for it
-        const { spawn } = await import('child_process');
         const spawnArgs = [entryPoint, 'team', goal.trim(), '--background'];
         const loopTemplate = typeof args.loop_template === 'string' ? args.loop_template.trim() : '';
         if (loopTemplate) spawnArgs.push('--loop-template', loopTemplate);
 
-        const child = spawn(
-          process.execPath,
-          spawnArgs,
-          {
-            cwd: projectRoot,
-            detached: true,
-            stdio: ['ignore', logFd, logFd],
-            env: { ...process.env },
-          }
-        );
-        child.unref();
-        fs.closeSync(logFd);
+        const child = spawnSilent(process.execPath, spawnArgs, {
+          cwd: projectRoot,
+          log: { logFile },
+        });
 
         const pid = child.pid ?? 0;
         const truncatedGoal = goal.trim().slice(0, 100) + (goal.trim().length > 100 ? '…' : '');

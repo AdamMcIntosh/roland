@@ -8,7 +8,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { fork } from 'child_process';
+import { fork, type ForkOptions } from 'child_process';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
 import { loadRecipe, loadAllAgents, loadRcoConfig } from './loadConfig.js';
@@ -175,10 +175,12 @@ function defaultRunWorker(workerPath: string, input: WorkerInput): Promise<Worke
       fn();
     };
 
-    const child = fork(workerPath, [], {
+    const forkOpts: ForkOptions & { windowsHide?: boolean } = {
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
       env: process.env,
-    });
+      windowsHide: true,
+    };
+    const child = fork(workerPath, [], forkOpts);
 
     child.on('message', (msg: unknown) => {
       const typed = msg as { type?: string };

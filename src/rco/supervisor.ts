@@ -27,7 +27,7 @@
  *   - ROLAND_NOTIFY=1 is honoured in background runs even without --notify flag.
  */
 
-import { spawn }        from 'child_process';
+import { spawnSilent } from '../utils/spawn-silent.js';
 import fs               from 'fs';
 import path             from 'path';
 import { fileURLToPath } from 'url';
@@ -424,25 +424,22 @@ export async function spawnBackground(
 
   const ts      = Date.now();
   const logFile = path.join(logDir, `bg-${ts}.log`);
-  const logFd   = fs.openSync(logFile, 'w');
 
   // Filter out the background flags; the worker runs with --quiet + --no-tui
   const filteredArgs = teamArgv.filter(
     (a) => a !== '--background' && a !== '--detach' && a !== '-b',
   );
 
-  const child = spawn(
+  const child = spawnSilent(
     process.execPath,
     [supervisorScript, '--background-worker', goal, ...filteredArgs],
     {
-      detached: true,
-      stdio:    ['ignore', logFd, logFd],
-      env:      { ...process.env, ROLAND_STATE_DIR: stateDir },
+      env: { ROLAND_STATE_DIR: stateDir },
+      log: { logFile, logMode: 'w' },
     },
   );
 
   if (!child.pid) {
-    fs.closeSync(logFd);
     throw new Error('Failed to spawn background process — no PID assigned');
   }
 
@@ -453,9 +450,6 @@ export async function spawnBackground(
     logFile,
     restarts:  0,
   });
-
-  child.unref();
-  fs.closeSync(logFd);
 
   const dim  = (s: string) => `\x1b[2m${s}\x1b[0m`;
   const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
