@@ -4,10 +4,12 @@
 
 import fs from 'fs';
 import path from 'path';
+import type { BlackboardEntry } from '../rco/blackboard.js';
 import { readRunState } from '../rco/run-state.js';
 import { readSupervisorRecord, isProcessRunning } from '../rco/supervisor.js';
 import { readLoopState, LOOP_STATE_FILE } from './loop-state.js';
 import { readLoopCheckpoint } from './loop-checkpoint.js';
+import { CLOSED_LOOP_PR_FILE } from './closed-loop.js';
 import {
   LoopObservability,
   computeLoopMetrics,
@@ -33,7 +35,36 @@ export interface LoopHealthReport {
     runStatus: string | null;
     lastVerificationPass: boolean | null;
     lastCritiqueDecision: string | null;
+    /** EvaluationGate weighted confidence (0–1). */
+    confidence: number | null;
+    /** True when confidence meets threshold and required gates passed. */
+    verificationAccepted: boolean | null;
   };
+  /** Recent PACVRE transitions for dashboard timeline. */
+  phaseHistory: Array<{
+    phase: string;
+    success?: boolean;
+    summary?: string;
+    startedAt: number;
+    completedAt?: number;
+  }>;
+  /** Specialist spawn intents recorded on the blackboard during closed-loop runs. */
+  specialistSpawns: Array<{
+    primaryAgent: string;
+    phase: string;
+    reason: string;
+    iteration: number;
+    spawnedAt: number;
+    supportingAgents: string[];
+  }>;
+  /** PR draft artifact when closed loop completes or escalates. */
+  closedLoopPr: {
+    title: string;
+    body: string;
+    status: string;
+    iteration: number;
+    at: number;
+  } | null;
   metrics: ReturnType<typeof computeLoopMetrics> | null;
   historySummary: string | null;
   checkpoint: {
@@ -65,6 +96,56 @@ export interface LoopHealthReport {
 
 function fileExists(stateDir: string, name: string): boolean {
   return fs.existsSync(path.join(stateDir, name));
+}
+
+function readBlackboardEntries(stateDir: string): BlackboardEntry[] {
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.join(stateDir, 'blackboard.json'), 'utf-8'));
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+}
+
+function readClosedLoopPr(stateDir: string): LoopHealthReport['closedLoopPr'] {
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.join(stateDir, CLOSED_LOOP_PR_FILE), 'utf-8'));
+    if (!raw?.title) return null;
+    return {
+      title: String(raw.title),
+      body: String(raw.body ?? ''),
+      status: String(raw.status ?? 'unknown'),
+      iteration: Number(raw.iteration ?? 0),
+      at: Number(raw.at ?? Date.now()),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Parse SpecialistSpawner blackboard posts into dashboard-friendly rows. */
+function extractSpecialistSpawns(entries: BlackboardEntry[]): LoopHealthReport['specialistSpawns'] {
+  const spawns: LoopHealthReport['specialistSpawns'] = [];
+  for (const entry of entries) {
+    if (!entry.tags?.includes('spawn') || !entry.tags?.includes('loop')) continue;
+    const lines = String(entry.content ?? '').split('\n');
+    const phaseLine = lines.find((l) => l.startsWith('Phase: '));
+    const primaryLine = lines.find((l) => l.startsWith('Primary: '));
+    const supportingLine = lines.find((l) => l.startsWith('Supporting: '));
+    const reasonLine = lines.find((l) => l.startsWith('Reason: '));
+    const iterMatch = reasonLine?.match(/iteration (\d+)/i);
+    spawns.push({
+      primaryAgent: primaryLine?.slice('Primary: '.length) ?? entry.title.replace(/^Spawn:\s*/, '').split(' ')[0] ?? 'agent',
+      phase: phaseLine?.slice('Phase: '.length) ?? 'act',
+      reason: reasonLine?.slice('Reason: '.length) ?? entry.title,
+      iteration: iterMatch ? Number(iterMatch[1]) : 1,
+      spawnedAt: entry.createdAt ?? entry.updatedAt ?? Date.now(),
+      supportingAgents: supportingLine
+        ? supportingLine.slice('Supporting: '.length).split(',').map((s) => s.trim()).filter(Boolean)
+        : [],
+    });
+  }
+  return spawns.slice(-24);
 }
 
 export function buildLoopHealthReport(stateDir: string): LoopHealthReport {
@@ -125,6 +206,21 @@ export function buildLoopHealthReport(stateDir: string): LoopHealthReport {
   );
   const canReplan = Boolean(loopState && supervisorAlive);
 
+  const lastVerification = loopState?.lastVerification ?? runState?.lastVerification;
+  const phaseHistory =
+    loopState?.phaseHistory?.slice(-24).map((t) => ({
+      phase: t.phase,
+      success: t.success,
+      summary: t.summary?.slice(0, 120),
+      startedAt: t.startedAt,
+      completedAt: t.completedAt,
+    })) ??
+    runState?.loopPhaseHistory ??
+    [];
+
+  const specialistSpawns = extractSpecialistSpawns(readBlackboardEntries(stateDir));
+  const closedLoopPr = readClosedLoopPr(stateDir);
+
   return {
     status,
     healthy: status === 'healthy' || status === 'idle',
@@ -137,10 +233,21 @@ export function buildLoopHealthReport(stateDir: string): LoopHealthReport {
       iteration: loopState?.iteration ?? runState?.loopIteration ?? null,
       retryCount: loopState?.retryCount ?? runState?.loopRetryCount ?? null,
       runStatus: loopState?.status ?? null,
-      lastVerificationPass: loopState?.lastVerification?.pass ?? runState?.lastVerification?.pass ?? null,
+      lastVerificationPass: lastVerification?.pass ?? null,
       lastCritiqueDecision:
         loopState?.lastCritique?.retryDecision ?? runState?.lastCritique?.retryDecision ?? null,
+      confidence:
+        lastVerification && 'confidence' in lastVerification
+          ? (lastVerification.confidence ?? null)
+          : null,
+      verificationAccepted:
+        lastVerification && 'accepted' in lastVerification
+          ? (lastVerification.accepted ?? null)
+          : null,
     },
+    phaseHistory,
+    specialistSpawns,
+    closedLoopPr,
     metrics,
     historySummary: history.entries.length ? summarizeHistory(history) : null,
     checkpoint: {
