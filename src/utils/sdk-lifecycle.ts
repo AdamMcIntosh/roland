@@ -150,12 +150,11 @@ export interface SdkAgentLocalOptions {
   shellExec?: { stdio?: 'ignore' | 'pipe'; detached?: boolean };
 }
 
-/** Local Agent.create options — shell-heavy agents get detached/ignore stdio when supported. */
+/** Local Agent.create options — all agents use silent shell children (no visible windows). */
 export function resolveSdkAgentLocalOptions(
-  agentName: string,
+  _agentName: string,
   base: SdkAgentLocalOptions,
 ): SdkAgentLocalOptions {
-  if (!SHELL_EXEC_HEAVY_AGENTS.test(agentName)) return base;
   return {
     ...base,
     shellExec: { stdio: 'ignore', detached: true },

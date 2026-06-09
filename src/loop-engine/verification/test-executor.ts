@@ -4,7 +4,7 @@
  * Integrates with npm test / project scripts. Injectable exec for unit tests.
  */
 
-import { spawn } from 'child_process';
+import { spawnHidden } from '../../utils/spawn-silent.js';
 import type {
   StrategyResult,
   VerificationFailure,
@@ -35,7 +35,7 @@ function defaultRunner(
   opts: { cwd: string; timeoutMs: number },
 ): Promise<{ exitCode: number | null; stdout: string; stderr: string; timedOut?: boolean }> {
   return new Promise((resolve) => {
-    const child = spawn(command, {
+    const child = spawnHidden(command, [], {
       cwd: opts.cwd,
       shell: true,
       env: { ...process.env, FORCE_COLOR: '0', CI: '1' },

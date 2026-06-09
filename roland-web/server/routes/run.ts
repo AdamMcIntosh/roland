@@ -75,6 +75,7 @@ function runRolandSync(
     const child = spawn(process.execPath, [rolandEntry, ...args], {
       cwd,
       env: { ...process.env, ...env },
+      windowsHide: true,
     });
 
     activeRunsByProject.set(projectId, child);

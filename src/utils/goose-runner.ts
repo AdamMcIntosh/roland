@@ -170,6 +170,7 @@ export function spawnGooseSession(options: GooseSessionOptions): Promise<GooseSe
       env,
       // Supervised mode needs a writable stdin so we can respond to confirmations
       stdio: supervised ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
     });
 
     const handleChunk = (data: Buffer) => {

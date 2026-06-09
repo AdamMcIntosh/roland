@@ -45,7 +45,8 @@ import http from 'http';
 import fs   from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
-import { spawn, execSync } from 'child_process';
+import { execSync } from 'child_process';
+import { spawnSilent } from '../dist/utils/spawn-silent.js';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { WebSocketServer } from 'ws';
 import {
@@ -915,13 +916,10 @@ function spawnTeamMission(effectiveGoal, options = {}) {
     env.ROLAND_ENGINEER_MODEL = engineerModel;
   }
 
-  const child = spawn(process.execPath, args, {
+  const child = spawnSilent(process.execPath, args, {
     cwd: activeProjectRoot,
     env,
-    detached: true,
-    stdio: 'ignore',
   });
-  child.unref();
   logMission('Spawned background team mission', {
     pid: child.pid ?? null,
     projectRoot: activeProjectRoot,
@@ -1755,13 +1753,9 @@ function templateHasPackageJson(templateId) {
 }
 
 function spawnNpmInstall(projectPath) {
-  const child = spawn('npm', ['install', '--no-fund', '--no-audit'], {
+  const child = spawnSilent('npm', ['install', '--no-fund', '--no-audit'], {
     cwd: projectPath,
-    detached: true,
-    stdio: 'ignore',
-    env: process.env,
   });
-  child.unref();
   return child.pid ?? null;
 }
 

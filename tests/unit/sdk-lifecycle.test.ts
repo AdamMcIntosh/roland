@@ -126,9 +126,9 @@ describe('resolveSdkAgentLocalOptions', () => {
     expect(opts.shellExec).toEqual({ stdio: 'ignore', detached: true });
   });
 
-  it('leaves ordinary agents unchanged', () => {
+  it('adds shellExec ignore/detached for all agents', () => {
     const opts = resolveSdkAgentLocalOptions('executor', { cwd: '/tmp' });
-    expect(opts.shellExec).toBeUndefined();
+    expect(opts.shellExec).toEqual({ stdio: 'ignore', detached: true });
   });
 });
 
