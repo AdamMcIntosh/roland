@@ -21,6 +21,7 @@ export type LoopPhase =
   | 'verify'
   | 'critique'
   | 'retry'
+  | 'escalate'
   | 'observe';
 
 /** Git branch / PR metadata for executor tasks (populated by task-git-workflow). */

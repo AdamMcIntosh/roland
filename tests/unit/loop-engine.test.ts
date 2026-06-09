@@ -144,7 +144,7 @@ describe('LoopEngine — minimal-3-phase E2E', () => {
     expect(result.state.currentPhase).toBe(Phase.Verify);
     expect(result.state.lastVerification).toMatchObject({
       pass: true,
-      summary: expect.stringContaining('Verification passed'),
+      summary: expect.stringContaining('Evaluation accepted'),
       strategies: expect.arrayContaining([
         expect.objectContaining({ type: 'unit', pass: true }),
       ]),
@@ -177,7 +177,9 @@ describe('LoopEngine — minimal-3-phase E2E', () => {
 
     const planEntry = loopEntries.find((e) => e.tags.includes('plan'));
     const actEntry = loopEntries.find((e) => e.tags.includes('act'));
-    const verifyEntry = loopEntries.find((e) => e.tags.includes('verify') && e.type === 'result');
+    const verifyEntry = loopEntries.find(
+      (e) => e.tags.includes('eval-gate') && e.type === 'result',
+    );
 
     expect(planEntry?.type).toBe('decision');
     expect(planEntry?.author).toBe('loop-engine');
@@ -198,7 +200,7 @@ describe('LoopEngine — minimal-3-phase E2E', () => {
     expect(persistedRun!.loopIteration).toBe(1);
     expect(persistedRun!.lastVerification).toMatchObject({
       pass: true,
-      summary: expect.stringContaining('Verification passed'),
+      summary: expect.stringContaining('Evaluation accepted'),
       strategies: expect.arrayContaining([
         expect.objectContaining({ type: 'unit', pass: true }),
       ]),
@@ -220,7 +222,7 @@ describe('LoopEngine — minimal-3-phase E2E', () => {
     const result = await engine.run({ hadBlockers: false });
 
     expect(result.state.lastVerification?.pass).toBe(false);
-    expect(result.state.lastVerification?.summary).toContain('Verification failed');
+    expect(result.state.lastVerification?.summary).toContain('Evaluation rejected');
     expect(result.state.lastVerification?.strategies?.[0]?.pass).toBe(false);
   });
 

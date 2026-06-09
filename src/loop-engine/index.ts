@@ -44,6 +44,34 @@ export { LoopEngine, LoopEngineCoordinator } from './loop-engine.js';
 export type { LoopEngineOptions, LoopHooks, LoopRunResult } from './loop-engine.js';
 
 export {
+  ClosedLoop,
+  createClosedLoop,
+  CLOSED_LOOP_PR_FILE,
+} from './closed-loop.js';
+export type { ClosedLoopOptions, ClosedLoopResult } from './closed-loop.js';
+
+export {
+  EvaluationGate,
+  evaluationResultToLoopState,
+} from './evaluation-gate.js';
+export type {
+  EvaluationGateResult,
+  EvaluationGateOptions,
+  GateResult,
+  CustomCriterion,
+  CustomCriterionContext,
+  CustomCriterionResult,
+  GateVerifierType,
+} from './evaluation-gate.js';
+
+export {
+  SpecialistSpawner,
+  PHASE_SPECIALIST_DEFAULTS,
+  ON_DEMAND_SPECIALISTS,
+} from './specialist-spawner.js';
+export type { SpawnRequest, SpecialistSpawnerOptions } from './specialist-spawner.js';
+
+export {
   LoopObservability,
   computeLoopMetrics,
   summarizeHistory,
@@ -86,6 +114,7 @@ export {
   VerifyPhaseHandler,
   CritiquePhaseHandler,
   RetryPhaseHandler,
+  EscalatePhaseHandler,
   ObservePhaseHandler,
 } from './phase-handlers/index.js';
 export type { VerifyPhaseHandlerOptions } from './phase-handlers/verify-phase.js';

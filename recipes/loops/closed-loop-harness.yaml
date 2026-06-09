@@ -1,0 +1,38 @@
+name: closed-loop-harness
+description: >
+  Production closed-loop harness — full Plan → Act → Verify → Critique → Retry → Escalate → Observe
+  cycle with evaluation gates, specialist spawning, checkpoint recovery, and PR formatting.
+phases:
+  - phase: plan
+    label: Plan work
+    agent: lead-pm
+  - phase: act
+    label: Implement changes
+    agent: executor
+  - phase: verify
+    label: Evaluation gates
+    agent: test-executor
+    verification:
+      - lint
+      - unit
+      - typecheck
+  - phase: critique
+    label: Self-critique
+    agent: critic
+  - phase: retry
+    label: Smart retry
+    optional: true
+  - phase: escalate
+    label: Human escalation
+    optional: true
+    agent: lead-pm
+  - phase: observe
+    label: Observe and record
+    agent: researcher
+maxIterations: 5
+maxRetries: 3
+escalationThreshold: 4
+testModeMaxRetries: 8
+testModeEscalationThreshold: 10
+timeout_ms: 1800000
+exponential_backoff: true
