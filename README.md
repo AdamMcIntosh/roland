@@ -1,12 +1,35 @@
 # Roland
 
-> **UNSC Smart AI Lead PM** — orchestrates specialist sub-agents to plan, execute, test, and synthesize complex engineering missions.
+> **Production-grade agent looping harness** — orchestrates specialist sub-agents through plan → act → verify → critique cycles, with clean PR conventions, GitHub integration, and a mobile-friendly command center.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-green.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> **Current Status:** Phase 2 complete — Sparrow (Coder) hardened + Blackboard hygiene improved.
+**Current status:** Closed-Loop Harness, EvaluationGate, loop memory, clean PR formatting, dashboard GitHub discovery, and mobile-responsive UI are production-ready.
+
+---
+
+## What Roland Is
+
+Roland is a multi-agent platform for **reliable, iterative software missions**:
+
+| Layer | Role |
+|-------|------|
+| **Closed-Loop Harness** | Structured iterations with evaluation gates, reflection, exit conditions, and checkpoint recovery ([guide](docs/guides/closed-loop-harness.md)) |
+| **PM Team Engine** | Lead PM plans parallel waves, dispatches UNSC callsigns, synthesizes results |
+| **Global CLI + MCP** | `roland team`, interactive chat, Cursor MCP tools |
+| **Command Center** | Web dashboard — live progress, HITL, loop health, GitHub clone |
+
+Inspired by [loops.elorm.xyz](https://loops.elorm.xyz) patterns: self-paced iterations, between-iteration checks, explicit exit conditions, and reflection memory.
+
+```
+  Operator ──► ClosedLoop / Lead PM ──► PLAN → ACT → VERIFY → CRITIQUE → REFLECT
+                    │                         │
+                    ▼                         ▼
+           .roland/loops/<id>/          EvaluationGate · LoopMemory
+           command-blackboard.md        clean PR on completion
+```
 
 ---
 
@@ -14,7 +37,7 @@
 
 **Prerequisites:** Node.js 22+, [`CURSOR_API_KEY`](https://cursor.com/settings), a git project directory.
 
-### 1. Global install + basic usage
+### 1. Install
 
 ```bash
 git clone https://github.com/AdamMcIntosh/roland.git
@@ -28,51 +51,43 @@ roland doctor
 roland board-status --concise
 ```
 
-Run interactively (default — type goals naturally, `/help` for commands):
+### 2. Your first closed-loop mission
 
 ```bash
-roland
+roland team "add rate limiting to the password reset endpoint" \
+  --loop-template closed-loop-harness
 ```
 
-Or fire a one-liner:
+Other common templates:
 
 ```bash
-roland "add input validation to the registration endpoint"
+roland team "ship user profile settings" --loop-template feature-implementation-loop
+roland team "clean up recent slop in src/" --loop-template code-quality-loop
 ```
 
-### 2. Your first team mission
-
-From your project repo:
+### 3. Command center (dashboard)
 
 ```bash
-roland team "add rate limiting to the password reset endpoint"
+npm run serve-dashboard
+# → http://127.0.0.1:8081
 ```
 
-Useful flags for your first run:
+For phone access over Tailscale:
 
 ```bash
-roland team "your goal" --stream          # preview agent output as tasks finish
-roland team "your goal" --background      # detach; check with roland bg-status
-roland board-status --concise             # battlespace snapshot (blockers first)
+node scripts/serve-dashboard.js --host 0.0.0.0 --port 8081
+# Open http://<tailscale-ip>:8081 on iPhone Safari
 ```
 
-While a run is active, steer from another terminal:
+Connect GitHub in the dashboard → browse repos → **one-click clone** into your projects directory.
 
-```bash
-roland pause
-roland inject "prioritise security over performance"
-roland resume
-```
-
-### 3. Roland inside Cursor (MCP)
-
-One-time setup after `npm link`:
+### 4. Roland inside Cursor (MCP)
 
 ```bash
 roland mcp-config --write    # merges into ~/.cursor/mcp.json
 ```
 
-Restart Cursor. In chat, mention `@roland` or call `roland_hello`. Roland triages new work automatically:
+Restart Cursor. Roland triages new work automatically:
 
 | In chat | What happens |
 |---------|----------------|
@@ -84,26 +99,49 @@ Key MCP tools: `triage` · `roland_run_team` · `pm_standup` · `board_status`
 
 ---
 
-## What Roland Does
+## Loop Templates
 
-Roland is a multi-agent platform: **global CLI**, **Cursor MCP server**, and **PM team engine** (Cursor SDK). You state a goal; the Lead PM plans parallel waves, dispatches UNSC callsigns, tracks blockers on the Command Blackboard, and delivers a Mission Complete synthesis.
+Templates live in `recipes/loops/`. Attach with `--loop-template <name>`.
+
+| Template | When to use | Max iter | Key gates |
+|----------|-------------|----------|-----------|
+| **closed-loop-harness** | Production missions — full harness with reflection, exit conditions, PR formatting | 10 | lint, unit, typecheck |
+| **feature-implementation-loop** | Ship a feature with integration + smoke | 8 | unit, integration, smoke |
+| **code-quality-loop** | De-sloppify recent changes (loops.elorm.xyz pattern) | 4 | lint, unit, typecheck |
+| **standard-code-loop** | Canonical plan → act → verify → critique | 5 | unit, lint, typecheck |
+| **research-loop** | Investigation and synthesis | 3 | critic validation |
+| **research-synthesis-loop** | Deeper research with synthesis critique | 3 | critic validation |
+| **minimal-3-phase** | E2E reference (plan, act, verify only) | 1 | unit |
+
+Full guide: [docs/guides/closed-loop-harness.md](docs/guides/closed-loop-harness.md)
+
+---
+
+## Clean PR Conventions
+
+Roland autogenerates conventional PR titles and structured bodies — no more `Task task-1: [Mission: …]` noise.
+
+**Title format:** `type(scope): short imperative description`
 
 ```
-  You ──► Lead PM (grok-4.3) ──► Wave 1 (parallel) ──► Review ──► Synthesis
-              │                        │
-              ▼                        ▼
-     command-blackboard.md      Sparrow · Vanguard · Oracle · Sentinel …
-     blackboard.json · memory.md
+feat(api): add rate limiting to password reset endpoint
+fix(dashboard): restore mobile layout on iphone
+refactor(loop): simplify critique escalation logic
 ```
 
-| Layer | Role |
-|-------|------|
-| **Roland (Lead PM)** | Plan → waves → review → synthesis |
-| **UNSC callsigns** | Sparrow, Vanguard, Oracle, Sentinel, Forge, Specter |
-| **Command Blackboard** | Live mission picture — `.roland/command-blackboard.md` |
-| **Project memory** | Cross-run learning — `.roland/memory.md` |
+Retroactively clean legacy open PRs:
 
-### Callsign roster
+```bash
+roland pr-cleanup              # preview (dry-run)
+roland pr-cleanup --apply      # rename via gh CLI
+roland pr-cleanup --body --apply   # also migrate legacy bodies
+```
+
+Full guide: [docs/guides/pr-title-convention.md](docs/guides/pr-title-convention.md)
+
+---
+
+## Callsign Roster
 
 | Callsign | Role | Maps from |
 |----------|------|-----------|
@@ -114,13 +152,9 @@ Roland is a multi-agent platform: **global CLI**, **Cursor MCP server**, and **P
 | **Forge** | DevOps, CI, builds | `build-fixer` |
 | **Specter** | UI/UX, accessibility | `designer*` |
 
-Sparrow is hardened for pattern adherence, defensive coding, and end-to-end verification (`agents/unsc/sparrow.yaml`).
-
 ---
 
 ## Direct vs Team
-
-Roland triages every request to **Direct** (chat) or **Team** (full mission). In Cursor, the `triage` MCP tool and project rules enforce this automatically.
 
 | **Direct** — stay in chat | **Team** — spawn `roland team` |
 |---------------------------|--------------------------------|
@@ -128,34 +162,11 @@ Roland triages every request to **Direct** (chat) or **Team** (full mission). In
 | Questions, debugging, research | Multiple files / services |
 | Planning only (< ~30 min) | Tests, waves, synthesis (> ~30–45 min) |
 
-**Cursor:** Roland shows `**Execution path:** Direct — …` or offers a team mission before spawning.
-
-**Force full team** (power user — no confirmation in Cursor):
-
-| Trigger | Example |
-|---------|---------|
-| `--force-team` | `Improve the logger --force-team` |
-| `force team` | `force team: refactor auth module` |
-| `full team` / `run as team` / `spawn team` | `spawn team to fix the CI pipeline` |
-
-> `triage` is an **MCP tool** in Cursor — there is no `roland triage` CLI command. From the terminal, use `roland board-status --concise`.
+**Force full team** (no confirmation in Cursor): `--force-team`, `force team`, `full team`, `run as team`, `spawn team`
 
 ---
 
-## Execution modes
-
-| Mode | When | Command |
-|------|------|---------|
-| **Direct** | Quick chat work | Cursor tools in chat |
-| **Team** | Full PM mission | `roland team "goal"` or `roland_run_team` |
-| **Orchestrate** | SDK supervisor + inline sub-agents | `roland orchestrate "goal"` |
-| **Chat CLI** | Interactive terminal session | `roland` or `roland chat` |
-
-All modes share `.roland/` state, memory, and the Command Blackboard.
-
----
-
-## CLI reference
+## CLI Reference
 
 ### Missions
 
@@ -163,149 +174,77 @@ All modes share `.roland/` state, memory, and the Command Blackboard.
 |---------|---------|
 | `roland "goal"` | Shortcut for `roland team` |
 | `roland team "goal"` | PM team with live TUI |
+| `roland team "goal" --loop-template <id>` | Attach loop harness |
 | `roland team "goal" --stream` | Agent output preview per task |
 | `roland team "goal" --background` | Detached run |
-| `roland team "goal" --simple-tui` | ASCII-only (SSH / Termius) |
+| `roland team "goal" --simple-tui` | ASCII-only (SSH / Termius / iPhone) |
 | `roland orchestrate "goal"` | SDK supervisor mode |
 | `roland chat` | Interactive session |
 
-### Battlespace & hygiene
+### PR & GitHub
 
 | Command | Purpose |
 |---------|---------|
-| `roland board-status` | UNSC mission summary |
-| `roland board-status --concise` | One-screen digest |
+| `roland pr-cleanup [--apply]` | Migrate legacy PR titles/bodies |
+| `roland pr-cleanup --current --apply` | Current branch PR only |
+| `roland pr 42 --fix` | Review + fix via `gh` CLI |
+
+Team runs use `roland/<slug>` branches; clean PR titles on completion.
+
+### Battlespace & HITL
+
+| Command | Purpose |
+|---------|---------|
+| `roland board-status --concise` | One-screen mission digest |
 | `roland board-cleanup` | Archive stale tasks |
-| `roland board-cleanup --dry-run` | Preview cleanup |
-| `roland pm-log` | PM event timeline |
-
-Board cleanup runs automatically at each team mission start.
-
-### Human-in-the-loop
-
-| Command | Purpose |
-|---------|---------|
 | `roland pause` / `roland resume` | Pause / resume between waves |
-| `roland abort` | Stop after current wave |
 | `roland inject "…"` | Directive to Lead PM |
 | `roland unblock task-3 "…"` | Unblock a stalled agent |
-| `roland replan` | Ask PM to re-evaluate plan |
-| `roland hitl-status` | Queue and pause state |
 
-Also available as `/pause`, `/resume`, … in chat and on the web dashboard.
+Also available on the web dashboard and via `/pause`, `/resume` in chat.
 
-### Background, GitHub, utilities
+### Background
 
 ```bash
 roland team "goal" --background && roland bg-status && roland bg-logs --follow
-roland pr 42 --fix                     # review + fix via gh CLI
-roland watch --pattern "src/**"        # auto-run on file changes
-roland doctor                          # verify install
-roland mcp-config [--write]            # Cursor MCP entry
-roland --help                          # full reference
 ```
-
-Team runs use `roland/<slug>` branches; Sentinel gates before merge.
 
 ### Environment variables
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `CURSOR_API_KEY` | *(required)* | Agent execution |
-| `ROLAND_PROJECT_ROOT` | auto-detect | Project when cwd ≠ repo |
 | `ROLAND_STATE_DIR` | `.roland` | Persistence directory |
 | `ROLAND_MAX_CONCURRENT` | `2` | Parallel agents per wave |
-| `ROLAND_AGENT_TIMEOUT_MS` | `1500000` | 25 min per agent |
-| `ROLAND_CIRCUIT_BREAKER` | `1` | Pause after network errors |
 | `ROLAND_SIMPLE_TUI` | `0` | ASCII-only output |
-| `ROLAND_NOTIFY` | `0` | Desktop notifications |
-
-Headless / mini PC / Tailscale: [docs/guides/mini-pc-deployment.md](docs/guides/mini-pc-deployment.md)
+| `ROLAND_LOOP_TEST_MODE` | unset | Relaxed loop limits for E2E |
 
 ---
 
-## Cursor MCP
+## Mobile Usage (iPhone + Tailscale)
 
-After `roland mcp-config --write` and a Cursor restart:
+Roland is designed for comfortable operation from a phone:
 
-| Tool | When |
-|------|------|
-| `roland_hello` | Session start |
-| `triage` | **First on new work** — Direct vs Team, agent, recipe |
-| `roland_run_team` | Background PM team (Team path or force-team) |
-| `pm_standup` | Blockers-first board digest |
-| `board_status` | End-of-task UNSC summary |
-| `start_team_recipe` | `full-feature-team` · `bugfix-team` · `refactor-team` |
-| `unblock_task` | Resolve blockers with a decision |
-| `git_status` / `git_diff` / `git_log` | Read-only git context |
+1. **Tailscale** — install on your home server and iPhone; bind dashboard with `--host 0.0.0.0`
+2. **Safari** — open `http://<tailscale-ip>:8081`; dashboard is mobile-first with touch-friendly controls
+3. **Simple TUI** — `roland team "goal" --simple-tui` for ASCII-only SSH sessions (Termius, Blink)
+4. **HITL from phone** — pause, resume, inject directives from the dashboard Mission panel
 
-Mutating tools require approval in Cursor. Read-only tools can go in `autoApprove` — see `roland mcp-config`.
-
-**Rules behavior:** Direct → implement in chat. Team → offer mission first. Force-team → launch `roland_run_team` immediately.
-
-Manual PM mode (you dispatch engineers in separate panes): [docs/guides/pm-workflow.md](docs/guides/pm-workflow.md)
+Details: [docs/guides/mini-pc-deployment.md](docs/guides/mini-pc-deployment.md) (Tailscale section)
 
 ---
 
-## Architecture
+## `.roland/` State
 
-**PM loop:** Plan → parallel waves → review/adjust → synthesis → memory + blackboard update.
-
-| Lane | Model | Roles |
-|------|-------|-------|
-| PM | `grok-4.3` | Lead PM |
-| Reasoning | `claude-sonnet-4-6` | architect, critic, analyst, … |
-| Execution | `composer-2.5` | Sparrow, Vanguard execute, build-fixer, … |
-
-**`.roland/` state:**
-
-| File | Purpose |
+| Path | Purpose |
 |------|---------|
 | `command-blackboard.md` | Human-readable battlespace |
 | `blackboard.json` | Tasks, blockers, decisions |
-| `memory.md` | Cross-run knowledge |
-| `run-state.json` | Live progress |
+| `memory.md` | Cross-run project knowledge |
+| `run-state.json` | Live progress + loop phase |
+| `loops/<loop-id>/` | Loop memory, reflections, checkpoints |
+| `loops/<loop-id>/closed-loop-pr.json` | Formatted PR draft on completion |
 | `usage-history.json` | Token/cost estimates |
-
-Deep dive: [docs/evolution/README.md](docs/evolution/README.md) · developer guide: [CLAUDE.md](CLAUDE.md)
-
----
-
-## Web dashboard
-
-```bash
-npm run serve-dashboard
-# → http://127.0.0.1:8081
-```
-
-Live progress, HITL controls, run history, memory editor, Command Board panel.
-
----
-
-## Resilience
-
-| Setting | Default |
-|---------|---------|
-| Max concurrent agents | 2 |
-| Retries | 4 (5 total attempts) |
-| Circuit breaker | 1 network-error wave → HITL pause |
-| Retry jitter | ±30% on backoff |
-| Warmup stagger | 1500 ms between slot starts |
-
-Failed agents return a synthetic **BLOCKER** — the PM re-scopes instead of crashing the run.
-
----
-
-## Install options
-
-| Method | Command |
-|--------|---------|
-| Dev link | `npm ci && npm run build && npm link` |
-| Global install | `npm install -g .` |
-| One-command setup | See [INSTALLATION.md](INSTALLATION.md) |
-| MCP only | `roland-mcp` or `npm run mcp` |
-
-After changes to `src/` or agent YAML: `npm run build`. Verify with `roland doctor`.
 
 ---
 
@@ -313,13 +252,15 @@ After changes to `src/` or agent YAML: `npm run build`. Verify with `roland doct
 
 | Doc | Contents |
 |-----|----------|
-| [DAILY-USAGE.md](DAILY-USAGE.md) | Chat workflows, controls, troubleshooting |
-| [INSTALLATION.md](INSTALLATION.md) | MCP setup for Cursor / VS Code |
+| [docs/vision.md](docs/vision.md) | Product vision and architecture |
+| [docs/guides/closed-loop-harness.md](docs/guides/closed-loop-harness.md) | Loop harness, gates, exit conditions, memory |
+| [docs/guides/pr-title-convention.md](docs/guides/pr-title-convention.md) | Clean PR titles, bodies, cleanup |
 | [docs/evolution/README.md](docs/evolution/README.md) | UNSC architecture and capabilities |
 | [docs/guides/mini-pc-deployment.md](docs/guides/mini-pc-deployment.md) | Headless, Tailscale, systemd |
 | [docs/guides/pm-workflow.md](docs/guides/pm-workflow.md) | Manual PM mode in Cursor |
+| [DAILY-USAGE.md](DAILY-USAGE.md) | Chat workflows, controls, troubleshooting |
+| [INSTALLATION.md](INSTALLATION.md) | MCP setup for Cursor / VS Code |
 | [CLAUDE.md](CLAUDE.md) | Developer conventions and smoke tests |
-| [CHANGELOG.md](CHANGELOG.md) | Version history |
 
 ---
 
@@ -332,6 +273,8 @@ node scripts/test-signals.mjs           # 8/8
 node scripts/test-mcp-tools.mjs         # 8/8
 node scripts/test-retry-resilience.mjs  # 70/70
 ```
+
+After changes to `src/` or agent YAML: `npm run build`.
 
 ---
 
