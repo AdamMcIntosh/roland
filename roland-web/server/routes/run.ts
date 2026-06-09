@@ -10,6 +10,7 @@ import { decrypt } from '../crypto.js';
 import { getConfig } from '../config.js';
 import { logger } from '../logger.js';
 import { isValidCursorModel } from '../../@roland-core/dist/rco/cursor-models.js';
+import { formatPrFromGoal } from '../../@roland-core/dist/rco/pr-format.js';
 
 export const runRouter = Router();
 
@@ -220,14 +221,10 @@ runRouter.post('/:projectId/run', requireAuth, async (req, res) => {
   if (!cancelled && exitCode === 0 && branchName && project.encrypted_pat && project.github_owner && project.github_repo) {
     try {
       const pat = decrypt(project.encrypted_pat);
-      const prTitle = `Roland: ${goal.length > 72 ? goal.slice(0, 69) + '…' : goal}`;
-      const prBody = [
-        '## Roland Run',
-        '',
-        `**Goal:** ${goal}`,
-        '',
-        'Changes generated automatically by [Roland](https://github.com/AdamMcIntosh/roland).',
-      ].join('\n');
+      const { title: prTitle, body: prBody } = formatPrFromGoal(goal, {
+        runId,
+        impactNote: 'Automated Roland web run — review before merge.',
+      });
 
       const pr = await Promise.race([
         pushBranchAndCreatePR(
