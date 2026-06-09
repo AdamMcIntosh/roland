@@ -13,9 +13,12 @@
  */
 
 import {
+  cleanPrDescription,
   cleanupLegacyPrTitles,
   formatCurrentPr,
   formatPrFromGoal,
+  isLegacyPrBody,
+  isNoisyPrContent,
   suggestPrCleanup,
 } from './pr-format.js';
 
@@ -169,5 +172,20 @@ export function runPrCleanupCli(argv: string[]): void {
 
 /** Suggest cleanup for arbitrary title/body (used by agents and tests). */
 export function previewPrCleanup(title: string, body?: string): ReturnType<typeof suggestPrCleanup> {
+  const trimmedBody = body?.trim() ?? '';
+  if (trimmedBody && (isNoisyPrContent(trimmedBody) || isLegacyPrBody(trimmedBody))) {
+    return suggestPrCleanup(title, trimmedBody);
+  }
+  if (trimmedBody) {
+    const cleaned = cleanPrDescription(trimmedBody);
+    if (cleaned !== trimmedBody) {
+      return {
+        title,
+        body: cleaned,
+        titleChanged: false,
+        bodyChanged: true,
+      };
+    }
+  }
   return suggestPrCleanup(title, body);
 }

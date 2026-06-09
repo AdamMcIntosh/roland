@@ -23,6 +23,15 @@ const PhaseConfigSchema = z.object({
     .optional(),
 });
 
+const ExitConditionSchema = z.object({
+  id: z.string().optional(),
+  type: z.enum(['all_gates_pass', 'confidence_streak', 'command_success']),
+  description: z.string().optional(),
+  minConfidence: z.number().min(0).max(1).optional(),
+  consecutiveIterations: z.number().int().positive().optional(),
+  command: z.string().optional(),
+});
+
 export const LoopTemplateSchema = z.object({
   name: z.string(),
   description: z.string().default(''),
@@ -34,6 +43,11 @@ export const LoopTemplateSchema = z.object({
   testModeEscalationThreshold: z.number().int().positive().optional(),
   timeout_ms: z.number().int().positive().optional(),
   exponential_backoff: z.boolean().optional(),
+  kickoff: z.string().optional(),
+  between_iterations: z.string().optional(),
+  reflection: z.boolean().optional(),
+  min_confidence: z.number().min(0).max(1).optional(),
+  exit_conditions: z.array(ExitConditionSchema).optional(),
 });
 
 export class LoopTemplates {
@@ -89,6 +103,18 @@ export class LoopTemplates {
           testModeEscalationThreshold: parsed.testModeEscalationThreshold,
           timeoutMs: parsed.timeout_ms,
           exponentialBackoff: parsed.exponential_backoff,
+          kickoff: parsed.kickoff,
+          betweenIterations: parsed.between_iterations,
+          reflection: parsed.reflection,
+          minConfidence: parsed.min_confidence,
+          exitConditions: parsed.exit_conditions?.map((c) => ({
+            id: c.id,
+            type: c.type,
+            description: c.description,
+            minConfidence: c.minConfidence,
+            consecutiveIterations: c.consecutiveIterations,
+            command: c.command,
+          })),
         };
         map.set(template.name, template);
       } catch {

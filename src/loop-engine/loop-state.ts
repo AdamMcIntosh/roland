@@ -63,6 +63,8 @@ export interface LoopState {
   status: LoopRunStatus;
   startedAt: number;
   updatedAt: number;
+  /** LoopMemory disk id when closed-loop harness is active. */
+  loopId?: string;
   lastVerification?: LoopVerificationSnapshot;
   /** Most recent critique snapshot for dashboard / retry decisions. */
   lastCritique?: LoopCritiqueSnapshot;
@@ -72,6 +74,21 @@ export interface LoopState {
   critiqueHistory?: LoopCritiqueSnapshot[];
   /** Append-only retry history across iterations. */
   retryHistory?: LoopRetrySnapshot[];
+  /** Latest exit condition evaluation for dashboard visibility. */
+  exitConditionStatus?: Array<{
+    id: string;
+    type: string;
+    description: string;
+    met: boolean;
+    reason: string;
+    evaluatedAt: number;
+  }>;
+  /** Summary of why the loop exited or continued. */
+  lastExitEvaluation?: {
+    shouldExit: boolean;
+    reason: string;
+    at: number;
+  };
 }
 
 export function createInitialLoopState(
@@ -142,6 +159,11 @@ export class LoopStateStore {
       lastRetry: this.state.lastRetry ? { ...this.state.lastRetry } : undefined,
       critiqueHistory: this.state.critiqueHistory?.map((c) => ({ ...c })),
       retryHistory: this.state.retryHistory?.map((r) => ({ ...r })),
+      exitConditionStatus: this.state.exitConditionStatus?.map((s) => ({ ...s })),
+      lastExitEvaluation: this.state.lastExitEvaluation
+        ? { ...this.state.lastExitEvaluation }
+        : undefined,
+      loopId: this.state.loopId,
     };
   }
 
@@ -210,6 +232,22 @@ export class LoopStateStore {
 
   setStatus(status: LoopRunStatus): void {
     this.state.status = status;
+    this.state.updatedAt = Date.now();
+    this.flush();
+  }
+
+  setLoopId(loopId: string): void {
+    this.state.loopId = loopId;
+    this.state.updatedAt = Date.now();
+    this.flush();
+  }
+
+  setExitEvaluation(
+    statuses: NonNullable<LoopState['exitConditionStatus']>,
+    evaluation: NonNullable<LoopState['lastExitEvaluation']>,
+  ): void {
+    this.state.exitConditionStatus = statuses;
+    this.state.lastExitEvaluation = evaluation;
     this.state.updatedAt = Date.now();
     this.flush();
   }

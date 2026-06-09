@@ -8,8 +8,11 @@ import { encrypt, decrypt } from '../crypto.js';
 import { logger } from '../logger.js';
 import { validateGithubPat, gitPull, gitPushBranch, pushBranchAndCreatePR, classifyGitError, gitErrorFlags } from '../github.js';
 import {
+  cleanPrDescription,
   formatPrFromGoal,
+  isLegacyPrBody,
   isLegacyPrTitle,
+  isNoisyPrContent,
   suggestPrCleanup,
 } from '../../@roland-core/dist/rco/pr-format.js';
 
@@ -160,6 +163,15 @@ projectsRouter.post('/:id/github/pr', async (req, res) => {
   } else if (!prBody) {
     const suggestion = suggestPrCleanup(prTitle, '');
     prBody = suggestion.body ?? formatPrFromGoal(seed, { runId: `web-${req.params.id}` }).body;
+  }
+
+  if (prBody && (isNoisyPrContent(prBody) || isLegacyPrBody(prBody))) {
+    const suggestion = suggestPrCleanup(prTitle, prBody);
+    if (suggestion.body) {
+      prBody = suggestion.body;
+    } else {
+      prBody = cleanPrDescription(prBody);
+    }
   }
 
   const project = getDb().prepare('SELECT * FROM projects WHERE id=?').get(req.params.id) as any;

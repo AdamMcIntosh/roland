@@ -1,7 +1,11 @@
 name: closed-loop-harness
 description: >
-  Production closed-loop harness — full Plan → Act → Verify → Critique → Retry → Escalate → Observe
-  cycle with evaluation gates, specialist spawning, checkpoint recovery, and PR formatting.
+  Production closed-loop harness — structured kickoff, evaluation gates, between-iteration checks,
+  reflection memory, explicit exit conditions, specialist spawning, checkpoint recovery, and PR formatting.
+kickoff: >
+  Start the closed-loop harness. Self-pace each iteration: implement, verify with evaluation gates,
+  critique, reflect on learnings, run the between-iterations check, and stop when exit conditions pass
+  or max iterations is reached. Give a short status update each pass.
 phases:
   - phase: plan
     label: Plan work
@@ -29,10 +33,24 @@ phases:
   - phase: observe
     label: Observe and record
     agent: researcher
-maxIterations: 5
+  - phase: reflect
+    label: Reflect on learnings
+    optional: true
+    agent: researcher
+maxIterations: 10
 maxRetries: 3
 escalationThreshold: 4
 testModeMaxRetries: 8
 testModeEscalationThreshold: 10
 timeout_ms: 1800000
 exponential_backoff: true
+min_confidence: 0.85
+between_iterations: npm test
+reflection: true
+exit_conditions:
+  - type: all_gates_pass
+    description: All evaluation gates pass with accepted confidence
+  - type: confidence_streak
+    description: Success confidence ≥ 0.85 for 2 consecutive iterations
+    minConfidence: 0.85
+    consecutiveIterations: 2

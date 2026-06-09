@@ -13,6 +13,10 @@ import {
   isLegacyPrBody,
   migrateLegacyPrBody,
   suggestPrCleanup,
+  cleanPrDescription,
+  extractShortSummary,
+  isNoisyPrContent,
+  rebuildPrBodyFromNoise,
   type PrFormatTaskInput,
   type PrFormatContext,
 } from '../../src/rco/pr-format.js';
@@ -193,7 +197,7 @@ describe('migrateLegacyPrTitle', () => {
 });
 
 describe('buildPrDescription', () => {
-  it('includes required sections in order: Summary, Key changes, Testing, Related', () => {
+  it('includes required sections in order: Summary, Key Changes, Testing, Related', () => {
     const task = makeTask({
       id: 'task-2',
       agent: 'executor',
@@ -208,10 +212,10 @@ describe('buildPrDescription', () => {
 
     const body = buildPrDescription(task, ctx);
 
-    const summaryIdx = body.indexOf('## Summary');
-    const keyIdx = body.indexOf('## Key changes');
-    const testingIdx = body.indexOf('## Testing');
-    const relatedIdx = body.indexOf('## Related');
+    const summaryIdx = body.indexOf('**Summary**');
+    const keyIdx = body.indexOf('**Key Changes**');
+    const testingIdx = body.indexOf('**Testing**');
+    const relatedIdx = body.indexOf('**Related**');
 
     expect(summaryIdx).toBeGreaterThanOrEqual(0);
     expect(keyIdx).toBeGreaterThan(summaryIdx);
@@ -222,11 +226,48 @@ describe('buildPrDescription', () => {
     expect(body).toContain('- Add formatter module');
     expect(body).toContain('- Wire into task git workflow');
     expect(body).toContain('Roland PM team workflow');
-    expect(body).toContain('**Task:** `task-2` (executor)');
+    expect(body).toContain('Task `task-2` (executor)');
     expect(body).toContain('Improve PR Title & Description Quality');
-    expect(body).toContain('**Run:** `run-xyz`');
+    expect(body).toContain('Run `run-xyz`');
     expect(body).toContain('http://127.0.0.1:8081');
-    expect(body).toContain('*Draft PR opened by Roland task git workflow.*');
+    expect(body).not.toContain('## Roland Run');
+    expect(body).not.toContain('PRODUCTION HARDENING');
+  });
+
+  it('strips PM production hardening checklist from task description', () => {
+    const noisyDescription = [
+      'Implement rate limiting middleware for the Express API.',
+      '',
+      '⚠️ PRODUCTION HARDENING — MANDATORY: Before marking this task done, verify each item that applies:',
+      '- [ ] EF Core migrations: any schema change has a migration file',
+      '- [ ] Input validation: all request inputs validated with FluentValidation',
+      '- [ ] Error responses: all error paths return RFC 7807 ProblemDetails',
+    ].join('\n');
+    const task = makeTask({ description: noisyDescription });
+    const body = buildPrDescription(task, makeContext());
+
+    expect(body).toContain('rate limiting middleware');
+    expect(body).not.toContain('EF Core');
+    expect(body).not.toContain('FluentValidation');
+    expect(body).not.toContain('ProblemDetails');
+    expect(body).not.toContain('PRODUCTION HARDENING');
+  });
+
+  it('strips Sparrow agent completion report from task description', () => {
+    const noisyDescription = [
+      'Add structured logging to auth routes.',
+      '',
+      '## Sparrow — Task Complete',
+      '**Objective:** Wire pino logger',
+      '**Changes:** Updated auth.ts',
+      '**Wiring:** Mounted middleware in index.ts',
+    ].join('\n');
+    const task = makeTask({ description: noisyDescription });
+    const body = buildPrDescription(task, makeContext());
+
+    expect(body).toContain('structured logging');
+    expect(body).not.toContain('Sparrow — Task Complete');
+    expect(body).not.toContain('**Wiring:**');
   });
 
   it('uses custom testingNotes when provided', () => {
@@ -240,10 +281,10 @@ describe('buildPrDescription', () => {
   it('applies safe defaults for empty task description', () => {
     const task = makeTask({ title: 'Task task-9: Chore bump', description: '' });
     const body = buildPrDescription(task, makeContext());
-    expect(body).toContain('## Summary');
+    expect(body).toContain('**Summary**');
     expect(body).toContain('Chore bump');
-    expect(body).toContain('## Key changes');
-    expect(body).toContain('Task task-9: Chore bump');
+    expect(body).toContain('**Key Changes**');
+    expect(body).not.toContain('Task task-9:');
   });
 });
 
@@ -272,32 +313,116 @@ describe('formatPrFromGoal', () => {
     const { title, body } = formatPrFromGoal(goal, { runId: 'run-web-1' });
     expect(title).toBe('feat(git): implement clean PR title convention');
     expect(isLegacyPrTitle(title)).toBe(false);
-    expect(body).toContain('## Summary');
-    expect(body).toContain('## Key changes');
+    expect(body).toContain('**Summary**');
+    expect(body).toContain('**Key Changes**');
     expect(body).toContain('run-web-1');
+    expect(body).not.toContain('[Mission:');
+    expect(body).not.toContain('Task task-1:');
   });
 
   it('includes optional Impact section', () => {
     const { body } = formatPrFromGoal('Add health check', {
       impactNote: 'Improves deploy smoke-test reliability.',
     });
-    expect(body).toContain('## Impact');
+    expect(body).toContain('**Impact**');
     expect(body).toContain('deploy smoke-test');
+  });
+});
+
+describe('cleanPrDescription', () => {
+  it('removes .NET production hardening checklist blocks', () => {
+    const raw = [
+      'Add JWT auth middleware.',
+      '',
+      '⚠️ PRODUCTION HARDENING — MANDATORY: Before marking this task done, verify each item that applies:',
+      '- [ ] EF Core migrations: any schema change has a migration file',
+      '- [ ] Input validation: FluentValidation or DataAnnotations at the API boundary',
+      '- [ ] Error responses: RFC 7807 ProblemDetails',
+      '- [ ] CancellationToken: every async method accepts CancellationToken',
+    ].join('\n');
+    const cleaned = cleanPrDescription(raw);
+    expect(cleaned).toContain('JWT auth middleware');
+    expect(cleaned).not.toMatch(/EF Core|FluentValidation|ProblemDetails|CancellationToken/i);
+  });
+
+  it('removes Sparrow constraints and agent completion sections', () => {
+    const raw = [
+      'Wire CORS middleware.',
+      '',
+      '## Sparrow Handoff Protocol (Roland → You)',
+      'Read peer files first.',
+      '',
+      '## Sparrow — Task Complete',
+      '**Defensive:** Added null checks',
+    ].join('\n');
+    const cleaned = cleanPrDescription(raw);
+    expect(cleaned).toContain('CORS middleware');
+    expect(cleaned).not.toContain('Sparrow Handoff');
+    expect(cleaned).not.toContain('Task Complete');
+  });
+
+  it('strips mission and task prefixes from raw text', () => {
+    const raw = 'Task task-1: [Mission: auth-hardening] Add rate limiting to login endpoint';
+    expect(cleanPrDescription(raw)).toBe('Add rate limiting to login endpoint');
+  });
+
+  it('falls back to generic summary when cleaning removes all useful content', () => {
+    const raw = '⚠️ PRODUCTION HARDENING — MANDATORY: verify EF Core migrations and ProblemDetails';
+    const cleaned = cleanPrDescription(raw);
+    expect(cleaned).toBe('Implements the scoped deliverable for this change.');
+    expect(cleaned).not.toContain('EF Core');
+  });
+
+  it('detects noisy PR content', () => {
+    expect(isNoisyPrContent('## Roland Run\n**Goal:** Fix auth')).toBe(true);
+    expect(isNoisyPrContent('**Summary**\nClean PR.\n**Key Changes**\n- x')).toBe(false);
+  });
+});
+
+describe('extractShortSummary', () => {
+  it('returns first one or two sentences without mission noise', () => {
+    const text = 'Task task-2: [Mission: x] Implement dashboard mobile layout. Refactor CSS grid.';
+    const summary = extractShortSummary(text);
+    expect(summary).toContain('Implement dashboard mobile layout');
+    expect(summary).not.toContain('[Mission:');
+    expect(summary).not.toContain('Task task-2');
   });
 });
 
 describe('legacy PR body migration', () => {
   it('detects legacy Roland Run bodies', () => {
     expect(isLegacyPrBody('## Roland Run\n\n**Goal:** Fix auth\n')).toBe(true);
-    expect(isLegacyPrBody('## Summary\n\nDone\n\n## Key changes\n- x\n')).toBe(false);
+    expect(isLegacyPrBody('**Summary**\n\nDone\n\n**Key Changes**\n- x\n')).toBe(false);
+  });
+
+  it('detects noisy PM checklist bodies as legacy', () => {
+    const noisy = 'Implement API\n\n⚠️ PRODUCTION HARDENING — MANDATORY:\n- [ ] EF Core migrations';
+    expect(isLegacyPrBody(noisy)).toBe(true);
   });
 
   it('migrates legacy body to structured sections', () => {
     const legacyBody = '## Roland Run\n\n**Goal:** Implement rate limiting\n\nGenerated automatically by Roland.';
     const migrated = migrateLegacyPrBody('Roland: Implement rate limiting', legacyBody);
-    expect(migrated).toContain('## Summary');
+    expect(migrated).toContain('**Summary**');
     expect(migrated).toContain('rate limiting');
     expect(migrated).not.toContain('## Roland Run');
+    expect(migrated).not.toContain('Generated automatically');
+  });
+
+  it('rebuilds noisy task output into clean template', () => {
+    const noisyBody = [
+      'Task task-1: [Mission: x] Add health check endpoint.',
+      '',
+      '⚠️ PRODUCTION HARDENING — MANDATORY:',
+      '- [ ] FluentValidation at API boundary',
+      '## Sparrow — Task Complete',
+      '**Changes:** Added /health route',
+    ].join('\n');
+    const rebuilt = rebuildPrBodyFromNoise('feat(api): add health check', noisyBody);
+    expect(rebuilt).toContain('**Summary**');
+    expect(rebuilt).toContain('health check');
+    expect(rebuilt).not.toContain('FluentValidation');
+    expect(rebuilt).not.toContain('Sparrow');
   });
 });
 
@@ -310,13 +435,27 @@ describe('suggestPrCleanup', () => {
     expect(suggestion.titleChanged).toBe(true);
     expect(suggestion.title).toBe('feat(git): implement clean PR titles');
     expect(suggestion.bodyChanged).toBe(true);
-    expect(suggestion.body).toContain('## Summary');
+    expect(suggestion.body).toContain('**Summary**');
+  });
+
+  it('cleans noisy PM bodies even when title is already conventional', () => {
+    const noisyBody = [
+      'Add structured logging.',
+      '⚠️ PRODUCTION HARDENING — MANDATORY:',
+      '- [ ] ILogger<T> structured logging',
+      '- [ ] ProblemDetails error responses',
+    ].join('\n');
+    const suggestion = suggestPrCleanup('feat(api): add structured logging', noisyBody);
+    expect(suggestion.bodyChanged).toBe(true);
+    expect(suggestion.body).toContain('**Summary**');
+    expect(suggestion.body).not.toContain('ILogger');
+    expect(suggestion.body).not.toContain('ProblemDetails');
   });
 
   it('returns no changes for already-clean PRs', () => {
     const suggestion = suggestPrCleanup(
       'feat(git): implement clean pr titles',
-      '## Summary\n\nDone\n\n## Key changes\n- x\n\n## Testing\n- vitest\n\n## Related\n- task',
+      '**Summary**\n\nDone\n\n**Key Changes**\n- x\n\n**Testing**\n- vitest\n\n**Related**\n- task',
     );
     expect(suggestion.titleChanged).toBe(false);
     expect(suggestion.bodyChanged).toBe(false);
@@ -342,11 +481,12 @@ describe('task-git-workflow wired path', () => {
 
     expect(prTitle).toBe('feat(git): implement clean PR title/description convention');
     expect(isLegacyPrTitle(prTitle)).toBe(false);
-    expect(prBody).toContain('## Summary');
-    expect(prBody).toContain('## Key changes');
-    expect(prBody).toContain('## Testing');
-    expect(prBody).toContain('## Related');
+    expect(prBody).toContain('**Summary**');
+    expect(prBody).toContain('**Key Changes**');
+    expect(prBody).toContain('**Testing**');
+    expect(prBody).toContain('**Related**');
     expect(prBody).toContain('task-1');
     expect(prBody).toContain('run-mission-pr-cleanup');
+    expect(prBody).not.toContain('PRODUCTION HARDENING');
   });
 });

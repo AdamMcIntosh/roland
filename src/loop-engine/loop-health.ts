@@ -10,6 +10,7 @@ import { readSupervisorRecord, isProcessRunning } from '../rco/supervisor.js';
 import { readLoopState, LOOP_STATE_FILE } from './loop-state.js';
 import { readLoopCheckpoint } from './loop-checkpoint.js';
 import { CLOSED_LOOP_PR_FILE } from './closed-loop.js';
+import { findLatestLoopMemory, LOOPS_ROOT } from './loop-memory.js';
 import {
   LoopObservability,
   computeLoopMetrics,
@@ -64,6 +65,29 @@ export interface LoopHealthReport {
     status: string;
     iteration: number;
     at: number;
+    loopId?: string;
+    exitReason?: string;
+  } | null;
+  /** LoopMemory disk persistence summary. */
+  loopMemory: {
+    loopId: string | null;
+    reflectionCount: number;
+    confidenceStreak: number;
+    lastReflection: string | null;
+    betweenIterationRuns: number;
+  } | null;
+  /** Latest exit condition evaluation statuses. */
+  exitConditions: Array<{
+    id: string;
+    type: string;
+    description: string;
+    met: boolean;
+    reason: string;
+  }>;
+  exitEvaluation: {
+    shouldExit: boolean;
+    reason: string;
+    at: number | null;
   } | null;
   metrics: ReturnType<typeof computeLoopMetrics> | null;
   historySummary: string | null;
@@ -83,6 +107,7 @@ export interface LoopHealthReport {
     loopHistory: boolean;
     loopCheckpoint: boolean;
     runState: boolean;
+    loopMemory: boolean;
   };
   diagnostics: string[];
   actions: {
@@ -117,6 +142,8 @@ function readClosedLoopPr(stateDir: string): LoopHealthReport['closedLoopPr'] {
       status: String(raw.status ?? 'unknown'),
       iteration: Number(raw.iteration ?? 0),
       at: Number(raw.at ?? Date.now()),
+      loopId: raw.loopId ? String(raw.loopId) : undefined,
+      exitReason: raw.exitReason ? String(raw.exitReason) : undefined,
     };
   } catch {
     return null;
@@ -220,6 +247,22 @@ export function buildLoopHealthReport(stateDir: string): LoopHealthReport {
 
   const specialistSpawns = extractSpecialistSpawns(readBlackboardEntries(stateDir));
   const closedLoopPr = readClosedLoopPr(stateDir);
+  const memoryState = findLatestLoopMemory(stateDir);
+  const exitConditions =
+    loopState?.exitConditionStatus?.map((s) => ({
+      id: s.id,
+      type: s.type,
+      description: s.description,
+      met: s.met,
+      reason: s.reason,
+    })) ?? [];
+  const exitEvaluation = loopState?.lastExitEvaluation
+    ? {
+        shouldExit: loopState.lastExitEvaluation.shouldExit,
+        reason: loopState.lastExitEvaluation.reason,
+        at: loopState.lastExitEvaluation.at,
+      }
+    : null;
 
   return {
     status,
@@ -248,6 +291,18 @@ export function buildLoopHealthReport(stateDir: string): LoopHealthReport {
     phaseHistory,
     specialistSpawns,
     closedLoopPr,
+    loopMemory: memoryState
+      ? {
+          loopId: memoryState.loopId,
+          reflectionCount: memoryState.reflections.length,
+          confidenceStreak: memoryState.confidenceStreak,
+          lastReflection:
+            memoryState.reflections.at(-1)?.content.slice(0, 200) ?? null,
+          betweenIterationRuns: memoryState.betweenIterationRuns.length,
+        }
+      : null,
+    exitConditions,
+    exitEvaluation,
     metrics,
     historySummary: history.entries.length ? summarizeHistory(history) : null,
     checkpoint: {
@@ -266,6 +321,9 @@ export function buildLoopHealthReport(stateDir: string): LoopHealthReport {
       loopHistory: fileExists(stateDir, LOOP_HISTORY_FILE),
       loopCheckpoint: fileExists(stateDir, 'loop-checkpoint.json'),
       runState: fileExists(stateDir, 'run-state.json'),
+      loopMemory: memoryState
+        ? fs.existsSync(path.join(stateDir, LOOPS_ROOT, memoryState.loopId, 'state.json'))
+        : false,
     },
     diagnostics,
     actions: {

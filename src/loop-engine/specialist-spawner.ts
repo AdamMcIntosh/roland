@@ -28,6 +28,7 @@ export const PHASE_SPECIALIST_DEFAULTS: Record<Phase, string[]> = {
   [P.Retry]: ['executor', 'build-fixer'],
   [P.Escalate]: ['lead-pm'],
   [P.Observe]: ['researcher', 'writer'],
+  [P.Reflect]: ['researcher', 'writer'],
 };
 
 /** On-demand specialists spawned when gates fail or critique requests deep review. */
