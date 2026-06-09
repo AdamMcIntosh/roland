@@ -1,0 +1,51 @@
+name: spec-first-ship-loop
+description: >
+  Spec-First Ship loop (loops.elorm.xyz pattern) — plan against a markdown checklist,
+  implement, verify with evaluation gates + spec completion gate, structured reflection,
+  and exit when all checklist items are marked complete.
+kickoff: >
+  Start the Spec-First Ship loop. Work against the checklist at .roland/specs/feature-ship-checklist.md.
+  Each iteration: plan against open items, implement, mark completed items [x], verify gates,
+  reflect on learnings, and stop when all checklist items and exit conditions pass.
+specFile: .roland/specs/feature-ship-checklist.md
+phases:
+  - phase: plan
+    label: Plan against spec
+    agent: lead-pm
+  - phase: act
+    label: Implement spec items
+    agent: executor
+  - phase: verify
+    label: Evaluation + spec gate
+    agent: test-executor
+    verification:
+      - lint
+      - unit
+      - typecheck
+  - phase: critique
+    label: Critique delivery
+    agent: critic
+  - phase: retry
+    label: Retry implementation
+    optional: true
+  - phase: observe
+    label: Observe state
+    agent: researcher
+  - phase: reflect
+    label: Structured reflection
+    optional: true
+    agent: researcher
+maxIterations: 10
+maxRetries: 3
+escalationThreshold: 4
+min_confidence: 0.85
+between_iterations: npm test
+reflection: true
+exit_conditions:
+  - type: all_gates_pass
+    description: All evaluation gates pass with accepted confidence
+  - type: spec_complete
+    description: All spec/checklist markdown task items marked complete
+  - type: command_success
+    description: npm test exits 0
+    command: npm test

@@ -11,6 +11,7 @@ import { readLoopState, LOOP_STATE_FILE } from './loop-state.js';
 import { readLoopCheckpoint } from './loop-checkpoint.js';
 import { CLOSED_LOOP_PR_FILE } from './closed-loop.js';
 import { findLatestLoopMemory, LOOPS_ROOT } from './loop-memory.js';
+import { parseStructuredReflection } from './phase-handlers/reflection-phase.js';
 import {
   LoopObservability,
   computeLoopMetrics,
@@ -74,7 +75,22 @@ export interface LoopHealthReport {
     reflectionCount: number;
     confidenceStreak: number;
     lastReflection: string | null;
+    /** Structured reflection history for dashboard. */
+    reflectionHistory: Array<{
+      iteration: number;
+      at: number;
+      preview: string;
+      confidenceScore: number | null;
+    }>;
     betweenIterationRuns: number;
+    /** Spec-First progress when configured. */
+    specProgress: {
+      specPath: string;
+      total: number;
+      completed: number;
+      percentComplete: number;
+      allComplete: boolean;
+    } | null;
   } | null;
   /** Latest exit condition evaluation statuses. */
   exitConditions: Array<{
@@ -297,8 +313,26 @@ export function buildLoopHealthReport(stateDir: string): LoopHealthReport {
           reflectionCount: memoryState.reflections.length,
           confidenceStreak: memoryState.confidenceStreak,
           lastReflection:
-            memoryState.reflections.at(-1)?.content.slice(0, 200) ?? null,
+            memoryState.reflections.at(-1)?.content.slice(0, 400) ?? null,
+          reflectionHistory: memoryState.reflections.slice(-8).map((r) => ({
+            iteration: r.iteration,
+            at: r.at,
+            preview: r.content.slice(0, 160),
+            confidenceScore:
+              r.structured?.confidenceScore ??
+              parseStructuredReflection(r.content)?.confidenceScore ??
+              null,
+          })),
           betweenIterationRuns: memoryState.betweenIterationRuns.length,
+          specProgress: memoryState.specProgress
+            ? {
+                specPath: memoryState.specProgress.specPath,
+                total: memoryState.specProgress.total,
+                completed: memoryState.specProgress.completed,
+                percentComplete: memoryState.specProgress.percentComplete,
+                allComplete: memoryState.specProgress.allComplete,
+              }
+            : null,
         }
       : null,
     exitConditions,

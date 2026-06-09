@@ -1,11 +1,14 @@
 name: feature-implementation-loop
 description: >
   Feature delivery loop (loops.elorm.xyz pattern) — plan scope, implement, verify, critique,
-  reflect learnings, run between-iteration checks, exit when gates green and confidence stable.
+  structured reflection learnings, run between-iteration checks, exit when gates green and confidence stable.
+  Enable Spec-First by setting specFile (see spec-first-ship-loop template for full example).
 kickoff: >
   Start the Feature Implementation loop. Goal: feature is implemented with tests passing and
   integration smoke green. Self-pace: after each iteration run the check command, read output,
-  reflect on learnings, and only continue if exit conditions are not met.
+  reflect on learnings (structured format), and only continue if exit conditions are not met.
+  When specFile is set, plan and verify against the markdown checklist — mark items [x] as done.
+# checklistPath: .roland/specs/feature-ship-checklist.md
 phases:
   - phase: plan
     label: Plan feature

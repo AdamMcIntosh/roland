@@ -36,6 +36,7 @@ export type ExitConditionType =
   | 'all_gates_pass'
   | 'confidence_streak'
   | 'command_success'
+  | 'spec_complete'
   | 'custom';
 
 /** Declarative exit rule loaded from YAML or supplied programmatically. */
@@ -95,6 +96,10 @@ export interface LoopTemplate {
   exitConditions?: ExitConditionConfig[];
   /** Minimum confidence for EvaluationGate acceptance override. */
   minConfidence?: number;
+  /** Spec-First: path to markdown checklist/spec (task lists with `- [ ]` / `- [x]`). */
+  specFile?: string;
+  /** Alias for specFile — either may be set in YAML templates. */
+  checklistPath?: string;
 }
 
 export function isPhase(value: string): value is Phase {

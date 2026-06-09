@@ -14,6 +14,8 @@ export type {
   LoopDiskState,
   LoopMemoryOptions,
   ReflectionEntry,
+  StructuredReflection,
+  SpecProgressSnapshot,
   BetweenIterationRun,
 } from './loop-memory.js';
 
@@ -136,6 +138,16 @@ export type { DegradationState } from './loop-resilience.js';
 
 export { buildLoopHealthReport } from './loop-health.js';
 export type { LoopHealthReport, LoopHealthStatus } from './loop-health.js';
+
+export {
+  parseMarkdownTaskList,
+  computeSpecProgress,
+  resolveSpecPath,
+  readSpecContent,
+  formatSpecProgressSummary,
+  createSpecCompletionCriterion,
+} from './spec-progress.js';
+export type { SpecTaskItem, SpecProgress } from './spec-progress.js';
 
 export {
   createDefaultHandlers,

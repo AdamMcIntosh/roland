@@ -99,6 +99,8 @@
     var specialistSpawns = health?.specialistSpawns || [];
     var closedLoopPr = health?.closedLoopPr || null;
     var loopMemory = health?.loopMemory || null;
+    var specProgress = loopMemory?.specProgress || null;
+    var reflectionHistory = loopMemory?.reflectionHistory || [];
     var exitConditions = health?.exitConditions || [];
     var exitEvaluation = health?.exitEvaluation || null;
     var isPaused = Boolean(rs?.hitlPaused);
@@ -116,6 +118,8 @@
       specialistSpawns: specialistSpawns,
       closedLoopPr: closedLoopPr,
       loopMemory: loopMemory,
+      specProgress: specProgress,
+      reflectionHistory: reflectionHistory,
       exitConditions: exitConditions,
       exitEvaluation: exitEvaluation,
       lastVerification: lv,
@@ -392,16 +396,44 @@
 
   function renderReflectionPanel(vm) {
     var mem = vm.loopMemory;
-    if (!mem || (!mem.lastReflection && !mem.reflectionCount)) return '';
+    if (!mem || (!mem.lastReflection && !mem.reflectionCount && !vm.reflectionHistory?.length)) return '';
+
+    var historyRows = (vm.reflectionHistory || []).slice().reverse().map(function (r) {
+      var conf = r.confidenceScore != null ? ' · conf ' + r.confidenceScore : '';
+      return '<div class="loop-reflection-history-row">' +
+        '<span class="loop-reflection-iter">Iter ' + esc(String(r.iteration)) + conf + '</span>' +
+        '<span class="loop-reflection-snippet">' + esc(r.preview).replace(/\n/g, ' ') + '</span>' +
+        '</div>';
+    }).join('');
+
     return '<div class="loop-reflection-panel">' +
       '<h5>Reflection Memory</h5>' +
       '<div class="loop-reflection-meta">' +
         esc(mem.loopId || 'loop') + ' · ' + esc(String(mem.reflectionCount)) + ' reflection(s)' +
         (mem.confidenceStreak ? ' · streak ' + esc(String(mem.confidenceStreak)) : '') +
       '</div>' +
+      (historyRows ? '<div class="loop-reflection-history">' + historyRows + '</div>' : '') +
       (mem.lastReflection
         ? '<div class="loop-reflection-preview">' + esc(mem.lastReflection).replace(/\n/g, '<br>') + '</div>'
         : '') +
+      '</div>';
+  }
+
+  function renderSpecProgressPanel(vm) {
+    var spec = vm.specProgress;
+    if (!spec || !spec.total) return '';
+    var barPct = Math.max(0, Math.min(100, spec.percentComplete || 0));
+    var statusCls = spec.allComplete ? 'complete' : 'in-progress';
+    return '<div class="loop-spec-panel loop-spec-' + statusCls + '">' +
+      '<h5>Spec / Checklist</h5>' +
+      '<div class="loop-spec-meta">' +
+        esc(spec.completed + '/' + spec.total) + ' items · ' + esc(String(barPct)) + '%' +
+        (spec.allComplete ? ' · ✓ complete' : '') +
+      '</div>' +
+      '<div class="loop-spec-bar" role="progressbar" aria-valuenow="' + barPct + '" aria-valuemin="0" aria-valuemax="100">' +
+        '<div class="loop-spec-fill" style="width:' + barPct + '%"></div>' +
+      '</div>' +
+      '<div class="loop-spec-path" title="Spec file path">' + esc(spec.specPath) + '</div>' +
       '</div>';
   }
 
@@ -505,6 +537,7 @@
         renderMetricsRow(vm) +
         renderTimeline(vm, opts) +
         renderExitConditionsPanel(vm) +
+        renderSpecProgressPanel(vm) +
         renderReflectionPanel(vm) +
         renderCritiquePanel(vm) +
         renderSpecialists(vm) +

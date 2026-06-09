@@ -111,6 +111,41 @@ function evaluateOne(
       };
     }
 
+    case 'spec_complete': {
+      const spec = ctx.memory.specProgress;
+      if (!spec) {
+        return {
+          id,
+          type: condition.type,
+          description,
+          met: false,
+          reason: 'No spec/checklist progress recorded — configure specFile or checklistPath',
+          evaluatedAt: now,
+        };
+      }
+      if (spec.total === 0) {
+        return {
+          id,
+          type: condition.type,
+          description,
+          met: false,
+          reason: `Spec file has no task-list items: ${spec.specPath}`,
+          evaluatedAt: now,
+        };
+      }
+      const met = spec.allComplete;
+      return {
+        id,
+        type: condition.type,
+        description,
+        met,
+        reason: met
+          ? `All ${spec.total} spec/checklist items marked complete`
+          : `${spec.completed}/${spec.total} spec items complete (${spec.percentComplete}%)`,
+        evaluatedAt: now,
+      };
+    }
+
     case 'custom': {
       const met = Boolean(condition.evaluate?.(ctx));
       return {
@@ -143,6 +178,8 @@ function defaultDescription(c: ExitConditionConfig): string {
       return `Success confidence ≥ ${c.minConfidence ?? 0.85} for ${c.consecutiveIterations ?? 2} consecutive iterations`;
     case 'command_success':
       return c.command ? `Command succeeds: ${c.command}` : 'Between-iterations check command exits 0';
+    case 'spec_complete':
+      return 'All spec/checklist markdown task items marked complete';
     case 'custom':
       return 'Custom exit criterion';
     default:

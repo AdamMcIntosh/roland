@@ -32,6 +32,10 @@ import type { CustomCriterion } from './evaluation-gate.js';
 import { SpecialistSpawner } from './specialist-spawner.js';
 import type { CommandRunner } from './verification/index.js';
 import { LoopMemory } from './loop-memory.js';
+import {
+  createSpecCompletionCriterion,
+  resolveSpecPath,
+} from './spec-progress.js';
 
 export const CLOSED_LOOP_PR_FILE = 'closed-loop-pr.json';
 
@@ -97,13 +101,20 @@ export class ClosedLoop {
     const minConfidence =
       opts.minConfidence ?? this.template.minConfidence ?? undefined;
 
+    const cwd = opts.cwd ?? process.cwd();
+    const specPath = resolveSpecPath(this.template, cwd);
+    const specCriteria: CustomCriterion[] = specPath
+      ? [createSpecCompletionCriterion(specPath)]
+      : [];
+    const customCriteria = [...(opts.customCriteria ?? []), ...specCriteria];
+
     const handlers = createDefaultHandlers();
     handlers.set(
       P.Verify,
       new VerifyPhaseHandler({
         cwd: opts.cwd,
         runner: opts.runner,
-        customCriteria: opts.customCriteria,
+        customCriteria,
         requireManualReview: opts.requireManualReview,
         manualReviewApproved: opts.manualReviewApproved,
         minConfidence,
@@ -135,7 +146,8 @@ export class ClosedLoop {
     console.error(
       `[Loop][closed-loop] harness ready template="${this.template.name}" loopId=${this.memory.loopId} ` +
         `phases=${this.template.phases.map((p) => p.phase).join('→')} ` +
-        `exitRules=${this.template.exitConditions?.length ?? 1} betweenIter=${Boolean(this.template.betweenIterations)}`,
+        `exitRules=${this.template.exitConditions?.length ?? 1} betweenIter=${Boolean(this.template.betweenIterations)} ` +
+        `specFirst=${Boolean(specPath)} reflection=${Boolean(this.template.reflection)}`,
     );
   }
 
@@ -347,5 +359,19 @@ export function createClosedLoop(opts: ClosedLoopOptions): ClosedLoop {
  * ```
  *
  * CLI: `roland team "goal" --loop-template closed-loop-harness`
+ *
+ * Spec-First usage:
+ * ```typescript
+ * const loop = new ClosedLoop({
+ *   stateDir: '.roland',
+ *   goal: 'Ship feature X',
+ *   template: 'feature-implementation-loop', // defines specFile
+ *   blackboard,
+ * });
+ * // Planner references .roland/specs/feature-ship-checklist.md
+ * // Verify gate includes spec_complete criterion
+ * ```
+ *
+ * ## Reflection + Spec-First Integration Complete
  */
 export {};

@@ -25,7 +25,7 @@ const PhaseConfigSchema = z.object({
 
 const ExitConditionSchema = z.object({
   id: z.string().optional(),
-  type: z.enum(['all_gates_pass', 'confidence_streak', 'command_success']),
+  type: z.enum(['all_gates_pass', 'confidence_streak', 'command_success', 'spec_complete']),
   description: z.string().optional(),
   minConfidence: z.number().min(0).max(1).optional(),
   consecutiveIterations: z.number().int().positive().optional(),
@@ -47,6 +47,8 @@ export const LoopTemplateSchema = z.object({
   between_iterations: z.string().optional(),
   reflection: z.boolean().optional(),
   min_confidence: z.number().min(0).max(1).optional(),
+  specFile: z.string().optional(),
+  checklistPath: z.string().optional(),
   exit_conditions: z.array(ExitConditionSchema).optional(),
 });
 
@@ -107,6 +109,8 @@ export class LoopTemplates {
           betweenIterations: parsed.between_iterations,
           reflection: parsed.reflection,
           minConfidence: parsed.min_confidence,
+          specFile: parsed.specFile,
+          checklistPath: parsed.checklistPath,
           exitConditions: parsed.exit_conditions?.map((c) => ({
             id: c.id,
             type: c.type,

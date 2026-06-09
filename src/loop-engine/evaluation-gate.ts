@@ -332,6 +332,7 @@ export function evaluationResultToLoopState(result: EvaluationGateResult): {
 
 /**
  * ## Component Complete
- * EvaluationGate aggregates automated verifiers, custom criteria, and optional manual review
- * into a single pass/fail decision with weighted confidence scoring for closed-loop retry logic.
+ * EvaluationGate aggregates automated verifiers, custom criteria (including spec_complete via
+ * createSpecCompletionCriterion), and optional manual review into a single pass/fail decision
+ * with weighted confidence scoring for closed-loop retry logic.
  */

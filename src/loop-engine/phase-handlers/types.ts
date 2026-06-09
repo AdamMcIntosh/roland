@@ -1,8 +1,10 @@
 import type { Blackboard } from '../../rco/blackboard.js';
 import type { CommandBlackboard } from '../../rco/command-blackboard.js';
-import type { Phase, PhaseConfig } from '../loop-phases.js';
+import type { Phase, PhaseConfig, LoopTemplate } from '../loop-phases.js';
 import type { LoopCritiqueSnapshot } from '../self-improvement/types.js';
 import type { LoopRetrySnapshot, LoopState, LoopVerificationSnapshot } from '../loop-state.js';
+import type { ReflectionEntry } from '../loop-memory.js';
+import type { SpecProgress } from '../spec-progress.js';
 
 export interface PhaseResult {
   success: boolean;
@@ -30,6 +32,16 @@ export interface PhaseHandlerContext {
   waveNumber?: number;
   hadBlockers?: boolean;
   phaseConfig?: PhaseConfig;
+  template?: LoopTemplate;
+  /** Latest reflection from prior iteration — fed to Plan and Critique. */
+  latestReflection?: ReflectionEntry | null;
+  /** Full reflection history markdown for context injection. */
+  reflectionContext?: string;
+  /** Current spec/checklist progress when template defines specFile/checklistPath. */
+  specProgress?: SpecProgress | null;
+  /** Raw spec file content for Plan phase reference. */
+  specContent?: string;
+  cwd?: string;
   /** Max retry attempts before escalation (from loop template / config). */
   maxRetries?: number;
   /** Consecutive verify failures before HITL (from loop template / config). */

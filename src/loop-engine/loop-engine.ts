@@ -33,6 +33,12 @@ import { runBetweenIterations } from './between-iterations.js';
 import { evaluateExitConditions } from './exit-conditions.js';
 import type { CommandRunner } from './verification/index.js';
 import type { EvaluationGateResult } from './evaluation-gate.js';
+import {
+  computeSpecProgress,
+  readSpecContent,
+  resolveSpecPath,
+} from './spec-progress.js';
+import type { PhaseHandlerContext } from './phase-handlers/types.js';
 
 export interface LoopHooks {
   onPhaseStart?: (phase: Phase, iteration: number) => void;
@@ -422,6 +428,10 @@ export class LoopEngine {
       };
       await this.runPhase(reflectConfig, { iteration: iter });
       phasesCompleted++;
+      const latestReflection = this.loopMemory?.getLatestReflection();
+      if (latestReflection) {
+        this.hooks.onReflection?.(iter, latestReflection.content);
+      }
     }
 
     if (this.loopMemory && this.store.get().lastVerification) {
@@ -519,18 +529,8 @@ export class LoopEngine {
 
     let result: PhaseResult;
     try {
-      result = await handler.execute({
-        goal: this.goal,
-        state: this.store.get(),
-        blackboard: this.blackboard,
-        commandBoard: this.commandBoard,
-        iteration: ctx.iteration,
-        waveNumber: ctx.waveNumber,
-        hadBlockers: ctx.hadBlockers,
-        phaseConfig,
-        maxRetries: this.critiqueThresholds.maxRetries,
-        escalationThreshold: this.critiqueThresholds.escalationThreshold,
-      });
+      const handlerCtx = this.buildPhaseContext(ctx, phaseConfig);
+      result = await handler.execute(handlerCtx);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[Loop][engine] phase ${phase} handler error — defensive recovery`, { error: message });
@@ -602,6 +602,41 @@ export class LoopEngine {
 
   getMetrics() {
     return this.observability.persistMetrics(this.store.get());
+  }
+
+  private buildPhaseContext(
+    ctx: { iteration: number; hadBlockers?: boolean; waveNumber?: number },
+    phaseConfig: PhaseConfig,
+  ): PhaseHandlerContext {
+    const specPath = resolveSpecPath(this.template, this.cwd);
+    let specProgress = specPath ? computeSpecProgress(specPath) : null;
+
+    // Refresh spec progress before Plan and Verify — key Spec-First integration points.
+    if (specProgress && this.loopMemory && (phaseConfig.phase === P.Plan || phaseConfig.phase === P.Verify)) {
+      this.loopMemory.recordSpecProgress(specProgress);
+    }
+
+    const latestReflection =
+      ctx.iteration > 1 ? (this.loopMemory?.getLatestReflection() ?? null) : null;
+
+    return {
+      goal: this.goal,
+      state: this.store.get(),
+      blackboard: this.blackboard,
+      commandBoard: this.commandBoard,
+      iteration: ctx.iteration,
+      waveNumber: ctx.waveNumber,
+      hadBlockers: ctx.hadBlockers,
+      phaseConfig,
+      template: this.template,
+      latestReflection,
+      reflectionContext: this.loopMemory?.getReflectionContext(),
+      specProgress,
+      specContent: specPath ? readSpecContent(specPath) : undefined,
+      cwd: this.cwd,
+      maxRetries: this.critiqueThresholds.maxRetries,
+      escalationThreshold: this.critiqueThresholds.escalationThreshold,
+    };
   }
 
   private isTimedOut(): boolean {

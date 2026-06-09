@@ -9,6 +9,7 @@
 import { DEFAULT_ENGINEER_MODEL, DEFAULT_PM_MODEL } from '../../rco/cursor-models.js';
 import type { PhaseHandler, PhaseHandlerContext, PhaseResult } from './types.js';
 import { Phase } from '../loop-phases.js';
+import { formatSpecProgressSummary } from '../spec-progress.js';
 import {
   CritiqueEngine,
   type CritiqueEngineOptions,
@@ -35,8 +36,18 @@ export class CritiquePhaseHandler implements PhaseHandler {
 
     let critique: LoopCritiqueSnapshot;
     try {
+      const reflectionNote = ctx.latestReflection
+        ? `\n\nPrior reflection (iteration ${ctx.latestReflection.iteration}):\n${ctx.latestReflection.content}`
+        : ctx.reflectionContext?.trim()
+          ? `\n\nReflection history:\n${ctx.reflectionContext.slice(-2000)}`
+          : '';
+
+      const specNote = ctx.specProgress
+        ? `\n\nSpec progress: ${formatSpecProgressSummary(ctx.specProgress)}`
+        : '';
+
       const output = this.engine.critique({
-        goal: ctx.goal,
+        goal: ctx.goal + reflectionNote + specNote,
         iteration: ctx.iteration,
         retryCount: ctx.state.retryCount,
         maxRetries,
