@@ -2,6 +2,36 @@ export { Phase, ALL_PHASES, isPhase, phaseLabel } from './loop-phases.js';
 export type { PhaseConfig, LoopTemplate } from './loop-phases.js';
 
 export {
+  LoopMemory,
+  deriveLoopId,
+  readLoopMemoryState,
+  findLatestLoopMemory,
+  LOOPS_ROOT,
+  LOOP_STATE_JSON,
+  LOOP_REFLECTION_MD,
+} from './loop-memory.js';
+export type {
+  LoopDiskState,
+  LoopMemoryOptions,
+  ReflectionEntry,
+  BetweenIterationRun,
+} from './loop-memory.js';
+
+export {
+  evaluateExitConditions,
+} from './exit-conditions.js';
+export type {
+  ExitConditionStatus,
+  ExitEvaluationContext,
+  ExitEvaluationResult,
+} from './exit-conditions.js';
+
+export { runBetweenIterations } from './between-iterations.js';
+export type { BetweenIterationsOptions, BetweenIterationsResult } from './between-iterations.js';
+
+export type { ExitConditionConfig, ExitConditionType } from './loop-phases.js';
+
+export {
   LOOP_STATE_FILE,
   LoopStateStore,
   createInitialLoopState,
@@ -116,6 +146,7 @@ export {
   RetryPhaseHandler,
   EscalatePhaseHandler,
   ObservePhaseHandler,
+  ReflectionPhaseHandler,
 } from './phase-handlers/index.js';
 export type { VerifyPhaseHandlerOptions } from './phase-handlers/verify-phase.js';
 export type { RetryPhaseHandlerOptions } from './phase-handlers/retry-phase.js';

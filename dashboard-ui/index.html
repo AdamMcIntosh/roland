@@ -3,6 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#1a1a2e" />
+  <meta name="theme-color" content="#1a1a2e" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Roland Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
@@ -419,6 +424,22 @@
     .loop-pr-draft.success { border-top-color: rgba(16,185,129,.35); }
     .loop-pr-draft.escalated { border-top-color: rgba(239,68,68,.35); }
     .loop-critique-summary { margin-top: .25rem; color: var(--muted); line-height: 1.4; }
+    .loop-exit-panel, .loop-reflection-panel {
+      margin-top: .45rem; padding-top: .35rem; border-top: 1px solid rgba(255,255,255,.08); font-size: .72rem;
+    }
+    .loop-exit-panel h5, .loop-reflection-panel h5 {
+      margin: 0 0 .3rem; font-size: .66rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+    }
+    .loop-exit-row { display: grid; grid-template-columns: auto 1fr; gap: .25rem .45rem; padding: .2rem 0; align-items: start; }
+    .loop-exit-row.loop-exit-met .loop-exit-icon { color: var(--emerald); }
+    .loop-exit-row.loop-exit-unmet .loop-exit-icon { color: #fca5a5; }
+    .loop-exit-desc { font-weight: 600; color: var(--text); }
+    .loop-exit-reason { grid-column: 2; color: var(--muted); font-size: .64rem; line-height: 1.35; }
+    .loop-exit-eval { margin-bottom: .35rem; padding: .25rem .4rem; border-radius: .25rem; font-size: .64rem; }
+    .loop-exit-eval-met { background: rgba(16,185,129,.12); color: var(--emerald); }
+    .loop-exit-eval-pending { background: rgba(245,158,11,.1); color: #fcd34d; }
+    .loop-reflection-meta { color: var(--muted); font-size: .64rem; margin-bottom: .25rem; }
+    .loop-reflection-preview { color: var(--text); line-height: 1.45; opacity: .9; }
     .loop-diagnostics { margin-top: .35rem; color: #fca5a5; font-size: .64rem; line-height: 1.4; }
     .loop-error-actions { margin-top: .4rem; display: flex; gap: .4rem; flex-wrap: wrap; }
     .loop-health-badge {
@@ -2605,6 +2626,8 @@
       .project-modal-close { min-height: var(--touch-min); min-width: var(--touch-min); }
     }
   </style>
+  <!-- Mobile-first responsive layer (Tailwind-inspired utilities + iPhone polish) -->
+  <link rel="stylesheet" href="styles/mobile-responsive.css" />
 </head>
 <body>
 
@@ -2644,7 +2667,7 @@
 
       <!-- Project context -->
       <section class="project-context" id="project-context" aria-live="polite">
-        <div class="project-context-row u-stack-row">
+        <div class="project-context-row project-bar u-stack-row">
           <button type="button" class="project-context-bar" id="project-context-toggle" aria-expanded="false" aria-controls="project-context-details">
             <span class="project-context-icon" aria-hidden="true">📁</span>
             <span class="project-context-main">
@@ -2705,7 +2728,7 @@
               class="mission-textarea"
               placeholder="Describe what Roland should build, fix, or investigate…"
               rows="3"
-              autofocus
+              enterkeyhint="done"
             ></textarea>
           </div>
           <div class="mission-row">
@@ -4558,10 +4581,20 @@
 
   const modelPickers = [];
 
+  function isMobilePicker() {
+    return window.matchMedia('(max-width: 640px)').matches;
+  }
+
+  function syncPickerSheetLock() {
+    const anyOpen = modelPickers.some(p => p.rootEl?.classList.contains('open'));
+    document.body.classList.toggle('model-picker-sheet-open', anyOpen && isMobilePicker());
+  }
+
   function closeAllModelPickers(except) {
     for (const p of modelPickers) {
       if (p !== except) p.close();
     }
+    syncPickerSheetLock();
   }
 
   function createModelPicker(rootEl) {
@@ -4648,7 +4681,8 @@
       rootEl.classList.add('open');
       trigger?.setAttribute('aria-expanded', 'true');
       renderList(searchInput?.value || '');
-      setTimeout(() => searchInput?.focus(), 0);
+      syncPickerSheetLock();
+      setTimeout(() => searchInput?.focus({ preventScroll: true }), 0);
     }
 
     function close() {
@@ -4656,9 +4690,10 @@
       trigger?.setAttribute('aria-expanded', 'false');
       if (searchInput) searchInput.value = '';
       focusedIdx = -1;
+      syncPickerSheetLock();
     }
 
-    const picker = { close, setSelected, open };
+    const picker = { close, setSelected, open, rootEl };
 
     trigger?.addEventListener('click', (e) => {
       e.preventDefault();
@@ -4864,8 +4899,15 @@
     }
   }
 
+  function isCoarsePointer() {
+    return window.matchMedia('(pointer: coarse)').matches
+      || window.matchMedia('(hover: none)').matches
+      || window.innerWidth < 641;
+  }
+
   function focusMissionGoal() {
     if (activeTab !== 'overview') return;
+    if (isCoarsePointer()) return;
     const ta = document.getElementById('mission-goal');
     if (ta && document.activeElement !== ta) {
       try { ta.focus({ preventScroll: true }); } catch { ta.focus(); }
@@ -6950,6 +6992,8 @@
     document.body.setAttribute('data-theme', theme);
     const btn = document.getElementById('btn-theme');
     if (btn) btn.textContent = theme==='dark' ? '☀️' : '🌙';
+    const themeMeta = document.querySelector('meta[name="theme-color"]:not([media])');
+    if (themeMeta) themeMeta.setAttribute('content', theme === 'dark' ? '#1a1a2e' : '#ffffff');
     if (tokensChart) { tokensChart.destroy(); tokensChart = null; }
     if (modelChart)  { modelChart.destroy();  modelChart  = null; }
     renderTokensChart(filterRuns(usageData, period));

@@ -21,17 +21,26 @@ import {
 import {
   createDefaultHandlers,
   RetryPhaseHandler,
+  ReflectionPhaseHandler,
   type PhaseHandler,
   type PhaseResult,
 } from './phase-handlers/index.js';
 import { loadLoopEngineConfig, resolveCritiqueThresholds } from './loop-config.js';
 import { LoopObservability } from './loop-observability.js';
 import { saveLoopCheckpoint, tryRecoverLoopState } from './loop-checkpoint.js';
+import type { LoopMemory } from './loop-memory.js';
+import { runBetweenIterations } from './between-iterations.js';
+import { evaluateExitConditions } from './exit-conditions.js';
+import type { CommandRunner } from './verification/index.js';
+import type { EvaluationGateResult } from './evaluation-gate.js';
 
 export interface LoopHooks {
   onPhaseStart?: (phase: Phase, iteration: number) => void;
   onPhaseComplete?: (phase: Phase, result: PhaseResult) => void;
   onLoopIterationStart?: (iteration: number) => void;
+  onBetweenIterations?: (iteration: number, command: string, success: boolean) => void;
+  onReflection?: (iteration: number, content: string) => void;
+  onExitConditionEvaluated?: (iteration: number, shouldExit: boolean, reason: string) => void;
   onLoopComplete?: (state: LoopState, status: LoopRunStatus) => void;
   onStateChange?: (state: LoopState) => void;
 }
@@ -54,6 +63,11 @@ export interface LoopEngineOptions {
   timeoutMs?: number;
   /** Skip exponential backoff delays (tests). */
   skipBackoff?: boolean;
+  /** Persistent loop memory layer (closed-loop harness). */
+  loopMemory?: LoopMemory;
+  /** Shell command runner for between-iterations checks. */
+  runner?: CommandRunner;
+  cwd?: string;
 }
 
 export interface LoopRunResult {
@@ -77,6 +91,10 @@ export class LoopEngine {
   private readonly stateDir: string;
   private readonly timeoutMs: number;
   private readonly loopStartedAt: number;
+  private readonly loopMemory?: LoopMemory;
+  private readonly runner?: CommandRunner;
+  private readonly cwd: string;
+  private lastEvaluation?: EvaluationGateResult;
 
   constructor(opts: LoopEngineOptions) {
     const firstPhase = opts.template.phases[0]?.phase ?? P.Plan;
@@ -89,8 +107,17 @@ export class LoopEngine {
     if (opts.skipBackoff && !opts.handlers) {
       this.handlers.set(P.Retry, new RetryPhaseHandler({ skipDelay: true }));
     }
+    if (opts.loopMemory && !opts.handlers) {
+      this.handlers.set(
+        P.Reflect,
+        new ReflectionPhaseHandler({ memory: opts.loopMemory }),
+      );
+    }
     this.hooks = opts.hooks ?? {};
     this.stateDir = opts.stateDir;
+    this.loopMemory = opts.loopMemory;
+    this.runner = opts.runner;
+    this.cwd = opts.cwd ?? process.cwd();
     this.observability = new LoopObservability(opts.stateDir, opts.blackboard);
     this.critiqueThresholds = resolveCritiqueThresholds(opts.template, {
       isTestMode: opts.isTestMode,
@@ -132,8 +159,25 @@ export class LoopEngine {
     console.error(
       `[Loop][engine] template="${opts.template.name}" maxIterations=${opts.template.maxIterations ?? 1} ` +
         `maxRetries=${this.critiqueThresholds.maxRetries} timeoutMs=${this.timeoutMs} ` +
-        `resume=${Boolean(opts.resumeFromState)} recover=${opts.recoverOnStart !== false}`,
+        `resume=${Boolean(opts.resumeFromState)} recover=${opts.recoverOnStart !== false} ` +
+        `betweenIter=${Boolean(opts.template.betweenIterations)} reflection=${Boolean(opts.template.reflection)}`,
     );
+    if (opts.loopMemory) {
+      this.store.setLoopId(opts.loopMemory.loopId);
+    }
+    if (opts.template.kickoff) {
+      this.commandBoard?.appendBullet('Mission Objectives', `[KICKOFF] ${opts.template.kickoff}`);
+      this.blackboard.post({
+        type: 'decision',
+        title: 'Loop kickoff',
+        content: opts.template.kickoff,
+        status: 'done',
+        author: 'loop-engine',
+        priority: 'medium',
+        tags: ['loop', 'kickoff'],
+        relatedIds: [],
+      });
+    }
     this.emitState();
   }
 
@@ -206,7 +250,32 @@ export class LoopEngine {
         };
       }
 
-      if (!iterationOutcome.shouldRetryLoop) break;
+      const postIter = await this.runPostIterationHooks(iter);
+      phasesCompleted += postIter.phasesCompleted;
+
+      if (postIter.exitMet) {
+        this.store.setStatus('completed');
+        this.emitState();
+        this.observability.persistMetrics(this.store.get());
+        this.observability.postHistoryToBlackboard(this.store.get());
+        this.hooks.onLoopComplete?.(this.store.get(), 'completed');
+        return {
+          status: 'completed',
+          state: this.store.get(),
+          phasesCompleted,
+          iterationsRun,
+        };
+      }
+
+      if (!iterationOutcome.shouldRetryLoop) {
+        if (iter < maxIter) {
+          console.error(
+            `[Loop][engine] exit conditions unmet — self-pacing to iteration ${iter + 1}/${maxIter}`,
+          );
+          continue;
+        }
+        break;
+      }
 
       const { maxRetries } = this.critiqueThresholds;
       if (this.store.get().retryCount >= maxRetries) {
@@ -322,6 +391,98 @@ export class LoopEngine {
     return { phasesCompleted, shouldRetryLoop };
   }
 
+  /** Between-iterations check, reflection, and exit condition evaluation. */
+  private async runPostIterationHooks(iter: number): Promise<{
+    phasesCompleted: number;
+    exitMet: boolean;
+  }> {
+    let phasesCompleted = 0;
+    let lastBetweenRun;
+
+    if (this.template.betweenIterations && this.loopMemory) {
+      const between = await runBetweenIterations({
+        command: this.template.betweenIterations,
+        iteration: iter,
+        cwd: this.cwd,
+        runner: this.runner,
+        memory: this.loopMemory,
+      });
+      lastBetweenRun = between.run;
+      this.hooks.onBetweenIterations?.(iter, this.template.betweenIterations, between.success);
+    }
+
+    const shouldReflect =
+      this.template.reflection ||
+      this.template.phases.some((p) => p.phase === P.Reflect);
+    if (shouldReflect && iter < (this.template.maxIterations ?? 1)) {
+      const reflectConfig = this.template.phases.find((p) => p.phase === P.Reflect) ?? {
+        phase: P.Reflect,
+        label: 'Reflect',
+        optional: true,
+      };
+      await this.runPhase(reflectConfig, { iteration: iter });
+      phasesCompleted++;
+    }
+
+    if (this.loopMemory && this.store.get().lastVerification) {
+      const lv = this.store.get().lastVerification!;
+      this.loopMemory.recordVerification(lv.confidence, lv.accepted);
+      this.loopMemory.saveCheckpoint(iter, this.store.get());
+    }
+
+    const exitEval = evaluateExitConditions(this.template.exitConditions, {
+      iteration: iter,
+      maxIterations: this.template.maxIterations ?? 1,
+      evaluation: this.lastEvaluation,
+      memory: this.loopMemory?.getState() ?? {
+        loopId: '',
+        goal: this.goal,
+        templateId: this.template.name,
+        startedAt: this.loopStartedAt,
+        updatedAt: Date.now(),
+        iteration: iter,
+        confidenceStreak: 0,
+        confidenceHistory: [],
+        betweenIterationRuns: lastBetweenRun ? [lastBetweenRun] : [],
+        exitConditionStatus: [],
+        reflections: [],
+      },
+      lastBetweenRun,
+    });
+
+    this.store.setExitEvaluation(exitEval.statuses, {
+      shouldExit: exitEval.shouldExit,
+      reason: exitEval.reason,
+      at: Date.now(),
+    });
+    this.loopMemory?.recordExitConditionStatus(exitEval.statuses);
+
+    this.commandBoard?.appendBullet(
+      'Key Decisions',
+      `[EXIT] Iter ${iter}: ${exitEval.shouldExit ? 'MET — completing loop' : 'continue'} — ${exitEval.reason}`,
+    );
+
+    this.blackboard.post({
+      type: 'result',
+      title: `Exit conditions (iteration ${iter})`,
+      content: exitEval.summary,
+      status: exitEval.shouldExit ? 'done' : 'pending',
+      author: 'loop-engine',
+      priority: exitEval.shouldExit ? 'medium' : 'low',
+      tags: ['loop', 'exit-condition'],
+      relatedIds: [],
+    });
+
+    this.hooks.onExitConditionEvaluated?.(iter, exitEval.shouldExit, exitEval.reason);
+    this.emitState();
+
+    console.error(
+      `[Loop][engine] exit evaluation iter=${iter} shouldExit=${exitEval.shouldExit} reason="${exitEval.reason}"`,
+    );
+
+    return { phasesCompleted, exitMet: exitEval.shouldExit };
+  }
+
   /** Execute a single phase by config. */
   async runPhase(
     phaseConfig: PhaseConfig,
@@ -387,6 +548,10 @@ export class LoopEngine {
       critique: result.critique,
       retry: result.retry,
     });
+
+    if (phase === P.Verify && result.evaluation) {
+      this.lastEvaluation = result.evaluation;
+    }
 
     const durationMs = Date.now() - phaseStartedAt;
     this.observability.recordPhaseComplete(

@@ -12,6 +12,7 @@ export const Phase = {
   Retry: 'retry',
   Escalate: 'escalate',
   Observe: 'observe',
+  Reflect: 'reflect',
 } as const;
 
 export type Phase = (typeof Phase)[keyof typeof Phase];
@@ -24,10 +25,34 @@ export const ALL_PHASES: readonly Phase[] = [
   Phase.Retry,
   Phase.Escalate,
   Phase.Observe,
+  Phase.Reflect,
 ];
 
 /** Verification strategy types selectable in loop templates. */
 export type TemplateVerificationStep = 'unit' | 'integration' | 'smoke' | 'e2e' | 'lint' | 'typecheck';
+
+/** Exit condition types — inspired by loops.elorm.xyz explicit exit rules. */
+export type ExitConditionType =
+  | 'all_gates_pass'
+  | 'confidence_streak'
+  | 'command_success'
+  | 'custom';
+
+/** Declarative exit rule loaded from YAML or supplied programmatically. */
+export interface ExitConditionConfig {
+  id?: string;
+  type: ExitConditionType;
+  /** Human-readable label for dashboard and logs. */
+  description?: string;
+  /** For confidence_streak — minimum weighted confidence (default 0.85). */
+  minConfidence?: number;
+  /** For confidence_streak — consecutive accepted iterations required (default 2). */
+  consecutiveIterations?: number;
+  /** For command_success — command that must exit 0 (defaults to betweenIterations). */
+  command?: string;
+  /** For custom — programmatic evaluator (not serializable from YAML). */
+  evaluate?: (ctx: import('./exit-conditions.js').ExitEvaluationContext) => boolean;
+}
 
 /** Per-phase configuration within a loop template. */
 export interface PhaseConfig {
@@ -60,6 +85,16 @@ export interface LoopTemplate {
   timeoutMs?: number;
   /** Enable exponential backoff before retry iterations */
   exponentialBackoff?: boolean;
+  /** Structured kickoff prompt shown at loop start (loops.elorm.xyz pattern). */
+  kickoff?: string;
+  /** Shell command run between iterations for self-pacing checks. */
+  betweenIterations?: string;
+  /** Write reflection learnings to LoopMemory before next iteration. */
+  reflection?: boolean;
+  /** Explicit exit rules — all must pass to complete early. */
+  exitConditions?: ExitConditionConfig[];
+  /** Minimum confidence for EvaluationGate acceptance override. */
+  minConfidence?: number;
 }
 
 export function isPhase(value: string): value is Phase {

@@ -47,6 +47,9 @@ describe('ClosedLoop harness', () => {
     const templates = new LoopTemplates();
     const template = templates.get('closed-loop-harness');
     expect(template).toBeDefined();
+    expect(template!.exitConditions?.length).toBeGreaterThan(0);
+    expect(template!.betweenIterations).toBeDefined();
+    expect(template!.reflection).toBe(true);
 
     const goal = 'Improve loop-engine evaluation gates and confidence scoring';
     const loop = new ClosedLoop({
@@ -57,9 +60,9 @@ describe('ClosedLoop harness', () => {
       runner: passRunner,
       isTestMode: true,
       skipBackoff: true,
+      loopId: 'test-closed-loop',
     });
 
-    // Single iteration — mock pass stops retry loop
     const result = await loop.run({ hadBlockers: false });
 
     expect(result.status).toBe('completed');
@@ -68,14 +71,20 @@ describe('ClosedLoop harness', () => {
     expect(result.formattedPr).toBeDefined();
     expect(result.formattedPr!.title.length).toBeGreaterThan(0);
     expect(result.formattedPr!.body).toContain('Summary');
+    expect(result.loopId).toBe('test-closed-loop');
 
     const state = readLoopState(stateDir);
     expect(state).not.toBeNull();
     expect(state!.lastVerification?.confidence).toBeDefined();
     expect(state!.lastVerification?.accepted).toBe(true);
+    expect(state!.exitConditionStatus?.length).toBeGreaterThan(0);
+    expect(state!.loopId).toBe('test-closed-loop');
 
     const prFile = path.join(stateDir, CLOSED_LOOP_PR_FILE);
     expect(fs.existsSync(prFile)).toBe(true);
+
+    const memory = loop.getMemory();
+    expect(fs.existsSync(path.join(memory.loopDir, 'reflection.md'))).toBe(true);
   });
 
   it('spawns specialists on phase transitions', async () => {

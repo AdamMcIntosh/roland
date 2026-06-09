@@ -7,6 +7,7 @@ import { CritiquePhaseHandler } from './critique-phase.js';
 import { RetryPhaseHandler } from './retry-phase.js';
 import { EscalatePhaseHandler } from './escalate-phase.js';
 import { ObservePhaseHandler } from './observe.js';
+import { ReflectionPhaseHandler } from './reflection-phase.js';
 
 export type { PhaseHandler, PhaseHandlerContext, PhaseResult } from './types.js';
 
@@ -18,6 +19,7 @@ const DEFAULT_HANDLERS: PhaseHandler[] = [
   new RetryPhaseHandler(),
   new EscalatePhaseHandler(),
   new ObservePhaseHandler(),
+  new ReflectionPhaseHandler(),
 ];
 
 export function createDefaultHandlers(): Map<Phase, PhaseHandler> {
@@ -32,6 +34,7 @@ export {
   RetryPhaseHandler,
   EscalatePhaseHandler,
   ObservePhaseHandler,
+  ReflectionPhaseHandler,
 };
 export type { VerifyPhaseHandlerOptions } from './verify-phase.js';
 export type { RetryPhaseHandlerOptions } from './retry-phase.js';

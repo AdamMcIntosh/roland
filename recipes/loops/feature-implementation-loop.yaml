@@ -1,7 +1,11 @@
 name: feature-implementation-loop
 description: >
-  Feature delivery loop — plan scope, implement, verify with unit/integration tests,
-  critique completeness, retry gaps, observe before shipping next slice.
+  Feature delivery loop (loops.elorm.xyz pattern) — plan scope, implement, verify, critique,
+  reflect learnings, run between-iteration checks, exit when gates green and confidence stable.
+kickoff: >
+  Start the Feature Implementation loop. Goal: feature is implemented with tests passing and
+  integration smoke green. Self-pace: after each iteration run the check command, read output,
+  reflect on learnings, and only continue if exit conditions are not met.
 phases:
   - phase: plan
     label: Plan feature
@@ -24,8 +28,22 @@ phases:
     optional: true
   - phase: observe
     label: Observe state
-maxIterations: 5
+    agent: researcher
+  - phase: reflect
+    label: Reflect on iteration
+    optional: true
+    agent: researcher
+maxIterations: 8
 maxRetries: 3
 escalationThreshold: 4
 testModeMaxRetries: 6
 testModeEscalationThreshold: 8
+min_confidence: 0.85
+between_iterations: npm test
+reflection: true
+exit_conditions:
+  - type: all_gates_pass
+    description: Unit, integration, and smoke gates pass
+  - type: command_success
+    description: npm test exits 0
+    command: npm test

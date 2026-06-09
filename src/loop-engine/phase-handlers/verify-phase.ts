@@ -15,6 +15,7 @@ export interface VerifyPhaseHandlerOptions {
   requireManualReview?: boolean;
   manualReviewApproved?: boolean;
   minConfidence?: number;
+  exitConditions?: import('../loop-phases.js').ExitConditionConfig[];
 }
 
 export class VerifyPhaseHandler implements PhaseHandler {
@@ -38,6 +39,7 @@ export class VerifyPhaseHandler implements PhaseHandler {
       requireManualReview: this.opts.requireManualReview,
       manualReviewApproved: this.opts.manualReviewApproved,
       minConfidence: this.opts.minConfidence,
+      exitConditions: this.opts.exitConditions,
     });
 
     let evaluation;
@@ -88,6 +90,7 @@ export class VerifyPhaseHandler implements PhaseHandler {
       success: evaluation.accepted,
       summary: evaluation.summary,
       verification: loopSnapshot,
+      evaluation,
     };
   }
 }

@@ -17,6 +17,8 @@ export interface PhaseResult {
   critique?: LoopCritiqueSnapshot;
   /** Structured retry output when phase is retry */
   retry?: LoopRetrySnapshot;
+  /** Full EvaluationGate result when phase is verify */
+  evaluation?: import('../evaluation-gate.js').EvaluationGateResult;
 }
 
 export interface PhaseHandlerContext {

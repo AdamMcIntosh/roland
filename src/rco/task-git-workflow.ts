@@ -16,6 +16,9 @@ import {
   buildConventionalPrTitle,
   buildPrDescription,
   buildTaskCommitMessage,
+  cleanPrDescription,
+  extractShortSummary,
+  stripMissionNoise,
 } from './pr-format.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -497,8 +500,13 @@ export class TaskGitWorkflow {
       return this.persist(task.id, info);
     }
 
-    const prTitle = buildConventionalPrTitle(task);
-    const prBody = buildPrDescription(task, {
+    const prTask = {
+      ...task,
+      title: extractShortSummary(task.title) || stripMissionNoise(task.title),
+      description: cleanPrDescription(task.description?.trim() || task.title),
+    };
+    const prTitle = buildConventionalPrTitle(prTask);
+    const prBody = buildPrDescription(prTask, {
       goal: this.opts.goal,
       runId: this.opts.runId,
       missionUrl: this.opts.missionUrl,

@@ -1,7 +1,10 @@
 name: code-quality-loop
 description: >
-  Code quality loop — plan improvements, implement fixes, verify with lint/unit/typecheck,
-  critique quality gaps, retry focused fixes, observe before next cycle.
+  Code quality loop — de-sloppify pattern from loops.elorm.xyz. Plan improvements, implement fixes,
+  verify lint/unit/typecheck, critique quality gaps, reflect, and loop until clean.
+kickoff: >
+  Start the Code Quality loop. Goal: recent changes are clean, minimal, and convention-aligned.
+  After each iteration run lint and tests, reflect on review findings, and stop when exit conditions pass.
 phases:
   - phase: plan
     label: Plan quality work
@@ -24,8 +27,21 @@ phases:
     optional: true
   - phase: observe
     label: Observe metrics
+    agent: researcher
+  - phase: reflect
+    label: Reflection pass
+    optional: true
+    agent: critic
 maxIterations: 4
 maxRetries: 3
 escalationThreshold: 4
 testModeMaxRetries: 6
 testModeEscalationThreshold: 8
+min_confidence: 0.8
+between_iterations: npm run lint && npm test
+reflection: true
+exit_conditions:
+  - type: all_gates_pass
+    description: Lint, unit, and typecheck gates pass
+  - type: command_success
+    description: Lint and test command exits 0

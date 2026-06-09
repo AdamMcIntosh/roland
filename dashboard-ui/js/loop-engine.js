@@ -17,6 +17,7 @@
     { id: 'retry',    icon: '↻',  label: 'Retry',    hint: 'Focused or full retry backoff' },
     { id: 'escalate', icon: '🚨', label: 'Escalate', hint: 'Human operator handoff' },
     { id: 'observe',  icon: '👁', label: 'Observe',  hint: 'Retrospective and memory extract' },
+    { id: 'reflect',  icon: '💭', label: 'Reflect',  hint: 'Write learnings before next iteration' },
   ];
 
   var loopHealth = null;
@@ -97,6 +98,9 @@
     var phaseHistory = health?.phaseHistory || rs?.loopPhaseHistory || [];
     var specialistSpawns = health?.specialistSpawns || [];
     var closedLoopPr = health?.closedLoopPr || null;
+    var loopMemory = health?.loopMemory || null;
+    var exitConditions = health?.exitConditions || [];
+    var exitEvaluation = health?.exitEvaluation || null;
     var isPaused = Boolean(rs?.hitlPaused);
     var isAbortPending = Boolean(rs?.hitlAbortPending);
 
@@ -111,6 +115,9 @@
       phaseHistory: phaseHistory,
       specialistSpawns: specialistSpawns,
       closedLoopPr: closedLoopPr,
+      loopMemory: loopMemory,
+      exitConditions: exitConditions,
+      exitEvaluation: exitEvaluation,
       lastVerification: lv,
       lastCritique: rs?.lastCritique,
       lastRetry: rs?.lastRetry,
@@ -290,7 +297,7 @@
           (vm.retryCount ? ' · Retry ' + esc(String(vm.retryCount)) : '') +
           (vm.confidence != null ? ' · Confidence ' + esc(formatConfidence(vm.confidence)) : '') +
         '</h5>' +
-        '<div class="loop-timeline loop-timeline-scroll">' + chips.join('') + '</div>' +
+        '<div class="loop-timeline loop-timeline-scroll" role="list" aria-label="Loop phase timeline">' + chips.join('') + '</div>' +
         '<div class="loop-phase-details-stack">' + details.join('') + '</div>' +
       '</div>'
     );
@@ -351,11 +358,50 @@
     if (!pr || !pr.title) return '';
     var statusCls = pr.status === 'completed' ? 'success' : pr.status === 'escalated' ? 'escalated' : '';
     var bodyPreview = pr.body ? esc(pr.body.slice(0, 280)).replace(/\n/g, '<br>') : '';
+    var exitNote = pr.exitReason ? ' · ' + esc(pr.exitReason.slice(0, 80)) : '';
     return '<div class="loop-pr-draft ' + statusCls + '">' +
       '<h5>PR Draft</h5>' +
       '<div class="loop-pr-title">' + esc(pr.title) + '</div>' +
       (bodyPreview ? '<div class="loop-pr-body">' + bodyPreview + (pr.body.length > 280 ? '…' : '') + '</div>' : '') +
-      '<div class="loop-pr-meta">' + esc(pr.status) + ' · iteration ' + esc(String(pr.iteration)) + '</div>' +
+      '<div class="loop-pr-meta">' + esc(pr.status) + ' · iteration ' + esc(String(pr.iteration)) + exitNote + '</div>' +
+      '</div>';
+  }
+
+  function renderExitConditionsPanel(vm) {
+    if (!vm.exitConditions || !vm.exitConditions.length) return '';
+    var rows = vm.exitConditions.map(function (c) {
+      var cls = c.met ? 'loop-exit-met' : 'loop-exit-unmet';
+      var icon = c.met ? '✓' : '✗';
+      return '<div class="loop-exit-row ' + cls + '">' +
+        '<span class="loop-exit-icon" aria-hidden="true">' + icon + '</span>' +
+        '<span class="loop-exit-desc">' + esc(c.description || c.type) + '</span>' +
+        '<span class="loop-exit-reason" title="' + esc(c.reason) + '">' + esc(c.reason.slice(0, 72)) + (c.reason.length > 72 ? '…' : '') + '</span>' +
+        '</div>';
+    }).join('');
+    var evalBanner = '';
+    if (vm.exitEvaluation && vm.exitEvaluation.reason) {
+      var evalCls = vm.exitEvaluation.shouldExit ? 'met' : 'pending';
+      evalBanner = '<div class="loop-exit-eval loop-exit-eval-' + evalCls + '">' +
+        esc(vm.exitEvaluation.shouldExit ? 'Exit met' : 'Continuing') + ': ' + esc(vm.exitEvaluation.reason.slice(0, 120)) +
+        '</div>';
+    }
+    return '<div class="loop-exit-panel">' +
+      '<h5>Exit Conditions</h5>' + evalBanner + rows +
+      '</div>';
+  }
+
+  function renderReflectionPanel(vm) {
+    var mem = vm.loopMemory;
+    if (!mem || (!mem.lastReflection && !mem.reflectionCount)) return '';
+    return '<div class="loop-reflection-panel">' +
+      '<h5>Reflection Memory</h5>' +
+      '<div class="loop-reflection-meta">' +
+        esc(mem.loopId || 'loop') + ' · ' + esc(String(mem.reflectionCount)) + ' reflection(s)' +
+        (mem.confidenceStreak ? ' · streak ' + esc(String(mem.confidenceStreak)) : '') +
+      '</div>' +
+      (mem.lastReflection
+        ? '<div class="loop-reflection-preview">' + esc(mem.lastReflection).replace(/\n/g, '<br>') + '</div>'
+        : '') +
       '</div>';
   }
 
@@ -458,6 +504,8 @@
         header + metaRow + progressBlock +
         renderMetricsRow(vm) +
         renderTimeline(vm, opts) +
+        renderExitConditionsPanel(vm) +
+        renderReflectionPanel(vm) +
         renderCritiquePanel(vm) +
         renderSpecialists(vm) +
         renderPrDraft(vm) +

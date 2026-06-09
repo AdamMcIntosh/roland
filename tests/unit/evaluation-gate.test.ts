@@ -98,4 +98,15 @@ describe('EvaluationGate', () => {
     expect(snapshot.accepted).toBe(true);
     expect(snapshot.pass).toBe(true);
   });
+
+  it('includes exit preview when exit conditions configured and accepted', async () => {
+    const gate = new EvaluationGate({
+      templateFilter: ['unit'],
+      runner: passRunner,
+      exitConditions: [{ type: 'all_gates_pass' }],
+    });
+    const result = await gate.evaluate();
+    expect(result.accepted).toBe(true);
+    expect(result.exitPreview?.wouldExit).toBe(true);
+  });
 });

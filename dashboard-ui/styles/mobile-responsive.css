@@ -1,0 +1,668 @@
+/**
+ * Roland Dashboard — Mobile-first responsive layer
+ * Tailwind-inspired utilities + iPhone / small-screen component polish.
+ * Loaded after inline styles in index.html; dark + light themes supported.
+ */
+
+/* ─── Breakpoint tokens (match index.html) ─────────────────────────────── */
+:root {
+  --bp-sm: 640px;
+  --bp-md: 760px;
+  --touch-min: 44px;
+  --stack-gap: 0.5rem;
+}
+
+/* ─── Utility classes (mobile-first, md: = min-width 641px) ─────────────── */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.flex-wrap { flex-wrap: wrap; }
+.items-center { align-items: center; }
+.items-stretch { align-items: stretch; }
+.justify-between { justify-content: space-between; }
+.justify-center { justify-content: center; }
+.gap-2 { gap: 0.5rem; }
+.gap-3 { gap: 0.75rem; }
+.p-3 { padding: 0.75rem; }
+.p-4 { padding: 1rem; }
+.text-sm { font-size: 0.875rem; }
+.text-xs { font-size: 0.75rem; }
+.min-w-0 { min-width: 0; }
+.w-full { width: 100%; }
+.touch-manipulation { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+
+@media (min-width: 641px) {
+  .md\:flex-row { flex-direction: row; }
+  .md\:w-auto { width: auto; }
+}
+
+/* ─── Global touch & overflow guardrails ─────────────────────────────────── */
+button,
+[role="button"],
+.tab-btn,
+.period-pill,
+.intel-tab,
+.btn-hitl,
+.btn-primary,
+.btn-secondary,
+.btn-icon,
+.btn-mission,
+.btn-project-github,
+.btn-project-new,
+.btn-project-switch,
+.model-picker-trigger,
+.model-picker-option,
+.goal-chip-copy,
+.toast-action-btn {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent accidental horizontal page scroll on narrow viewports */
+.page,
+.tab-panel,
+.section-box,
+.project-context,
+.mission-box,
+.ops-status,
+.action-card,
+.intel-header,
+.board-panel-scroll {
+  max-width: 100%;
+  overflow-x: clip;
+}
+@supports not (overflow-x: clip) {
+  .page,
+  .tab-panel,
+  .section-box,
+  .project-context,
+  .mission-box,
+  .ops-status,
+  .action-card { overflow-x: hidden; }
+}
+
+/* ─── ≤640px — primary phone layout ─────────────────────────────────────── */
+@media (max-width: 640px) {
+  :root {
+    --page-pad-x: 0.875rem;
+    --stack-gap: 0.5rem;
+  }
+
+  /* Header: stack title row + controls */
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+    padding: 0.6rem var(--page-pad-x);
+  }
+  .header-left {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .header-right {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem;
+    align-items: stretch;
+  }
+  .header-right .sync-badge {
+    grid-column: 1 / -1;
+    justify-content: center;
+    min-height: var(--touch-min);
+    padding: 0.35rem 0.65rem;
+  }
+  .header-right .btn-icon {
+    min-height: var(--touch-min);
+    font-size: 0.8rem;
+    padding: 0.45rem 0.65rem;
+  }
+  .header-right .last-updated {
+    grid-column: 1 / -1;
+    text-align: center;
+    order: unset;
+  }
+
+  /* Tab bar — snap scroll, larger targets */
+  .tab-bar {
+    gap: 0;
+    scroll-snap-type: x proximity;
+    padding: 0 max(0.35rem, var(--safe-left)) 0 max(0.35rem, var(--safe-right));
+  }
+  .tab-btn {
+    scroll-snap-align: start;
+    flex: 0 0 auto;
+    min-height: var(--touch-min);
+    padding: 0.55rem 0.85rem;
+  }
+
+  /* Project context bar — stack bar then action grid */
+  .project-context {
+    margin: 0.65rem 0 0.5rem;
+  }
+  .project-bar,
+  .project-context-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+    padding: 0.5rem;
+  }
+  .project-context-row .project-context-bar {
+    flex: none;
+    width: 100%;
+    border-radius: 8px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 0.65rem 0.75rem;
+  }
+  .project-context-name {
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.3;
+  }
+  .project-context-git {
+    white-space: normal;
+    word-break: break-all;
+    line-height: 1.35;
+  }
+  .project-context-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.4rem;
+    width: 100%;
+  }
+  .project-context-actions .btn-project-github,
+  .project-context-actions .btn-project-new,
+  .project-context-actions .btn-project-switch {
+    flex: none;
+    width: 100%;
+    margin: 0;
+    min-height: var(--touch-min);
+    padding: 0.5rem 0.4rem;
+    font-size: 0.72rem;
+    line-height: 1.2;
+    text-align: center;
+    white-space: normal;
+  }
+  .project-context-details {
+    padding: 0 0.5rem 0.65rem;
+  }
+
+  /* Quick actions — equal 3-up grid on phone */
+  .quick-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.4rem;
+    margin: 0.55rem 0 0.5rem;
+  }
+  .quick-actions .btn-secondary {
+    flex: none;
+    min-width: 0;
+    width: 100%;
+    min-height: var(--touch-min);
+    padding: 0.5rem 0.35rem;
+    font-size: 0.7rem;
+    line-height: 1.25;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+
+  /* Mission Control strip */
+  .ops-status {
+    padding: 0.65rem 0.75rem;
+    margin-bottom: 0.65rem;
+  }
+  .ops-status-top {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.45rem;
+  }
+  .ops-status-left {
+    justify-content: space-between;
+    width: 100%;
+  }
+  .ops-status-right {
+    margin-left: 0;
+    width: 100%;
+  }
+  .ops-status-right .btn-project-switch.compact {
+    width: 100%;
+    min-height: var(--touch-min);
+    font-size: 0.78rem;
+    padding: 0.45rem 0.75rem;
+  }
+  .ops-goal {
+    font-size: 0.85rem;
+    -webkit-line-clamp: unset;
+    display: block;
+    overflow: visible;
+    word-break: break-word;
+  }
+  .ops-meta {
+    font-size: 0.72rem;
+    gap: 0.35rem 0.55rem;
+  }
+  .ops-log-preview {
+    font-size: 0.7rem;
+    max-height: min(28dvh, 28vh, 120px);
+  }
+
+  /* New Mission form */
+  .mission-box {
+    margin-bottom: 0.85rem;
+  }
+  .mission-header {
+    padding: 0.65rem var(--page-pad-x) 0.35rem;
+  }
+  .mission-body {
+    padding: 0.35rem var(--page-pad-x) 1rem;
+    gap: 0.75rem;
+  }
+  .mission-textarea {
+    min-height: 108px;
+    font-size: max(16px, 0.88rem);
+    padding: 0.75rem;
+  }
+  .form-label,
+  .mission-field label {
+    font-size: 0.72rem;
+    margin-bottom: 0.35rem;
+    display: block;
+  }
+  .mission-select,
+  .mission-input,
+  .model-picker-trigger {
+    font-size: max(16px, 0.85rem);
+    min-height: var(--touch-min);
+  }
+  .model-picker-hint {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .mission-toggle {
+    width: 100%;
+    min-height: var(--touch-min);
+    padding: 0.25rem 0;
+  }
+  .mission-toggle input {
+    width: 1.15rem;
+    height: 1.15rem;
+  }
+  .btn-mission {
+    width: 100%;
+    min-height: 48px;
+    font-size: 0.9rem;
+  }
+
+  /* Model picker — bottom sheet on phone (avoids clipping inside cards) */
+  .model-picker.open {
+    z-index: 550;
+  }
+  .model-picker.open .model-picker-dropdown {
+    position: fixed;
+    left: max(0.65rem, var(--safe-left));
+    right: max(0.65rem, var(--safe-right));
+    bottom: max(0.65rem, var(--safe-bottom));
+    top: auto;
+    max-height: min(62dvh, 62vh, 420px);
+    z-index: 551;
+    border-radius: 12px;
+    box-shadow: 0 -12px 48px rgba(0, 0, 0, 0.45);
+  }
+  body.model-picker-sheet-open {
+    overflow: hidden;
+    touch-action: none;
+  }
+  body.model-picker-sheet-open::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 540;
+  }
+  .model-picker-option {
+    min-height: var(--touch-min);
+    padding: 0.55rem 0.75rem;
+  }
+
+  /* Loop timeline — horizontal scroll with snap */
+  .loop-timeline.loop-timeline-scroll {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    scroll-padding-inline: 0.5rem;
+    touch-action: pan-x;
+    overscroll-behavior-x: contain;
+    margin-left: -0.25rem;
+    margin-right: -0.25rem;
+    padding: 0.25rem 0.5rem 0.35rem;
+    gap: 0.45rem;
+    scrollbar-width: none;
+    mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      #000 0.5rem,
+      #000 calc(100% - 0.5rem),
+      transparent 100%
+    );
+  }
+  .loop-timeline.loop-timeline-scroll::-webkit-scrollbar {
+    display: none;
+  }
+  .loop-phase-chip,
+  .loop-phase-card {
+    scroll-snap-align: center;
+    min-width: 4.5rem;
+    min-height: var(--touch-min);
+    padding: 0.4rem 0.55rem;
+  }
+  .loop-phase-label {
+    font-size: 0.6rem;
+  }
+  .loop-controls-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.45rem;
+  }
+  .loop-controls-bar .btn-hitl,
+  .loop-error-actions .btn-hitl {
+    flex: 1 1 100%;
+    width: 100%;
+    min-height: var(--touch-min);
+    justify-content: center;
+  }
+  .loop-pr-draft,
+  .loop-specialists-panel {
+    font-size: 0.74rem;
+  }
+  .loop-pr-title {
+    word-break: break-word;
+  }
+  .loop-pr-body {
+    word-break: break-word;
+    max-height: 12rem;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Mission Intel / Board Status */
+  .intel-header {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0.65rem var(--page-pad-x);
+    gap: 0.55rem;
+  }
+  .intel-header h2 {
+    text-align: left;
+    width: 100%;
+  }
+  .intel-subtabs {
+    width: 100%;
+    justify-content: stretch;
+  }
+  .intel-tab {
+    flex: 1 1 50%;
+    min-height: var(--touch-min);
+    text-align: center;
+    font-size: 0.78rem;
+  }
+  .intel-header .btn-board-refresh {
+    width: 100%;
+    min-height: var(--touch-min);
+    font-size: 0.8rem;
+  }
+  .board-panel-scroll {
+    max-height: min(42dvh, 42vh, 360px);
+  }
+  .board-add-goal-section {
+    padding: 0.65rem var(--page-pad-x);
+  }
+  .board-add-goal-input {
+    min-height: var(--touch-min);
+    font-size: max(16px, 0.8rem);
+  }
+  .board-add-goal-priority {
+    min-height: var(--touch-min);
+    font-size: max(16px, 0.78rem);
+  }
+
+  /* GitHub repos modal */
+  .github-modal-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.45rem;
+    padding: 0.55rem var(--page-pad-x);
+  }
+  .github-modal-status {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .github-modal-toolbar .btn-secondary {
+    width: 100%;
+    min-height: var(--touch-min);
+  }
+  .github-connect-actions {
+    flex-direction: column;
+  }
+  .github-connect-actions .btn-primary,
+  .github-connect-actions .btn-secondary {
+    width: 100%;
+    min-height: var(--touch-min);
+  }
+  .github-repo-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+    padding: 0.75rem var(--page-pad-x);
+  }
+  .github-repo-name {
+    word-break: break-word;
+  }
+  .github-repo-action {
+    width: 100%;
+    min-height: var(--touch-min);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .github-modal-footer {
+    flex-direction: column;
+  }
+  .github-modal-footer .btn-secondary {
+    width: 100%;
+    min-height: var(--touch-min);
+  }
+
+  /* Actions tab */
+  .actions-layout {
+    padding: 0.75rem var(--page-pad-x);
+    gap: 0.65rem;
+  }
+  .action-card-body {
+    padding: 0.75rem;
+  }
+  .hitl-panel-buttons .btn-hitl {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-height: var(--touch-min);
+    justify-content: center;
+  }
+  .new-run-opt {
+    min-height: var(--touch-min);
+    width: 100%;
+  }
+  .goal-chip {
+    min-height: var(--touch-min);
+    padding: 0.45rem 0.65rem;
+  }
+  .goal-chip-copy {
+    min-width: var(--touch-min);
+    min-height: var(--touch-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .pr-input-row {
+    flex-direction: column;
+  }
+  .pr-input,
+  .pr-input-row .btn-secondary {
+    width: 100%;
+    min-height: var(--touch-min);
+    font-size: max(16px, 0.8rem);
+  }
+
+  /* Period pills & cards */
+  .period-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.4rem;
+  }
+  .period-pills {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.35rem;
+    width: 100%;
+  }
+  .period-pill {
+    min-height: var(--touch-min);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72rem;
+    padding: 0.35rem 0.25rem;
+  }
+  .cards {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.45rem;
+  }
+  .card-estimate {
+    font-size: 0.65rem;
+    line-height: 1.4;
+  }
+
+  /* Tables — contained horizontal scroll only inside table-scroll */
+  .table-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+  .usage-table th,
+  .usage-table td {
+    padding: 0.55rem 0.65rem;
+    font-size: 0.72rem;
+  }
+
+  /* HITL bar on live status */
+  .hitl-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .hitl-bar .btn-hitl {
+    width: 100%;
+    justify-content: center;
+    min-height: var(--touch-min);
+  }
+
+  /* Modals — full-width bottom sheets */
+  .project-modal-backdrop {
+    align-items: flex-end;
+  }
+  .project-modal {
+    width: 100%;
+    max-height: min(88dvh, 88vh);
+    border-radius: 16px 16px 0 0;
+  }
+  .project-modal-footer {
+    flex-direction: column;
+  }
+  .project-modal-footer .btn-project-github,
+  .project-modal-footer .btn-project-new {
+    width: 100%;
+    min-height: var(--touch-min);
+  }
+  .create-project-actions {
+    flex-direction: column;
+  }
+  .create-project-actions .btn-primary,
+  .create-project-actions .btn-secondary {
+    width: 100%;
+    min-height: var(--touch-min);
+  }
+
+  /* Toast — full width above home indicator */
+  #toast-container {
+    bottom: max(0.75rem, var(--safe-bottom));
+    left: max(0.65rem, var(--safe-left));
+    right: max(0.65rem, var(--safe-right));
+  }
+  .toast {
+    max-width: none;
+    width: 100%;
+  }
+  .toast-action-btn {
+    min-height: 36px;
+    padding: 0.35rem 0.65rem;
+  }
+}
+
+/* ─── ≤380px — very narrow phones ───────────────────────────────────────── */
+@media (max-width: 380px) {
+  .quick-actions {
+    grid-template-columns: 1fr;
+  }
+  .quick-actions .btn-secondary {
+    font-size: 0.78rem;
+  }
+  .project-context-actions {
+    grid-template-columns: 1fr;
+  }
+  .period-pills {
+    grid-template-columns: 1fr 1fr;
+  }
+  .cards {
+    grid-template-columns: 1fr;
+  }
+  .header-right .last-updated {
+    display: none;
+  }
+}
+
+/* ─── Landscape phone ─────────────────────────────────────────────────────── */
+@media (max-width: 896px) and (orientation: landscape) {
+  .shell-sticky .header {
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+  }
+  .tab-btn {
+    min-height: 38px;
+    padding: 0.4rem 0.7rem;
+  }
+  .board-panel-scroll {
+    max-height: min(34dvh, 34vh);
+  }
+  .mission-graph-viewport {
+    max-height: min(40dvh, 40vh);
+    min-height: 160px;
+  }
+  .model-picker.open .model-picker-dropdown {
+    max-height: min(52dvh, 52vh);
+  }
+}
+
+/* ─── Light theme mobile tweaks ───────────────────────────────────────────── */
+@media (max-width: 640px) {
+  [data-theme="light"] .project-context-row .project-context-bar {
+    background: var(--surface2);
+  }
+  [data-theme="light"] .loop-timeline.loop-timeline-scroll {
+    mask-image: none;
+  }
+  [data-theme="light"] body.model-picker-sheet-open::before {
+    background: rgba(0, 0, 0, 0.25);
+  }
+}

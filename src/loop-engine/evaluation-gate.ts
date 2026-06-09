@@ -62,6 +62,11 @@ export interface EvaluationGateResult extends VerificationResult {
   gates: GateResult[];
   /** True when all required gates passed and confidence >= minConfidence. */
   accepted: boolean;
+  /** Exit condition preview when configured (full eval at iteration end). */
+  exitPreview?: {
+    wouldExit: boolean;
+    reason: string;
+  };
 }
 
 export interface EvaluationGateOptions {
@@ -78,6 +83,8 @@ export interface EvaluationGateOptions {
   minConfidence?: number;
   runner?: CommandRunner;
   blackboard?: Blackboard;
+  /** Exit conditions evaluated after gate run (informational in gate summary). */
+  exitConditions?: import('./loop-phases.js').ExitConditionConfig[];
 }
 
 const DEFAULT_MIN_CONFIDENCE = 0.75;
@@ -251,6 +258,13 @@ export class EvaluationGate {
       gates,
       accepted,
     };
+
+    if (this.opts.exitConditions?.length && accepted) {
+      result.exitPreview = {
+        wouldExit: true,
+        reason: 'All gates accepted — exit conditions eligible at iteration end',
+      };
+    }
 
     this.opts.blackboard?.post({
       type: 'result',
