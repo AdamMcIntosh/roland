@@ -35,6 +35,10 @@ export interface LoopVerificationSnapshot {
   summary: string;
   at: number;
   durationMs?: number;
+  /** Weighted gate confidence (0–1) from EvaluationGate. */
+  confidence?: number;
+  /** True when confidence meets threshold and required gates passed. */
+  accepted?: boolean;
   strategies?: LoopVerificationStrategySnapshot[];
 }
 

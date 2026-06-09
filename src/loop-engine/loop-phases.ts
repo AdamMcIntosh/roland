@@ -1,7 +1,7 @@
 /**
  * Loop Phase Model — canonical phases for Loop Engineering missions.
  *
- * Standard loop: Plan → Act → Verify → Critique → Retry → Observe
+ * Standard loop: Plan → Act → Verify → Critique → Retry → Escalate → Observe
  */
 
 export const Phase = {
@@ -10,6 +10,7 @@ export const Phase = {
   Verify: 'verify',
   Critique: 'critique',
   Retry: 'retry',
+  Escalate: 'escalate',
   Observe: 'observe',
 } as const;
 
@@ -21,6 +22,7 @@ export const ALL_PHASES: readonly Phase[] = [
   Phase.Verify,
   Phase.Critique,
   Phase.Retry,
+  Phase.Escalate,
   Phase.Observe,
 ];
 

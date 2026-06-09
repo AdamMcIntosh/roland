@@ -213,6 +213,15 @@ export class LoopEngine {
         console.error(
           `[Loop][engine] retry budget exhausted retryCount=${this.store.get().retryCount} maxRetries=${maxRetries}`,
         );
+        const escalateConfig = this.template.phases.find((p) => p.phase === P.Escalate);
+        if (escalateConfig) {
+          await this.runPhase(escalateConfig, {
+            iteration: iter,
+            hadBlockers: context.hadBlockers,
+            waveNumber: context.waveNumber,
+          });
+          phasesCompleted++;
+        }
         this.store.setStatus('escalated');
         this.emitState();
         this.observability.persistMetrics(this.store.get());
@@ -268,6 +277,16 @@ export class LoopEngine {
         continue;
       }
 
+      if (phaseConfig.optional && phaseConfig.phase === P.Escalate) {
+        const pendingEscalation =
+          shouldRetryLoop &&
+          this.store.get().retryCount >= this.critiqueThresholds.maxRetries;
+        if (!pendingEscalation) {
+          console.error(`[Loop][engine] skipping optional Escalate phase (no escalation needed)`);
+          continue;
+        }
+      }
+
       const result = await this.runPhase(phaseConfig, {
         iteration: iter,
         hadBlockers: context.hadBlockers,
@@ -276,6 +295,15 @@ export class LoopEngine {
       phasesCompleted++;
 
       if (result.shouldEscalate) {
+        const escalateConfig = this.template.phases.find((p) => p.phase === P.Escalate);
+        if (escalateConfig) {
+          await this.runPhase(escalateConfig, {
+            iteration: iter,
+            hadBlockers: context.hadBlockers,
+            waveNumber: context.waveNumber,
+          });
+          phasesCompleted++;
+        }
         this.store.setStatus('escalated');
         this.emitState();
         return { phasesCompleted, shouldRetryLoop: false, terminalStatus: 'escalated' };

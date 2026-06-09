@@ -5,6 +5,7 @@ import { ActPhaseHandler } from './act.js';
 import { VerifyPhaseHandler } from './verify-phase.js';
 import { CritiquePhaseHandler } from './critique-phase.js';
 import { RetryPhaseHandler } from './retry-phase.js';
+import { EscalatePhaseHandler } from './escalate-phase.js';
 import { ObservePhaseHandler } from './observe.js';
 
 export type { PhaseHandler, PhaseHandlerContext, PhaseResult } from './types.js';
@@ -15,6 +16,7 @@ const DEFAULT_HANDLERS: PhaseHandler[] = [
   new VerifyPhaseHandler(),
   new CritiquePhaseHandler(),
   new RetryPhaseHandler(),
+  new EscalatePhaseHandler(),
   new ObservePhaseHandler(),
 ];
 
@@ -28,6 +30,7 @@ export {
   VerifyPhaseHandler,
   CritiquePhaseHandler,
   RetryPhaseHandler,
+  EscalatePhaseHandler,
   ObservePhaseHandler,
 };
 export type { VerifyPhaseHandlerOptions } from './verify-phase.js';
