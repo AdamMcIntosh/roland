@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { spawn, type ChildProcess } from 'child_process';
+import { spawnHidden } from '../../@roland-core/dist/utils/spawn-silent.js';
 import { randomUUID } from 'crypto';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
@@ -50,7 +50,7 @@ interface RolandRunResult {
 }
 
 // Single-replica deployment — one active Roland process per project at a time.
-const activeRunsByProject = new Map<string, ChildProcess>();
+const activeRunsByProject = new Map<string, import('child_process').ChildProcess>();
 
 /** Projects explicitly cancelled via POST /run/cancel — not inferred from signals. */
 const explicitlyCancelledProjects = new Set<string>();
@@ -72,10 +72,10 @@ function runRolandSync(
   return new Promise((resolvePromise, reject) => {
     let output = '';
 
-    const child = spawn(process.execPath, [rolandEntry, ...args], {
+    const child = spawnHidden(process.execPath, [rolandEntry, ...args], {
       cwd,
       env: { ...process.env, ...env },
-      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
 
     activeRunsByProject.set(projectId, child);

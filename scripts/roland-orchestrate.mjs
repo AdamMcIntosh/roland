@@ -25,7 +25,7 @@ if (!existsSync(distRoot)) {
 }
 
 const { Agent, CursorAgentError } = await import('@cursor/sdk');
-const { configureSdkProcessLimits } = await import(
+const { configureSdkProcessLimits, resolveSdkAgentLocalOptions } = await import(
   resolve(distRoot, 'utils/sdk-lifecycle.js')
 );
 configureSdkProcessLimits();
@@ -80,7 +80,10 @@ async function createRolandSupervisor() {
         apiKey,
         model: { id: 'gpt-5.4-nano' },
         name: 'Roland',
-        local: { cwd: process.cwd(), settingSources: ['project'] },
+        local: resolveSdkAgentLocalOptions('Roland', {
+          cwd: process.cwd(),
+          settingSources: ['project'],
+        }),
         agents: unscAgents,
       });
     } catch (err) {

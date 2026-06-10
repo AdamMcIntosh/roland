@@ -418,20 +418,33 @@ async function main(): Promise<void> {
           console.error(`Orchestrate script not found: ${script}`);
           process.exit(1);
         }
-        const { spawnSync } = await import('child_process');
         const goal = rest.join(' ').trim();
         if (!goal) {
           console.error('Usage: roland orchestrate "<mission goal>"');
           process.exit(1);
         }
         const projectRoot = process.env.ROLAND_PROJECT_ROOT?.trim() || process.cwd();
-        const result = spawnSync(process.execPath, [script, goal], {
-          stdio: 'inherit',
+        const logDir = path.join(projectRoot, '.roland', 'logs');
+        fs.mkdirSync(logDir, { recursive: true });
+        const logFile = path.join(logDir, `orchestrate-${Date.now()}.log`);
+
+        if ((process.stderr as NodeJS.WriteStream).isTTY) {
+          const { spawnSync } = await import('child_process');
+          const result = spawnSync(process.execPath, [script, goal], {
+            stdio: 'inherit',
+            cwd: projectRoot,
+            env: process.env,
+          });
+          process.exit(result.status ?? 1);
+        }
+
+        const { spawnSilent } = await import('./utils/spawn-silent.js');
+        const child = spawnSilent(process.execPath, [script, goal], {
           cwd: projectRoot,
-          env: process.env,
+          log: { logFile, logMode: 'w' },
         });
-        process.exit(result.status ?? 1);
-        break;
+        child.on('close', (code) => process.exit(code ?? 1));
+        return;
       }
       case 'watch': {
         const { runWatchCli } = await import('./rco/watch-cli.js');

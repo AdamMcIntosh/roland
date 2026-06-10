@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { spawnSilent } from '../../src/utils/spawn-silent.js';
+import { buildSilentSpawnOptions, spawnSilent } from '../../src/utils/spawn-silent.js';
 
 describe('spawnSilent', () => {
   it('spawns a detached child with a pid', () => {
@@ -21,5 +21,22 @@ describe('spawnSilent', () => {
     await new Promise<void>((resolve) => child.on('close', () => resolve()));
     const content = fs.readFileSync(logFile, 'utf8');
     expect(content).toContain('silent-log-ok');
+  });
+
+  it('buildSilentSpawnOptions sets windowsHide and ignores stdio by default', () => {
+    const opts = buildSilentSpawnOptions();
+    expect(opts.windowsHide).toBe(true);
+    expect(opts.shell).toBe(false);
+    expect(opts.detached).toBe(true);
+    expect(opts.stdio).toEqual(['ignore', 'ignore', 'ignore']);
+  });
+
+  it('buildSilentSpawnOptions adds CREATE_NO_WINDOW on Windows', () => {
+    const opts = buildSilentSpawnOptions() as { creationFlags?: number };
+    if (process.platform === 'win32') {
+      expect(opts.creationFlags! & 0x08000000).toBe(0x08000000);
+    } else {
+      expect(opts.creationFlags).toBeUndefined();
+    }
   });
 });

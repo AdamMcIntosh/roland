@@ -8,7 +8,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { fork, type ForkOptions } from 'child_process';
+import { forkSilent } from '../utils/spawn-silent.js';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
 import { loadRecipe, loadAllAgents, loadRcoConfig } from './loadConfig.js';
@@ -175,12 +175,9 @@ function defaultRunWorker(workerPath: string, input: WorkerInput): Promise<Worke
       fn();
     };
 
-    const forkOpts: ForkOptions & { windowsHide?: boolean } = {
-      stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+    const child = forkSilent(workerPath, [], {
       env: process.env,
-      windowsHide: true,
-    };
-    const child = fork(workerPath, [], forkOpts);
+    });
 
     child.on('message', (msg: unknown) => {
       const typed = msg as { type?: string };

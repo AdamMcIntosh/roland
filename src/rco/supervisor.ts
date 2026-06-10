@@ -50,6 +50,11 @@ export interface SupervisorRecord {
   restarts:  number;
 }
 
+export interface SpawnBackgroundResult {
+  pid:     number;
+  logFile: string;
+}
+
 // ── Liveness check ─────────────────────────────────────────────────────────────
 
 export function isProcessRunning(pid: number): boolean {
@@ -411,7 +416,8 @@ export async function spawnBackground(
   goal:     string,
   teamArgv: string[],  // full argv as passed to runTeamCli, includes 'team' prefix
   stateDir: string,
-): Promise<void> {
+  opts?: { quiet?: boolean },
+): Promise<SpawnBackgroundResult> {
   const supervisorScript = path.join(__dirname, 'supervisor.js');
   if (!fs.existsSync(supervisorScript)) {
     throw new Error(
@@ -451,21 +457,25 @@ export async function spawnBackground(
     restarts:  0,
   });
 
-  const dim  = (s: string) => `\x1b[2m${s}\x1b[0m`;
-  const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
-  const cyan = (s: string) => `\x1b[36m${s}\x1b[0m`;
+  if (!opts?.quiet) {
+    const dim  = (s: string) => `\x1b[2m${s}\x1b[0m`;
+    const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
+    const cyan = (s: string) => `\x1b[36m${s}\x1b[0m`;
 
-  process.stderr.write('\n');
-  process.stderr.write(`  ${bold('✅ Roland is running in the background')}\n`);
-  process.stderr.write(`\n`);
-  process.stderr.write(`  ${dim('PID')}       ${child.pid}\n`);
-  process.stderr.write(`  ${dim('Goal')}      ${goal.slice(0, 70)}${goal.length > 70 ? '…' : ''}\n`);
-  process.stderr.write(`  ${dim('Logs')}      ${logFile}\n`);
-  process.stderr.write(`\n`);
-  process.stderr.write(`  ${cyan('roland bg-status')}           check progress + wave info\n`);
-  process.stderr.write(`  ${cyan('roland bg-logs --follow')}    stream log output live\n`);
-  process.stderr.write(`  ${cyan('roland bg-stop')}             gracefully stop the run\n`);
-  process.stderr.write('\n');
+    process.stderr.write('\n');
+    process.stderr.write(`  ${bold('✅ Roland is running in the background')}\n`);
+    process.stderr.write(`\n`);
+    process.stderr.write(`  ${dim('PID')}       ${child.pid}\n`);
+    process.stderr.write(`  ${dim('Goal')}      ${goal.slice(0, 70)}${goal.length > 70 ? '…' : ''}\n`);
+    process.stderr.write(`  ${dim('Logs')}      ${logFile}\n`);
+    process.stderr.write(`\n`);
+    process.stderr.write(`  ${cyan('roland bg-status')}           check progress + wave info\n`);
+    process.stderr.write(`  ${cyan('roland bg-logs --follow')}    stream log output live\n`);
+    process.stderr.write(`  ${cyan('roland bg-stop')}             gracefully stop the run\n`);
+    process.stderr.write('\n');
+  }
+
+  return { pid: child.pid, logFile };
 }
 
 // ── Supervisor worker main (runs inside the detached process) ─────────────────
