@@ -11,7 +11,7 @@
  *   - Developer extension enabled in ~/.config/goose/config.yaml
  */
 
-import { spawn } from 'child_process';
+import { spawnHidden } from './spawn-silent.js';
 import { execSync } from 'child_process';
 import { getPermissionBlock, readPermissions } from './permission-gate.js';
 
@@ -165,12 +165,10 @@ export function spawnGooseSession(options: GooseSessionOptions): Promise<GooseSe
     const t0 = Date.now();
     const chunks: string[] = [];
 
-    const child = spawn('goose', ['run', ...sessionArgs, '-t', effectiveTask], {
+    const child = spawnHidden('goose', ['run', ...sessionArgs, '-t', effectiveTask], {
       cwd: projectRoot,
       env,
-      // Supervised mode needs a writable stdin so we can respond to confirmations
       stdio: supervised ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
     });
 
     const handleChunk = (data: Buffer) => {

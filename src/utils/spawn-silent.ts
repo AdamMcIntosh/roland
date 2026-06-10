@@ -5,9 +5,12 @@
  * children with ignored stdio (or optional log files under `.roland/logs/`).
  */
 
-import { spawn, type ChildProcess, type SpawnOptions } from 'child_process';
+import { spawn, fork, type ChildProcess, type ForkOptions, type SpawnOptions } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+
+/** Windows CREATE_NO_WINDOW — belt-and-suspenders alongside windowsHide. */
+const CREATE_NO_WINDOW = 0x08000000;
 
 export interface SpawnSilentLogOptions {
   /** Redirect stdout/stderr to this file. */
@@ -27,9 +30,35 @@ export interface SpawnSilentOptions {
   unref?: boolean;
 }
 
+/** Shared spawn/fork flags for hidden background children. */
+export function buildSilentSpawnOptions(
+  overrides: SpawnOptions & ForkOptions = {},
+): SpawnOptions & ForkOptions {
+  const base: SpawnOptions & ForkOptions = {
+    detached: overrides.detached ?? true,
+    stdio: overrides.stdio ?? ['ignore', 'ignore', 'ignore'],
+    windowsHide: true,
+    shell: false,
+    ...overrides,
+  };
+
+  if (process.platform === 'win32') {
+    const existing = typeof base.windowsVerbatimArguments === 'boolean'
+      ? base.windowsVerbatimArguments
+      : false;
+    base.windowsVerbatimArguments = existing;
+    // Explicit CREATE_NO_WINDOW for GUI-parent spawns (Cursor/Electron MCP host).
+    base.detached = overrides.detached ?? true;
+    (base as SpawnOptions & { creationFlags?: number }).creationFlags =
+      ((base as SpawnOptions & { creationFlags?: number }).creationFlags ?? 0) | CREATE_NO_WINDOW;
+  }
+
+  return base;
+}
+
 /**
  * Spawn a child with no visible terminal window.
- * Unix: detached + unref. Windows: windowsHide + detached.
+ * Unix: detached + unref. Windows: windowsHide + CREATE_NO_WINDOW + detached.
  */
 export function spawnSilent(
   command: string,
@@ -49,14 +78,16 @@ export function spawnSilent(
     stdio = ['ignore', logFd, logFd];
   }
 
-  const child = spawn(command, args, {
-    cwd: options.cwd,
-    env: options.env ? { ...process.env, ...options.env } : process.env,
-    detached,
-    stdio,
-    windowsHide: true,
-    shell: false,
-  });
+  const child = spawn(
+    command,
+    args,
+    buildSilentSpawnOptions({
+      cwd: options.cwd,
+      env: options.env ? { ...process.env, ...options.env } : process.env,
+      detached,
+      stdio,
+    }),
+  );
 
   if (logFd !== undefined) {
     fs.closeSync(logFd);
@@ -86,11 +117,47 @@ export function spawnHidden(
   args?: string[],
   options: SpawnHiddenOptions = {},
 ): ChildProcess {
-  return spawn(command, args ?? [], {
-    cwd: options.cwd,
-    env: options.env ? { ...process.env, ...options.env } : process.env,
-    shell: options.shell ?? false,
-    stdio: options.stdio ?? ['ignore', 'pipe', 'pipe'],
-    windowsHide: true,
-  });
+  return spawn(
+    command,
+    args ?? [],
+    buildSilentSpawnOptions({
+      cwd: options.cwd,
+      env: options.env ? { ...process.env, ...options.env } : process.env,
+      shell: options.shell ?? false,
+      stdio: options.stdio ?? ['ignore', 'pipe', 'pipe'],
+      detached: false,
+      unref: false,
+    } as SpawnOptions),
+  );
+}
+
+export interface ForkSilentOptions {
+  cwd?: string;
+  env?: Record<string, string | undefined>;
+  /** IPC channel (default true for fork). */
+  ipc?: boolean;
+}
+
+/**
+ * Fork a Node module with no visible terminal window — for recipe orchestrator workers.
+ */
+export function forkSilent(
+  modulePath: string,
+  args?: string[],
+  options: ForkSilentOptions = {},
+): ChildProcess {
+  const stdio: ForkOptions['stdio'] = options.ipc === false
+    ? ['pipe', 'pipe', 'pipe']
+    : ['pipe', 'pipe', 'pipe', 'ipc'];
+
+  return fork(
+    modulePath,
+    args ?? [],
+    buildSilentSpawnOptions({
+      cwd: options.cwd,
+      env: options.env ? { ...process.env, ...options.env } : process.env,
+      stdio,
+      detached: false,
+    } as ForkOptions),
+  );
 }

@@ -36,7 +36,8 @@ import { RecipeSessionManager, ParsedRecipe, SubagentDef, RecipeStepDef } from '
 import { generateDiff } from '../utils/diff-engine.js';
 import { normaliseGooseModel, spawnGooseSession, isGooseAvailable } from '../utils/goose-runner.js';
 import { gitStatus, gitDiff, gitLog, gitCommit } from '../utils/git-tools.js';
-import { spawnSilent } from '../utils/spawn-silent.js';
+import { spawnBackground } from '../rco/supervisor.js';
+import { configureSdkProcessLimits } from '../utils/sdk-lifecycle.js';
 import { analyzeScreenshot } from '../utils/screenshot.js';
 import { getDiffStreamServer, initDiffStreamServer } from './diff-stream.js';
 import {
@@ -3479,32 +3480,14 @@ What would you like to work on?`;
           ? args.state_dir
           : path.join(projectRoot, '.roland');
 
-        // Locate the roland CLI entry point (dist/index.js from dist/server/)
-        let entryPoint: string;
-        try {
-          const thisFile = fileURLToPath(import.meta.url);
-          entryPoint = path.resolve(path.dirname(thisFile), '..', 'index.js');
-          if (!fs.existsSync(entryPoint)) throw new Error('not found');
-        } catch {
-          entryPoint = path.join(process.cwd(), 'dist', 'index.js');
-        }
-
-        // Prepare log file
-        const logDir = path.join(stateDir, 'logs');
-        fs.mkdirSync(logDir, { recursive: true });
-        const ts = Date.now();
-        const logFile = path.join(logDir, `chat-${ts}.log`);
-
-        const spawnArgs = [entryPoint, 'team', goal.trim(), '--background'];
         const loopTemplate = typeof args.loop_template === 'string' ? args.loop_template.trim() : '';
-        if (loopTemplate) spawnArgs.push('--loop-template', loopTemplate);
+        const teamArgv = ['team', goal.trim(), '--background', '--quiet', '--no-tui'];
+        if (loopTemplate) teamArgv.push('--loop-template', loopTemplate);
 
-        const child = spawnSilent(process.execPath, spawnArgs, {
-          cwd: projectRoot,
-          log: { logFile },
-        });
+        process.env.ROLAND_STATE_DIR = stateDir;
+        process.env.ROLAND_PROJECT_ROOT = projectRoot;
 
-        const pid = child.pid ?? 0;
+        const { pid, logFile } = await spawnBackground(goal.trim(), teamArgv, stateDir, { quiet: true });
         const truncatedGoal = goal.trim().slice(0, 100) + (goal.trim().length > 100 ? '…' : '');
 
         return {
@@ -3642,6 +3625,8 @@ function isMcpMainModule(): boolean {
 
 /** Run Roland as a stdio MCP server — used by `npm run mcp`, Cursor, and `roland serve`. */
 export async function runMcpServer(): Promise<void> {
+  configureSdkProcessLimits();
+
   const { loadConfig } = await import('../config/config-loader.js');
 
   if (process.env.ROLAND_QUIET === '1' || process.env.ROLAND_QUIET === 'true') {
