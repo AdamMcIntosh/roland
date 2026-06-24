@@ -54,6 +54,69 @@ async function serve(): Promise<void> {
   await runMcpServer();
 }
 
+/** Verify @cursor/sdk is installable for `roland team` / orchestrate on this platform. */
+function checkCursorSdkRuntime(installRoot: string): { ok: boolean; label: string; hint?: string } {
+  const platform = process.platform;
+  const arch = process.arch;
+  const abi = process.versions.modules;
+  const sdkPkgPath = path.join(installRoot, 'node_modules', '@cursor', 'sdk', 'package.json');
+  const sdkDist = path.join(installRoot, 'node_modules', '@cursor', 'sdk', 'dist');
+
+  if (!fs.existsSync(sdkPkgPath)) {
+    return {
+      ok: false,
+      label: `@cursor/sdk (${platform}/${arch}, Node ABI ${abi})`,
+      hint: 'Run `npm ci` from the Roland install root.',
+    };
+  }
+
+  let sdkMeta: { optionalDependencies?: Record<string, string> } = {};
+  try {
+    sdkMeta = JSON.parse(fs.readFileSync(sdkPkgPath, 'utf-8')) as typeof sdkMeta;
+  } catch {
+    // Fall through to dist-only check.
+  }
+
+  const platformPkgName = `@cursor/sdk-${platform}-${arch}`;
+  if (sdkMeta.optionalDependencies?.[platformPkgName]) {
+    const platformDir = path.join(installRoot, 'node_modules', '@cursor', `sdk-${platform}-${arch}`);
+    const platformOk = fs.existsSync(path.join(platformDir, 'package.json'));
+    return {
+      ok: platformOk,
+      label: `@cursor/sdk platform package (${platformPkgName})`,
+      hint: platformOk ? undefined : `Run \`npm ci\` from repo root to install ${platformPkgName}.`,
+    };
+  }
+
+  // Legacy @cursor/sdk releases shipped npm sqlite3 native bindings.
+  const sqliteRoot = path.join(installRoot, 'node_modules', 'sqlite3');
+  if (fs.existsSync(path.join(sqliteRoot, 'package.json'))) {
+    const sqliteBinding = path.join(
+      sqliteRoot,
+      'lib',
+      'binding',
+      `node-v${abi}-${platform}-${arch}`,
+      'node_sqlite3.node',
+    );
+    const sqliteRelease = path.join(sqliteRoot, 'build', 'Release', 'node_sqlite3.node');
+    const sqliteOk = fs.existsSync(sqliteBinding) || fs.existsSync(sqliteRelease);
+    return {
+      ok: sqliteOk,
+      label: `@cursor/sdk sqlite3 binding (${platform}/${arch}, Node ABI ${abi})`,
+      hint: sqliteOk
+        ? undefined
+        : 'Install VS "Desktop development with C++", then `npm rebuild sqlite3`. See docs/guides/mini-pc-deployment.md.',
+    };
+  }
+
+  const distOk = fs.existsSync(sdkDist);
+  return {
+    ok: distOk,
+    label: `@cursor/sdk (${platform}/${arch}, Node ABI ${abi})`,
+    hint: distOk ? undefined : 'Run `npm ci` from the Roland install root.',
+  };
+}
+
 function mcpConfig(write: boolean): void {
   const block = { mcpServers: { roland: rolandMcpEntry() } };
   if (!write) {
@@ -130,26 +193,9 @@ function doctor(): void {
   }
   add(canWrite, `Writable .roland/ in ${process.cwd()}`, canWrite ? undefined : 'Check directory permissions.');
 
-  // @cursor/sdk → sqlite3 native binding (orchestrate + team mode)
-  const pkgRoot = installRoot;
-  const sqliteBinding = path.join(
-    pkgRoot,
-    'node_modules',
-    'sqlite3',
-    'lib',
-    'binding',
-    `node-v${process.versions.modules}-${process.platform}-${process.arch}`,
-    'node_sqlite3.node',
-  );
-  const sqliteRelease = path.join(pkgRoot, 'node_modules', 'sqlite3', 'build', 'Release', 'node_sqlite3.node');
-  const sqliteOk = fs.existsSync(sqliteBinding) || fs.existsSync(sqliteRelease);
-  add(
-    sqliteOk,
-    `@cursor/sdk sqlite3 binding (${process.platform}/${process.arch}, Node ABI ${process.versions.modules})`,
-    sqliteOk
-      ? undefined
-      : 'Required for `roland team` and orchestrate. From repo root: install VS "Desktop development with C++", then `npm rebuild sqlite3`. See docs/guides/mini-pc-deployment.md.',
-  );
+  // @cursor/sdk runtime (orchestrate + team mode)
+  const sdkCheck = checkCursorSdkRuntime(installRoot);
+  add(sdkCheck.ok, sdkCheck.label, sdkCheck.hint);
 
   // SDK shell-exec cleanup tuning (optional env overrides)
   const settleMs = process.env.ROLAND_SDK_SETTLE_MS ?? '3500 (default)';
