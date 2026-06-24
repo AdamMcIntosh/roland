@@ -97,7 +97,7 @@ describe('loop-orchestrator', () => {
     expect(result.wavesRun).toBeGreaterThanOrEqual(1);
     expect(result.synthesis).toContain('Closed-Loop Mission Complete');
     expect(result.synthesis).toContain('PR Draft');
-    expect(result.plan.pmNotes).toMatch(/ClosedLoop harness|PM path|Stub PM plan/i);
+    expect(result.plan.pmNotes).toMatch(/ClosedLoop harness|PM path|pure ClosedLoop|lightweight/i);
 
     expect(fs.existsSync(path.join(tmpDir, CLOSED_LOOP_PR_FILE))).toBe(true);
 

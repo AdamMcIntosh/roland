@@ -45,8 +45,6 @@ testModeEscalationThreshold: 10
 timeout_ms: 1800000
 exponential_backoff: true
 min_confidence: 0.85
-pm_plan: auto
-pm_act: auto
 between_iterations: npm test
 reflection: true
 exit_conditions:

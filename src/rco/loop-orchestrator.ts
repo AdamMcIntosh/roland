@@ -7,7 +7,7 @@
  * - LoopEngineCoordinator + inline LoopEngine construction in team-orchestrator is deprecated for loop missions.
  */
 
-import { ClosedLoop, LoopTemplates, readLoopPmSession, type ClosedLoopResult } from '../loop-engine/index.js';
+import { ClosedLoop, LoopTemplates, readLoopPmSession, resolvePmIntegrationStatus, logPmIntegrationMode, type ClosedLoopResult } from '../loop-engine/index.js';
 import { ModelRouter } from '../models/model-router.js';
 import { Blackboard } from './blackboard.js';
 import { CommandBlackboard } from './command-blackboard.js';
@@ -57,6 +57,10 @@ export async function runClosedLoopMission(opts: ClosedLoopMissionOptions): Prom
   const runId = Date.now().toString(36);
   const runStart = Date.now();
 
+  const template = templates.get(templateName)!;
+  const pmStatus = resolvePmIntegrationStatus(template, { enablePmIntegration: opts.enablePmIntegration });
+  logPmIntegrationMode(pmStatus, templateName);
+
   const modelRouter = ModelRouter.fromConfig();
   const validation = ModelRouter.validateOnStartup(modelRouter);
   if (!validation.ok) {
@@ -71,7 +75,6 @@ export async function runClosedLoopMission(opts: ClosedLoopMissionOptions): Prom
   modelRouter.logStartupBanner(templateName);
 
   console.error('[Loop] ClosedLoop mission — Loop Engineering primary path');
-  console.error('[Loop] PM Team Engine wired into Plan/Act when template pm_plan/pm_act is auto|always');
   console.error('[Loop] Verify/Critique/Reflect/ExitConditions remain in ClosedLoop harness');
 
   const blackboard = new Blackboard(stateDir);
@@ -99,7 +102,10 @@ export async function runClosedLoopMission(opts: ClosedLoopMissionOptions): Prom
   }
 
   commandBoard.appendBullet('Mission Objectives', `[P2 active] ${goal}`);
-  commandBoard.appendBullet('Mission Objectives', `Loop template: ${templateName} (ClosedLoop + PM Plan/Act)`);
+  commandBoard.appendBullet(
+    'Mission Objectives',
+    `Loop template: ${templateName} · PM Integration: ${pmStatus.enabled ? 'ENABLED' : 'DISABLED'}`,
+  );
   commandBoard.setAgentStatus({
     callsign: 'Roland',
     state: 'active',
@@ -131,6 +137,7 @@ export async function runClosedLoopMission(opts: ClosedLoopMissionOptions): Prom
     isTestMode,
     skipBackoff: isTestMode,
     runner: loopRunner,
+    enablePmIntegration: opts.enablePmIntegration,
     hooks: { onStateChange: onLoopStateChange },
     teamOpts: {
       hitlQueue: opts.hitlQueue,
@@ -275,9 +282,7 @@ function buildClosedLoopSynthesis(goal: string, result: ClosedLoopResult, stateD
 }
 
 /**
- * ## Final Legacy Cleanup + Model Router Integration Complete
+ * ## Final Decoupling + Model Router Integration Complete
  *
- * Loop-template missions route here from `runTeam()` / `runTeamInner()` before the legacy PM wave engine.
- * ClosedLoop owns the full lifecycle; ModelRouter startup banner prints at mission start.
- * Non-loop missions continue through legacy PM planning → wave → synthesis (TODO: deprecation).
+ * Pure ClosedLoop is default. Legacy PM Team opt-in: loop_engine.use_pm_team or template use_pm_team.
  */

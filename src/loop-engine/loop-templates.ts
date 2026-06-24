@@ -51,6 +51,7 @@ export const LoopTemplateSchema = z.object({
   exit_conditions: z.array(ExitConditionSchema).optional(),
   pm_plan: z.enum(['auto', 'always', 'never']).optional(),
   pm_act: z.enum(['auto', 'always', 'never']).optional(),
+  use_pm_team: z.boolean().optional(),
 });
 
 export class LoopTemplates {
@@ -121,6 +122,7 @@ export class LoopTemplates {
           })),
           pmPlan: parsed.pm_plan,
           pmAct: parsed.pm_act,
+          usePmTeam: parsed.use_pm_team,
         };
         map.set(template.name, template);
       } catch {

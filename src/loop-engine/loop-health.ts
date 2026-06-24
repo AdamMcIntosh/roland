@@ -20,6 +20,8 @@ import {
 } from './loop-observability.js';
 import { LoopTemplates } from './loop-templates.js';
 import { ModelRouter } from '../models/model-router.js';
+import { readLoopPmSession } from './loop-pm-session.js';
+import { resolvePmIntegrationStatus } from './loop-pm-policy.js';
 
 export type LoopHealthStatus = 'healthy' | 'degraded' | 'escalated' | 'idle' | 'unknown';
 
@@ -129,6 +131,14 @@ export interface LoopHealthReport {
     }>;
     phaseModels: Record<string, string>;
   } | null;
+  /** Legacy PM Team integration status. */
+  pmIntegration: {
+    enabled: boolean;
+    configured: boolean;
+    reason: string;
+    executionPath: string;
+    label: string;
+  };
   /** Compact completion summary when loop is finished or escalated. */
   loopSummary: {
     status: string;
@@ -308,6 +318,23 @@ export function buildLoopHealthReport(stateDir: string): LoopHealthReport {
     ),
   };
 
+  const pmSession = readLoopPmSession(stateDir);
+  const templateId = loopState?.templateId ?? runState?.loopTemplateId ?? null;
+  const template = templateId ? templates.get(templateId) : undefined;
+  const configuredPm = template
+    ? resolvePmIntegrationStatus(template)
+    : { enabled: false, reason: 'no template', source: 'disabled' as const };
+  const pmIntegration = {
+    enabled: runState?.pmIntegration?.enabled ??
+      (pmSession?.executionPath === 'pm_team' || configuredPm.enabled),
+    configured: configuredPm.enabled,
+    reason: runState?.pmIntegration?.reason ?? pmSession?.routingReason ?? configuredPm.reason,
+    executionPath: pmSession?.executionPath ?? runState?.pmIntegration?.executionPath ?? 'lightweight',
+    label: (pmSession?.executionPath === 'pm_team' || configuredPm.enabled)
+      ? 'ENABLED (legacy PM Team)'
+      : 'DISABLED (pure ClosedLoop)',
+  };
+
   const runStatus = loopState?.status ?? runState?.loopStatus ?? null;
   const isComplete = runStatus === 'completed' || runStatus === 'escalated' || runStatus === 'failed';
   const loopSummary = isComplete || loopState
@@ -398,6 +425,7 @@ export function buildLoopHealthReport(stateDir: string): LoopHealthReport {
     },
     templates: templateList,
     roleRouting,
+    pmIntegration,
     loopSummary,
   };
 }

@@ -81,18 +81,25 @@ export {
 export type { ClosedLoopOptions, ClosedLoopResult } from './closed-loop.js';
 
 export {
-  LoopPmBridge,
   LOOP_PM_SESSION_FILE,
   readLoopPmSession,
   writeLoopPmSession,
+} from './loop-pm-session.js';
+export type { LoopPmSession, LoopPmExecutionPath } from './loop-pm-session.js';
+
+export {
+  LoopPmBridge,
   resolvePmTeamMode,
   shouldUsePmTeam,
 } from './pm-integration.js';
-export type {
-  LoopPmBridgeOptions,
-  LoopPmSession,
-  LoopPmExecutionPath,
-} from './pm-integration.js';
+export type { LoopPmBridgeOptions } from './pm-integration.js';
+
+export {
+  resolvePmIntegrationStatus,
+  isLoopPmTeamEnabled,
+  logPmIntegrationMode,
+} from './loop-pm-policy.js';
+export type { PmIntegrationStatus } from './loop-pm-policy.js';
 
 export {
   EvaluationGate,

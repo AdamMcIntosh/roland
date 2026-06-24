@@ -1,25 +1,39 @@
+/**
+ * ## Assumptions
+ * - Pure ClosedLoop is the default Plan path (lightweight-plan-act.ts).
+ * - LoopPmBridge is only injected when legacy PM Team is explicitly opted in.
+ */
+
 import type { LoopPmBridge } from '../pm-integration.js';
+import type { LightweightPlanActContext } from '../lightweight-plan-act.js';
+import { runLightweightPlan } from '../lightweight-plan-act.js';
 import type { PhaseHandler, PhaseHandlerContext, PhaseResult } from './types.js';
 import { Phase } from '../loop-phases.js';
 
 export interface PlanPhaseHandlerOptions {
-  /** When set, Plan may invoke PM Team Engine based on template routing. */
+  /** TODO: Legacy PM Team — only set when use_pm_team opt-in is active. */
   pmBridge?: LoopPmBridge;
+  lightweight?: LightweightPlanActContext;
 }
 
 export class PlanPhaseHandler implements PhaseHandler {
   readonly phase = Phase.Plan;
   private readonly pmBridge?: LoopPmBridge;
+  private readonly lightweight?: LightweightPlanActContext;
 
   constructor(opts: PlanPhaseHandlerOptions = {}) {
     this.pmBridge = opts.pmBridge;
+    this.lightweight = opts.lightweight;
   }
 
   async execute(ctx: PhaseHandlerContext): Promise<PhaseResult> {
     if (this.pmBridge) {
       return this.pmBridge.runPlanning(ctx.iteration, ctx.phaseConfig);
     }
-
+    if (this.lightweight) {
+      return runLightweightPlan(ctx.iteration, this.lightweight);
+    }
+    // LoopEngine direct usage (tests) — inline stub without PM session
     ctx.blackboard.post({
       type: 'decision',
       title: 'Loop: Plan phase',
@@ -32,7 +46,7 @@ export class PlanPhaseHandler implements PhaseHandler {
     });
     ctx.commandBoard?.appendBullet(
       'Key Decisions',
-      `Loop plan (iteration ${ctx.iteration}): task graph seeded by Lead PM`,
+      `Loop plan (iteration ${ctx.iteration}): lightweight scope`,
     );
     return { success: true, summary: 'Planning complete — task graph ready' };
   }

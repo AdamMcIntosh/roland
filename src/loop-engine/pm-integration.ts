@@ -1,14 +1,11 @@
 /**
  * ## Assumptions
- * - ClosedLoop owns verify/critique/reflect/exit — PM Team is scoped to Plan + Act only.
- * - Plan phase persists a session to `.roland/loop-pm-session.json` for Act to consume.
- * - `auto` routing uses ComplexityClassifier heuristics (no network in tests).
- * - Test mode (`ROLAND_LOOP_TEST_MODE=1` or `isTestMode`) uses synthetic PM plans/waves (no SDK).
- * - Production delegates to `runTeam` with `pmSlice` / `loopEmbedded` flags.
+ * - TODO: Legacy PM Team — to be removed in final Loop Engineering pivot.
+ * - ClosedLoop owns verify/critique/reflect/exit — this module is Plan + Act only when explicitly opted in.
+ * - Pure ClosedLoop uses lightweight-plan-act.ts instead of this bridge.
+ * - Production delegates to `runTeam` with `pmSlice` / `loopEmbedded` flags when PM path is chosen.
  */
-
 import fs from 'fs';
-import path from 'path';
 import type { Blackboard } from '../rco/blackboard.js';
 import type { CommandBlackboard } from '../rco/command-blackboard.js';
 import { ComplexityClassifier } from '../orchestrator/complexity-classifier.js';
@@ -17,22 +14,22 @@ import type { LoopTemplate, Phase, PhaseConfig, PmTeamMode } from './loop-phases
 import { Phase as P } from './loop-phases.js';
 import type { PhaseResult } from './phase-handlers/types.js';
 import { ModelRouter } from '../models/model-router.js';
+import { runLightweightAct, runLightweightPlan } from './lightweight-plan-act.js';
+import {
+  readLoopPmSession,
+  writeLoopPmSession,
+  LOOP_PM_SESSION_FILE,
+  type LoopPmExecutionPath,
+  type LoopPmSession,
+} from './loop-pm-session.js';
 
-export const LOOP_PM_SESSION_FILE = 'loop-pm-session.json';
-
-export type LoopPmExecutionPath = 'pm_team' | 'lightweight';
-
-export interface LoopPmSession {
-  iteration: number;
-  templateId: string;
-  executionPath: LoopPmExecutionPath;
-  routingReason: string;
-  plan?: TeamPlan;
-  wavesRun: number;
-  blockersEncountered: number;
-  taskResults: Record<string, TeamTaskResult>;
-  updatedAt: number;
-}
+export {
+  LOOP_PM_SESSION_FILE,
+  readLoopPmSession,
+  writeLoopPmSession,
+  type LoopPmExecutionPath,
+  type LoopPmSession,
+} from './loop-pm-session.js';
 
 export interface LoopPmBridgeOptions {
   stateDir: string;
@@ -58,8 +55,12 @@ export function resolvePmTeamMode(
   return 'never';
 }
 
-/** Decide whether to invoke PM Team for this phase (`auto` uses complexity heuristics). */
-export function shouldUsePmTeam(goal: string, mode: PmTeamMode): {
+/** Decide whether to invoke PM Team for this phase (`auto` requires loop-level PM opt-in). */
+export function shouldUsePmTeam(
+  goal: string,
+  mode: PmTeamMode,
+  opts: { pmOptIn?: boolean } = {},
+): {
   usePm: boolean;
   reason: string;
 } {
@@ -73,6 +74,13 @@ export function shouldUsePmTeam(goal: string, mode: PmTeamMode): {
 
   if (mode === 'always') return { usePm: true, reason: 'template pm mode: always' };
   if (mode === 'never') return { usePm: false, reason: 'template pm mode: never' };
+
+  if (!opts.pmOptIn) {
+    return {
+      usePm: false,
+      reason: 'auto: PM opt-in required (use_pm_team) — pure ClosedLoop lightweight path',
+    };
+  }
 
   const analysis = ComplexityClassifier.getDetailedAnalysis(goal);
   const complex = analysis.complexity === 'medium' || analysis.complexity === 'complex';
@@ -92,41 +100,36 @@ export function shouldUsePmTeam(goal: string, mode: PmTeamMode): {
   };
 }
 
-export function readLoopPmSession(stateDir: string): LoopPmSession | null {
-  const filePath = path.join(stateDir, LOOP_PM_SESSION_FILE);
-  try {
-    if (!fs.existsSync(filePath)) return null;
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as LoopPmSession;
-  } catch {
-    return null;
-  }
-}
-
-export function writeLoopPmSession(stateDir: string, session: LoopPmSession): void {
-  fs.mkdirSync(stateDir, { recursive: true });
-  fs.writeFileSync(
-    path.join(stateDir, LOOP_PM_SESSION_FILE),
-    JSON.stringify({ ...session, updatedAt: Date.now() }, null, 2),
-    'utf-8',
-  );
-}
-
 /**
- * Bridges ClosedLoop Plan/Act phases to the PM Team Engine or lightweight stubs.
+ * TODO: Legacy PM Team — bridges ClosedLoop Plan/Act to team-orchestrator when opted in.
+ * Prefer pure ClosedLoop (lightweight-plan-act.ts) unless use_pm_team is enabled.
  */
 export class LoopPmBridge {
   private readonly opts: LoopPmBridgeOptions;
   private readonly router: ModelRouter;
+  private readonly pmOptIn: boolean;
 
   constructor(opts: LoopPmBridgeOptions) {
     this.opts = opts;
     this.router = opts.modelRouter ?? ModelRouter.fromConfig();
+    this.pmOptIn = true; // bridge only constructed when loop-level PM opt-in is active
+  }
+
+  private lightweightCtx() {
+    return {
+      stateDir: this.opts.stateDir,
+      goal: this.opts.goal,
+      template: this.opts.template,
+      blackboard: this.opts.blackboard,
+      commandBoard: this.opts.commandBoard,
+      modelRouter: this.router,
+    };
   }
 
   /** Run Plan phase — optionally invokes Lead PM planning. */
   async runPlanning(iteration: number, phaseConfig?: PhaseConfig): Promise<PhaseResult> {
     const mode = resolvePmTeamMode(P.Plan, phaseConfig, this.opts.template);
-    const { usePm, reason } = shouldUsePmTeam(this.opts.goal, mode);
+    const { usePm, reason } = shouldUsePmTeam(this.opts.goal, mode, { pmOptIn: this.pmOptIn });
     const executionPath: LoopPmExecutionPath = usePm ? 'pm_team' : 'lightweight';
 
     console.error(
@@ -142,10 +145,10 @@ export class LoopPmBridge {
     if (usePm) {
       return this.runPmPlanning(iteration, reason);
     }
-    return this.runLightweightPlan(iteration);
+    return runLightweightPlan(iteration, this.lightweightCtx());
   }
 
-  /** Run Act phase — uses PM waves when Plan chose pm_team, else lightweight stub. */
+  /** Run Act phase — uses PM waves when Plan chose pm_team, else pure ClosedLoop. */
   async runAct(iteration: number, phaseConfig?: PhaseConfig): Promise<PhaseResult> {
     const session = readLoopPmSession(this.opts.stateDir);
     const priorPath = session?.iteration === iteration ? session.executionPath : undefined;
@@ -161,7 +164,7 @@ export class LoopPmBridge {
       reason = 'Act follows lightweight Plan phase';
     } else {
       const mode = resolvePmTeamMode(P.Act, phaseConfig, this.opts.template);
-      const decision = shouldUsePmTeam(this.opts.goal, mode);
+      const decision = shouldUsePmTeam(this.opts.goal, mode, { pmOptIn: this.pmOptIn });
       usePm = decision.usePm;
       reason = decision.reason;
     }
@@ -182,62 +185,7 @@ export class LoopPmBridge {
     if (usePm) {
       return this.runPmAct(iteration, reason, session ?? undefined);
     }
-    return this.runLightweightAct(iteration);
-  }
-
-  private async runLightweightPlan(iteration: number): Promise<PhaseResult> {
-    const { blackboard, commandBoard, goal, stateDir, template } = this.opts;
-
-    writeLoopPmSession(stateDir, {
-      iteration,
-      templateId: template.name,
-      executionPath: 'lightweight',
-      routingReason: 'lightweight plan stub',
-      wavesRun: 0,
-      blockersEncountered: 0,
-      taskResults: {},
-      updatedAt: Date.now(),
-    });
-
-    blackboard.post({
-      type: 'decision',
-      title: 'Loop: Plan phase (lightweight)',
-      content: `Planning loop iteration ${iteration} for goal: ${goal.slice(0, 200)}`,
-      status: 'done',
-      author: 'loop-engine',
-      priority: 'medium',
-      tags: ['loop', 'plan', 'lightweight'],
-      relatedIds: [],
-    });
-    commandBoard?.appendBullet(
-      'Key Decisions',
-      `Loop plan (iteration ${iteration}): lightweight scope — no PM decomposition`,
-    );
-
-    return {
-      success: true,
-      summary: 'Planning complete (lightweight — no PM Team)',
-    };
-  }
-
-  private async runLightweightAct(iteration: number): Promise<PhaseResult> {
-    const { blackboard, commandBoard } = this.opts;
-
-    blackboard.post({
-      type: 'decision',
-      title: 'Loop: Act phase (lightweight)',
-      content: `Lightweight execution for iteration ${iteration}`,
-      status: 'in_progress',
-      author: 'loop-engine',
-      priority: 'medium',
-      tags: ['loop', 'act', 'lightweight'],
-      relatedIds: [],
-    });
-
-    return {
-      success: true,
-      summary: 'Act phase complete (lightweight — no PM waves)',
-    };
+    return runLightweightAct(iteration, this.lightweightCtx());
   }
 
   private async runPmPlanning(iteration: number, routingReason: string): Promise<PhaseResult> {
@@ -416,12 +364,8 @@ function buildStubPlan(goal: string, iteration: number): TeamPlan {
 }
 
 /**
- * ## PM Integration into ClosedLoop Complete
+ * ## Final Decoupling + Model Router Integration Complete
  *
- * Usage from ClosedLoop:
- * ```typescript
- * const pmBridge = new LoopPmBridge({ stateDir, goal, template, blackboard, commandBoard, isTestMode });
- * handlers.set(P.Plan, new PlanPhaseHandler({ pmBridge }));
- * handlers.set(P.Act, new ActPhaseHandler({ pmBridge }));
- * ```
+ * Legacy PM Team bridge — only constructed when `isLoopPmTeamEnabled()` is true.
+ * Pure ClosedLoop uses `lightweight-plan-act.ts` directly from phase handlers.
  */

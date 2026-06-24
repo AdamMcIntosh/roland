@@ -39,15 +39,25 @@ describe('PM integration routing', () => {
     expect(resolvePmTeamMode(Phase.Act, undefined, template)).toBe('auto');
   });
 
-  it('shouldUsePmTeam routes complex goals to PM Team in auto mode', () => {
+  it('shouldUsePmTeam routes complex goals to PM Team when pmOptIn is true', () => {
     const complex = shouldUsePmTeam(
       'Refactor the authentication module across multiple services with integration tests and architecture review',
       'auto',
+      { pmOptIn: true },
     );
     expect(complex.usePm).toBe(true);
 
-    const simple = shouldUsePmTeam('Fix typo in README', 'auto');
+    const simple = shouldUsePmTeam('Fix typo in README', 'auto', { pmOptIn: true });
     expect(simple.usePm).toBe(false);
+  });
+
+  it('shouldUsePmTeam auto without pmOptIn stays lightweight', () => {
+    const complex = shouldUsePmTeam(
+      'Refactor the authentication module across multiple services',
+      'auto',
+      { pmOptIn: false },
+    );
+    expect(complex.usePm).toBe(false);
   });
 
   it('shouldUsePmTeam respects always and never modes', () => {
@@ -72,10 +82,10 @@ describe('LoopPmBridge session', () => {
     fs.rmSync(stateDir, { recursive: true, force: true });
   });
 
-  it('uses PM Team for complex goals when template pm_plan is auto', async () => {
+  it('uses PM Team for complex goals when template has use_pm_team opt-in', async () => {
     const templates = new LoopTemplates();
     const template = templates.get('feature-implementation-loop');
-    expect(template?.pmPlan).toBe('auto');
+    expect(template?.usePmTeam).toBe(true);
 
     const goal =
       'Implement user profile settings page with API integration, multi-file UI components, and full test coverage';
@@ -119,7 +129,7 @@ describe('LoopPmBridge session', () => {
     });
 
     const planResult = await bridge.runPlanning(1);
-    expect(planResult.summary).toContain('lightweight');
+    expect(planResult.summary).toMatch(/pure ClosedLoop|lightweight/i);
 
     const session = readLoopPmSession(stateDir);
     expect(session?.executionPath).toBe('lightweight');
@@ -141,7 +151,28 @@ describe('ClosedLoop with PM integration', () => {
     fs.rmSync(stateDir, { recursive: true, force: true });
   });
 
-  it('feature-implementation-loop completes with PM session for complex goal', async () => {
+  it('closed-loop-harness uses pure ClosedLoop by default', async () => {
+    const { ClosedLoop } = await import('../../src/loop-engine/closed-loop.js');
+    const loop = new ClosedLoop({
+      stateDir,
+      goal: 'Smoke test pure closed loop harness',
+      template: 'closed-loop-harness',
+      blackboard,
+      runner: passRunner,
+      isTestMode: true,
+      skipBackoff: true,
+    });
+
+    expect(loop.getPmIntegration().enabled).toBe(false);
+    const result = await loop.run();
+    expect(result.status).toBe('completed');
+    expect(result.pmIntegration.enabled).toBe(false);
+
+    const session = readLoopPmSession(stateDir);
+    expect(session?.executionPath).toBe('lightweight');
+  });
+
+  it('feature-implementation-loop completes with PM session when use_pm_team opt-in', async () => {
     const { ClosedLoop } = await import('../../src/loop-engine/closed-loop.js');
     const goal =
       'Ship OAuth callback handling with integration tests across auth module and API routes';

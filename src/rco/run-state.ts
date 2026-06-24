@@ -135,6 +135,12 @@ export interface RunState {
     }>;
     phaseModels?: Record<string, string>;
   };
+  /** Legacy PM Team integration status for active loop. */
+  pmIntegration?: {
+    enabled: boolean;
+    reason: string;
+    executionPath?: 'pm_team' | 'lightweight';
+  };
 }
 
 // ── Writer (used by team-cli / orchestrator callbacks) ────────────────────────
@@ -336,6 +342,7 @@ export class RunStateWriter {
       at: number;
     };
     modelRouting?: RunState['modelRouting'];
+    pmIntegration?: RunState['pmIntegration'];
   }): void {
     if (fields.loopTemplateId !== undefined) {
       this.state.loopTemplateId = fields.loopTemplateId;
@@ -366,6 +373,9 @@ export class RunStateWriter {
     }
     if (fields.modelRouting !== undefined) {
       this.state.modelRouting = fields.modelRouting;
+    }
+    if (fields.pmIntegration !== undefined) {
+      this.state.pmIntegration = fields.pmIntegration;
     }
     this.flush();
   }

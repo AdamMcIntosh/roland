@@ -295,6 +295,8 @@ export interface TeamOrchestratorOptions {
   loopEmbedded?: boolean;
   /** Loop iteration number for logging when embedded in ClosedLoop. */
   loopIteration?: number;
+  /** Explicit opt-in for legacy PM Team inside ClosedLoop Plan/Act (default: config/template policy). */
+  enablePmIntegration?: boolean;
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────

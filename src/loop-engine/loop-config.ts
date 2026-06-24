@@ -54,6 +54,7 @@ export const LoopEngineConfigSchema = z.object({
     })
     .optional(),
   timeout_ms: z.number().int().positive().optional(),
+  use_pm_team: z.boolean().optional(),
 });
 
 export type LoopEngineConfig = z.infer<typeof LoopEngineConfigSchema> & {
@@ -83,6 +84,8 @@ export type LoopEngineConfig = z.infer<typeof LoopEngineConfigSchema> & {
   };
   /** Default wall-clock timeout for full loop runs (ms). */
   timeoutMs?: number;
+  /** When true, templates with pm_plan/pm_act: auto may invoke legacy PM Team (default false). */
+  usePmTeam?: boolean;
 };
 
 export interface CritiqueThresholds {
@@ -234,6 +237,7 @@ export function loadLoopEngineConfig(): LoopEngineConfig {
       critique: normaliseCritique(parsed.data.critique),
       retry: normaliseRetry(parsed.data.retry),
       timeoutMs: parsed.data.timeout_ms ?? DEFAULT_CONFIG.timeoutMs,
+      usePmTeam: parsed.data.use_pm_team ?? false,
     };
     return cached;
   } catch {

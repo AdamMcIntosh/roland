@@ -39,6 +39,7 @@ escalationThreshold: 4
 testModeMaxRetries: 6
 testModeEscalationThreshold: 8
 min_confidence: 0.85
+use_pm_team: true
 pm_plan: auto
 pm_act: auto
 between_iterations: npm test

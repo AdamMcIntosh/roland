@@ -102,6 +102,7 @@
     var exitConditions = health?.exitConditions || [];
     var exitEvaluation = health?.exitEvaluation || null;
     var roleRouting = health?.roleRouting || rs?.modelRouting || null;
+    var pmIntegration = health?.pmIntegration || rs?.pmIntegration || null;
     var loopSummary = health?.loopSummary || null;
     var isPaused = Boolean(rs?.hitlPaused);
     var isAbortPending = Boolean(rs?.hitlAbortPending);
@@ -121,6 +122,7 @@
       exitConditions: exitConditions,
       exitEvaluation: exitEvaluation,
       roleRouting: roleRouting,
+      pmIntegration: pmIntegration,
       loopSummary: loopSummary,
       lastVerification: lv,
       lastCritique: rs?.lastCritique,
@@ -420,6 +422,19 @@
       '</div>';
   }
 
+  function renderPmIntegrationPanel(vm) {
+    var pm = vm.pmIntegration;
+    if (!pm) return '';
+    var cls = pm.enabled || pm.configured ? 'loop-pm-enabled' : 'loop-pm-disabled';
+    var label = pm.label || (pm.enabled ? 'ENABLED (legacy PM Team)' : 'DISABLED (pure ClosedLoop)');
+    return '<div class="loop-pm-panel ' + cls + '">' +
+      '<h5>PM Integration</h5>' +
+      '<div class="loop-pm-status"><strong>' + esc(label) + '</strong></div>' +
+      (pm.reason ? '<div class="loop-pm-reason">' + esc(pm.reason) + '</div>' : '') +
+      (pm.executionPath ? '<div class="loop-pm-path">Path: ' + esc(pm.executionPath) + '</div>' : '') +
+      '</div>';
+  }
+
   function renderModelRoutingPanel(vm) {
     var rr = vm.roleRouting;
     if (!rr || !rr.roles) return '';
@@ -571,6 +586,7 @@
     return panelClass + '|' + (
       '<div class="' + panelClass + '" data-loop-harness="1">' +
         header + metaRow + progressBlock +
+        renderPmIntegrationPanel(vm) +
         renderMetricsRow(vm) +
         renderModelRoutingPanel(vm) +
         renderTimeline(vm, opts) +

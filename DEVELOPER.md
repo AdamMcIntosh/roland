@@ -108,9 +108,11 @@ if (hasLoopTemplate(opts.loopTemplate)) {
 // else legacy PM plan → waves → synthesis
 ```
 
-**ClosedLoop owns:** EvaluationGate (verify), LoopMemory, reflection, exit conditions, SpecialistSpawner, checkpoint/recovery, and PR formatting (`closed-loop-pr.json`). Plan/Act phases optionally embed PM Team via `LoopPmBridge` when the template sets `pm_plan` / `pm_act` to `auto` or `always`.
+**ClosedLoop owns:** EvaluationGate (verify), LoopMemory, reflection, exit conditions, SpecialistSpawner, checkpoint/recovery, and PR formatting (`closed-loop-pr.json`).
 
-**Model routing:** All loop components resolve models via `ModelRouter.getModel(role)` in `src/models/model-router.ts`. Switch OpenRouter ↔ Ollama by editing `config.yaml` `models` section only (see file comments). Startup prints a routing banner; dashboard Loop panel shows live role + phase routing.
+**PM Team (legacy, opt-in):** Pure ClosedLoop is the default for Plan/Act (`lightweight-plan-act.ts`). Legacy PM Team runs only when `loop_engine.use_pm_team: true`, template `use_pm_team: true`, or `enablePmIntegration: true`. Templates with `pm_plan/pm_act: auto` no longer invoke PM without explicit opt-in.
+
+**Model routing:** All loop components resolve models via `ModelRouter.getModel(role)` in `src/models/model-router.ts`. Switch OpenRouter ↔ Ollama by editing `config.yaml` `models` section only (see file comments). Startup prints a routing banner; dashboard Loop panel shows live role + phase routing and PM Integration status.
 
 **Entry points:** `roland team --loop-template`, MCP `roland_run_team` with `loop_template`, dashboard `POST /api/mission { loopTemplate }`.
 

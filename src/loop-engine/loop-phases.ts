@@ -104,6 +104,8 @@ export interface LoopTemplate {
   pmPlan?: PmTeamMode;
   /** PM Team routing for Act phase (default: never for minimal templates). */
   pmAct?: PmTeamMode;
+  /** Explicit opt-in for legacy PM Team on this template (requires pm_plan/pm_act for auto routing). */
+  usePmTeam?: boolean;
 }
 
 export function isPhase(value: string): value is Phase {

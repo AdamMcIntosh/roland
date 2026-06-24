@@ -36,6 +36,12 @@ import type { CommandRunner } from './verification/index.js';
 import { LoopMemory } from './loop-memory.js';
 import { LoopPmBridge } from './pm-integration.js';
 import { ModelRouter, initModelRouter, ModelRouterError } from '../models/model-router.js';
+import {
+  isLoopPmTeamEnabled,
+  logPmIntegrationMode,
+  resolvePmIntegrationStatus,
+  type PmIntegrationStatus,
+} from './loop-pm-policy.js';
 import type { TeamOrchestratorOptions } from '../rco/team-orchestrator.js';
 
 export const CLOSED_LOOP_PR_FILE = 'closed-loop-pr.json';
@@ -63,7 +69,7 @@ export interface ClosedLoopOptions {
   manualReviewApproved?: boolean;
   minConfidence?: number;
   hooks?: LoopHooks;
-  /** When false, Plan/Act always use lightweight stubs (overrides template pm_plan/pm_act). */
+  /** Explicit opt-in for legacy PM Team (overrides config/template). When false, pure ClosedLoop only. */
   enablePmIntegration?: boolean;
   /** Forwarded to embedded PM Team runs (HITL, wave callbacks). */
   teamOpts?: Partial<TeamOrchestratorOptions>;
@@ -74,6 +80,7 @@ export interface ClosedLoopResult extends LoopRunResult {
   spawnCount: number;
   loopId: string;
   loopDir: string;
+  pmIntegration: PmIntegrationStatus;
 }
 
 /**
@@ -88,6 +95,7 @@ export class ClosedLoop {
   private readonly template: LoopTemplate;
   private readonly memory: LoopMemory;
   private readonly modelRouter: ModelRouter;
+  private readonly pmIntegration: PmIntegrationStatus;
 
   constructor(opts: ClosedLoopOptions) {
     this.opts = opts;
@@ -104,6 +112,9 @@ export class ClosedLoop {
       console.error(`[ModelRouter] Note: ${w}`);
     }
     this.template = ClosedLoop.resolveTemplate(opts.template);
+    this.pmIntegration = resolvePmIntegrationStatus(this.template, opts);
+    logPmIntegrationMode(this.pmIntegration, this.template.name);
+    this.modelRouter.logStartupBanner(this.template.name);
     this.memory = new LoopMemory({
       stateDir: opts.stateDir,
       loopId: opts.loopId,
@@ -120,9 +131,15 @@ export class ClosedLoop {
     const minConfidence =
       opts.minConfidence ?? this.template.minConfidence ?? undefined;
 
-    const pmEnabled = opts.enablePmIntegration !== false &&
-      (Boolean(this.template.pmPlan) || Boolean(this.template.pmAct) ||
-        this.template.phases.some((p) => p.pmTeam));
+    const pmEnabled = isLoopPmTeamEnabled(this.template, opts);
+    const lightweightCtx = {
+      stateDir: opts.stateDir,
+      goal: opts.goal,
+      template: this.template,
+      blackboard: opts.blackboard,
+      commandBoard: opts.commandBoard,
+      modelRouter: this.modelRouter,
+    };
 
     const pmBridge = pmEnabled
       ? new LoopPmBridge({
@@ -138,8 +155,8 @@ export class ClosedLoop {
       : undefined;
 
     const handlers = createDefaultHandlersWithoutPm();
-    handlers.set(P.Plan, new PlanPhaseHandler({ pmBridge }));
-    handlers.set(P.Act, new ActPhaseHandler({ pmBridge }));
+    handlers.set(P.Plan, new PlanPhaseHandler({ pmBridge, lightweight: lightweightCtx }));
+    handlers.set(P.Act, new ActPhaseHandler({ pmBridge, lightweight: lightweightCtx }));
     handlers.set(
       P.Verify,
       new VerifyPhaseHandler({
@@ -178,8 +195,12 @@ export class ClosedLoop {
       `[Loop][closed-loop] harness ready template="${this.template.name}" loopId=${this.memory.loopId} ` +
         `phases=${this.template.phases.map((p) => p.phase).join('→')} ` +
         `exitRules=${this.template.exitConditions?.length ?? 1} betweenIter=${Boolean(this.template.betweenIterations)} ` +
-        `pmIntegration=${pmEnabled ? 'enabled' : 'disabled'}`,
+        `pmIntegration=${pmEnabled ? 'legacy-enabled' : 'pure-closed-loop'}`,
     );
+  }
+
+  getPmIntegration(): PmIntegrationStatus {
+    return this.pmIntegration;
   }
 
   /** Run the full closed loop until complete, escalate, fail, timeout, or exit conditions met. */
@@ -203,6 +224,7 @@ export class ClosedLoop {
       spawnCount: this.spawner.getHistory().length,
       loopId: this.memory.loopId,
       loopDir: this.memory.loopDir,
+      pmIntegration: this.pmIntegration,
     };
   }
 
@@ -373,15 +395,17 @@ export function createClosedLoop(opts: ClosedLoopOptions): ClosedLoop {
 }
 
 /**
- * ## Loop Orchestrator Refactor Complete
+ * ## Final Decoupling + Model Router Integration Complete
  *
- * ClosedLoop is the single source of truth for loop-template missions. Orchestrates:
- * EvaluationGate (verify), LoopMemory + ReflectionPhaseHandler, exit conditions, SpecialistSpawner,
- * checkpoint/recovery via LoopEngine, and PR formatting on completion.
+ * Default: pure ClosedLoop Plan/Act via lightweight-plan-act.ts.
+ * Legacy PM Team: opt-in via loop_engine.use_pm_team, template use_pm_team, or enablePmIntegration.
  *
- * Entry: `roland team "goal" --loop-template closed-loop-harness` → `runClosedLoopMission()` → `run()`.
- *
- * Plan/Act optionally invoke PM Team when template `pm_plan` / `pm_act` is `auto` or `always`.
- * Non-loop missions: legacy PM Team Engine in team-orchestrator.ts (TODO: Legacy).
+ * ```yaml
+ * loop_engine:
+ *   use_pm_team: false   # default — pure ClosedLoop
+ * models:
+ *   pm: { provider: openrouter, model: grok-4.3 }
+ *   coding: { provider: ollama, model: qwen3.5-coder:14b }
+ * ```
  */
 export {};

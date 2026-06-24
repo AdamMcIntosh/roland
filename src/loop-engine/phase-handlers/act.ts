@@ -1,25 +1,38 @@
+/**
+ * ## Assumptions
+ * - Pure ClosedLoop is the default Act path (lightweight-plan-act.ts).
+ * - LoopPmBridge is only injected when legacy PM Team is explicitly opted in.
+ */
+
 import type { LoopPmBridge } from '../pm-integration.js';
+import type { LightweightPlanActContext } from '../lightweight-plan-act.js';
+import { runLightweightAct } from '../lightweight-plan-act.js';
 import type { PhaseHandler, PhaseHandlerContext, PhaseResult } from './types.js';
 import { Phase } from '../loop-phases.js';
 
 export interface ActPhaseHandlerOptions {
-  /** When set, Act may invoke PM Team wave execution based on Plan routing. */
+  /** TODO: Legacy PM Team — only set when use_pm_team opt-in is active. */
   pmBridge?: LoopPmBridge;
+  lightweight?: LightweightPlanActContext;
 }
 
 export class ActPhaseHandler implements PhaseHandler {
   readonly phase = Phase.Act;
   private readonly pmBridge?: LoopPmBridge;
+  private readonly lightweight?: LightweightPlanActContext;
 
   constructor(opts: ActPhaseHandlerOptions = {}) {
     this.pmBridge = opts.pmBridge;
+    this.lightweight = opts.lightweight;
   }
 
   async execute(ctx: PhaseHandlerContext): Promise<PhaseResult> {
     if (this.pmBridge) {
       return this.pmBridge.runAct(ctx.iteration, ctx.phaseConfig);
     }
-
+    if (this.lightweight) {
+      return runLightweightAct(ctx.iteration, this.lightweight, ctx.waveNumber ?? 0);
+    }
     const wave = ctx.waveNumber ?? 0;
     ctx.commandBoard?.setAgentStatus({
       callsign: 'Roland',

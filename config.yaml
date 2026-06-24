@@ -75,6 +75,8 @@ models:
 loop_engine:
   default_template: standard-code-loop
   templates_dir: recipes/loops
+  # Legacy PM Team in Plan/Act — default false (pure ClosedLoop). Set true to enable pm_plan/pm_act: auto templates.
+  use_pm_team: false
   timeout_ms: 1800000
   verification:
     # Legacy flag — Critique always runs after Verify; retry owned by critique phase

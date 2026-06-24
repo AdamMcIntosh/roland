@@ -28,6 +28,7 @@ import { Notifier } from './notifier.js';
 import { HitlQueue } from './hitl.js';
 import { spawnBackground } from './supervisor.js';
 import type { LoopState } from '../loop-engine/index.js';
+import { readLoopPmSession } from '../loop-engine/index.js';
 import { ModelRouter } from '../models/model-router.js';
 
 // ── Terminal helpers ──────────────────────────────────────────────────────────
@@ -66,7 +67,7 @@ const err = (s = '') => process.stderr.write(s + '\n');
  * Delete blackboard.json and messages.json from stateDir.
  * Preserves memory.md — project memory is intentionally cross-run.
  */
-function syncLoopStateToRun(runState: RunStateWriter, loopState: LoopState): void {
+function syncLoopStateToRun(runState: RunStateWriter, loopState: LoopState, stateDir: string): void {
   const recentHistory = loopState.phaseHistory.slice(-12).map((t) => ({
     phase: t.phase,
     success: t.success,
@@ -74,6 +75,7 @@ function syncLoopStateToRun(runState: RunStateWriter, loopState: LoopState): voi
     startedAt: t.startedAt,
     completedAt: t.completedAt,
   }));
+  const pmSession = readLoopPmSession(stateDir);
   runState.updateLoopState({
     loopTemplateId: loopState.templateId,
     loopPhase: loopState.currentPhase,
@@ -82,6 +84,11 @@ function syncLoopStateToRun(runState: RunStateWriter, loopState: LoopState): voi
     loopStatus: loopState.status,
     loopPhaseHistory: recentHistory,
     modelRouting: ModelRouter.fromConfig().serializeRoutingForState(),
+    pmIntegration: {
+      enabled: pmSession?.executionPath === 'pm_team',
+      reason: pmSession?.routingReason ?? 'pure ClosedLoop (no PM session)',
+      executionPath: pmSession?.executionPath ?? 'lightweight',
+    },
     lastVerification: loopState.lastVerification,
     lastCritique: loopState.lastCritique
       ? {
@@ -313,7 +320,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
         noImprove: true,
         sequential: !parallel, interactive: false,
         loopTemplate,
-        onLoopStateChange: (s) => syncLoopStateToRun(runState, s),
+        onLoopStateChange: (s) => syncLoopStateToRun(runState, s, stateDir),
 
         onPlanReady: (tasks) => {
           runState.planReady(tasks);
@@ -479,7 +486,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
         goal, stateDir, agentsDir, hitlQueue,
         noImprove, sequential: !parallel, interactive: false, quiet: true,
         loopTemplate,
-        onLoopStateChange: (s) => syncLoopStateToRun(runState, s),
+        onLoopStateChange: (s) => syncLoopStateToRun(runState, s, stateDir),
         onPlanReady:    (tasks)         => { runState.planReady(tasks); },
         onWaveStart:    (w, tasks)      => { runState.waveStart(w, tasks.map((t) => t.id)); },
         onTaskStart: (id, _a, _t, git) => {
@@ -606,7 +613,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
         noImprove, sequential: !parallel, interactive: false,
         loopTemplate,
         onLoopStateChange: (s) => {
-          syncLoopStateToRun(runState, s);
+          syncLoopStateToRun(runState, s, stateDir);
           tui.update(runState.get());
         },
         onBlockerDetected: (taskId, agent, description, waveNumber) => {
@@ -726,7 +733,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     sequential: !parallel,
     interactive: Boolean((process.stderr as NodeJS.WriteStream).isTTY) && !noImprove,
     loopTemplate,
-    onLoopStateChange: (s) => syncLoopStateToRun(runState, s),
+    onLoopStateChange: (s) => syncLoopStateToRun(runState, s, stateDir),
     onBlockerDetected: (taskId, agent, description, waveNumber) => {
       void notifier.notify({
         event: 'blocker', goal,
