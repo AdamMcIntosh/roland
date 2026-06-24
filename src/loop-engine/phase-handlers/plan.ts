@@ -1,10 +1,25 @@
+import type { LoopPmBridge } from '../pm-integration.js';
 import type { PhaseHandler, PhaseHandlerContext, PhaseResult } from './types.js';
 import { Phase } from '../loop-phases.js';
 
+export interface PlanPhaseHandlerOptions {
+  /** When set, Plan may invoke PM Team Engine based on template routing. */
+  pmBridge?: LoopPmBridge;
+}
+
 export class PlanPhaseHandler implements PhaseHandler {
   readonly phase = Phase.Plan;
+  private readonly pmBridge?: LoopPmBridge;
+
+  constructor(opts: PlanPhaseHandlerOptions = {}) {
+    this.pmBridge = opts.pmBridge;
+  }
 
   async execute(ctx: PhaseHandlerContext): Promise<PhaseResult> {
+    if (this.pmBridge) {
+      return this.pmBridge.runPlanning(ctx.iteration, ctx.phaseConfig);
+    }
+
     ctx.blackboard.post({
       type: 'decision',
       title: 'Loop: Plan phase',

@@ -61,6 +61,32 @@ export interface ContextGatheringConfig {
   exclude_patterns: string[];
 }
 
+export interface RoleModelConfig {
+  provider: string;
+  model: string;
+  fallback?: RoleModelConfig;
+}
+
+export interface ModelsRoleConfig {
+  pm?: RoleModelConfig;
+  coding?: RoleModelConfig;
+  critic?: RoleModelConfig;
+  verifier?: RoleModelConfig;
+  researcher?: RoleModelConfig;
+  planner?: RoleModelConfig;
+  executor?: RoleModelConfig;
+  reviewer?: RoleModelConfig;
+  reasoning?: RoleModelConfig;
+  light?: RoleModelConfig;
+}
+
+export interface PmConfig {
+  lead_model?: string;
+  fast_model?: string;
+  standard_model?: string;
+  lane_overrides?: Record<string, string>;
+}
+
 export interface AppConfig {
   routing: RoutingConfig;
   roland: SessionConfig;
@@ -69,6 +95,8 @@ export interface AppConfig {
   classifier?: ClassifierConfig;
   diff_stream?: DiffStreamConfig;
   context_gathering?: ContextGatheringConfig;
+  models?: ModelsRoleConfig;
+  pm?: PmConfig;
   configPath?: string;
 }
 

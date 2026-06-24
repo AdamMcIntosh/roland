@@ -28,6 +28,8 @@ export interface PrFormatContext {
   testingNotes?: string;
   /** Optional one-liner for the Impact section (why this change matters). */
   impactNote?: string;
+  /** Active ModelRouter summary for loop missions. */
+  modelRoutingNotes?: string;
 }
 
 /** Title + body pair returned by formatters. */
@@ -433,6 +435,10 @@ export function buildPrDescription(task: PrFormatTaskInput, ctx: PrFormatContext
     lines.push('', '**Impact**', ctx.impactNote.trim());
   }
 
+  if (ctx.modelRoutingNotes?.trim()) {
+    lines.push('', '**Model Routing**', ctx.modelRoutingNotes.trim());
+  }
+
   return lines.join('\n');
 }
 
@@ -449,6 +455,7 @@ export function formatPrFromGoal(
     missionUrl?: string;
     agent?: string;
     taskId?: string;
+    modelRoutingNotes?: string;
   },
 ): FormattedPr {
   const cleanGoal = stripMissionNoise(goal) || goal.trim();
@@ -465,6 +472,7 @@ export function formatPrFromGoal(
     testingNotes: opts?.testingNotes,
     impactNote: opts?.impactNote,
     missionUrl: opts?.missionUrl,
+    modelRoutingNotes: opts?.modelRoutingNotes,
   };
   return {
     title: buildConventionalPrTitle(task),

@@ -19,6 +19,7 @@ import {
   LOOP_HISTORY_FILE,
 } from './loop-observability.js';
 import { LoopTemplates } from './loop-templates.js';
+import { ModelRouter } from '../models/model-router.js';
 
 export type LoopHealthStatus = 'healthy' | 'degraded' | 'escalated' | 'idle' | 'unknown';
 
@@ -117,6 +118,26 @@ export interface LoopHealthReport {
     hitlReplanCmd: string;
   };
   templates: Array<{ name: string; description: string; phaseCount: number }>;
+  /** Active role-based model routing (Loop Engineering). */
+  roleRouting: {
+    summary: string;
+    roles: Record<string, {
+      provider: string;
+      model: string;
+      displayLabel: string;
+      isFallback: boolean;
+    }>;
+    phaseModels: Record<string, string>;
+  } | null;
+  /** Compact completion summary when loop is finished or escalated. */
+  loopSummary: {
+    status: string;
+    iterations: number;
+    retryCount: number;
+    confidence: number | null;
+    exitReason: string | null;
+    complete: boolean;
+  } | null;
 }
 
 function fileExists(stateDir: string, name: string): boolean {
@@ -264,6 +285,49 @@ export function buildLoopHealthReport(stateDir: string): LoopHealthReport {
       }
     : null;
 
+  const router = ModelRouter.fromConfig();
+  const routing = router.getActiveRouting();
+  const roleRouting = {
+    summary: router.formatRoutingSummary(),
+    roles: Object.fromEntries(
+      Object.entries(routing).map(([role, m]) => [
+        role,
+        {
+          provider: m.provider,
+          model: m.model,
+          displayLabel: m.displayLabel,
+          isFallback: m.isFallback,
+        },
+      ]),
+    ),
+    phaseModels: Object.fromEntries(
+      ['plan', 'act', 'verify', 'critique', 'retry', 'observe', 'reflect'].map((phase) => [
+        phase,
+        router.getModelForPhase(phase).displayLabel,
+      ]),
+    ),
+  };
+
+  const runStatus = loopState?.status ?? runState?.loopStatus ?? null;
+  const isComplete = runStatus === 'completed' || runStatus === 'escalated' || runStatus === 'failed';
+  const loopSummary = isComplete || loopState
+    ? {
+        status: String(runStatus ?? 'unknown'),
+        iterations: loopState?.iteration ?? runState?.loopIteration ?? 0,
+        retryCount: loopState?.retryCount ?? runState?.loopRetryCount ?? 0,
+        confidence:
+          lastVerification && 'confidence' in lastVerification
+            ? (lastVerification.confidence ?? null)
+            : null,
+        exitReason:
+          exitEvaluation?.reason ??
+          closedLoopPr?.exitReason ??
+          loopState?.lastCritique?.summary?.slice(0, 120) ??
+          null,
+        complete: isComplete,
+      }
+    : null;
+
   return {
     status,
     healthy: status === 'healthy' || status === 'idle',
@@ -333,5 +397,7 @@ export function buildLoopHealthReport(stateDir: string): LoopHealthReport {
       hitlReplanCmd: 'roland replan',
     },
     templates: templateList,
+    roleRouting,
+    loopSummary,
   };
 }

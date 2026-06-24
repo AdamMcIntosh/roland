@@ -21,6 +21,7 @@ const PhaseConfigSchema = z.object({
   verification: z
     .array(z.enum(['unit', 'integration', 'smoke', 'e2e', 'lint', 'typecheck']))
     .optional(),
+  pm_team: z.enum(['auto', 'always', 'never']).optional(),
 });
 
 const ExitConditionSchema = z.object({
@@ -48,6 +49,8 @@ export const LoopTemplateSchema = z.object({
   reflection: z.boolean().optional(),
   min_confidence: z.number().min(0).max(1).optional(),
   exit_conditions: z.array(ExitConditionSchema).optional(),
+  pm_plan: z.enum(['auto', 'always', 'never']).optional(),
+  pm_act: z.enum(['auto', 'always', 'never']).optional(),
 });
 
 export class LoopTemplates {
@@ -95,6 +98,7 @@ export class LoopTemplates {
             agent: p.agent,
             optional: p.optional,
             verification: p.verification,
+            pmTeam: p.pm_team,
           })),
           maxIterations: parsed.maxIterations,
           maxRetries: parsed.maxRetries,
@@ -115,6 +119,8 @@ export class LoopTemplates {
             consecutiveIterations: c.consecutiveIterations,
             command: c.command,
           })),
+          pmPlan: parsed.pm_plan,
+          pmAct: parsed.pm_act,
         };
         map.set(template.name, template);
       } catch {

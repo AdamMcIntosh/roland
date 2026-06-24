@@ -22,8 +22,13 @@ const DEFAULT_HANDLERS: PhaseHandler[] = [
   new ReflectionPhaseHandler(),
 ];
 
-export function createDefaultHandlers(): Map<Phase, PhaseHandler> {
+/** Handlers without PM bridge — used when pm integration is wired externally. */
+export function createDefaultHandlersWithoutPm(): Map<Phase, PhaseHandler> {
   return new Map(DEFAULT_HANDLERS.map((h) => [h.phase, h]));
+}
+
+export function createDefaultHandlers(): Map<Phase, PhaseHandler> {
+  return createDefaultHandlersWithoutPm();
 }
 
 export {
@@ -38,3 +43,5 @@ export {
 };
 export type { VerifyPhaseHandlerOptions } from './verify-phase.js';
 export type { RetryPhaseHandlerOptions } from './retry-phase.js';
+export type { PlanPhaseHandlerOptions } from './plan.js';
+export type { ActPhaseHandlerOptions } from './act.js';

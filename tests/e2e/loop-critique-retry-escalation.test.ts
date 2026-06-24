@@ -193,7 +193,7 @@ describe('LoopEngine — standard-code-loop critique → retry → escalation E2
     const finalCritique = result.state.critiqueHistory!.at(-1)!;
 
     expect(firstCritique.retryDecision).toBe('retry_focused');
-    expect(firstCritique.model).toBe('composer');
+    expect(firstCritique.model).toBe('coding');
     expect(firstCritique.summary).toMatch(/focused retry on unit/i);
     expect(firstCritique.issues.length).toBeGreaterThan(0);
     expect(firstCritique.suggestions.length).toBeGreaterThan(0);
@@ -247,7 +247,7 @@ describe('LoopEngine — standard-code-loop critique → retry → escalation E2
     expect(persistedLoop!.retryCount).toBe(3);
     expect(persistedLoop!.lastCritique).toMatchObject({
       retryDecision: 'escalate',
-      model: expect.stringMatching(/^(grok|composer)$/),
+      model: expect.stringMatching(/^(critic|coding|grok|composer)$/),
       summary: expect.stringMatching(/escalate/i),
     });
     expect(persistedLoop!.critiqueHistory?.length).toBe(4);

@@ -1,5 +1,5 @@
 export { Phase, ALL_PHASES, isPhase, phaseLabel } from './loop-phases.js';
-export type { PhaseConfig, LoopTemplate } from './loop-phases.js';
+export type { PhaseConfig, LoopTemplate, PmTeamMode } from './loop-phases.js';
 
 export {
   LoopMemory,
@@ -79,6 +79,20 @@ export {
   CLOSED_LOOP_PR_FILE,
 } from './closed-loop.js';
 export type { ClosedLoopOptions, ClosedLoopResult } from './closed-loop.js';
+
+export {
+  LoopPmBridge,
+  LOOP_PM_SESSION_FILE,
+  readLoopPmSession,
+  writeLoopPmSession,
+  resolvePmTeamMode,
+  shouldUsePmTeam,
+} from './pm-integration.js';
+export type {
+  LoopPmBridgeOptions,
+  LoopPmSession,
+  LoopPmExecutionPath,
+} from './pm-integration.js';
 
 export {
   EvaluationGate,

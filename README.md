@@ -260,7 +260,7 @@ Details: [docs/guides/mini-pc-deployment.md](docs/guides/mini-pc-deployment.md) 
 | [docs/guides/pm-workflow.md](docs/guides/pm-workflow.md) | Manual PM mode in Cursor |
 | [DAILY-USAGE.md](DAILY-USAGE.md) | Chat workflows, controls, troubleshooting |
 | [INSTALLATION.md](INSTALLATION.md) | MCP setup for Cursor / VS Code |
-| [CLAUDE.md](CLAUDE.md) | Developer conventions and smoke tests |
+| [DEVELOPER.md](DEVELOPER.md) | Developer conventions and smoke tests |
 
 ---
 

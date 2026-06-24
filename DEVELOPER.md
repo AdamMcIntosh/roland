@@ -1,8 +1,11 @@
-# Roland — CLAUDE.md
+# Roland — Developer Guide
 
-Roland is a multi-agent AI orchestration platform delivered as an MCP server for Cursor, VS Code,
-and Claude Desktop. It ships agent personas, workflow recipes, a standalone CLI orchestrator (RCO),
-and a PM-style team execution engine driven by the Cursor SDK.
+Internal reference for Roland repo contributors: conventions, smoke tests, and subsystem internals.
+
+Roland is a **Loop Engineering platform** — MCP tools for Cursor, a global CLI, closed-loop harness,
+agent personas, workflow recipes, and PM team execution via the Cursor SDK.
+
+**Operator docs:** [README.md](README.md) · **Architecture:** [docs/evolution/README.md](docs/evolution/README.md) · **Loops:** [docs/guides/closed-loop-harness.md](docs/guides/closed-loop-harness.md)
 
 ---
 
@@ -38,7 +41,8 @@ src/
   index.ts              ← MCP server entry + CLI dispatcher (serve | mcp-config | doctor | pm-log | team | pause | resume | unblock | inject | replan | abort | bg-status | bg-logs | bg-stop)
   rco/
     team-cli.ts         ← `roland team "<goal>"` — renders progress, delegates to team-orchestrator
-    team-orchestrator.ts← PM control loop: plan → waves → review → synthesis; polls HITL queue
+    team-orchestrator.ts← PM control loop OR routes loop templates → loop-orchestrator → ClosedLoop
+    loop-orchestrator.ts← ClosedLoop routing when `--loop-template` is set (Loop Engineering pivot)
     pm-prompts.ts       ← All three Lead PM prompts (planning, review, synthesis)
     prompts.ts          ← Worker agent prompt builder
     worker-signals.ts   ← Parses BLOCKER / MESSAGE signals from agent prose
@@ -535,6 +539,7 @@ roland abort                          # stop after current wave completes
 |------|-------|
 | CLI entry point | `src/index.ts` |
 | PM team execution | `src/rco/team-orchestrator.ts` |
+| Loop orchestrator (ClosedLoop) | `src/rco/loop-orchestrator.ts` |
 | PM prompts | `src/rco/pm-prompts.ts` |
 | Worker prompts | `src/rco/prompts.ts` |
 | Model routing | `src/rco/model-routing.ts` |

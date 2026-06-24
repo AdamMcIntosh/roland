@@ -6,7 +6,7 @@ export type {
   CritiqueOutput,
   LoopCritiqueSnapshot,
 } from './types.js';
-export { critiqueOutputToSnapshot } from './types.js';
+export { critiqueOutputToSnapshot, normalizeCritiqueLane } from './types.js';
 
 export {
   shouldEscalateToHuman,

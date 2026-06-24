@@ -22,9 +22,11 @@ import {
 } from './loop-engine.js';
 import { LoopTemplates } from './loop-templates.js';
 import {
-  createDefaultHandlers,
+  createDefaultHandlersWithoutPm,
   VerifyPhaseHandler,
   ReflectionPhaseHandler,
+  PlanPhaseHandler,
+  ActPhaseHandler,
   type PhaseResult,
 } from './phase-handlers/index.js';
 import type { LoopState, LoopRunStatus } from './loop-state.js';
@@ -32,6 +34,9 @@ import type { CustomCriterion } from './evaluation-gate.js';
 import { SpecialistSpawner } from './specialist-spawner.js';
 import type { CommandRunner } from './verification/index.js';
 import { LoopMemory } from './loop-memory.js';
+import { LoopPmBridge } from './pm-integration.js';
+import { ModelRouter, initModelRouter } from '../models/model-router.js';
+import type { TeamOrchestratorOptions } from '../rco/team-orchestrator.js';
 
 export const CLOSED_LOOP_PR_FILE = 'closed-loop-pr.json';
 
@@ -58,6 +63,10 @@ export interface ClosedLoopOptions {
   manualReviewApproved?: boolean;
   minConfidence?: number;
   hooks?: LoopHooks;
+  /** When false, Plan/Act always use lightweight stubs (overrides template pm_plan/pm_act). */
+  enablePmIntegration?: boolean;
+  /** Forwarded to embedded PM Team runs (HITL, wave callbacks). */
+  teamOpts?: Partial<TeamOrchestratorOptions>;
 }
 
 export interface ClosedLoopResult extends LoopRunResult {
@@ -78,9 +87,21 @@ export class ClosedLoop {
   private readonly opts: ClosedLoopOptions;
   private readonly template: LoopTemplate;
   private readonly memory: LoopMemory;
+  private readonly modelRouter: ModelRouter;
 
   constructor(opts: ClosedLoopOptions) {
     this.opts = opts;
+    this.modelRouter = initModelRouter();
+    const validation = ModelRouter.validateOnStartup(this.modelRouter);
+    if (!validation.ok) {
+      console.error(
+        `[ModelRouter] Missing required roles: ${validation.missing.join(', ')} — check config.yaml models section`,
+      );
+    }
+    for (const w of validation.warnings.slice(0, 3)) {
+      console.error(`[ModelRouter] Note: ${w}`);
+    }
+    this.modelRouter.logRoutingBanner();
     this.template = ClosedLoop.resolveTemplate(opts.template);
     this.memory = new LoopMemory({
       stateDir: opts.stateDir,
@@ -92,12 +113,32 @@ export class ClosedLoop {
       blackboard: opts.blackboard,
       commandBoard: opts.commandBoard,
       goal: opts.goal,
+      modelRouter: this.modelRouter,
     });
 
     const minConfidence =
       opts.minConfidence ?? this.template.minConfidence ?? undefined;
 
-    const handlers = createDefaultHandlers();
+    const pmEnabled = opts.enablePmIntegration !== false &&
+      (Boolean(this.template.pmPlan) || Boolean(this.template.pmAct) ||
+        this.template.phases.some((p) => p.pmTeam));
+
+    const pmBridge = pmEnabled
+      ? new LoopPmBridge({
+          stateDir: opts.stateDir,
+          goal: opts.goal,
+          template: this.template,
+          blackboard: opts.blackboard,
+          commandBoard: opts.commandBoard,
+          isTestMode: opts.isTestMode,
+          teamOpts: opts.teamOpts,
+          modelRouter: this.modelRouter,
+        })
+      : undefined;
+
+    const handlers = createDefaultHandlersWithoutPm();
+    handlers.set(P.Plan, new PlanPhaseHandler({ pmBridge }));
+    handlers.set(P.Act, new ActPhaseHandler({ pmBridge }));
     handlers.set(
       P.Verify,
       new VerifyPhaseHandler({
@@ -135,7 +176,8 @@ export class ClosedLoop {
     console.error(
       `[Loop][closed-loop] harness ready template="${this.template.name}" loopId=${this.memory.loopId} ` +
         `phases=${this.template.phases.map((p) => p.phase).join('→')} ` +
-        `exitRules=${this.template.exitConditions?.length ?? 1} betweenIter=${Boolean(this.template.betweenIterations)}`,
+        `exitRules=${this.template.exitConditions?.length ?? 1} betweenIter=${Boolean(this.template.betweenIterations)} ` +
+        `pmIntegration=${pmEnabled ? 'enabled' : 'disabled'}`,
     );
   }
 
@@ -192,6 +234,7 @@ export class ClosedLoop {
       agent: 'closed-loop',
       testingNotes: buildTestingNotes(s, st),
       impactNote: buildImpactNote(s, st),
+      modelRoutingNotes: this.modelRouter.formatRoutingSummary(),
     });
   }
 
@@ -329,7 +372,11 @@ export function createClosedLoop(opts: ClosedLoopOptions): ClosedLoop {
 }
 
 /**
- * ## Loop Integration Complete
+ * ## PM Integration into ClosedLoop Complete
+ *
+ * Plan and Act phases optionally invoke the PM Team Engine when template `pm_plan` /
+ * `pm_act` is `auto` or `always`. Complex goals route to Lead PM decomposition;
+ * simple goals stay on lightweight stubs. Verify → Critique → Reflect unchanged.
  *
  * Usage:
  * ```typescript
@@ -347,5 +394,12 @@ export function createClosedLoop(opts: ClosedLoopOptions): ClosedLoop {
  * ```
  *
  * CLI: `roland team "goal" --loop-template closed-loop-harness`
+ *
+ * Routing: loop-template missions delegate to `src/rco/loop-orchestrator.ts` → `ClosedLoop.run()`.
+ *
+ * ## Pre-Testing Cleanup Complete
+ *
+ * Loop missions: ClosedLoop + ModelRouter.validateOnStartup() + role routing banner.
+ * Non-loop missions: legacy PM Team Engine in team-orchestrator.ts (marked TODO: Legacy).
  */
 export {};

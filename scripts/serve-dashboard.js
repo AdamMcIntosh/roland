@@ -54,6 +54,7 @@ import {
   DEFAULT_PM_MODEL,
   DEFAULT_ENGINEER_MODEL,
 } from '../dist/rco/cursor-models.js';
+import { ModelRouter } from '../dist/models/model-router.js';
 import {
   sanitizeStaleMissionState,
   cleanupPreviousRuns,
@@ -379,6 +380,26 @@ function formatPricing(p) {
   };
 }
 
+function buildRoleRoutingPayload() {
+  try {
+    const router = ModelRouter.fromConfig();
+    const routing = router.getActiveRouting();
+    return Object.fromEntries(
+      Object.entries(routing).map(([role, m]) => [
+        role,
+        {
+          provider: m.provider,
+          model: m.model,
+          displayLabel: m.displayLabel,
+          isFallback: m.isFallback,
+        },
+      ]),
+    );
+  } catch {
+    return null;
+  }
+}
+
 function buildModelsApiPayload() {
   const models = CURSOR_MODELS.map(m => ({
     ...m,
@@ -389,6 +410,14 @@ function buildModelsApiPayload() {
     groups: MODEL_GROUPS,
     models,
     defaults: { pm: DEFAULT_PM_MODEL, engineer: DEFAULT_ENGINEER_MODEL },
+    roleRouting: buildRoleRoutingPayload(),
+    roleRoutingSummary: (() => {
+      try {
+        return ModelRouter.fromConfig().formatRoutingSummary();
+      } catch {
+        return null;
+      }
+    })(),
   };
 }
 

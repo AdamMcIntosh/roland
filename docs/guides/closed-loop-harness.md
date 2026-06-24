@@ -8,6 +8,8 @@ The design follows [loops.elorm.xyz](https://loops.elorm.xyz) patterns: self-pac
 
 ## Quick start
 
+Loop-template missions route through **ClosedLoop** (`src/rco/loop-orchestrator.ts`) — not the legacy PM wave engine. The orchestrator detects `--loop-template` and calls `ClosedLoop.run()` for the full lifecycle (verify gates, reflection, exit conditions, PR formatting).
+
 ```bash
 # Default production harness
 roland team "ship OAuth callback handling with tests green" \
@@ -243,4 +245,4 @@ The dashboard Loop Engineering panel shows:
 - [PR title convention](./pr-title-convention.md)
 - [Product vision](../vision.md)
 - [Mini PC / Tailscale deployment](./mini-pc-deployment.md)
-- Source: `src/loop-engine/closed-loop.ts`, `src/loop-engine/evaluation-gate.ts`, `src/loop-engine/exit-conditions.ts`, `src/loop-engine/loop-memory.ts`
+- Source: `src/rco/loop-orchestrator.ts` (routing), `src/loop-engine/closed-loop.ts`, `src/loop-engine/evaluation-gate.ts`, `src/loop-engine/exit-conditions.ts`, `src/loop-engine/loop-memory.ts`

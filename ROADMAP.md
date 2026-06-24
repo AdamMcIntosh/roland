@@ -93,7 +93,7 @@
 | Model selection | Any OpenRouter model, per-step routing | Claude only |
 | Cost visibility | Full per-model tracking, hard budget limits | None |
 | Multi-provider recipes | Claude plans, Gemini reviews, cheaper models execute | Single provider |
-| Structured domain knowledge | `roland-context.json` — typed rules, versioned, appendable | Freeform `CLAUDE.md` |
+| Structured domain knowledge | `roland-context.json` — typed rules, versioned, appendable | Freeform project context file |
 | Portability | Runs anywhere Goose runs: CI, cron, headless servers | IDE-bound |
 | Budget enforcement | Daily/monthly caps, per-query limits | None |
 

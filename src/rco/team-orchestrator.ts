@@ -1,7 +1,12 @@
 /**
+ * ## Assumptions
+ * - Loop-template missions delegate to ClosedLoop via loop-orchestrator.ts (Loop Engineering pivot).
+ * - Legacy PM team mode (plan → waves → synthesis) serves non-loop missions only.
+ * - LoopEngineCoordinator is deprecated; ClosedLoop owns loop lifecycle for template missions.
+ *
  * RCO Team Orchestrator — PM-style parallel agent execution with review loop.
  *
- * Execution flow:
+ * Execution flow (legacy PM path only):
  *
  *   Phase 1 — Lead PM planning
  *     The Lead PM (Grok 4.3) reads the goal + Blackboard + roster and
@@ -55,12 +60,8 @@ import {
   type MissionPlanningMode,
 } from './mission-dag.js';
 import { loadAllAgents, resolveAgentsDir } from './loadConfig.js';
-import {
-  LoopEngine,
-  LoopEngineCoordinator,
-  LoopTemplates,
-  type LoopHooks,
-} from '../loop-engine/index.js';
+import type { LoopHooks } from '../loop-engine/index.js';
+import { hasLoopTemplate, runClosedLoopMission } from './loop-orchestrator.js';
 import { toCursorModelId } from './model-routing.js';
 import { parseWorkerSignals } from './worker-signals.js';
 import type { AgentYaml } from './types.js';
@@ -279,6 +280,20 @@ export interface TeamOrchestratorOptions {
   loopTemplate?: string;
   /** Fired when loop phase state changes (wire to RunStateWriter.updateLoopState). */
   onLoopStateChange?: LoopHooks['onStateChange'];
+  /** Inject verify-phase command runner (tests / loop-orchestrator ClosedLoop path). */
+  loopRunner?: import('../loop-engine/verification/index.js').CommandRunner;
+  /**
+   * When embedded inside ClosedLoop, limits PM Team scope:
+   * - `plan-only`: Lead PM planning then return (no waves/synthesis)
+   * - `waves-only`: Execute waves from `existingPlan` (skip planning/synthesis)
+   */
+  pmSlice?: 'plan-only' | 'waves-only';
+  /** Plan from a prior ClosedLoop Plan phase (required for `waves-only`). */
+  existingPlan?: TeamPlan;
+  /** Suppress mission-start board cleanup when ClosedLoop already initialized boards. */
+  loopEmbedded?: boolean;
+  /** Loop iteration number for logging when embedded in ClosedLoop. */
+  loopIteration?: number;
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -651,6 +666,11 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
     quiet = false,
     loopTemplate,
     onLoopStateChange,
+    loopRunner,
+    pmSlice,
+    existingPlan,
+    loopEmbedded,
+    loopIteration,
   } = opts;
 
   const restoreStderr = quiet ? createShellExecStderrFilter() : undefined;
@@ -668,6 +688,11 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
       quiet,
       loopTemplate,
       onLoopStateChange,
+      loopRunner,
+      pmSlice,
+      existingPlan,
+      loopEmbedded,
+      loopIteration,
     });
   } finally {
     restoreStderr?.();
@@ -676,6 +701,11 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
 }
 
 async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> {
+  // Loop Engineering pivot — ClosedLoop is the single source of truth for loop-template missions.
+  if (hasLoopTemplate(opts.loopTemplate)) {
+    return runClosedLoopMission(opts);
+  }
+
   const {
     goal, stateDir = '.roland', agentsDir: agentsDirOverride,
     onPlanReady, onWaveStart, onTaskStart, onTaskComplete, onWaveComplete,
@@ -685,9 +715,15 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
     noImprove = false, interactive = false, rl,
     onCircuitBreak,
     sequential = false,
-    loopTemplate,
-    onLoopStateChange,
+    pmSlice,
+    existingPlan,
+    loopEmbedded = false,
+    loopIteration,
   } = opts;
+
+  const loopEmbedLabel = loopEmbedded
+    ? `[Loop][PM Team]${loopIteration != null ? ` iter=${loopIteration}` : ''}`
+    : '[Team]';
 
   // ── Usage tracking ────────────────────────────────────────────────────────
   const runId    = Date.now().toString(36);
@@ -695,20 +731,22 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
   const allTaskUsage: TaskUsageRecord[] = [];
 
   // ── Coordination layer ────────────────────────────────────────────────────
-  console.error('[Team] Initializing coordination layer...');
+  console.error(`${loopEmbedLabel} Initializing coordination layer...`);
   const blackboard = new Blackboard(stateDir);
   const commandBoard = new CommandBlackboard(stateDir);
 
-  const { cleanupBoardsForNewMission, formatCleanupReport } = await import('./board-cleanup.js');
-  const cleanupResult = cleanupBoardsForNewMission(stateDir, goal);
-  if (
-    cleanupResult.blackboardArchived > 0 ||
-    cleanupResult.commandBoard.activeTasksRemoved.length > 0 ||
-    cleanupResult.commandBoard.objectivesArchived.length > 0
-  ) {
-    console.error('[Team] Board hygiene — prior mission state archived:');
-    for (const line of formatCleanupReport(cleanupResult).split('\n').slice(1)) {
-      if (line.trim()) console.error(`[Team]   ${line}`);
+  if (!loopEmbedded) {
+    const { cleanupBoardsForNewMission, formatCleanupReport } = await import('./board-cleanup.js');
+    const cleanupResult = cleanupBoardsForNewMission(stateDir, goal);
+    if (
+      cleanupResult.blackboardArchived > 0 ||
+      cleanupResult.commandBoard.activeTasksRemoved.length > 0 ||
+      cleanupResult.commandBoard.objectivesArchived.length > 0
+    ) {
+      console.error(`${loopEmbedLabel} Board hygiene — prior mission state archived:`);
+      for (const line of formatCleanupReport(cleanupResult).split('\n').slice(1)) {
+        if (line.trim()) console.error(`${loopEmbedLabel}   ${line}`);
+      }
     }
   }
 
@@ -725,8 +763,20 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
   }
 
   // Seed Command Blackboard with mission objective
-  commandBoard.appendBullet('Mission Objectives', `[P2 active] ${goal}`);
-  commandBoard.setAgentStatus({ callsign: 'Roland', state: 'active', lastUpdated: Date.now(), note: 'Lead PM planning' });
+  if (!loopEmbedded) {
+    commandBoard.appendBullet('Mission Objectives', `[P2 active] ${goal}`);
+  } else {
+    commandBoard.appendBullet(
+      'Mission Objectives',
+      `[Loop PM embed${loopIteration != null ? ` iter ${loopIteration}` : ''}] ${goal.slice(0, 100)}`,
+    );
+  }
+  commandBoard.setAgentStatus({
+    callsign: 'Roland',
+    state: 'active',
+    lastUpdated: Date.now(),
+    note: loopEmbedded ? `PM Team embedded — ${pmSlice ?? 'full'}` : 'Lead PM planning',
+  });
 
   const getCommandBlackboardSnapshot = () => commandBoard.smartSnapshot(goal);
 
@@ -755,42 +805,20 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
     console.error('[GIT] Task git workflow disabled');
   }
 
-  blackboard.post({ type: 'task', title: 'TEAM GOAL', content: goal, status: 'in_progress', author: 'system', priority: 'critical', tags: ['goal'], relatedIds: [] });
+  blackboard.post({
+    type: 'task',
+    title: loopEmbedded ? 'LOOP PM SLICE' : 'TEAM GOAL',
+    content: goal,
+    status: 'in_progress',
+    author: 'system',
+    priority: loopEmbedded ? 'high' : 'critical',
+    tags: loopEmbedded ? ['goal', 'loop-pm-embed'] : ['goal'],
+    relatedIds: [],
+  });
 
-  // ── Loop Engine (optional template) ───────────────────────────────────────
-  let loopCoordinator: LoopEngineCoordinator | undefined;
-  if (loopTemplate) {
-    const templates = new LoopTemplates();
-    const template = templates.get(loopTemplate);
-    if (!template) {
-      console.error(`[Loop] Template "${loopTemplate}" not found — continuing without loop engine`);
-      commandBoard.appendBullet('Open Intel', `[LOOP] Template "${loopTemplate}" not found — mission runs without loop phases`);
-    } else {
-      const engine = new LoopEngine({
-        stateDir,
-        template,
-        goal,
-        blackboard,
-        commandBoard,
-        recoverOnStart: true,
-        hooks: { onStateChange: onLoopStateChange },
-      });
-      loopCoordinator = new LoopEngineCoordinator(engine);
-      await loopCoordinator.onMissionStart();
-      commandBoard.appendBullet('Mission Objectives', `Loop template: ${template.name} (${template.phases.map((p) => p.phase).join(' → ')})`);
-      blackboard.post({
-        type: 'artifact',
-        title: `Loop template: ${template.name}`,
-        content: template.description || template.phases.map((p) => p.phase).join(' → '),
-        status: 'in_progress',
-        author: 'loop-engine',
-        priority: 'medium',
-        tags: ['loop', 'template'],
-        relatedIds: [],
-      });
-    }
-  }
-
+  // ── Legacy PM Team Engine (non-loop missions only) ─────────────────────────
+  // TODO: Legacy — to be trimmed after Loop Engineering pivot validates in production.
+  // Loop-template missions return early via runClosedLoopMission() above.
   const agentsDir = resolveAgentsDir(import.meta.url, agentsDirOverride);
   const rosterMap = loadAllAgents(agentsDir, { excludeVariants: true });
   const roster: AgentYaml[] = Array.from(rosterMap.values());
@@ -1053,27 +1081,41 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
   }
 
   // ── Phase 1: Lead PM planning ─────────────────────────────────────────────
-  console.error('[Team] Phase 1: Lead PM planning...');
+  let plan: TeamPlan;
+  let planText: string | undefined;
 
-  const planningPrompt = buildLeadPMPlanningPrompt({
-    goal,
-    blackboardSnapshot: blackboard.snapshot(),
-    roster,
-    inboxMessages: bus.inboxSummary('Lead-PM') || undefined,
-    projectMemory: memorySnapshot || undefined,
-    projectKnowledge: knowledge.injectionBlock || undefined,
-    commandBlackboard: getCommandBlackboardSnapshot(),
-    dagPlanningEnabled,
-  });
-  const pmPlanStart = Date.now();
-  const planText = await callCursorAgent('Lead-PM', pmModelId, planningPrompt, undefined, supervisorCallOpts);
-  allTaskUsage.push(buildTaskUsage('pm-planning', 'Lead PM: Planning', 'Lead-PM', pmModelId, planningPrompt.length, planText.length, Date.now() - pmPlanStart));
+  if (pmSlice === 'waves-only') {
+    if (!existingPlan?.tasks?.length) {
+      throw new Error('pmSlice waves-only requires existingPlan with tasks');
+    }
+    plan = existingPlan;
+    console.error(
+      `${loopEmbedLabel} Phase 1 skipped — using existing plan (${plan.tasks.length} task(s)) from ClosedLoop Plan phase`,
+    );
+  } else {
+    console.error(`${loopEmbedLabel} Phase 1: Lead PM planning...`);
 
-  const rawPlan = extractJsonBlock(planText);
-  const plan: TeamPlan = isTeamPlan(rawPlan) ? rawPlan : fallbackPlan(goal);
+    const planningPrompt = buildLeadPMPlanningPrompt({
+      goal,
+      blackboardSnapshot: blackboard.snapshot(),
+      roster,
+      inboxMessages: bus.inboxSummary('Lead-PM') || undefined,
+      projectMemory: memorySnapshot || undefined,
+      projectKnowledge: knowledge.injectionBlock || undefined,
+      commandBlackboard: getCommandBlackboardSnapshot(),
+      dagPlanningEnabled,
+    });
+    const pmPlanStart = Date.now();
+    planText = await callCursorAgent('Lead-PM', pmModelId, planningPrompt, undefined, supervisorCallOpts);
+    allTaskUsage.push(buildTaskUsage('pm-planning', 'Lead PM: Planning', 'Lead-PM', pmModelId, planningPrompt.length, planText.length, Date.now() - pmPlanStart));
+
+    const rawPlan = extractJsonBlock(planText);
+    plan = isTeamPlan(rawPlan) ? rawPlan : fallbackPlan(goal);
+  }
+
   const planningMode: MissionPlanningMode =
     plan.planningMode ?? (dagPlanningEnabled ? 'dag' : 'flat');
-  console.error(`[Team] Plan: ${plan.tasks.length} task(s) [${planningMode}]${plan.pmNotes ? ` — ${plan.pmNotes.slice(0, 80)}` : ''}`);
+  console.error(`${loopEmbedLabel} Plan: ${plan.tasks.length} task(s) [${planningMode}]${plan.pmNotes ? ` — ${plan.pmNotes.slice(0, 80)}` : ''}`);
 
   const missionDagStore = MissionDagStore.fromPlan({
     stateDir,
@@ -1102,19 +1144,30 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
   }
   commandBoard.setAgentStatus({ callsign: 'Roland', state: 'active', lastUpdated: Date.now(), note: `Wave control — ${plan.tasks.length} task(s)` });
   onPlanReady?.(plan.tasks);
-  await loopCoordinator?.onPlanningComplete();
 
   // ── Display memory citations (show user learning-in-action) ───────────────
-  if (memorySnapshot) {
+  if (memorySnapshot && planText) {
     const citations = parsePlanCitations(planText);
     if (citations.length > 0) {
-      console.error(`[Team] 🧠 Memory influenced this plan (${citations.length} citation${citations.length !== 1 ? 's' : ''}):`);
-      for (const c of citations) console.error(`[Team]   · ${c.slice(0, 120)}`);
+      console.error(`${loopEmbedLabel} 🧠 Memory influenced this plan (${citations.length} citation${citations.length !== 1 ? 's' : ''}):`);
+      for (const c of citations) console.error(`${loopEmbedLabel}   · ${c.slice(0, 120)}`);
     }
   }
 
+  // ClosedLoop Plan phase — return after planning without wave execution.
+  if (pmSlice === 'plan-only') {
+    console.error(`${loopEmbedLabel} Plan-only slice complete — returning to ClosedLoop`);
+    const runUsage = buildRunUsage({
+      runId, runStart, runEnd: Date.now(),
+      goal, wavesRun: 0, blockersEncountered: 0,
+      tasks: allTaskUsage,
+    });
+    saveRunUsage(stateDir, runUsage);
+    return { goal, plan, taskResults: {}, synthesis: '', wavesRun: 0, blockersEncountered: 0 };
+  }
+
   // ── Phase 2: PM control loop ──────────────────────────────────────────────
-  console.error('[Team] Phase 2: Starting PM control loop...');
+  console.error(`${loopEmbedLabel} Phase 2: Starting PM control loop...`);
 
   const remaining = [...plan.tasks];
   let waveNumber = 0;
@@ -1148,7 +1201,6 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
     console.error(`[Team] ${modeLabel} — ${ready.map((t) => t.id).join(', ')}`);
     syncMissionGraph();
     onWaveStart?.(waveNumber, ready);
-    await loopCoordinator?.onWaveStart(waveNumber);
 
     // Reset circuit breaker for this wave (clears error count and open flag)
     waveCircuit.reset();
@@ -1316,7 +1368,6 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
       }
 
       onWaveComplete?.(waveNumber, decision);
-      await loopCoordinator?.onWaveComplete(waveNumber, hasBlockers);
 
       if (decision.decision === 'continue') {
         console.error(`[Team] PM: wave ${waveNumber} approved — continuing`);
@@ -1353,9 +1404,22 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
     }
   }
 
+  // ClosedLoop Act phase — skip synthesis; ClosedLoop owns verify/critique/reflect/PR.
+  if (loopEmbedded && pmSlice === 'waves-only') {
+    console.error(
+      `${loopEmbedLabel} Waves-only slice complete (${waveNumber} wave(s), ${totalBlockers} blocker(s)) — returning to ClosedLoop`,
+    );
+    const runUsage = buildRunUsage({
+      runId, runStart, runEnd: Date.now(),
+      goal, wavesRun: waveNumber, blockersEncountered: totalBlockers,
+      tasks: allTaskUsage,
+    });
+    saveRunUsage(stateDir, runUsage);
+    return { goal, plan, taskResults, synthesis: '', wavesRun: waveNumber, blockersEncountered: totalBlockers };
+  }
+
   // ── Phase 3: Lead PM synthesis ────────────────────────────────────────────
-  console.error('[Team] Phase 3: Lead PM synthesis...');
-  await loopCoordinator?.onSynthesisStart();
+  console.error(`${loopEmbedLabel} Phase 3: Lead PM synthesis...`);
   onSynthesizing?.();
 
   const synthesisCtx = {
@@ -1500,3 +1564,11 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
 
   return { goal, plan, taskResults, synthesis, wavesRun: waveNumber, blockersEncountered: totalBlockers };
 }
+
+/**
+ * ## PM Integration into ClosedLoop Complete
+ *
+ * Loop-template missions: `hasLoopTemplate()` → `runClosedLoopMission()` → `ClosedLoop.run()`.
+ * ClosedLoop Plan/Act optionally invoke PM Team via `pmSlice` (`plan-only` / `waves-only`).
+ * Legacy PM missions: unchanged plan → wave → synthesis path above.
+ */

@@ -5,8 +5,17 @@
 /** How the loop should proceed after critique. */
 export type RetryDecision = 'proceed' | 'retry' | 'retry_focused' | 'escalate';
 
-/** Model lane for critique — Grok for high-level, Composer for code-specific. */
-export type CritiqueModel = 'grok' | 'composer';
+/** Critique routing lane — maps to `critic` or `coding` roles via ModelRouter. */
+export type CritiqueModel = 'critic' | 'coding';
+
+/** Normalize legacy lane keys (grok/composer) to canonical critique lanes. */
+export function normalizeCritiqueLane(lane: string): CritiqueModel {
+  const key = lane.toLowerCase().trim();
+  if (key === 'grok' || key === 'pm' || key === 'critic' || key === 'high_level' || key === 'high-level') {
+    return 'critic';
+  }
+  return 'coding';
+}
 
 export interface ImprovementProposal {
   id: string;

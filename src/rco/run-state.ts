@@ -96,7 +96,7 @@ export interface RunState {
   lastCritique?: {
     summary: string;
     retryDecision: 'proceed' | 'retry' | 'retry_focused' | 'escalate';
-    model: 'grok' | 'composer';
+    model: 'critic' | 'coding' | 'grok' | 'composer';
     at: number;
     iteration: number;
     issueCount?: number;
@@ -309,7 +309,7 @@ export class RunStateWriter {
     lastCritique?: {
       summary: string;
       retryDecision: 'proceed' | 'retry' | 'retry_focused' | 'escalate';
-      model: 'grok' | 'composer';
+      model: 'critic' | 'coding' | 'grok' | 'composer';
       at: number;
       iteration: number;
       issueCount?: number;

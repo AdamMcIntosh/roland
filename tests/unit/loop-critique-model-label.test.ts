@@ -1,6 +1,6 @@
 /**
- * Critique phase model label — blackboard display must show routed Cursor model IDs,
- * not a hardcoded "Grok" brand string. Internal lane name `grok` maps to DEFAULT_PM_MODEL.
+ * Critique phase model label — blackboard display must show routed model IDs via ModelRouter,
+ * not hardcoded brand strings like "Grok".
  *
  * Scoped run: npx vitest run tests/unit/loop-critique-model-label.test.ts
  */
@@ -13,7 +13,7 @@ import { CritiquePhaseHandler } from '../../src/loop-engine/phase-handlers/criti
 import { createInitialLoopState } from '../../src/loop-engine/loop-state.js';
 import { Phase } from '../../src/loop-engine/loop-phases.js';
 import { Blackboard } from '../../src/rco/blackboard.js';
-import { DEFAULT_PM_MODEL, DEFAULT_ENGINEER_MODEL } from '../../src/rco/cursor-models.js';
+import { ModelRouter } from '../../src/models/model-router.js';
 import type { BlackboardEntry } from '../../src/rco/blackboard.js';
 
 function findCritiqueResultEntry(entries: BlackboardEntry[]): BlackboardEntry | undefined {
@@ -34,18 +34,25 @@ describe('CritiquePhaseHandler — model label rendering', () => {
   let tmpDir: string;
   let blackboard: Blackboard;
   let handler: CritiquePhaseHandler;
+  let router: ModelRouter;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'roland-critique-label-'));
     blackboard = new Blackboard(tmpDir);
-    handler = new CritiquePhaseHandler();
+    router = new ModelRouter({
+      pm: { provider: 'openrouter', model: 'grok-4.3' },
+      coding: { provider: 'openrouter', model: 'qwen/qwen3-coder-next' },
+      critic: { provider: 'openrouter', model: 'deepseek/deepseek-chat' },
+      verifier: { provider: 'openrouter', model: 'deepseek/deepseek-v3-0324' },
+    });
+    handler = new CritiquePhaseHandler({ modelRouter: router });
   });
 
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('renders DEFAULT_PM_MODEL for high-level lane (internal grok) on blackboard', async () => {
+  it('renders critic role model on blackboard for high-level lane', async () => {
     const state = createInitialLoopState('minimal-3-phase', 'model label test', Phase.Critique);
     state.retryCount = 0;
     state.lastVerification = {
@@ -69,12 +76,12 @@ describe('CritiquePhaseHandler — model label rendering', () => {
 
     const modelLine = modelLineFromContent(entry!.content);
     expect(modelLine).toBeDefined();
-    expect(modelLine).toContain(`Model: ${DEFAULT_PM_MODEL} (high-level)`);
+    expect(modelLine).toContain('Model: deepseek/deepseek-chat@openrouter (high-level)');
     expect(modelLine).not.toMatch(/Grok/i);
     expect(entry!.content).not.toMatch(/Grok/i);
   });
 
-  it('renders DEFAULT_PM_MODEL when blockers force high-level lane', async () => {
+  it('renders critic model when blockers force high-level lane', async () => {
     const state = createInitialLoopState('minimal-3-phase', 'blocker label test', Phase.Critique);
     state.retryCount = 1;
     state.lastVerification = {
@@ -101,12 +108,12 @@ describe('CritiquePhaseHandler — model label rendering', () => {
     expect(entry).toBeDefined();
 
     const modelLine = modelLineFromContent(entry!.content);
-    expect(modelLine).toContain(`Model: ${DEFAULT_PM_MODEL} (high-level)`);
+    expect(modelLine).toContain('deepseek/deepseek-chat@openrouter (high-level)');
     expect(modelLine).not.toMatch(/Grok/i);
   });
 
-  it('renders DEFAULT_ENGINEER_MODEL for code-specific lane without Grok branding', async () => {
-    const state = createInitialLoopState('minimal-3-phase', 'composer label test', Phase.Critique);
+  it('renders coding role model for code-specific lane', async () => {
+    const state = createInitialLoopState('minimal-3-phase', 'coding label test', Phase.Critique);
     state.retryCount = 0;
     state.lastVerification = {
       pass: false,
@@ -118,7 +125,7 @@ describe('CritiquePhaseHandler — model label rendering', () => {
     };
 
     await handler.execute({
-      goal: 'composer label test',
+      goal: 'coding label test',
       state,
       blackboard,
       iteration: 1,
@@ -130,12 +137,12 @@ describe('CritiquePhaseHandler — model label rendering', () => {
     expect(entry).toBeDefined();
 
     const modelLine = modelLineFromContent(entry!.content);
-    expect(modelLine).toContain(`Model: ${DEFAULT_ENGINEER_MODEL} (code-specific)`);
+    expect(modelLine).toContain('Model: qwen/qwen3-coder-next@openrouter (code-specific)');
     expect(modelLine).not.toMatch(/Grok/i);
     expect(entry!.content).not.toMatch(/Grok/i);
   });
 
-  it('keeps internal lane key in structured JSON while display label uses routed PM model', async () => {
+  it('keeps canonical lane key in structured JSON while display uses routed model', async () => {
     const state = createInitialLoopState('minimal-3-phase', 'structured label test', Phase.Critique);
     state.lastVerification = {
       pass: true,
@@ -158,11 +165,11 @@ describe('CritiquePhaseHandler — model label rendering', () => {
     expect(detail).toBeDefined();
 
     const snapshot = JSON.parse(detail!.content) as { model: string };
-    expect(snapshot.model).toBe('grok');
+    expect(snapshot.model).toBe('critic');
 
     const result = findCritiqueResultEntry(blackboard.read());
     const modelLine = modelLineFromContent(result!.content);
-    expect(modelLine).toContain(DEFAULT_PM_MODEL);
+    expect(modelLine).toContain('deepseek/deepseek-chat@openrouter');
     expect(modelLine).not.toMatch(/Grok/i);
   });
 });

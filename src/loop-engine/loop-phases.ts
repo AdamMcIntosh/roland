@@ -54,6 +54,9 @@ export interface ExitConditionConfig {
   evaluate?: (ctx: import('./exit-conditions.js').ExitEvaluationContext) => boolean;
 }
 
+/** PM Team Engine routing for Plan/Act phases inside ClosedLoop. */
+export type PmTeamMode = 'auto' | 'always' | 'never';
+
 /** Per-phase configuration within a loop template. */
 export interface PhaseConfig {
   phase: Phase;
@@ -65,6 +68,8 @@ export interface PhaseConfig {
   optional?: boolean;
   /** Verify-phase only — subset of verification strategies to run */
   verification?: TemplateVerificationStep[];
+  /** Override template-level PM Team routing for this phase. */
+  pmTeam?: PmTeamMode;
 }
 
 /** A reusable loop template — loaded from recipes/loops/*.yaml */
@@ -95,6 +100,10 @@ export interface LoopTemplate {
   exitConditions?: ExitConditionConfig[];
   /** Minimum confidence for EvaluationGate acceptance override. */
   minConfidence?: number;
+  /** PM Team routing for Plan phase (default: never for minimal templates). */
+  pmPlan?: PmTeamMode;
+  /** PM Team routing for Act phase (default: never for minimal templates). */
+  pmAct?: PmTeamMode;
 }
 
 export function isPhase(value: string): value is Phase {

@@ -101,6 +101,8 @@
     var loopMemory = health?.loopMemory || null;
     var exitConditions = health?.exitConditions || [];
     var exitEvaluation = health?.exitEvaluation || null;
+    var roleRouting = health?.roleRouting || null;
+    var loopSummary = health?.loopSummary || null;
     var isPaused = Boolean(rs?.hitlPaused);
     var isAbortPending = Boolean(rs?.hitlAbortPending);
 
@@ -118,6 +120,8 @@
       loopMemory: loopMemory,
       exitConditions: exitConditions,
       exitEvaluation: exitEvaluation,
+      roleRouting: roleRouting,
+      loopSummary: loopSummary,
       lastVerification: lv,
       lastCritique: rs?.lastCritique,
       lastRetry: rs?.lastRetry,
@@ -234,6 +238,9 @@
       var lc = vm.lastCritique;
       lines.push('Decision: ' + String(lc.retryDecision || '').toUpperCase());
       if (lc.summary) lines.push(lc.summary);
+      if (vm.roleRouting && vm.roleRouting.phaseModels && vm.roleRouting.phaseModels.critique) {
+        lines.push('Model: ' + vm.roleRouting.phaseModels.critique);
+      }
       if (Array.isArray(lc.issues) && lc.issues.length) {
         lines.push('Issues: ' + lc.issues.slice(0, 3).join('; '));
       }
@@ -253,6 +260,10 @@
     });
     if (spawns.length) {
       lines.push('Specialists: ' + spawns.map(function (s) { return s.primaryAgent; }).join(', '));
+    }
+
+    if (vm.roleRouting && vm.roleRouting.phaseModels && vm.roleRouting.phaseModels[phaseId]) {
+      lines.push('Model: ' + vm.roleRouting.phaseModels[phaseId]);
     }
 
     if (!lines.length) {
@@ -393,14 +404,58 @@
   function renderReflectionPanel(vm) {
     var mem = vm.loopMemory;
     if (!mem || (!mem.lastReflection && !mem.reflectionCount)) return '';
+    var streakNote = mem.confidenceStreak
+      ? ' · confidence streak <strong>' + esc(String(mem.confidenceStreak)) + '</strong>'
+      : '';
     return '<div class="loop-reflection-panel">' +
       '<h5>Reflection Memory</h5>' +
       '<div class="loop-reflection-meta">' +
         esc(mem.loopId || 'loop') + ' · ' + esc(String(mem.reflectionCount)) + ' reflection(s)' +
-        (mem.confidenceStreak ? ' · streak ' + esc(String(mem.confidenceStreak)) : '') +
+        streakNote +
       '</div>' +
       (mem.lastReflection
-        ? '<div class="loop-reflection-preview">' + esc(mem.lastReflection).replace(/\n/g, '<br>') + '</div>'
+        ? '<div class="loop-reflection-preview"><strong>Latest:</strong> ' +
+          esc(mem.lastReflection).replace(/\n/g, '<br>') + '</div>'
+        : '') +
+      '</div>';
+  }
+
+  function renderModelRoutingPanel(vm) {
+    var rr = vm.roleRouting;
+    if (!rr || !rr.roles) return '';
+    var coreRoles = ['pm', 'coding', 'critic', 'verifier', 'researcher'];
+    var rows = coreRoles.map(function (role) {
+      var m = rr.roles[role];
+      if (!m) return '';
+      var fb = m.isFallback ? ' <span class="loop-routing-fallback">fallback</span>' : '';
+      return '<div class="loop-routing-row">' +
+        '<span class="loop-routing-role">' + esc(role) + '</span>' +
+        '<span class="loop-routing-model">' + esc(m.displayLabel) + fb + '</span>' +
+        '</div>';
+    }).filter(Boolean).join('');
+    if (!rows) return '';
+    return '<div class="loop-routing-panel">' +
+      '<h5>Model Routing</h5>' +
+      '<div class="loop-routing-summary">' + esc(rr.summary || '') + '</div>' +
+      rows +
+      '</div>';
+  }
+
+  function renderLoopSummaryPanel(vm) {
+    var ls = vm.loopSummary;
+    if (!ls || !ls.complete) return '';
+    return '<div class="loop-summary-panel">' +
+      '<h5>Loop Summary</h5>' +
+      '<div class="loop-summary-grid">' +
+        '<span>Status <strong>' + esc(ls.status) + '</strong></span>' +
+        '<span>Iterations <strong>' + esc(String(ls.iterations)) + '</strong></span>' +
+        '<span>Retries <strong>' + esc(String(ls.retryCount)) + '</strong></span>' +
+        (ls.confidence != null
+          ? '<span>Confidence <strong>' + esc(formatConfidence(ls.confidence)) + '</strong></span>'
+          : '') +
+      '</div>' +
+      (ls.exitReason
+        ? '<div class="loop-summary-exit">' + esc(ls.exitReason) + '</div>'
         : '') +
       '</div>';
   }
@@ -411,7 +466,9 @@
     var decCls = lc.retryDecision === 'escalate' ? 'escalate'
       : (lc.retryDecision === 'retry' || lc.retryDecision === 'retry_focused') ? 'retry' : 'proceed';
     var decLabel = lc.retryDecision === 'retry_focused' ? 'RETRY (focused)' : lc.retryDecision.toUpperCase();
-    var modelLabel = lc.model === 'composer' ? getEngModelId() : getPmModelId();
+    var modelLabel = lc.model === 'coding' || lc.model === 'composer'
+      ? (vm.roleRouting?.roles?.coding?.displayLabel || getEngModelId())
+      : (vm.roleRouting?.roles?.critic?.displayLabel || getPmModelId());
     var issueNote = lc.issueCount != null ? ' · ' + lc.issueCount + ' issue(s)' : '';
     return '<div class="loop-critique-panel">' +
       '<span class="loop-critique-decision ' + decCls + '">' + esc(decLabel) + '</span>' +
@@ -503,7 +560,9 @@
       '<div class="' + panelClass + '" data-loop-harness="1">' +
         header + metaRow + progressBlock +
         renderMetricsRow(vm) +
+        renderModelRoutingPanel(vm) +
         renderTimeline(vm, opts) +
+        renderLoopSummaryPanel(vm) +
         renderExitConditionsPanel(vm) +
         renderReflectionPanel(vm) +
         renderCritiquePanel(vm) +

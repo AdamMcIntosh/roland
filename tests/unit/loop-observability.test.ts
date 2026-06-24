@@ -169,10 +169,11 @@ describe('Loop health + resilience', () => {
   });
 
   it('detects rate-limit errors and degrades model selection', () => {
+    loopDegradationPolicy.reset();
     expect(isRateLimitOrUnavailableError('HTTP 429 Too Many Requests')).toBe(true);
     expect(isRateLimitOrUnavailableError('all good')).toBe(false);
-    const fallback = loopDegradationPolicy.recordFailure('grok', 'rate limit exceeded');
-    expect(fallback).toBe('composer');
-    expect(loopDegradationPolicy.selectModel('grok')).toBe('composer');
+    const fallback = loopDegradationPolicy.recordFailure('critic', 'rate limit exceeded');
+    expect(fallback).toBe('coding');
+    expect(loopDegradationPolicy.selectLane('critic')).toBe('coding');
   });
 });

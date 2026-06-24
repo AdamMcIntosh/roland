@@ -9,6 +9,7 @@ import type { Blackboard } from '../rco/blackboard.js';
 import type { CommandBlackboard } from '../rco/command-blackboard.js';
 import type { Phase, PhaseConfig } from './loop-phases.js';
 import { Phase as P } from './loop-phases.js';
+import { ModelRouter } from '../models/model-router.js';
 
 export interface SpawnRequest {
   phase: Phase;
@@ -44,6 +45,7 @@ export interface SpecialistSpawnerOptions {
   blackboard: Blackboard;
   commandBoard?: CommandBlackboard;
   goal: string;
+  modelRouter?: ModelRouter;
 }
 
 function logSpawn(msg: string, detail?: Record<string, unknown>): void {
@@ -61,9 +63,11 @@ function logSpawn(msg: string, detail?: Record<string, unknown>): void {
 export class SpecialistSpawner {
   private readonly opts: SpecialistSpawnerOptions;
   private readonly history: SpawnRequest[] = [];
+  private readonly router: ModelRouter;
 
   constructor(opts: SpecialistSpawnerOptions) {
     this.opts = opts;
+    this.router = opts.modelRouter ?? ModelRouter.fromConfig();
   }
 
   /** Spawn specialists for a loop phase based on template config and defaults. */
@@ -121,11 +125,17 @@ export class SpecialistSpawner {
   private recordSpawn(request: SpawnRequest): void {
     this.history.push(request);
     const agents = [request.primaryAgent, ...request.supportingAgents].join(', ');
+    const phaseRole = ModelRouter.roleForPhase(request.phase);
+    const resolved = this.router.getModelForAgent(request.primaryAgent);
+    const phaseModel = this.router.getModel(phaseRole);
 
     logSpawn('spawn intent recorded', {
       phase: request.phase,
       agents,
       iteration: request.iteration,
+      role: phaseRole,
+      model: phaseModel.displayLabel,
+      agentModel: resolved.displayLabel,
     });
 
     this.opts.blackboard.post({
@@ -138,6 +148,7 @@ export class SpecialistSpawner {
           ? `Supporting: ${request.supportingAgents.join(', ')}`
           : '',
         `Reason: ${request.reason}`,
+        `Model routing: ${phaseModel.displayLabel} (phase) · ${resolved.displayLabel} (agent)`,
         `Goal: ${this.opts.goal}`,
       ]
         .filter(Boolean)

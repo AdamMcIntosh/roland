@@ -1,10 +1,25 @@
+import type { LoopPmBridge } from '../pm-integration.js';
 import type { PhaseHandler, PhaseHandlerContext, PhaseResult } from './types.js';
 import { Phase } from '../loop-phases.js';
 
+export interface ActPhaseHandlerOptions {
+  /** When set, Act may invoke PM Team wave execution based on Plan routing. */
+  pmBridge?: LoopPmBridge;
+}
+
 export class ActPhaseHandler implements PhaseHandler {
   readonly phase = Phase.Act;
+  private readonly pmBridge?: LoopPmBridge;
+
+  constructor(opts: ActPhaseHandlerOptions = {}) {
+    this.pmBridge = opts.pmBridge;
+  }
 
   async execute(ctx: PhaseHandlerContext): Promise<PhaseResult> {
+    if (this.pmBridge) {
+      return this.pmBridge.runAct(ctx.iteration, ctx.phaseConfig);
+    }
+
     const wave = ctx.waveNumber ?? 0;
     ctx.commandBoard?.setAgentStatus({
       callsign: 'Roland',
