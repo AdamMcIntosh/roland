@@ -190,4 +190,38 @@ roland:
     expect(summary).toContain('coding=');
     expect(summary).toContain('critic=');
   });
+
+  it('formatStartupBanner includes template and core roles', () => {
+    const router = new ModelRouter(DEFAULT_MODELS_CONFIG);
+    const lines = router.formatStartupBanner('closed-loop-harness');
+    const joined = lines.join('\n');
+    expect(joined).toContain('closed-loop-harness');
+    expect(joined).toContain('pm');
+    expect(joined).toContain('coding');
+    expect(joined).toContain('╔');
+  });
+
+  it('serializeRoutingForState includes phase models', () => {
+    const router = new ModelRouter(DEFAULT_MODELS_CONFIG);
+    const snap = router.serializeRoutingForState();
+    expect(snap.summary).toContain('pm=');
+    expect(snap.phaseModels.plan).toBeTruthy();
+    expect(snap.phaseModels.critique).toBeTruthy();
+  });
+
+  it('resolveSdkModelId maps roles to Cursor SDK ids', () => {
+    const router = new ModelRouter({
+      pm: { provider: 'cursor', model: 'gpt-5.4-nano' },
+      coding: { provider: 'cursor', model: 'composer-2.5' },
+    });
+    expect(router.resolveSdkModelId('lead-pm')).toBe('gpt-5.4-nano');
+    expect(router.resolveSdkModelId('executor')).toBe('composer-2.5');
+  });
+
+  it('resolveSdkModelId maps OpenRouter pm model to Cursor SDK', () => {
+    const router = new ModelRouter(DEFAULT_MODELS_CONFIG);
+    const sdk = router.resolveSdkModelId('lead-pm');
+    expect(typeof sdk).toBe('string');
+    expect(sdk.length).toBeGreaterThan(0);
+  });
 });

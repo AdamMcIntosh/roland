@@ -68,7 +68,7 @@ config.yaml             ← Model routing tiers, RCO settings, dashboard port
 
 ## PM Team Mode
 
-The primary execution path for complex goals.
+The execution path for complex goals **without** a loop template. When `--loop-template` is set, missions route to ClosedLoop instead (see Loop Engineering below).
 
 ```bash
 roland team "Add input validation to the registration endpoint"
@@ -87,6 +87,39 @@ roland team "..." --state-dir /tmp  # use alternate state directory
 - `blackboard.json` — shared key/value store agents read and write
 - `messages.json` — point-to-point message queue between agents
 - `usage-history.json` — per-run token/cost estimates appended by `usage-tracker.ts` after every run
+
+---
+
+## Loop Engineering (ClosedLoop)
+
+When `--loop-template` is set, `runTeam()` routes to `loop-orchestrator.ts` → `ClosedLoop.run()` instead of the legacy PM wave engine.
+
+```bash
+roland team "ship OAuth callback with tests green" --loop-template closed-loop-harness
+roland team "add profile settings page" --loop-template feature-implementation-loop
+```
+
+**Routing** (`team-orchestrator.ts`):
+
+```typescript
+if (hasLoopTemplate(opts.loopTemplate)) {
+  return runClosedLoopMission(opts); // ClosedLoop — primary path
+}
+// else legacy PM plan → waves → synthesis
+```
+
+**ClosedLoop owns:** EvaluationGate (verify), LoopMemory, reflection, exit conditions, SpecialistSpawner, checkpoint/recovery, and PR formatting (`closed-loop-pr.json`). Plan/Act phases optionally embed PM Team via `LoopPmBridge` when the template sets `pm_plan` / `pm_act` to `auto` or `always`.
+
+**Model routing:** All loop components resolve models via `ModelRouter.getModel(role)` in `src/models/model-router.ts`. Switch OpenRouter ↔ Ollama by editing `config.yaml` `models` section only (see file comments). Startup prints a routing banner; dashboard Loop panel shows live role + phase routing.
+
+**Entry points:** `roland team --loop-template`, MCP `roland_run_team` with `loop_template`, dashboard `POST /api/mission { loopTemplate }`.
+
+**State files** (loop missions):
+- `loop-state.json` — phase, iteration, verification, critique snapshots
+- `loops/<loop-id>/` — LoopMemory artifacts and reflections
+- `closed-loop-pr.json` — formatted PR draft on completion
+
+See `docs/guides/closed-loop-harness.md` and `src/rco/loop-orchestrator.ts`.
 
 ---
 
@@ -297,7 +330,7 @@ Two files serve the browser-based usage dashboard:
 
 **Usage tracker** (`src/rco/usage-tracker.ts`):
 
-- Called at the end of every `runTeam()` in `team-orchestrator.ts`
+- Called at the end of every `runTeam()` — legacy PM path in `team-orchestrator.ts` and loop path in `loop-orchestrator.ts`
 - Estimates tokens as `chars / 4` and cost from per-model rate table (`MODEL_PRICING`)
 - Appends one `RunUsageRecord` to `.roland/usage-history.json` (creates the file on first run)
 - Rate table lives at the top of `usage-tracker.ts` — update it if you have better pricing data

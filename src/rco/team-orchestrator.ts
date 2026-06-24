@@ -62,6 +62,7 @@ import {
 import { loadAllAgents, resolveAgentsDir } from './loadConfig.js';
 import type { LoopHooks } from '../loop-engine/index.js';
 import { hasLoopTemplate, runClosedLoopMission } from './loop-orchestrator.js';
+import { ModelRouter } from '../models/model-router.js';
 import { toCursorModelId } from './model-routing.js';
 import { parseWorkerSignals } from './worker-signals.js';
 import type { AgentYaml } from './types.js';
@@ -817,20 +818,23 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
   });
 
   // ── Legacy PM Team Engine (non-loop missions only) ─────────────────────────
-  // TODO: Legacy — to be trimmed after Loop Engineering pivot validates in production.
-  // Loop-template missions return early via runClosedLoopMission() above.
+  // TODO: Legacy PM Team — scheduled for deprecation after Loop Engineering pivot.
+  // Loop-template missions return early via runClosedLoopMission() → ClosedLoop (100% loop path).
   const agentsDir = resolveAgentsDir(import.meta.url, agentsDirOverride);
   const rosterMap = loadAllAgents(agentsDir, { excludeVariants: true });
   const roster: AgentYaml[] = Array.from(rosterMap.values());
   console.error(`[Team] Roster: ${roster.length} agents from ${agentsDir}`);
 
-  // ── Model config banner ───────────────────────────────────────────────────
-  const pmModelId = toCursorModelId('', 'lead-pm');
-  const engineerModelId = toCursorModelId('', 'executor');
+  // ── Model config banner (legacy PM path — routes via ModelRouter → Cursor SDK) ─
+  const legacyRouter = ModelRouter.fromConfig();
+  const pmResolved = legacyRouter.getModel('pm');
+  const codingResolved = legacyRouter.getModel('coding');
+  const pmModelId = toCursorModelId(pmResolved.model, 'lead-pm');
+  const engineerModelId = toCursorModelId(codingResolved.model, 'executor');
   console.error('[Team] ─────────────────────────────────────────────────────');
-  console.error('[Team] Model config:');
-  console.error(`[Team]   Lead PM       → ${pmModelId}     (Roland supervisor + UNSC sub-agents)`);
-  console.error(`[Team]   All engineers → ${engineerModelId} (reasoning, execution, tests, docs)`);
+  console.error('[Team] Legacy PM Team — ModelRouter → Cursor SDK');
+  console.error(`[Team]   Lead PM (pm)     → ${pmResolved.displayLabel} → SDK ${pmModelId}`);
+  console.error(`[Team]   Engineers (coding)→ ${codingResolved.displayLabel} → SDK ${engineerModelId}`);
   console.error('[Team] ─────────────────────────────────────────────────────');
 
   // ── Shared execution state ─────────────────────────────────────────────────
@@ -1081,6 +1085,7 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
   }
 
   // ── Phase 1: Lead PM planning ─────────────────────────────────────────────
+  // TODO: Legacy PM Team — scheduled for deprecation after pivot (ClosedLoop Plan phase replaces this).
   let plan: TeamPlan;
   let planText: string | undefined;
 
@@ -1167,6 +1172,7 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
   }
 
   // ── Phase 2: PM control loop ──────────────────────────────────────────────
+  // TODO: Legacy PM Team — scheduled for deprecation after pivot (ClosedLoop Act phase replaces waves).
   console.error(`${loopEmbedLabel} Phase 2: Starting PM control loop...`);
 
   const remaining = [...plan.tasks];
@@ -1419,6 +1425,7 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
   }
 
   // ── Phase 3: Lead PM synthesis ────────────────────────────────────────────
+  // TODO: Legacy PM Team — scheduled for deprecation after pivot (ClosedLoop owns synthesis + PR).
   console.error(`${loopEmbedLabel} Phase 3: Lead PM synthesis...`);
   onSynthesizing?.();
 
@@ -1566,9 +1573,13 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
 }
 
 /**
- * ## PM Integration into ClosedLoop Complete
+ * ## Final Legacy Cleanup + Model Router Integration Complete
  *
- * Loop-template missions: `hasLoopTemplate()` → `runClosedLoopMission()` → `ClosedLoop.run()`.
- * ClosedLoop Plan/Act optionally invoke PM Team via `pmSlice` (`plan-only` / `waves-only`).
- * Legacy PM missions: unchanged plan → wave → synthesis path above.
+ * Routing at top of `runTeamInner()`:
+ * ```typescript
+ * if (hasLoopTemplate(opts.loopTemplate)) {
+ *   return runClosedLoopMission(opts); // ClosedLoop — 100% loop path
+ * }
+ * // TODO: Legacy PM Team — plan → waves → synthesis below
+ * ```
  */

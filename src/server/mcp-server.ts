@@ -3468,7 +3468,7 @@ What would you like to work on?`;
     // ── roland_run_team ───────────────────────────────────────────────────────
     this.registerTool(
       'roland_run_team',
-      'Launch a background PM team run for goals on the **Team** execution path. Use when work needs multi-file changes, Sparrow + Vanguard test orchestration, Command Blackboard tracking, wave synthesis, or > 30–45 min effort. Also use when the operator forces team mode via --force-team, "force team", "full team", "run as team", or "spawn team" (no confirmation needed — launch immediately). Do NOT use for single-file edits, Q&A, or quick fixes unless force-team was explicitly requested. Trade-off: team runs add PM overhead but provide parallel callsigns, blocker surfacing, and Mission Complete synthesis. Returns immediately; track with pm_standup() or get_team_context().',
+      'Launch a background PM team run for goals on the **Team** execution path. Use when work needs multi-file changes, Sparrow + Vanguard test orchestration, Command Blackboard tracking, wave synthesis, or > 30–45 min effort. Pass `loop_template` (e.g. closed-loop-harness, feature-implementation-loop) to route through **ClosedLoop** instead of legacy PM waves. Also use when the operator forces team mode via --force-team, "force team", "full team", "run as team", or "spawn team" (no confirmation needed — launch immediately). Do NOT use for single-file edits, Q&A, or quick fixes unless force-team was explicitly requested. Trade-off: team runs add PM overhead but provide parallel callsigns, blocker surfacing, and Mission Complete synthesis. Returns immediately; track with pm_standup() or get_team_context().',
       async (args: Record<string, unknown>) => {
         const goal = args.goal as string;
         if (!goal || typeof goal !== 'string' || !goal.trim()) {
@@ -3519,7 +3519,7 @@ What would you like to work on?`;
           },
           loop_template: {
             type: 'string',
-            description: 'Optional loop template id (e.g. standard-code-loop, research-loop, minimal-3-phase). Attaches Loop Engineering phase tracking.',
+            description: 'Optional loop template id (e.g. closed-loop-harness, feature-implementation-loop). Routes through ClosedLoop harness — not legacy PM waves.',
           },
         },
         required: ['goal'],

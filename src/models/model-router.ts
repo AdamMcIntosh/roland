@@ -11,7 +11,12 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
-import { DEFAULT_ENGINEER_MODEL, DEFAULT_PM_MODEL } from '../rco/cursor-models.js';
+import {
+  DEFAULT_ENGINEER_MODEL,
+  DEFAULT_PM_MODEL,
+  VALID_CURSOR_MODELS,
+  isValidCursorModel,
+} from '../rco/cursor-models.js';
 
 // ============================================================================
 // Types
@@ -377,10 +382,12 @@ export class ModelRouter {
       return new ModelRouter(applyEnvOverrides(yamlConfig));
     } catch (err) {
       const hint = err instanceof Error ? err.message : String(err);
-      console.error(
-        `[ModelRouter] Failed to load config — using built-in OpenRouter defaults. ${hint}`,
+      const configHint = resolveConfigPath() ?? '(config.yaml not found in cwd or package dir)';
+      throw new ModelRouterError(
+        `Failed to load model routing from ${configHint}. ${hint} ` +
+          'Fix config.yaml `models` section or set ROLAND_MODEL_<ROLE> env vars. ' +
+          'See config.yaml comments for OpenRouter vs Ollama examples.',
       );
-      return new ModelRouter(DEFAULT_MODELS_CONFIG);
     }
   }
 
@@ -522,7 +529,7 @@ export class ModelRouter {
     return keys.map((r) => `${r}=${this.getModel(r).displayLabel}`).join(' · ');
   }
 
-  /** Multi-line banner for loop mission start. */
+  /** Multi-line table for logs and Mission Objectives. */
   formatRoutingBanner(): string[] {
     const lines = ['[ModelRouter] Active role routing:'];
     for (const role of ALL_ROLES) {
@@ -533,8 +540,86 @@ export class ModelRouter {
     return lines;
   }
 
+  /**
+   * Beautiful startup banner — printed at the start of every loop-template mission.
+   */
+  formatStartupBanner(templateId?: string): string[] {
+    const width = 58;
+    const border = '═'.repeat(width);
+    const lines: string[] = [
+      `[Loop] ╔${border}╗`,
+      `[Loop] ║${' Loop Engineering — Model Router'.padEnd(width)}║`,
+    ];
+    if (templateId) {
+      lines.push(`[Loop] ║${` Template: ${templateId}`.slice(0, width).padEnd(width)}║`);
+    }
+    lines.push(`[Loop] ╠${border}╣`);
+    for (const role of ['pm', 'coding', 'critic', 'verifier', 'researcher'] as ModelRole[]) {
+      const chain = this.getModelWithFallback(role);
+      const active = chain.active;
+      const fb = active.isFallback ? ' ← fallback active' : '';
+      const row = ` ${role.padEnd(11)} ${active.displayLabel}${fb}`;
+      lines.push(`[Loop] ║${row.slice(0, width).padEnd(width)}║`);
+    }
+    lines.push(`[Loop] ╚${border}╝`);
+    return lines;
+  }
+
+  /** JSON-safe snapshot for run-state.json and dashboard. */
+  serializeRoutingForState(): {
+    summary: string;
+    roles: Record<string, { provider: string; model: string; displayLabel: string; isFallback: boolean }>;
+    phaseModels: Record<string, string>;
+  } {
+    const routing = this.getActiveRouting();
+    return {
+      summary: this.formatRoutingSummary(),
+      roles: Object.fromEntries(
+        Object.entries(routing).map(([role, m]) => [
+          role,
+          {
+            provider: m.provider,
+            model: m.model,
+            displayLabel: m.displayLabel,
+            isFallback: m.isFallback,
+          },
+        ]),
+      ),
+      phaseModels: Object.fromEntries(
+        ['plan', 'act', 'verify', 'critique', 'retry', 'observe', 'reflect'].map((phase) => [
+          phase,
+          this.getModelForPhase(phase).displayLabel,
+        ]),
+      ),
+    };
+  }
+
+  /**
+   * Resolve a Cursor SDK model id for legacy PM Team agent dispatch.
+   * Uses role routing from config; falls back to keyword mapping for non-cursor providers.
+   */
+  resolveSdkModelId(agentName: string, yamlModel?: string): string {
+    const yaml = yamlModel?.toLowerCase().trim() ?? '';
+    if (yaml && yaml !== 'auto' && isValidCursorModel(yaml)) return yaml;
+
+    const role = ModelRouter.roleForAgent(agentName);
+    const resolved = this.getModel(role);
+
+    if (resolved.provider === 'cursor' && isValidCursorModel(resolved.model)) {
+      return resolved.model;
+    }
+
+    return mapProviderModelToCursorSdk(resolved.model, role);
+  }
+
   logRoutingBanner(): void {
-    for (const line of this.formatRoutingBanner()) {
+    for (const line of this.formatStartupBanner()) {
+      console.error(line);
+    }
+  }
+
+  logStartupBanner(templateId?: string): void {
+    for (const line of this.formatStartupBanner(templateId)) {
       console.error(line);
     }
   }
@@ -549,17 +634,50 @@ export class ModelRouter {
   }
 }
 
+/** Map OpenRouter/Ollama model strings to Cursor SDK ids for legacy PM Team dispatch. */
+function mapProviderModelToCursorSdk(model: string, role: ModelRole): string {
+  const m = model.toLowerCase();
+  if (role === 'pm') {
+    if (m.includes('grok')) return 'grok-4.3';
+    if (m.includes('nano')) return DEFAULT_PM_MODEL;
+    return DEFAULT_PM_MODEL;
+  }
+  if (m.includes('opus')) return 'claude-opus-4-7';
+  if (m.includes('sonnet')) return 'claude-sonnet-4-6';
+  if (m.includes('haiku')) return 'claude-haiku-4-5';
+  if (m.includes('gemini') && m.includes('pro')) return 'gemini-2.5-pro';
+  if (m.includes('gemini')) return 'gemini-2.5-flash';
+  if (m.includes('composer')) return DEFAULT_ENGINEER_MODEL;
+  return DEFAULT_ENGINEER_MODEL;
+}
+
 /**
- * ## Pre-Testing Cleanup Complete
+ * ## Final Legacy Cleanup + Model Router Integration Complete
  *
- * Loop Engineering uses role-based routing via `getModel()` / `getModelWithFallback()`.
- * Legacy PM Team wave engine remains in team-orchestrator for non-loop missions only.
+ * Loop Engineering routes all roles via `getModel()` / `getModelWithFallback()`.
+ * Legacy PM Team (`team-orchestrator.ts`) bridges through `resolveSdkModelId()` for Cursor SDK dispatch.
  *
- * ```typescript
- * const router = ModelRouter.fromConfig();
- * ModelRouter.validateOnStartup(router); // warns on missing roles / fallbacks
- * const chain = router.getModelWithFallback('critic');
- * console.log(chain.active.displayLabel);
+ * **OpenRouter (default)** — `config.yaml`:
+ * ```yaml
+ * models:
+ *   pm:     { provider: openrouter, model: grok-4.3, fallback: { provider: openrouter, model: gpt-5.4-nano } }
+ *   coding: { provider: openrouter, model: qwen/qwen3-coder-next }
+ *   critic: { provider: openrouter, model: deepseek/deepseek-chat }
+ *   verifier: { provider: openrouter, model: deepseek/deepseek-v3-0324 }
  * ```
+ *
+ * **Full Ollama (local)** — change provider per role only:
+ * ```yaml
+ * models:
+ *   pm:     { provider: ollama, model: llama3.2:latest }
+ *   coding: { provider: ollama, model: qwen3.5-coder:14b }
+ *   critic: { provider: ollama, model: deepseek-r1:7b }
+ *   verifier: { provider: ollama, model: qwen3.5-coder:14b }
+ * ollama:
+ *   enabled: true
+ *   base_url: http://localhost:11434
+ * ```
+ *
+ * Env overrides: `ROLAND_MODEL_CODING=qwen3.5-coder:14b` + `ROLAND_MODEL_CODING_PROVIDER=ollama`
  */
 export {};

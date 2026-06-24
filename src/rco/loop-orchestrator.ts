@@ -57,17 +57,33 @@ export async function runClosedLoopMission(opts: ClosedLoopMissionOptions): Prom
   const runId = Date.now().toString(36);
   const runStart = Date.now();
 
-  console.error('[Loop] ─────────────────────────────────────────────────────');
-  console.error('[Loop] ClosedLoop mission — Loop Engineering primary path');
-  console.error(`[Loop] Template: ${templateName}`);
   const modelRouter = ModelRouter.fromConfig();
-  console.error(`[Loop] Model routing: ${modelRouter.formatRoutingSummary()}`);
+  const validation = ModelRouter.validateOnStartup(modelRouter);
+  if (!validation.ok) {
+    console.error(
+      `[ModelRouter] Missing required loop roles: ${validation.missing.join(', ')}. ` +
+        'Add models.<role> to config.yaml (pm, coding, critic, verifier) or set ROLAND_MODEL_<ROLE>.',
+    );
+  }
+  for (const w of validation.warnings.slice(0, 2)) {
+    console.error(`[ModelRouter] Note: ${w}`);
+  }
+  modelRouter.logStartupBanner(templateName);
+
+  console.error('[Loop] ClosedLoop mission — Loop Engineering primary path');
   console.error('[Loop] PM Team Engine wired into Plan/Act when template pm_plan/pm_act is auto|always');
   console.error('[Loop] Verify/Critique/Reflect/ExitConditions remain in ClosedLoop harness');
-  console.error('[Loop] ─────────────────────────────────────────────────────');
 
   const blackboard = new Blackboard(stateDir);
   const commandBoard = new CommandBlackboard(stateDir);
+  const routingSnapshot = modelRouter.serializeRoutingForState();
+  commandBoard.appendBullet('Mission Objectives', `Model routing: ${routingSnapshot.summary}`);
+  for (const role of ['pm', 'coding', 'critic', 'verifier'] as const) {
+    const m = routingSnapshot.roles[role];
+    if (m) {
+      commandBoard.appendBullet('Key Decisions', `[ModelRouter] ${role} → ${m.displayLabel}`);
+    }
+  }
 
   const { cleanupBoardsForNewMission, formatCleanupReport } = await import('./board-cleanup.js');
   const cleanupResult = cleanupBoardsForNewMission(stateDir, goal);
@@ -259,9 +275,9 @@ function buildClosedLoopSynthesis(goal: string, result: ClosedLoopResult, stateD
 }
 
 /**
- * ## PM Integration into ClosedLoop Complete
+ * ## Final Legacy Cleanup + Model Router Integration Complete
  *
  * Loop-template missions route here from `runTeam()` / `runTeamInner()` before the legacy PM wave engine.
- * ClosedLoop Plan/Act phases optionally invoke PM Team (Lead PM planning + wave execution).
- * Non-loop missions continue through the full PM planning → wave → synthesis path unchanged.
+ * ClosedLoop owns the full lifecycle; ModelRouter startup banner prints at mission start.
+ * Non-loop missions continue through legacy PM planning → wave → synthesis (TODO: deprecation).
  */

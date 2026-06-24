@@ -168,7 +168,7 @@ export class SpecialistSpawner {
 }
 
 /**
- * ## Component Complete
- * SpecialistSpawner records spawn intents on the blackboard and command board so the
- * team orchestrator can dispatch Critic, Researcher, Verifier, Test-Author, and other specialists on demand.
+ * ## Final Legacy Cleanup + Model Router Integration Complete
+ *
+ * SpecialistSpawner resolves phase/agent models via ModelRouter.getModel() on every spawn intent.
  */

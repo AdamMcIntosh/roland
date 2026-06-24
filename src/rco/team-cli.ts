@@ -28,6 +28,7 @@ import { Notifier } from './notifier.js';
 import { HitlQueue } from './hitl.js';
 import { spawnBackground } from './supervisor.js';
 import type { LoopState } from '../loop-engine/index.js';
+import { ModelRouter } from '../models/model-router.js';
 
 // ── Terminal helpers ──────────────────────────────────────────────────────────
 
@@ -80,6 +81,7 @@ function syncLoopStateToRun(runState: RunStateWriter, loopState: LoopState): voi
     loopRetryCount: loopState.retryCount,
     loopStatus: loopState.status,
     loopPhaseHistory: recentHistory,
+    modelRouting: ModelRouter.fromConfig().serializeRoutingForState(),
     lastVerification: loopState.lastVerification,
     lastCritique: loopState.lastCritique
       ? {

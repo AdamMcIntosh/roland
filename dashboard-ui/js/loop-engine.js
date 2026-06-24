@@ -101,7 +101,7 @@
     var loopMemory = health?.loopMemory || null;
     var exitConditions = health?.exitConditions || [];
     var exitEvaluation = health?.exitEvaluation || null;
-    var roleRouting = health?.roleRouting || null;
+    var roleRouting = health?.roleRouting || rs?.modelRouting || null;
     var loopSummary = health?.loopSummary || null;
     var isPaused = Boolean(rs?.hitlPaused);
     var isAbortPending = Boolean(rs?.hitlAbortPending);
@@ -433,11 +433,23 @@
         '<span class="loop-routing-model">' + esc(m.displayLabel) + fb + '</span>' +
         '</div>';
     }).filter(Boolean).join('');
+    var phaseRow = '';
+    if (rr.phaseModels) {
+      var phases = ['plan', 'act', 'verify', 'critique', 'reflect'];
+      phaseRow = '<div class="loop-routing-phases">' +
+        phases.map(function (p) {
+          var label = rr.phaseModels[p];
+          if (!label) return '';
+          return '<span class="loop-routing-phase-chip" title="' + esc(p) + '">' +
+            esc(p) + ': ' + esc(label) + '</span>';
+        }).filter(Boolean).join('') +
+        '</div>';
+    }
     if (!rows) return '';
-    return '<div class="loop-routing-panel">' +
-      '<h5>Model Routing</h5>' +
+    return '<div class="loop-routing-panel loop-routing-panel-prominent">' +
+      '<h5>⚡ Model Router</h5>' +
       '<div class="loop-routing-summary">' + esc(rr.summary || '') + '</div>' +
-      rows +
+      rows + phaseRow +
       '</div>';
   }
 
@@ -467,8 +479,8 @@
       : (lc.retryDecision === 'retry' || lc.retryDecision === 'retry_focused') ? 'retry' : 'proceed';
     var decLabel = lc.retryDecision === 'retry_focused' ? 'RETRY (focused)' : lc.retryDecision.toUpperCase();
     var modelLabel = lc.model === 'coding' || lc.model === 'composer'
-      ? (vm.roleRouting?.roles?.coding?.displayLabel || getEngModelId())
-      : (vm.roleRouting?.roles?.critic?.displayLabel || getPmModelId());
+      ? (vm.roleRouting?.roles?.coding?.displayLabel || 'coding')
+      : (vm.roleRouting?.roles?.critic?.displayLabel || 'critic');
     var issueNote = lc.issueCount != null ? ' · ' + lc.issueCount + ' issue(s)' : '';
     return '<div class="loop-critique-panel">' +
       '<span class="loop-critique-decision ' + decCls + '">' + esc(decLabel) + '</span>' +

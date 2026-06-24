@@ -124,6 +124,17 @@ export interface RunState {
     backoffMs: number;
     at: number;
   };
+  /** Active ModelRouter snapshot for dashboard loop panel. */
+  modelRouting?: {
+    summary: string;
+    roles: Record<string, {
+      provider: string;
+      model: string;
+      displayLabel: string;
+      isFallback: boolean;
+    }>;
+    phaseModels?: Record<string, string>;
+  };
 }
 
 // ── Writer (used by team-cli / orchestrator callbacks) ────────────────────────
@@ -324,6 +335,7 @@ export class RunStateWriter {
       backoffMs: number;
       at: number;
     };
+    modelRouting?: RunState['modelRouting'];
   }): void {
     if (fields.loopTemplateId !== undefined) {
       this.state.loopTemplateId = fields.loopTemplateId;
@@ -351,6 +363,9 @@ export class RunStateWriter {
     }
     if (fields.lastRetry !== undefined) {
       this.state.lastRetry = fields.lastRetry;
+    }
+    if (fields.modelRouting !== undefined) {
+      this.state.modelRouting = fields.modelRouting;
     }
     this.flush();
   }

@@ -35,7 +35,7 @@ import { SpecialistSpawner } from './specialist-spawner.js';
 import type { CommandRunner } from './verification/index.js';
 import { LoopMemory } from './loop-memory.js';
 import { LoopPmBridge } from './pm-integration.js';
-import { ModelRouter, initModelRouter } from '../models/model-router.js';
+import { ModelRouter, initModelRouter, ModelRouterError } from '../models/model-router.js';
 import type { TeamOrchestratorOptions } from '../rco/team-orchestrator.js';
 
 export const CLOSED_LOOP_PR_FILE = 'closed-loop-pr.json';
@@ -94,14 +94,15 @@ export class ClosedLoop {
     this.modelRouter = initModelRouter();
     const validation = ModelRouter.validateOnStartup(this.modelRouter);
     if (!validation.ok) {
-      console.error(
-        `[ModelRouter] Missing required roles: ${validation.missing.join(', ')} — check config.yaml models section`,
+      throw new ModelRouterError(
+        `ClosedLoop cannot start — missing model roles: ${validation.missing.join(', ')}. ` +
+          'Configure models.pm, models.coding, models.critic, models.verifier in config.yaml.',
+        validation.missing[0],
       );
     }
     for (const w of validation.warnings.slice(0, 3)) {
       console.error(`[ModelRouter] Note: ${w}`);
     }
-    this.modelRouter.logRoutingBanner();
     this.template = ClosedLoop.resolveTemplate(opts.template);
     this.memory = new LoopMemory({
       stateDir: opts.stateDir,
@@ -372,34 +373,15 @@ export function createClosedLoop(opts: ClosedLoopOptions): ClosedLoop {
 }
 
 /**
- * ## PM Integration into ClosedLoop Complete
+ * ## Loop Orchestrator Refactor Complete
  *
- * Plan and Act phases optionally invoke the PM Team Engine when template `pm_plan` /
- * `pm_act` is `auto` or `always`. Complex goals route to Lead PM decomposition;
- * simple goals stay on lightweight stubs. Verify → Critique → Reflect unchanged.
+ * ClosedLoop is the single source of truth for loop-template missions. Orchestrates:
+ * EvaluationGate (verify), LoopMemory + ReflectionPhaseHandler, exit conditions, SpecialistSpawner,
+ * checkpoint/recovery via LoopEngine, and PR formatting on completion.
  *
- * Usage:
- * ```typescript
- * import { ClosedLoop } from './loop-engine/index.js';
+ * Entry: `roland team "goal" --loop-template closed-loop-harness` → `runClosedLoopMission()` → `run()`.
  *
- * const loop = new ClosedLoop({
- *   stateDir: '.roland',
- *   goal: 'Ship feature X with tests green',
- *   template: 'feature-implementation-loop',
- *   blackboard,
- *   runId: 'run-123',
- * });
- * const result = await loop.run();
- * console.log(result.loopId, result.state.lastExitEvaluation);
- * ```
- *
- * CLI: `roland team "goal" --loop-template closed-loop-harness`
- *
- * Routing: loop-template missions delegate to `src/rco/loop-orchestrator.ts` → `ClosedLoop.run()`.
- *
- * ## Pre-Testing Cleanup Complete
- *
- * Loop missions: ClosedLoop + ModelRouter.validateOnStartup() + role routing banner.
- * Non-loop missions: legacy PM Team Engine in team-orchestrator.ts (marked TODO: Legacy).
+ * Plan/Act optionally invoke PM Team when template `pm_plan` / `pm_act` is `auto` or `always`.
+ * Non-loop missions: legacy PM Team Engine in team-orchestrator.ts (TODO: Legacy).
  */
 export {};
