@@ -1,0 +1,516 @@
+[
+  {
+    "type": "decision",
+    "title": "Loop kickoff",
+    "content": "Start the feature implementation loop. Goal: feature is implemented with tests passing and integration smoke green. Self-pace: after each iteration run configured checks, reflect on learnings, and only continue if exit conditions are not met.\n",
+    "status": "done",
+    "author": "loop-engine",
+    "priority": "medium",
+    "tags": [
+      "loop",
+      "kickoff"
+    ],
+    "relatedIds": [],
+    "id": "8768b181-bb69-4d7e-995a-d28e3bd6c088",
+    "rev": 1,
+    "createdAt": 1782490360487,
+    "updatedAt": 1782490360487
+  },
+  {
+    "type": "task",
+    "title": "Spawn: pm (plan)",
+    "content": "Phase: plan\nPrimary: pm\nReason: Closed-loop plan phase (iteration 1)\nModel routing: grok-4.3@openrouter (direct) (direct) · grok-4.3@openrouter (direct) (agent)\nSource: template specialist_spawns\nGoal: Add a brief module header comment to ModelRouter (simulation only — no repo edits)",
+    "status": "pending",
+    "author": "loop-engine",
+    "priority": "high",
+    "tags": [
+      "loop",
+      "spawn",
+      "plan",
+      "pm"
+    ],
+    "relatedIds": [],
+    "id": "085fe266-e118-4232-b657-9c9cae532210",
+    "rev": 1,
+    "createdAt": 1782490360490,
+    "updatedAt": 1782490360490
+  },
+  {
+    "type": "task",
+    "title": "Spawn: planner (plan)",
+    "content": "Phase: plan\nPrimary: planner\nReason: Decompose feature scope for Add a brief module header comment to ModelRouter (simulation only — no repo edits)\nModel routing: grok-4.3@openrouter (direct) (direct) · minimax/minimax-m2.5@openrouter (direct) (agent)\nSource: template specialist_spawns\nGoal: Add a brief module header comment to ModelRouter (simulation only — no repo edits)",
+    "status": "pending",
+    "author": "loop-engine",
+    "priority": "high",
+    "tags": [
+      "loop",
+      "spawn",
+      "plan",
+      "planner"
+    ],
+    "relatedIds": [],
+    "id": "1a6d5a13-a958-484d-a81c-1ef2ba8877c4",
+    "rev": 1,
+    "createdAt": 1782490360495,
+    "updatedAt": 1782490360495
+  },
+  {
+    "type": "task",
+    "title": "Spawn: pm (plan)",
+    "content": "Phase: plan\nPrimary: pm\nReason: Closed-loop plan phase (iteration 1)\nModel routing: grok-4.3@openrouter (direct) (direct) · grok-4.3@openrouter (direct) (agent)\nSource: template specialist_spawns\nGoal: Add a brief module header comment to ModelRouter (simulation only — no repo edits)",
+    "status": "pending",
+    "author": "loop-engine",
+    "priority": "high",
+    "tags": [
+      "loop",
+      "spawn",
+      "plan",
+      "pm"
+    ],
+    "relatedIds": [],
+    "id": "9d29c8e9-fc1d-45bb-9bfe-1408de7dc148",
+    "rev": 1,
+    "createdAt": 1782490360504,
+    "updatedAt": 1782490360504
+  },
+  {
+    "type": "task",
+    "title": "Spawn: planner (plan)",
+    "content": "Phase: plan\nPrimary: planner\nReason: Decompose feature scope for Add a brief module header comment to ModelRouter (simulation only — no repo edits)\nModel routing: grok-4.3@openrouter (direct) (direct) · minimax/minimax-m2.5@openrouter (direct) (agent)\nSource: template specialist_spawns\nGoal: Add a brief module header comment to ModelRouter (simulation only — no repo edits)",
+    "status": "pending",
+    "author": "loop-engine",
+    "priority": "high",
+    "tags": [
+      "loop",
+      "spawn",
+      "plan",
+      "planner"
+    ],
+    "relatedIds": [],
+    "id": "297a0bba-1df8-4790-a9c2-e7da9a0c4237",
+    "rev": 1,
+    "createdAt": 1782490360507,
+    "updatedAt": 1782490360507
+  },
+  {
+    "type": "decision",
+    "title": "Loop: Plan phase (pure ClosedLoop)",
+    "content": "Planning iteration 1 for goal: Add a brief module header comment to ModelRouter (simulation only — no repo edits)",
+    "status": "done",
+    "author": "loop-engine",
+    "priority": "medium",
+    "tags": [
+      "loop",
+      "plan",
+      "lightweight",
+      "pure-closed-loop"
+    ],
+    "relatedIds": [],
+    "id": "a8f2a1dd-7c56-4f6f-85cf-40964d192fc9",
+    "rev": 1,
+    "createdAt": 1782490360511,
+    "updatedAt": 1782490360511
+  },
+  {
+    "type": "task",
+    "title": "Spawn: coding (act)",
+    "content": "Phase: act\nPrimary: coding\nReason: Closed-loop act phase (iteration 1)\nModel routing: qwen/qwen3-coder-next@openrouter (direct) (direct) · qwen/qwen3-coder-next@openrouter (direct) (agent)\nSource: template specialist_spawns\nGoal: Add a brief module header comment to ModelRouter (simulation only — no repo edits)",
+    "status": "pending",
+    "author": "loop-engine",
+    "priority": "high",
+    "tags": [
+      "loop",
+      "spawn",
+      "act",
+      "coding"
+    ],
+    "relatedIds": [],
+    "id": "eff7c5ea-0e98-4d9b-ab2f-b1b99f873c4c",
+    "rev": 1,
+    "createdAt": 1782490360714,
+    "updatedAt": 1782490360714
+  },
+  {
+    "type": "task",
+    "title": "Spawn: test-author (act)",
+    "content": "Phase: act\nPrimary: test-author\nReason: Outline tests for iteration 1 of Add a brief module header comment to ModelRouter (simulation only — no repo edits)\nModel routing: qwen/qwen3-coder-next@openrouter (direct) (direct) · deepseek/deepseek-v3-0324@openrouter (direct) (agent)\nSource: template specialist_spawns\nGoal: Add a brief module header comment to ModelRouter (simulation only — no repo edits)",
+    "status": "pending",
+    "author": "loop-engine",
+    "priority": "high",
+    "tags": [
+      "loop",
+      "spawn",
+      "act",
+      "test-author"
+    ],
+    "relatedIds": [],
+    "id": "53b53468-0393-4030-acc0-3d448fc75d84",
+    "rev": 1,
+    "createdAt": 1782490360717,
+    "updatedAt": 1782490360717
+  },
+  {
+    "type": "decision",
+    "title": "Loop: Act phase (pure ClosedLoop)",
+    "content": "Lightweight execution for iteration 1",
+    "status": "in_progress",
+    "author": "loop-engine",
+    "priority": "medium",
+    "tags": [
+      "loop",
+      "act",
+      "lightweight",
+      "pure-closed-loop"
+    ],
+    "relatedIds": [],
+    "id": "c0f03f07-e2da-4a4b-877d-758aa07d98ff",
+    "rev": 1,
+    "createdAt": 1782490360723,
+    "updatedAt": 1782490360723
+  },
+  {
+    "type": "task",
+    "title": "Spawn: verifier (verify)",
+    "content": "Phase: verify\nPrimary: verifier\nReason: Closed-loop verify phase (iteration 1)\nModel routing: deepseek/deepseek-v3-0324@openrouter (direct) (direct) · deepseek/deepseek-v3-0324@openrouter (direct) (agent)\nSource: template specialist_spawns\nGoal: Add a brief module header comment to ModelRouter (simulation only — no repo edits)",
+    "status": "pending",
+    "author": "loop-engine",
+    "priority": "high",
+    "tags": [
+      "loop",
+      "spawn",
+      "verify",
+      "verifier"
+    ],
+    "relatedIds": [],
+    "id": "f9071bda-74ef-4c16-99cc-f9fb0198df7a",
+    "rev": 1,
+    "createdAt": 1782490360918,
+    "updatedAt": 1782490360918
+  },
+  {
+    "type": "task",
+    "title": "Spawn: test-executor (verify)",
+    "content": "Phase: verify\nPrimary: test-executor\nReason: Closed-loop verify phase (iteration 1)\nModel routing: deepseek/deepseek-v3-0324@openrouter (direct) (direct) · deepseek/deepseek-v3-0324@openrouter (direct) (agent)\nSource: template specialist_spawns\nGoal: Add a brief module header comment to ModelRouter (simulation only — no repo edits)",
+    "status": "pending",
+    "author": "loop-engine",
+    "priority": "high",
+    "tags": [
+      "loop",
+      "spawn",
+      "verify",
+      "test-executor"
+    ],
+    "relatedIds": [],
+    "id": "1d468984-bb21-458d-b432-3f835f4b1913",
+    "rev": 1,
+    "createdAt": 1782490360921,
+    "updatedAt": 1782490360921
+  },
+  {
+    "type": "result",
+    "title": "Evaluation gate (confidence 0.861)",
+    "content": "Evaluation accepted — confidence 0.861 (3 gate(s))\nunit: pass (conf=1)\nintegration: pass (conf=0.9)\nsmoke: pass (conf=0.6)",
+    "status": "done",
+    "author": "loop-engine",
+    "priority": "medium",
+    "tags": [
+      "loop",
+      "eval-gate",
+      "verification"
+    ],
+    "relatedIds": [],
+    "id": "21c670a9-485b-4e7a-840e-683704fe3696",
+    "rev": 1,
+    "createdAt": 1782490360932,
+    "updatedAt": 1782490360932
+  },
+  {
+    "type": "decision",
+    "title": "Loop: Evaluation gate results",
+    "content": "{\n  \"pass\": true,\n  \"summary\": \"Evaluation accepted — confidence 0.861 (3 gate(s))\",\n  \"at\": 1782490360932,\n  \"durationMs\": 6,\n  \"confidence\": 0.861,\n  \"accepted\": true,\n  \"strategies\": [\n    {\n      \"type\": \"unit\",\n      \"pass\": true,\n      \"durationMs\": 0\n    },\n    {\n      \"type\": \"integration\",\n      \"pass\": true,\n      \"durationMs\": 0\n    },\n    {\n      \"type\": \"smoke\",\n      \"pass\": true,\n      \"durationMs\": 0\n    }\n  ]\n}",
+    "status": "done",
+    "author": "loop-engine",
+    "priority": "low",
+    "tags": [
+      "loop",
+      "eval-gate",
+      "verification-detail"
+    ],
+    "relatedIds": [],
+    "id": "476ea0a2-dcba-4d1e-bd0b-4a28ec6deb05",
+    "rev": 1,
+    "createdAt": 1782490360933,
+    "updatedAt": 1782490360933
+  },
+  {
+    "type": "artifact",
+    "title": "Loop history: feature-implementation-loop (iter 1)",
+    "content": "Iteration 1 · retry 0 · status running\nSuccess rate: 75% · avg phase 16ms\n6 transitions: plan×2, act×2, verify×2; 0 failure(s) in recent window",
+    "status": "in_progress",
+    "author": "loop-engine",
+    "priority": "medium",
+    "tags": [
+      "loop",
+      "loop-history",
+      "observability"
+    ],
+    "relatedIds": [],
+    "id": "d59e76a6-7330-4599-a88a-5129251410ad",
+    "rev": 1,
+    "createdAt": 1782490360939,
+    "updatedAt": 1782490360939
+  },
+  {
+    "type": "task",
+    "title": "Spawn: critic (critique)",
+    "content": "Phase: critique\nPrimary: critic\nReason: Closed-loop critique phase (iteration 1)\nModel routing: deepseek/deepseek-chat@openrouter (direct) (direct) · deepseek/deepseek-chat@openrouter (direct) (agent)\nSource: template specialist_spawns\nGoal: Add a brief module header comment to ModelRouter (simulation only — no repo edits)",
+    "status": "pending",
+    "author": "loop-engine",
+    "priority": "high",
+    "tags": [
+      "loop",
+      "spawn",
+      "critique",
+      "critic"
+    ],
+    "relatedIds": [],
+    "id": "59d3a218-d68f-4048-8bc6-b7a8020b41ec",
+    "rev": 1,
+    "createdAt": 1782490361116,
+    "updatedAt": 1782490361116
+  },
+  {
+    "type": "task",
+    "title": "Spawn: code-reviewer (critique)",
+    "content": "Phase: critique\nPrimary: code-reviewer\nReason: Closed-loop critique phase (iteration 1)\nModel routing: deepseek/deepseek-chat@openrouter (direct) (direct) · deepseek/deepseek-chat@openrouter (direct) (agent)\nSource: template specialist_spawns\nGoal: Add a brief module header comment to ModelRouter (simulation only — no repo edits)",
+    "status": "pending",
+    "author": "loop-engine",
+    "priority": "high",
+    "tags": [
+      "loop",
+      "spawn",
+      "critique",
+      "code-reviewer"
+    ],
+    "relatedIds": [],
+    "id": "9afade25-22cc-4442-87e4-9debac888ebd",
+    "rev": 1,
+    "createdAt": 1782490361119,
+    "updatedAt": 1782490361119
+  },
+  {
+    "type": "result",
+    "title": "Loop: Critique phase (iteration 1)",
+    "content": "Critique: acceptable — Verification passed — no retry needed\nDecision: PROCEED · Model: deepseek/deepseek-chat@openrouter (high-level)\nStrengths: Verification gate passed; unit check passed (0ms); integration check passed (0ms); smoke check passed (0ms); No wave blockers reported; Plan and Act phases completed successfully\nSuggestions: Proceed to Observe or complete the loop iteration",
+    "status": "done",
+    "author": "loop-engine",
+    "priority": "high",
+    "tags": [
+      "loop",
+      "critique",
+      "retry-decision"
+    ],
+    "relatedIds": [],
+    "id": "7cd2d797-c09a-4121-a710-a2c15e7da1fd",
+    "rev": 1,
+    "createdAt": 1782490361123,
+    "updatedAt": 1782490361123
+  },
+  {
+    "type": "decision",
+    "title": "Loop: Critique structured output",
+    "content": "{\n  \"strengths\": [\n    \"Verification gate passed\",\n    \"unit check passed (0ms)\",\n    \"integration check passed (0ms)\",\n    \"smoke check passed (0ms)\",\n    \"No wave blockers reported\",\n    \"Plan and Act phases completed successfully\"\n  ],\n  \"issues\": [],\n  \"suggestions\": [\n    \"Proceed to Observe or complete the loop iteration\"\n  ],\n  \"retryDecision\": \"proceed\",\n  \"model\": \"critic\",\n  \"summary\": \"Critique: acceptable — Verification passed — no retry needed\",\n  \"at\": 1782490361123,\n  \"iteration\": 1,\n  \"proposalCount\": 0\n}",
+    "status": "done",
+    "author": "loop-engine",
+    "priority": "low",
+    "tags": [
+      "loop",
+      "critique",
+      "critique-detail"
+    ],
+    "relatedIds": [],
+    "id": "97af24a5-f4b0-46c9-8c84-3789a1d42d9e",
+    "rev": 1,
+    "createdAt": 1782490361124,
+    "updatedAt": 1782490361124
+  },
+  {
+    "type": "artifact",
+    "title": "Loop history: feature-implementation-loop (iter 1)",
+    "content": "Iteration 1 · retry 0 · status running\nSuccess rate: 80% · avg phase 15ms\n8 transitions: plan×2, act×2, verify×2, critique×2; 0 failure(s) in recent window",
+    "status": "in_progress",
+    "author": "loop-engine",
+    "priority": "medium",
+    "tags": [
+      "loop",
+      "loop-history",
+      "observability"
+    ],
+    "relatedIds": [],
+    "id": "ef57c8de-a843-41cc-86df-8ed835685fa4",
+    "rev": 1,
+    "createdAt": 1782490361130,
+    "updatedAt": 1782490361130
+  },
+  {
+    "type": "task",
+    "title": "Spawn: researcher (observe)",
+    "content": "Phase: observe\nPrimary: researcher\nSupporting: writer\nReason: Closed-loop observe phase (iteration 1)\nModel routing: deepseek/deepseek-v3-0324@openrouter (direct) (direct) · deepseek/deepseek-v3-0324@openrouter (direct) (agent)\nGoal: Add a brief module header comment to ModelRouter (simulation only — no repo edits)",
+    "status": "pending",
+    "author": "loop-engine",
+    "priority": "high",
+    "tags": [
+      "loop",
+      "spawn",
+      "observe",
+      "researcher"
+    ],
+    "relatedIds": [],
+    "id": "2ed2c677-be09-4e09-9984-982f524bdeb2",
+    "rev": 1,
+    "createdAt": 1782490361302,
+    "updatedAt": 1782490361302
+  },
+  {
+    "type": "artifact",
+    "title": "Loop: Observe phase (iteration 1)",
+    "content": "Observation: 6 phase transition(s) in iteration 1",
+    "status": "done",
+    "author": "loop-engine",
+    "priority": "low",
+    "tags": [
+      "loop",
+      "observe"
+    ],
+    "relatedIds": [],
+    "id": "59b01310-fd34-4443-928c-0c4c7f4718be",
+    "rev": 1,
+    "createdAt": 1782490361307,
+    "updatedAt": 1782490361307
+  },
+  {
+    "type": "task",
+    "title": "Spawn: researcher (reflect)",
+    "content": "Phase: reflect\nPrimary: researcher\nSupporting: writer\nReason: Closed-loop reflect phase (iteration 1)\nModel routing: deepseek/deepseek-v3-0324@openrouter (direct) (direct) · deepseek/deepseek-v3-0324@openrouter (direct) (agent)\nGoal: Add a brief module header comment to ModelRouter (simulation only — no repo edits)",
+    "status": "pending",
+    "author": "loop-engine",
+    "priority": "high",
+    "tags": [
+      "loop",
+      "spawn",
+      "reflect",
+      "researcher"
+    ],
+    "relatedIds": [],
+    "id": "40978cf9-43a6-4555-a15c-0a1ba66188d3",
+    "rev": 1,
+    "createdAt": 1782490361316,
+    "updatedAt": 1782490361316
+  },
+  {
+    "type": "artifact",
+    "title": "Loop: Reflection (iteration 1)",
+    "content": "**Goal:** Add a brief module header comment to ModelRouter (simulation only — no repo edits)\n**Iteration:** 1\n**Verification:** Evaluation accepted — confidence 0.861 (3 gate(s))\n**Confidence:** 0.861\n**Accepted:** true\n**Critique decision:** proceed\n**Critique summary:** Critique: acceptable — Verification passed — no retry needed\n\n**Learnings:**\n- Verification gates passed; carry forward patterns that worked.",
+    "status": "done",
+    "author": "loop-engine",
+    "priority": "low",
+    "tags": [
+      "loop",
+      "reflection"
+    ],
+    "relatedIds": [],
+    "id": "d86bb3f0-55aa-4fe4-ab1e-f29c3ed3a157",
+    "rev": 1,
+    "createdAt": 1782490361322,
+    "updatedAt": 1782490361322
+  },
+  {
+    "type": "task",
+    "title": "Spawn: researcher (reflect)",
+    "content": "Phase: reflect\nPrimary: researcher\nSupporting: writer\nReason: Closed-loop reflect phase (iteration 1)\nModel routing: deepseek/deepseek-v3-0324@openrouter (direct) (direct) · deepseek/deepseek-v3-0324@openrouter (direct) (agent)\nGoal: Add a brief module header comment to ModelRouter (simulation only — no repo edits)",
+    "status": "pending",
+    "author": "loop-engine",
+    "priority": "high",
+    "tags": [
+      "loop",
+      "spawn",
+      "reflect",
+      "researcher"
+    ],
+    "relatedIds": [],
+    "id": "52b9a0d0-a506-45e4-a7e2-0b5bac9f4498",
+    "rev": 1,
+    "createdAt": 1782490361672,
+    "updatedAt": 1782490361672
+  },
+  {
+    "type": "artifact",
+    "title": "Loop: Reflection (iteration 1)",
+    "content": "**Goal:** Add a brief module header comment to ModelRouter (simulation only — no repo edits)\n**Iteration:** 1\n**Verification:** Evaluation accepted — confidence 0.861 (3 gate(s))\n**Confidence:** 0.861\n**Accepted:** true\n**Critique decision:** proceed\n**Critique summary:** Critique: acceptable — Verification passed — no retry needed\n\n**Learnings:**\n- Verification gates passed; carry forward patterns that worked.",
+    "status": "done",
+    "author": "loop-engine",
+    "priority": "low",
+    "tags": [
+      "loop",
+      "reflection"
+    ],
+    "relatedIds": [],
+    "id": "b78b3b8a-b09b-46bf-bd9d-f9d193fab354",
+    "rev": 1,
+    "createdAt": 1782490361677,
+    "updatedAt": 1782490361677
+  },
+  {
+    "type": "result",
+    "title": "Exit conditions (iteration 1)",
+    "content": "✓ Unit, integration, and smoke gates pass — All required gates passed and confidence meets threshold",
+    "status": "done",
+    "author": "loop-engine",
+    "priority": "medium",
+    "tags": [
+      "loop",
+      "exit-condition"
+    ],
+    "relatedIds": [],
+    "id": "7f993a6a-0a5d-4082-b554-0e1feadb7213",
+    "rev": 1,
+    "createdAt": 1782490361685,
+    "updatedAt": 1782490361685
+  },
+  {
+    "type": "artifact",
+    "title": "Loop history: feature-implementation-loop (iter 1)",
+    "content": "Iteration 1 · retry 0 · status completed\nSuccess rate: 88% · avg phase 12ms\n14 transitions: plan×2, act×2, verify×2, critique×2, observe×2, reflect×4; 0 failure(s) in recent window",
+    "status": "in_progress",
+    "author": "loop-engine",
+    "priority": "medium",
+    "tags": [
+      "loop",
+      "loop-history",
+      "observability"
+    ],
+    "relatedIds": [],
+    "id": "7ba410b7-4a23-4860-8a1a-3aef6bca9351",
+    "rev": 1,
+    "createdAt": 1782490361688,
+    "updatedAt": 1782490361688
+  },
+  {
+    "type": "artifact",
+    "title": "PR draft: docs(roland): add a brief module header comment to ModelRouter (simulat…",
+    "content": "**Summary**\nAdd a brief module header comment to ModelRouter (simulation only — no repo edits)\n\n**Key Changes**\n- Add a brief module header comment to ModelRouter (simulation only — no repo edits)\n\n**Testing**\n- Verification: Evaluation accepted — confidence 0.861 (3 gate(s))\n- Confidence: 0.861\n- unit: pass\n- integration: pass\n- smoke: pass\n- Exit: Exit conditions met: all_gates_pass-0\n- Loop status: completed, iterations: 1, retries: 0\n\n**Related**\n- Task `mission` (closed-loop)\n- Mission: Add a brief module header comment to ModelRouter (simulation only — no repo edits)\n- Run `loop-1782490360482`\n\n**Impact**\nClosed loop completed — Exit conditions met: all_gates_pass-0\n\n**Model Routing**\npm=grok-4.3@openrouter · coding=qwen/qwen3-coder-next@openrouter · critic=deepseek/deepseek-chat@openrouter · verifier=deepseek/deepseek-v3-0324@openrouter · researcher=deepseek/deepseek-v3-0324@openrouter",
+    "status": "done",
+    "author": "loop-engine",
+    "priority": "medium",
+    "tags": [
+      "loop",
+      "pr-format",
+      "completed"
+    ],
+    "relatedIds": [],
+    "id": "9035e0cf-2bb2-4c97-a6dc-95cdc41838a5",
+    "rev": 1,
+    "createdAt": 1782490361696,
+    "updatedAt": 1782490361696
+  }
+]
