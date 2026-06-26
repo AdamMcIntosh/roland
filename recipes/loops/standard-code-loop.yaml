@@ -1,17 +1,19 @@
 name: standard-code-loop
 description: >
-  Canonical software loop — plan work, implement, verify with tests/lint,
-  critique output, retry on failure, observe state before next iteration.
+  Canonical software loop — plan work, implement, verify with tests/lint/typecheck, critique
+  output, retry on failure, observe state before next iteration. Default template for most projects.
 phases:
   - phase: plan
     label: Plan
-    agent: lead-pm
+    agent: pm
+    specialist_spawns:
+      - role: planner
   - phase: act
     label: Act
-    agent: executor
+    agent: coding
   - phase: verify
     label: Verify
-    agent: test-executor
+    agent: verifier
     verification:
       - unit
       - lint
@@ -19,17 +21,16 @@ phases:
   - phase: critique
     label: Critique
     agent: critic
-    # Analyzes verify results → retryDecision (proceed | retry | retry_focused | escalate)
   - phase: retry
     label: Retry
     optional: true
-    # Runs when critique decides retry/retry_focused; skipped on proceed
   - phase: observe
     label: Observe
+    agent: researcher
+    specialist_spawns:
+      - role: researcher
 maxIterations: 5
 maxRetries: 3
-# Consecutive verify failures before HITL (independent of maxRetries retry budget)
 escalationThreshold: 4
-# E2E / dev overrides when isTestMode or ROLAND_LOOP_TEST_MODE=1
 testModeMaxRetries: 6
 testModeEscalationThreshold: 8

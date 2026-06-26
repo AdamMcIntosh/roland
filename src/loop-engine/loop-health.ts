@@ -7,7 +7,7 @@ import path from 'path';
 import type { BlackboardEntry } from '../rco/blackboard.js';
 import { readRunState } from '../rco/run-state.js';
 import { readSupervisorRecord, isProcessRunning } from '../rco/supervisor.js';
-import { readLoopState, LOOP_STATE_FILE } from './loop-state.js';
+import { readLoopState, LOOP_STATE_FILE, type LoopState } from './loop-state.js';
 import { readLoopCheckpoint } from './loop-checkpoint.js';
 import { CLOSED_LOOP_PR_FILE } from './closed-loop.js';
 import { findLatestLoopMemory, LOOPS_ROOT } from './loop-memory.js';
@@ -19,6 +19,9 @@ import {
   LOOP_HISTORY_FILE,
 } from './loop-observability.js';
 import { LoopTemplates } from './loop-templates.js';
+import { ModelRouter } from '../models/model-router.js';
+import { readLoopPmSession } from './loop-pm-session.js';
+import { resolvePmIntegrationStatus, formatPmIntegrationLabel } from './loop-pm-policy.js';
 
 export type LoopHealthStatus = 'healthy' | 'degraded' | 'escalated' | 'idle' | 'unknown';
 
@@ -115,8 +118,51 @@ export interface LoopHealthReport {
     canReplan: boolean;
     hitlResumeCmd: string;
     hitlReplanCmd: string;
+    gitCommitApproveCmd: string;
+    gitCommitRejectCmd: string;
   };
   templates: Array<{ name: string; description: string; phaseCount: number }>;
+  /** Active role-based model routing (Loop Engineering). */
+  roleRouting: {
+    summary: string;
+    defaultDispatch?: string;
+    cursorSdkAvailable?: boolean;
+    roles: Record<string, {
+      provider: string;
+      model: string;
+      displayLabel: string;
+      isFallback: boolean;
+      dispatchMethod?: string;
+      sdkModelId?: string;
+      directProvider?: string;
+      directModel?: string;
+    }>;
+    phaseModels: Record<string, string>;
+    phaseDispatch?: Record<string, string>;
+  } | null;
+  /** Legacy PM Team integration status. */
+  pmIntegration: {
+    enabled: boolean;
+    configured: boolean;
+    reason: string;
+    executionPath: string;
+    label: string;
+  };
+  /** Compact completion summary when loop is finished or escalated. */
+  loopSummary: {
+    status: string;
+    iterations: number;
+    retryCount: number;
+    confidence: number | null;
+    exitReason: string | null;
+    complete: boolean;
+  } | null;
+  /** Real-time activity during active loop runs. */
+  liveActivity: LoopState['liveActivity'] | null;
+  /** Pending git-commit HITL approval. */
+  pendingGitCommitApproval: LoopState['pendingGitCommitApproval'] | null;
+  /** Recent spawn activity pulses. */
+  spawnActivityHistory: LoopState['spawnActivityHistory'] | null;
 }
 
 function fileExists(stateDir: string, name: string): boolean {
@@ -264,6 +310,57 @@ export function buildLoopHealthReport(stateDir: string): LoopHealthReport {
       }
     : null;
 
+  const router = ModelRouter.fromConfig();
+  const serialized = router.serializeRoutingForState();
+  const roleRouting = {
+    summary: serialized.summary,
+    defaultDispatch: serialized.defaultDispatch,
+    cursorSdkAvailable: serialized.cursorSdkAvailable,
+    roles: serialized.roles,
+    phaseModels: serialized.phaseModels,
+    phaseDispatch: serialized.phaseDispatch,
+  };
+
+  const pmSession = readLoopPmSession(stateDir);
+  const templateId = loopState?.templateId ?? runState?.loopTemplateId ?? null;
+  const template = templateId ? templates.get(templateId) : undefined;
+  const configuredPm = template
+    ? resolvePmIntegrationStatus(template)
+    : { enabled: false, reason: 'no template', source: 'disabled' as const };
+  const pmIntegration = {
+    enabled: runState?.pmIntegration?.enabled ??
+      (pmSession?.executionPath === 'pm_team' || configuredPm.enabled),
+    configured: configuredPm.enabled,
+    reason: runState?.pmIntegration?.reason ?? pmSession?.routingReason ?? configuredPm.reason,
+    executionPath: pmSession?.executionPath ?? runState?.pmIntegration?.executionPath ?? 'lightweight',
+    label: formatPmIntegrationLabel({
+      enabled: runState?.pmIntegration?.enabled ??
+        (pmSession?.executionPath === 'pm_team' || configuredPm.enabled),
+      reason: runState?.pmIntegration?.reason ?? configuredPm.reason,
+      source: configuredPm.source,
+    }),
+  };
+
+  const runStatus = loopState?.status ?? runState?.loopStatus ?? null;
+  const isComplete = runStatus === 'completed' || runStatus === 'escalated' || runStatus === 'failed';
+  const loopSummary = isComplete || loopState
+    ? {
+        status: String(runStatus ?? 'unknown'),
+        iterations: loopState?.iteration ?? runState?.loopIteration ?? 0,
+        retryCount: loopState?.retryCount ?? runState?.loopRetryCount ?? 0,
+        confidence:
+          lastVerification && 'confidence' in lastVerification
+            ? (lastVerification.confidence ?? null)
+            : null,
+        exitReason:
+          exitEvaluation?.reason ??
+          closedLoopPr?.exitReason ??
+          loopState?.lastCritique?.summary?.slice(0, 120) ??
+          null,
+        complete: isComplete,
+      }
+    : null;
+
   return {
     status,
     healthy: status === 'healthy' || status === 'idle',
@@ -331,7 +428,15 @@ export function buildLoopHealthReport(stateDir: string): LoopHealthReport {
       canReplan,
       hitlResumeCmd: 'roland resume',
       hitlReplanCmd: 'roland replan',
+      gitCommitApproveCmd: 'roland approve-commit',
+      gitCommitRejectCmd: 'roland reject-commit',
     },
     templates: templateList,
+    roleRouting,
+    pmIntegration,
+    loopSummary,
+    liveActivity: loopState?.liveActivity ?? null,
+    pendingGitCommitApproval: loopState?.pendingGitCommitApproval ?? null,
+    spawnActivityHistory: loopState?.spawnActivityHistory ?? null,
   };
 }

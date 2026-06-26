@@ -9,9 +9,9 @@
  */
 
 import {
-  DEFAULT_MODEL_POLICY,
   laneForEngineer,
   modelForLane,
+  modelPolicyFromRouter,
   PROVIDER,
   type Lane,
   type ModelPolicy,
@@ -41,7 +41,7 @@ export class TaskRouter {
   private readonly laneOverrides: Record<string, Lane>;
 
   constructor(opts: TaskRouterOptions = {}) {
-    this.policy = opts.policy ?? DEFAULT_MODEL_POLICY;
+    this.policy = opts.policy ?? modelPolicyFromRouter();
     this.laneOverrides = opts.laneOverrides ?? {};
   }
 

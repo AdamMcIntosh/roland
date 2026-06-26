@@ -543,4 +543,4 @@ See [README.md](README.md) for the full decision guide.
 | [docs/evolution/README.md](docs/evolution/README.md) | UNSC architecture and capabilities |
 | [docs/guides/mini-pc-deployment.md](docs/guides/mini-pc-deployment.md) | Headless, Tailscale, systemd |
 | [docs/guides/pm-workflow.md](docs/guides/pm-workflow.md) | Manual PM mode in Cursor |
-| [CLAUDE.md](CLAUDE.md) | Developer conventions and smoke tests |
+| [DEVELOPER.md](DEVELOPER.md) | Developer conventions and smoke tests |

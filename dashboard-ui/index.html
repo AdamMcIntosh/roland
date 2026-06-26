@@ -329,8 +329,65 @@
       padding: .12rem .4rem; border-radius: 999px; border: 1px solid rgba(16,185,129,.45);
       animation: loop-pulse 1.4s ease-in-out infinite;
     }
+    .loop-live-activity {
+      margin: .45rem 0; padding: .45rem .55rem; border-radius: 6px;
+      border: 1px solid rgba(16,185,129,.25); background: rgba(16,185,129,.06);
+      font-size: .64rem;
+    }
+    .loop-live-activity h5 { margin: 0 0 .25rem; font-size: .66rem; color: var(--emerald); }
+    .loop-live-strategies { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .25rem; }
+    .loop-live-strat { padding: .1rem .35rem; border-radius: 4px; background: rgba(255,255,255,.06); font-size: .58rem; }
+    .loop-live-strat.status-running { color: #fcd34d; }
+    .loop-live-strat.status-pass { color: var(--emerald); }
+    .loop-live-strat.status-fail { color: #f87171; }
+    .loop-live-dry { font-size: .55rem; color: #fcd34d; margin-left: .25rem; }
+    .loop-live-hitl { font-size: .55rem; color: #fbbf24; margin-left: .25rem; font-weight: 700; }
+    .loop-live-mode { margin-top: .2rem; color: var(--muted); font-size: .58rem; }
+    .loop-git-approval-panel {
+      margin: .45rem 0; padding: .55rem .65rem; border-radius: 6px;
+      border: 1px solid rgba(245,158,11,.35); background: rgba(245,158,11,.08);
+      font-size: .64rem;
+    }
+    .loop-git-approval-panel h5 { margin: 0 0 .25rem; color: var(--amber); font-size: .68rem; }
+    .loop-git-approval-sub { margin: 0 0 .35rem; color: var(--muted); font-size: .58rem; }
+    .loop-git-approval-message {
+      width: 100%; box-sizing: border-box; margin: .25rem 0 .35rem;
+      background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.12);
+      border-radius: 4px; color: var(--text); font-family: inherit; font-size: .64rem; padding: .35rem;
+    }
+    .loop-git-approval-diff {
+      max-height: 120px; overflow: auto; margin: 0 0 .4rem; padding: .35rem;
+      background: rgba(0,0,0,.2); border-radius: 4px; font-size: .58rem; color: var(--muted);
+      white-space: pre-wrap;
+    }
+    .loop-git-approval-actions { display: flex; gap: .4rem; flex-wrap: wrap; }
+    .loop-spawn-pulses {
+      margin: .35rem 0 0; padding: .35rem .45rem; border-radius: 6px;
+      border: 1px solid rgba(99,102,241,.2); background: rgba(99,102,241,.06);
+      font-size: .6rem;
+    }
+    .loop-spawn-pulses h5 { margin: 0 0 .2rem; font-size: .62rem; color: #c4b5fd; }
+    .loop-spawn-pulse-list { margin: 0; padding-left: 1rem; list-style: none; }
+    .loop-spawn-pulse-item { margin: .12rem 0; color: var(--muted); }
+    .loop-spawn-pulse-item strong { color: #a7f3d0; }
+    .loop-spawn-time { opacity: .7; font-size: .55rem; margin-right: .2rem; }
+    .loop-spawn-count { color: #fcd34d; font-size: .55rem; }
     .loop-harness-meta { color: var(--muted); font-size: .68rem; line-height: 1.5; }
     .loop-harness-meta strong { color: var(--text); }
+    .loop-template-catalog { margin-top: .75rem; padding: .65rem .75rem; border-radius: 8px; border: 1px solid rgba(255,255,255,.08); background: rgba(0,0,0,.15); }
+    .loop-template-catalog h4 { margin: 0 0 .35rem; font-size: .72rem; color: var(--emerald); }
+    .loop-template-catalog-sub { margin: 0 0 .55rem; font-size: .64rem; color: var(--muted); line-height: 1.45; }
+    .loop-template-grid { display: grid; gap: .45rem; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); max-height: 280px; overflow-y: auto; }
+    .loop-template-card { padding: .45rem .55rem; border-radius: 6px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.02); font-size: .64rem; }
+    .loop-template-card.selected { border-color: rgba(16,185,129,.45); background: rgba(16,185,129,.06); }
+    .loop-template-card.default { border-style: dashed; }
+    .loop-template-card-head { display: flex; align-items: center; gap: .35rem; flex-wrap: wrap; margin-bottom: .2rem; }
+    .loop-template-name { color: var(--text); font-size: .68rem; }
+    .loop-template-badge { font-size: .55rem; padding: .05rem .3rem; border-radius: 999px; background: rgba(99,102,241,.25); color: #c4b5fd; }
+    .loop-template-mode { margin-left: auto; font-size: .58rem; color: var(--muted); }
+    .loop-template-desc { color: var(--muted); line-height: 1.4; margin-bottom: .2rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .loop-template-meta { color: var(--muted); opacity: .85; font-size: .58rem; }
+    .loop-template-spawns { margin-top: .15rem; font-size: .58rem; color: #a7f3d0; opacity: .9; }
     .loop-checkpoint-note { margin-left: .25rem; opacity: .85; }
     .loop-progress-section { margin-top: .45rem; }
     .loop-progress-label-row {
@@ -440,6 +497,46 @@
     .loop-exit-eval-pending { background: rgba(245,158,11,.1); color: #fcd34d; }
     .loop-reflection-meta { color: var(--muted); font-size: .64rem; margin-bottom: .25rem; }
     .loop-reflection-preview { color: var(--text); line-height: 1.45; opacity: .9; }
+    .loop-routing-panel, .loop-summary-panel {
+      margin-top: .45rem; padding-top: .35rem; border-top: 1px solid rgba(255,255,255,.08);
+    }
+    .loop-routing-panel-prominent {
+      padding: .5rem .55rem; border-radius: 6px; border: 1px solid rgba(16,185,129,.4);
+      background: linear-gradient(135deg, rgba(16,185,129,.12), rgba(99,102,241,.08));
+      box-shadow: 0 0 14px rgba(16,185,129,.12);
+    }
+    .loop-routing-phases { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .35rem; }
+    .loop-routing-phase-chip {
+      font-size: .58rem; padding: .12rem .35rem; border-radius: 4px;
+      background: rgba(0,0,0,.25); color: var(--muted);
+    }
+    .loop-pm-panel {
+      margin-top: .4rem; padding: .4rem .5rem; border-radius: 6px; font-size: .64rem;
+    }
+    .loop-pm-panel h5 { margin: 0 0 .25rem; font-size: .66rem; color: var(--muted); font-weight: 600; }
+    .loop-pm-disabled { border: 1px solid rgba(16,185,129,.35); background: rgba(16,185,129,.08); }
+    .loop-pm-enabled { border: 1px solid rgba(245,158,11,.45); background: rgba(245,158,11,.1); }
+    .loop-pm-reason, .loop-pm-path { color: var(--muted); font-size: .6rem; margin-top: .15rem; }
+    .loop-pm-badge {
+      display: inline-block; font-size: .62rem; font-weight: 700; padding: .15rem .45rem;
+      border-radius: 999px; letter-spacing: .03em; text-transform: uppercase;
+    }
+    .loop-pm-badge-pure { background: rgba(16,185,129,.2); color: #6ee7b7; border: 1px solid rgba(16,185,129,.45); }
+    .loop-pm-badge-enhanced { background: rgba(245,158,11,.2); color: #fcd34d; border: 1px solid rgba(245,158,11,.5); }
+    .loop-routing-panel h5, .loop-summary-panel h5 {
+      margin: 0 0 .3rem; font-size: .66rem; color: var(--muted); font-weight: 600;
+    }
+    .loop-routing-summary { font-size: .62rem; color: var(--muted); margin-bottom: .25rem; }
+    .loop-routing-row { display: flex; justify-content: space-between; gap: .5rem; font-size: .64rem; padding: .15rem 0; }
+    .loop-routing-role { color: var(--muted); font-weight: 600; }
+    .loop-routing-model { color: var(--text); }
+    .loop-routing-fallback { color: #fcd34d; font-size: .58rem; }
+    .loop-routing-dispatch { font-size: .62rem; color: var(--muted); margin-bottom: .25rem; }
+    .loop-routing-sdk { color: #818cf8; font-size: .58rem; font-weight: 700; margin-right: .2rem; }
+    .loop-routing-direct { color: #34d399; font-size: .58rem; font-weight: 700; margin-right: .2rem; }
+    .loop-summary-grid { display: flex; flex-wrap: wrap; gap: .5rem .75rem; font-size: .66rem; color: var(--muted); }
+    .loop-summary-grid strong { color: var(--text); }
+    .loop-summary-exit { margin-top: .25rem; font-size: .64rem; color: var(--muted); line-height: 1.4; }
     .loop-diagnostics { margin-top: .35rem; color: #fca5a5; font-size: .64rem; line-height: 1.4; }
     .loop-error-actions { margin-top: .4rem; display: flex; gap: .4rem; flex-wrap: wrap; }
     .loop-health-badge {
@@ -2763,9 +2860,17 @@
           </div>
           <div class="mission-row">
             <div class="mission-field">
+              <label for="mission-loop-template">Loop template</label>
+              <select id="mission-loop-template" class="mission-select">
+                <option value="">Loading templates…</option>
+              </select>
+            </div>
+            <div class="mission-field">
               <label for="mission-run-name">Run name (optional)</label>
               <input type="text" id="mission-run-name" class="mission-input" placeholder="e.g. auth-refactor" maxlength="80" />
             </div>
+          </div>
+          <div class="mission-row">
             <div class="mission-field">
               <label for="mission-priority">Priority</label>
               <select id="mission-priority" class="mission-select">
@@ -4980,6 +5085,7 @@
       engineerModel: document.getElementById('mission-eng-model')?.value,
       priority: document.getElementById('mission-priority')?.value || 'P3',
       runName: document.getElementById('mission-run-name')?.value?.trim() || '',
+      loopTemplate: document.getElementById('mission-loop-template')?.value?.trim() || '',
       forceTeam: document.getElementById('mission-force-team')?.checked || false,
       notify: document.getElementById('mission-notify')?.checked || false,
       cleanup: document.getElementById('mission-cleanup')?.checked || false,
@@ -5419,7 +5525,8 @@
           escHtml((latest.label || latest.goal).slice(0, 55)) +
           ((latest.label || latest.goal).length > 55 ? '…' : '') + '</div>'
         : '';
-      el.innerHTML = '<div class="idle-state"><span style="font-size:1rem">○</span><div><div>No active run</div>' + lastLine + '</div></div>';
+      el.innerHTML = '<div class="idle-state"><span style="font-size:1rem">○</span><div><div>No active run</div>' + lastLine + '</div></div>' +
+        LoopEngine.renderTemplateCatalog();
       return;
     }
 
@@ -7071,12 +7178,14 @@
       fetchUsage(),
       fetchRunState(),
       LoopEngine.fetchHealth(),
+      LoopEngine.fetchLoopTemplates(),
       fetchBoardStatus(),
       fetchModels(),
       fetchSupervisor(),
       fetchProjects(),
     ]);
     populateModelSelects();
+    LoopEngine.populateTemplateSelect(document.getElementById('mission-loop-template'));
     renderAll();
     renderBoardAddGoalSection();
     focusMissionGoal();

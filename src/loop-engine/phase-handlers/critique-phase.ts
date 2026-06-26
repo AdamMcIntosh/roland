@@ -1,12 +1,12 @@
 /**
  * Critique phase — analyzes verification results and phase history, decides retry/escalate.
  *
- * Model routing (future LLM wiring):
- *   - PM default model: high-level / multi-area failures, blockers, architecture
- *   - Composer (composer-2.5): code-specific failures (unit, lint, typecheck)
+ * Model routing via ModelRouter:
+ *   - critic role: high-level / multi-area failures, blockers, architecture
+ *   - coding role: code-specific failures (unit, lint, typecheck)
  */
 
-import { DEFAULT_ENGINEER_MODEL, DEFAULT_PM_MODEL } from '../../rco/cursor-models.js';
+import { ModelRouter } from '../../models/model-router.js';
 import type { PhaseHandler, PhaseHandlerContext, PhaseResult } from './types.js';
 import { Phase } from '../loop-phases.js';
 import {
@@ -16,12 +16,18 @@ import {
 import type { CritiqueModel, LoopCritiqueSnapshot } from '../self-improvement/types.js';
 import { DEFAULT_ESCALATION_THRESHOLD } from '../self-improvement/escalation.js';
 
+export interface CritiquePhaseHandlerOptions extends CritiqueEngineOptions {
+  modelRouter?: ModelRouter;
+}
+
 export class CritiquePhaseHandler implements PhaseHandler {
   readonly phase = Phase.Critique;
   private readonly engine: CritiqueEngine;
+  private readonly router: ModelRouter;
 
-  constructor(opts: CritiqueEngineOptions = {}) {
-    this.engine = new CritiqueEngine(opts);
+  constructor(opts: CritiquePhaseHandlerOptions = {}) {
+    this.router = opts.modelRouter ?? ModelRouter.fromConfig();
+    this.engine = new CritiqueEngine({ ...opts, modelRouter: this.router });
   }
 
   async execute(ctx: PhaseHandlerContext): Promise<PhaseResult> {
@@ -68,7 +74,7 @@ export class CritiquePhaseHandler implements PhaseHandler {
         issues: [`Critique engine error: ${message}`],
         suggestions: ['Review verification output manually and retry or escalate'],
         retryDecision: ctx.state.retryCount >= maxRetries ? 'escalate' : 'retry',
-        model: 'grok',
+        model: 'critic',
         summary: `Critique fallback — ${message}`,
         at: Date.now(),
         iteration: ctx.iteration,
@@ -77,7 +83,7 @@ export class CritiquePhaseHandler implements PhaseHandler {
     }
 
     const decisionLabel = critique.retryDecision.toUpperCase();
-    const modelLabel = critiqueModelLabel(critique.model);
+    const modelLabel = critiqueModelLabel(critique.model, this.router);
 
     ctx.blackboard.post({
       type: 'result',
@@ -115,9 +121,10 @@ export class CritiquePhaseHandler implements PhaseHandler {
     );
     ctx.commandBoard?.appendBullet(
       'Open Intel',
-      `[CRITIQUE] model=${critique.model} decision=${critique.retryDecision} ` +
-        `retry=${ctx.state.retryCount}/${maxRetries} escalationThreshold=${escalationThreshold} ` +
-        `issues=${critique.issues.length}`,
+      `[CRITIQUE] role=${critique.model} dispatch=${this.router.resolveDispatch(critique.model, { log: false }).method} ` +
+        `model=${critiqueModelLabel(critique.model, this.router)} ` +
+        `decision=${critique.retryDecision} retry=${ctx.state.retryCount}/${maxRetries} ` +
+        `escalationThreshold=${escalationThreshold} issues=${critique.issues.length}`,
     );
 
     const shouldEscalate = critique.retryDecision === 'escalate';
@@ -135,8 +142,12 @@ export class CritiquePhaseHandler implements PhaseHandler {
   }
 }
 
-function critiqueModelLabel(model: CritiqueModel): string {
-  const routed = model === 'grok' ? DEFAULT_PM_MODEL : DEFAULT_ENGINEER_MODEL;
-  const lane = model === 'grok' ? 'high-level' : 'code-specific';
-  return `${routed} (${lane})`;
+function critiqueModelLabel(lane: CritiqueModel, router: ModelRouter): string {
+  const dispatch = router.resolveDispatch(lane, { phase: 'critique', log: false });
+  const laneDesc = lane === 'critic' ? 'high-level' : 'code-specific';
+  const base =
+    dispatch.method === 'cursor_sdk'
+      ? `${dispatch.sdkModelId ?? dispatch.model}@cursor_sdk`
+      : `${dispatch.directModel.model}@${dispatch.directModel.provider}`;
+  return `${base} (${laneDesc})`;
 }

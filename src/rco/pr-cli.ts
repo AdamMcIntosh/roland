@@ -140,9 +140,27 @@ function buildPrGoal(pr: PrData, diff: string, mode: 'review' | 'fix'): string {
 
   const description = (pr.body ?? '').trim().slice(0, 1_500) || '(no description provided)';
 
+  const reviewInstructions = [
+    'Review Rules:',
+    '- Treat the base branch as source of truth / baseline.',
+    '- Focus only on changes being introduced — do not criticize pre-existing baseline code unless the change makes it worse.',
+    '- Be specific, actionable, and quote relevant code snippets.',
+    '',
+    'Priorities (in order): correctness/bugs → security → performance → quality → best practices → testing → docs.',
+    '',
+    'Response structure (follow exactly, markdown):',
+    '1. Overall Summary (1-2 sentences, risk level, main theme)',
+    '2. Critical Issues (must fix before merge)',
+    '3. Important Issues (should address)',
+    '4. Suggestions & Improvements (nice-to-have)',
+    '5. Positive Highlights',
+    '6. Minor Nitpicks (optional)',
+    '7. Final Recommendation: ✅ Approve | ⚠️ Approve with comments | ❌ Request changes',
+  ].join('\n');
+
   const action = mode === 'fix'
     ? 'Review this PR thoroughly, identify all issues, and implement the necessary fixes and improvements.'
-    : 'Review this PR thoroughly and produce a comprehensive review covering: correctness, security, performance, test coverage, and code quality.';
+    : reviewInstructions;
 
   return [
     `${mode === 'fix' ? 'Review and fix' : 'Review'} GitHub PR #${pr.number}: "${pr.title}"`,
@@ -166,7 +184,7 @@ function buildPrGoal(pr: PrData, diff: string, mode: 'review' | 'fix'): string {
     '',
     mode === 'fix'
       ? 'After completing fixes: write a summary of changes made and why. Do NOT push — the orchestrator handles git operations.'
-      : 'Write a structured review with sections: Summary, Issues Found (severity: critical/high/medium/low), Suggestions, and Overall Verdict.',
+      : 'Produce the structured markdown review per the Response structure above.',
   ].join('\n');
 }
 

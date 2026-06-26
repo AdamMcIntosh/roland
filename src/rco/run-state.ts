@@ -96,7 +96,7 @@ export interface RunState {
   lastCritique?: {
     summary: string;
     retryDecision: 'proceed' | 'retry' | 'retry_focused' | 'escalate';
-    model: 'grok' | 'composer';
+    model: 'critic' | 'coding' | 'grok' | 'composer';
     at: number;
     iteration: number;
     issueCount?: number;
@@ -124,6 +124,63 @@ export interface RunState {
     backoffMs: number;
     at: number;
   };
+  /** Active ModelRouter snapshot for dashboard loop panel. */
+  modelRouting?: {
+    summary: string;
+    roles: Record<string, {
+      provider: string;
+      model: string;
+      displayLabel: string;
+      isFallback: boolean;
+    }>;
+    phaseModels?: Record<string, string>;
+  };
+  /** Legacy PM Team integration status for active loop. */
+  pmIntegration?: {
+    enabled: boolean;
+    reason: string;
+    executionPath?: 'pm_team' | 'lightweight';
+  };
+  /** Real-time loop activity for live dashboard panel. */
+  liveActivity?: {
+    kind: 'phase' | 'verification' | 'hook' | 'spawn' | 'idle' | 'approval';
+    label: string;
+    detail?: string;
+    startedAt: number;
+    dispatchMethod?: string;
+    executionMode?: string;
+    verificationStrategies?: Array<{
+      type: string;
+      status: 'pending' | 'running' | 'pass' | 'fail' | 'skipped';
+      weight?: number;
+      confidence?: number;
+    }>;
+    activeHook?: {
+      label: string;
+      dryRun?: boolean;
+      action?: string;
+      requireApproval?: boolean;
+    };
+    progressSummary?: string;
+  };
+  /** Pending git-commit HITL approval for dashboard. */
+  pendingGitCommitApproval?: {
+    id: string;
+    message: string;
+    statusPreview: string;
+    iteration: number;
+    requestedAt: number;
+    timeoutAt: number;
+    status: 'pending' | 'approved' | 'rejected' | 'timeout';
+  };
+  /** Recent specialist spawn pulses. */
+  spawnActivityHistory?: Array<{
+    role: string;
+    phase: string;
+    count: number;
+    label: string;
+    at: number;
+  }>;
 }
 
 // ── Writer (used by team-cli / orchestrator callbacks) ────────────────────────
@@ -309,7 +366,7 @@ export class RunStateWriter {
     lastCritique?: {
       summary: string;
       retryDecision: 'proceed' | 'retry' | 'retry_focused' | 'escalate';
-      model: 'grok' | 'composer';
+      model: 'critic' | 'coding' | 'grok' | 'composer';
       at: number;
       iteration: number;
       issueCount?: number;
@@ -324,6 +381,11 @@ export class RunStateWriter {
       backoffMs: number;
       at: number;
     };
+    modelRouting?: RunState['modelRouting'];
+    pmIntegration?: RunState['pmIntegration'];
+    liveActivity?: RunState['liveActivity'];
+    pendingGitCommitApproval?: RunState['pendingGitCommitApproval'];
+    spawnActivityHistory?: RunState['spawnActivityHistory'];
   }): void {
     if (fields.loopTemplateId !== undefined) {
       this.state.loopTemplateId = fields.loopTemplateId;
@@ -351,6 +413,21 @@ export class RunStateWriter {
     }
     if (fields.lastRetry !== undefined) {
       this.state.lastRetry = fields.lastRetry;
+    }
+    if (fields.modelRouting !== undefined) {
+      this.state.modelRouting = fields.modelRouting;
+    }
+    if (fields.pmIntegration !== undefined) {
+      this.state.pmIntegration = fields.pmIntegration;
+    }
+    if (fields.liveActivity !== undefined) {
+      this.state.liveActivity = fields.liveActivity;
+    }
+    if (fields.pendingGitCommitApproval !== undefined) {
+      this.state.pendingGitCommitApproval = fields.pendingGitCommitApproval;
+    }
+    if (fields.spawnActivityHistory !== undefined) {
+      this.state.spawnActivityHistory = fields.spawnActivityHistory;
     }
     this.flush();
   }

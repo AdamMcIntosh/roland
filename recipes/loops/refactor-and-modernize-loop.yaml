@@ -1,0 +1,46 @@
+name: refactor-and-modernize-loop
+description: >
+  Refactor and modernize loop — plan structural improvements, implement incrementally, verify
+  behavior unchanged, critique quality gaps, reflect, and loop until clean. Verification commands
+  are project-defined in config.yaml (loop_engine.verification.strategies).
+kickoff: >
+  Start the refactor and modernize loop. Goal: code is cleaner, conventions-aligned, and behavior
+  preserved. After each iteration run configured quality gates, reflect on findings, and stop when
+  exit conditions pass.
+phases:
+  - phase: plan
+    label: Plan refactor scope
+    agent: pm
+  - phase: act
+    label: Implement refactor
+    agent: coding
+  - phase: verify
+    label: Quality and regression gates
+    agent: verifier
+    verification:
+      - lint
+      - unit
+      - typecheck
+  - phase: critique
+    label: Critique quality
+    agent: critic
+  - phase: retry
+    label: Retry focused fixes
+    optional: true
+  - phase: observe
+    label: Observe metrics
+    agent: researcher
+  - phase: reflect
+    label: Reflection pass
+    optional: true
+    agent: critic
+maxIterations: 4
+maxRetries: 3
+escalationThreshold: 4
+testModeMaxRetries: 6
+testModeEscalationThreshold: 8
+min_confidence: 0.8
+reflection: true
+exit_conditions:
+  - type: all_gates_pass
+    description: Lint, unit, and typecheck gates pass

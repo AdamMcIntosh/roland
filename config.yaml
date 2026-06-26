@@ -11,6 +11,58 @@
 #   Main session (claude-haiku-4.5):        → ~$4/mo  (routing + file I/O)
 #   Total estimate:                         → ~$19/mo at moderate usage
 
+# Loop Engineering — role-based model routing (provider-agnostic).
+#
+# DEFAULT: OpenRouter (below). For full local Ollama, change provider to ollama per role:
+#   models:
+#     pm:     { provider: ollama, model: llama3.2:latest }
+#     coding: { provider: ollama, model: qwen3.5-coder:14b }
+#     critic: { provider: ollama, model: deepseek-r1:7b }
+#
+# Env overrides: ROLAND_MODEL_<ROLE>, ROLAND_MODEL_<ROLE>_PROVIDER,
+#   ROLAND_MODEL_<ROLE>_FALLBACK, ROLAND_MODEL_<ROLE>_FALLBACK_PROVIDER
+# Required loop roles: pm, coding, critic, verifier (validated at ClosedLoop startup).
+models:
+  pm:
+    provider: openrouter
+    model: grok-4.3
+    fallback:
+      provider: openrouter
+      model: gpt-5.4-nano
+  coding:
+    provider: openrouter
+    model: qwen/qwen3-coder-next
+    fallback:
+      provider: openrouter
+      model: deepseek/deepseek-v3-0324
+  critic:
+    provider: openrouter
+    model: deepseek/deepseek-chat
+    fallback:
+      provider: openrouter
+      model: minimax/minimax-m2.5
+  verifier:
+    provider: openrouter
+    model: deepseek/deepseek-v3-0324
+  researcher:
+    provider: openrouter
+    model: deepseek/deepseek-v3-0324
+  planner:
+    provider: openrouter
+    model: minimax/minimax-m2.5
+  executor:
+    provider: openrouter
+    model: qwen/qwen3-coder-next
+  reviewer:
+    provider: openrouter
+    model: deepseek/deepseek-chat
+  reasoning:
+    provider: openrouter
+    model: minimax/minimax-m2.5
+  light:
+    provider: openrouter
+    model: deepseek/deepseek-v3-0324
+
 # PM team (Phase 3) — Cursor-native model routing. The PM team does NOT use
 # OpenRouter; it runs on your Cursor subscription. Routing is lane-based:
 #   Lead PM   → lead_model      (gpt-5.4-nano: orchestration + planning only)
@@ -23,6 +75,10 @@
 loop_engine:
   default_template: standard-code-loop
   templates_dir: recipes/loops
+  # Between-iteration self-pacing command (templates may override via between_iterations)
+  between_iterations: npm run test:run
+  # Legacy PM Team in Plan/Act — default false (pure ClosedLoop). Set true to enable pm_plan/pm_act: auto templates.
+  use_pm_team: false
   timeout_ms: 1800000
   verification:
     # Legacy flag — Critique always runs after Verify; retry owned by critique phase

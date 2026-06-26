@@ -1,34 +1,66 @@
 name: feature-implementation-loop
 description: >
-  Feature delivery loop (loops.elorm.xyz pattern) — plan scope, implement, verify, critique,
-  reflect learnings, run between-iteration checks, exit when gates green and confidence stable.
+  Feature delivery loop — plan scope, implement, verify with unit/integration/smoke gates, critique,
+  reflect learnings, and exit when gates green. Set loop_engine.use_pm_team: true for PM-Enhanced
+  Plan/Act; default is Pure ClosedLoop.
 kickoff: >
-  Start the Feature Implementation loop. Goal: feature is implemented with tests passing and
-  integration smoke green. Self-pace: after each iteration run the check command, read output,
-  reflect on learnings, and only continue if exit conditions are not met.
+  Start the feature implementation loop. Goal: feature is implemented with tests passing and
+  integration smoke green. Self-pace: after each iteration run configured checks, reflect on
+  learnings, and only continue if exit conditions are not met.
+between_iterations:
+  action: git-commit
+  dry_run: true
+  optional: true
+  message_template: "feat(loop): iteration {iteration} — {goal}"
 phases:
   - phase: plan
     label: Plan feature
-    agent: lead-pm
+    agent: pm
+    specialist_spawns:
+      - role: planner
+        prompt_template: "Decompose feature scope for {goal}"
   - phase: act
     label: Implement
-    agent: executor
+    agent: coding
+    specialist_spawns:
+      - role: coding
+        primary: true
+      - role: test-author
+        prompt_template: "Outline tests for iteration {iteration} of {goal}"
   - phase: verify
     label: Verify feature
-    agent: test-executor
+    agent: verifier
     verification:
-      - unit
-      - integration
-      - smoke
+      - type: unit
+        weight: 0.9
+        success_threshold: 1.0
+      - type: integration
+        optional: true
+        weight: 0.8
+        success_threshold: 0.9
+      - type: smoke
+        optional: true
+        weight: 0.6
+        success_threshold: 0.6
+    specialist_spawns:
+      - role: verifier
+        primary: true
+      - role: test-executor
   - phase: critique
     label: Critique delivery
     agent: critic
+    specialist_spawns:
+      - role: critic
+        primary: true
+      - role: code-reviewer
   - phase: retry
     label: Retry implementation
     optional: true
   - phase: observe
     label: Observe state
     agent: researcher
+    after:
+      action: critique-only
   - phase: reflect
     label: Reflect on iteration
     optional: true
@@ -39,11 +71,10 @@ escalationThreshold: 4
 testModeMaxRetries: 6
 testModeEscalationThreshold: 8
 min_confidence: 0.85
-between_iterations: npm test
+use_pm_team: true
+pm_plan: auto
+pm_act: auto
 reflection: true
 exit_conditions:
   - type: all_gates_pass
     description: Unit, integration, and smoke gates pass
-  - type: command_success
-    description: npm test exits 0
-    command: npm test

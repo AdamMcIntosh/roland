@@ -158,7 +158,9 @@ See [docs/evolution/README.md](./docs/evolution/README.md) for the current produ
 | Path | Role |
 |------|------|
 | `src/loop-engine/loop-phases.ts` | `Phase` enum + `PhaseConfig` / `LoopTemplate` types |
-| `src/loop-engine/loop-engine.ts` | `LoopEngine` (sequential phase runner + hooks) + `LoopEngineCoordinator` (team-orchestrator lifecycle) |
+| `src/loop-engine/loop-engine.ts` | `LoopEngine` (sequential phase runner + hooks); `LoopEngineCoordinator` deprecated |
+| `src/rco/loop-orchestrator.ts` | Routes `--loop-template` missions to `ClosedLoop.run()` |
+| `src/loop-engine/closed-loop.ts` | Harness entry — memory, spawner, PR, full lifecycle |
 | `src/loop-engine/loop-state.ts` | Persists `.roland/loop-state.json` — survives supervisor restarts |
 | `src/loop-engine/loop-templates.ts` | Loads YAML from `recipes/loops/` |
 | `src/loop-engine/phase-handlers/` | Base handlers: Plan, Act, Verify, Critique, Retry, Observe |
@@ -168,8 +170,8 @@ See [docs/evolution/README.md](./docs/evolution/README.md) for the current produ
 - **Blackboard** — each phase handler posts decisions/results/artifacts to RCO blackboard.
 - **Command Blackboard** — loop template and phase transitions appended to Mission Objectives / Key Decisions.
 - **Run state** — `run-state.json` extended with `loopTemplateId`, `loopPhase`, `loopIteration`, `lastVerification` (dashboard-ready).
-- **Team orchestrator** — `TeamOrchestratorOptions.loopTemplate` wires `LoopEngineCoordinator` at planning / wave / synthesis boundaries.
-- **Mission creation** — `roland team "goal" --loop-template standard-code-loop` or `POST /api/mission { loopTemplate: "..." }`.
+- **Team orchestrator** — `hasLoopTemplate(loopTemplate)` at `runTeamInner()` delegates to `runClosedLoopMission()` → `ClosedLoop.run()`. Legacy PM waves only when no template is set.
+- **Mission creation** — `roland team "goal" --loop-template closed-loop-harness` (or `feature-implementation-loop`), MCP `roland_run_team` with `loop_template`, or `POST /api/mission { loopTemplate: "..." }`.
 
 ### Shipped templates (`recipes/loops/`)
 

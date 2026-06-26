@@ -21,6 +21,7 @@
   ];
 
   var loopHealth = null;
+  var loopTemplatesCatalog = null;
   var escHtmlFn = defaultEscHtml;
   var getPmModelId = function () { return 'gpt-5.4-nano'; };
   var getEngModelId = function () { return 'composer-2.5'; };
@@ -69,6 +70,93 @@
     }
   }
 
+  async function fetchLoopTemplates() {
+    try {
+      var res = await fetch('/api/loop-templates');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      loopTemplatesCatalog = await res.json();
+    } catch {
+      loopTemplatesCatalog = null;
+    }
+    return loopTemplatesCatalog;
+  }
+
+  function getLoopTemplatesCatalog() {
+    return loopTemplatesCatalog;
+  }
+
+  /** Populate a <select> with loop template options (mission form). */
+  function populateTemplateSelect(selectEl, selectedName) {
+    if (!selectEl || !loopTemplatesCatalog || !loopTemplatesCatalog.templates) return;
+    var current = selectedName || loopTemplatesCatalog.defaultTemplate || '';
+    var groups = { core: [], other: [], deprecated: [] };
+    loopTemplatesCatalog.templates.forEach(function (t) {
+      if (t.deprecated) groups.deprecated.push(t);
+      else if (t.isCoreGeneric) groups.core.push(t);
+      else groups.other.push(t);
+    });
+    var html = '<option value="">— Pure PM team (no loop template) —</option>';
+    function addGroup(label, items) {
+      if (!items.length) return;
+      html += '<optgroup label="' + esc(label) + '">';
+      items.forEach(function (t) {
+        var sel = t.name === current ? ' selected' : '';
+        html += '<option value="' + esc(t.name) + '"' + sel + '>' + esc(t.name) + '</option>';
+      });
+      html += '</optgroup>';
+    }
+    addGroup('Core generic templates', groups.core);
+    addGroup('Other templates', groups.other);
+    addGroup('Deprecated (aliases)', groups.deprecated);
+    selectEl.innerHTML = html;
+  }
+
+  /** Template catalog panel for Loop Engineering when idle or embedded in harness. */
+  function renderTemplateCatalog(opts) {
+    opts = opts || {};
+    var catalog = loopTemplatesCatalog;
+    if (!catalog || !catalog.templates || !catalog.templates.length) {
+      return '<div class="loop-template-catalog muted">Loop templates — run <code>npm run build</code> and refresh.</div>';
+    }
+    var selected = opts.selected || catalog.defaultTemplate;
+    var showAll = opts.showAll !== false;
+    var items = showAll
+      ? catalog.templates.filter(function (t) { return !t.deprecated; })
+      : catalog.templates.filter(function (t) { return t.isCoreGeneric; });
+
+    var rows = items.map(function (t) {
+      var isDefault = t.name === catalog.defaultTemplate;
+      var isSelected = t.name === selected;
+      var mode = t.executionModes.usePmTeam ? 'PM-Enhanced opt-in' : 'Pure ClosedLoop';
+      var spawnNote = t.spawnSummary
+        ? '<div class="loop-template-spawns" title="YAML specialist_spawns">Spawns: ' + esc(t.spawnSummary) + '</div>'
+        : '';
+      var verifyNote = t.verificationSummary
+        ? '<div class="loop-template-verify" title="Verification strategies">Verify: ' + esc(t.verificationSummary) + '</div>'
+        : '';
+      var betweenNote = t.betweenIterationsSummary
+        ? '<div class="loop-template-between" title="Between-iterations hook">Hook: ' + esc(t.betweenIterationsSummary) + '</div>'
+        : '';
+      var phaseList = t.phases.map(function (p) { return p.phase; }).join(' → ');
+      return '<div class="loop-template-card' + (isSelected ? ' selected' : '') + (isDefault ? ' default' : '') + '">' +
+        '<div class="loop-template-card-head">' +
+          '<strong class="loop-template-name">' + esc(t.name) + '</strong>' +
+          (isDefault ? '<span class="loop-template-badge">default</span>' : '') +
+          '<span class="loop-template-mode">' + esc(mode) + '</span>' +
+        '</div>' +
+        '<div class="loop-template-desc">' + esc(t.description || 'No description') + '</div>' +
+        '<div class="loop-template-meta">' + esc(String(t.phaseCount)) + ' phases · ' + esc(phaseList) + '</div>' +
+        spawnNote + verifyNote + betweenNote +
+      '</div>';
+    }).join('');
+
+    return '<div class="loop-template-catalog">' +
+      '<h4>Loop Templates</h4>' +
+      '<p class="loop-template-catalog-sub">Generic-first templates from <code>recipes/loops/</code>. Select one when starting a mission or pass <code>--loop-template</code> to Roland CLI.</p>' +
+      '<div class="loop-template-grid">' + rows + '</div>' +
+    '</div>';
+  }
+
   function phaseIndex(phaseId) {
     for (var i = 0; i < PHASES.length; i++) {
       if (PHASES[i].id === phaseId) return i;
@@ -101,6 +189,14 @@
     var loopMemory = health?.loopMemory || null;
     var exitConditions = health?.exitConditions || [];
     var exitEvaluation = health?.exitEvaluation || null;
+    var roleRouting = health?.roleRouting || rs?.modelRouting || null;
+    var pmIntegration = health?.pmIntegration || rs?.pmIntegration || null;
+    var loopSummary = health?.loopSummary || null;
+    var liveActivity = rs?.liveActivity ?? health?.liveActivity ?? null;
+    var pendingGitCommitApproval =
+      rs?.pendingGitCommitApproval ?? health?.pendingGitCommitApproval ?? null;
+    var spawnActivityHistory =
+      rs?.spawnActivityHistory ?? health?.spawnActivityHistory ?? liveActivity?.recentSpawns ?? [];
     var isPaused = Boolean(rs?.hitlPaused);
     var isAbortPending = Boolean(rs?.hitlAbortPending);
 
@@ -118,6 +214,12 @@
       loopMemory: loopMemory,
       exitConditions: exitConditions,
       exitEvaluation: exitEvaluation,
+      roleRouting: roleRouting,
+      pmIntegration: pmIntegration,
+      loopSummary: loopSummary,
+      liveActivity: liveActivity,
+      pendingGitCommitApproval: pendingGitCommitApproval,
+      spawnActivityHistory: spawnActivityHistory,
       lastVerification: lv,
       lastCritique: rs?.lastCritique,
       lastRetry: rs?.lastRetry,
@@ -234,6 +336,9 @@
       var lc = vm.lastCritique;
       lines.push('Decision: ' + String(lc.retryDecision || '').toUpperCase());
       if (lc.summary) lines.push(lc.summary);
+      if (vm.roleRouting && vm.roleRouting.phaseModels && vm.roleRouting.phaseModels.critique) {
+        lines.push('Model: ' + vm.roleRouting.phaseModels.critique);
+      }
       if (Array.isArray(lc.issues) && lc.issues.length) {
         lines.push('Issues: ' + lc.issues.slice(0, 3).join('; '));
       }
@@ -253,6 +358,10 @@
     });
     if (spawns.length) {
       lines.push('Specialists: ' + spawns.map(function (s) { return s.primaryAgent; }).join(', '));
+    }
+
+    if (vm.roleRouting && vm.roleRouting.phaseModels && vm.roleRouting.phaseModels[phaseId]) {
+      lines.push('Model: ' + vm.roleRouting.phaseModels[phaseId]);
     }
 
     if (!lines.length) {
@@ -393,14 +502,103 @@
   function renderReflectionPanel(vm) {
     var mem = vm.loopMemory;
     if (!mem || (!mem.lastReflection && !mem.reflectionCount)) return '';
+    var streakNote = mem.confidenceStreak
+      ? ' · confidence streak <strong>' + esc(String(mem.confidenceStreak)) + '</strong>'
+      : '';
     return '<div class="loop-reflection-panel">' +
       '<h5>Reflection Memory</h5>' +
       '<div class="loop-reflection-meta">' +
         esc(mem.loopId || 'loop') + ' · ' + esc(String(mem.reflectionCount)) + ' reflection(s)' +
-        (mem.confidenceStreak ? ' · streak ' + esc(String(mem.confidenceStreak)) : '') +
+        streakNote +
       '</div>' +
       (mem.lastReflection
-        ? '<div class="loop-reflection-preview">' + esc(mem.lastReflection).replace(/\n/g, '<br>') + '</div>'
+        ? '<div class="loop-reflection-preview"><strong>Latest:</strong> ' +
+          esc(mem.lastReflection).replace(/\n/g, '<br>') + '</div>'
+        : '') +
+      '</div>';
+  }
+
+  function renderPmIntegrationPanel(vm) {
+    var pm = vm.pmIntegration;
+    if (!pm) return '';
+    var enabled = pm.enabled || pm.configured;
+    var cls = enabled ? 'loop-pm-enabled' : 'loop-pm-disabled';
+    var label = pm.label || (enabled ? 'PM-Enhanced (Legacy)' : 'Pure ClosedLoop');
+    var badgeCls = enabled ? 'loop-pm-badge-enhanced' : 'loop-pm-badge-pure';
+    var pathLabel = pm.executionPath === 'pm_team'
+      ? 'Plan/Act → legacy PM Team waves'
+      : 'Plan/Act → lightweight ClosedLoop handlers';
+    return '<div class="loop-pm-panel ' + cls + '">' +
+      '<h5>Execution Mode</h5>' +
+      '<div class="loop-pm-status">' +
+        '<span class="loop-pm-badge ' + badgeCls + '">' + esc(label) + '</span>' +
+      '</div>' +
+      (pm.reason ? '<div class="loop-pm-reason">' + esc(pm.reason) + '</div>' : '') +
+      '<div class="loop-pm-path">' + esc(pathLabel) + '</div>' +
+      '</div>';
+  }
+
+  function renderModelRoutingPanel(vm) {
+    var rr = vm.roleRouting;
+    if (!rr || !rr.roles) return '';
+    var dispatchLine = '';
+    if (rr.defaultDispatch) {
+      var sdkNote = rr.cursorSdkAvailable ? ' · CURSOR_API_KEY ✓' : ' · SDK key missing → direct fallback';
+      dispatchLine = '<div class="loop-routing-dispatch">' +
+        'Default dispatch: <strong>' + esc(rr.defaultDispatch) + '</strong>' + esc(sdkNote) +
+        '</div>';
+    }
+    var coreRoles = ['pm', 'coding', 'critic', 'verifier', 'researcher'];
+    var rows = coreRoles.map(function (role) {
+      var m = rr.roles[role];
+      if (!m) return '';
+      var fb = m.isFallback ? ' <span class="loop-routing-fallback">provider fallback</span>' : '';
+      var method = m.dispatchMethod === 'cursor_sdk'
+        ? '<span class="loop-routing-sdk">SDK</span>'
+        : '<span class="loop-routing-direct">Direct</span>';
+      return '<div class="loop-routing-row">' +
+        '<span class="loop-routing-role">' + esc(role) + '</span>' +
+        '<span class="loop-routing-model">' + method + ' ' + esc(m.displayLabel) + fb + '</span>' +
+        '</div>';
+    }).filter(Boolean).join('');
+    var phaseRow = '';
+    if (rr.phaseModels) {
+      var phases = ['plan', 'act', 'verify', 'critique', 'reflect'];
+      phaseRow = '<div class="loop-routing-phases">' +
+        phases.map(function (p) {
+          var label = rr.phaseModels[p];
+          if (!label) return '';
+          var disp = rr.phaseDispatch && rr.phaseDispatch[p] ? rr.phaseDispatch[p] : '';
+          var dispTag = disp ? ' [' + disp + ']' : '';
+          return '<span class="loop-routing-phase-chip" title="' + esc(p) + '">' +
+            esc(p) + ': ' + esc(label) + esc(dispTag) + '</span>';
+        }).filter(Boolean).join('') +
+        '</div>';
+    }
+    if (!rows) return '';
+    return '<div class="loop-routing-panel loop-routing-panel-prominent">' +
+      '<h5>⚡ Model Router</h5>' +
+      dispatchLine +
+      '<div class="loop-routing-summary">' + esc(rr.summary || '') + '</div>' +
+      rows + phaseRow +
+      '</div>';
+  }
+
+  function renderLoopSummaryPanel(vm) {
+    var ls = vm.loopSummary;
+    if (!ls || !ls.complete) return '';
+    return '<div class="loop-summary-panel">' +
+      '<h5>Loop Summary</h5>' +
+      '<div class="loop-summary-grid">' +
+        '<span>Status <strong>' + esc(ls.status) + '</strong></span>' +
+        '<span>Iterations <strong>' + esc(String(ls.iterations)) + '</strong></span>' +
+        '<span>Retries <strong>' + esc(String(ls.retryCount)) + '</strong></span>' +
+        (ls.confidence != null
+          ? '<span>Confidence <strong>' + esc(formatConfidence(ls.confidence)) + '</strong></span>'
+          : '') +
+      '</div>' +
+      (ls.exitReason
+        ? '<div class="loop-summary-exit">' + esc(ls.exitReason) + '</div>'
         : '') +
       '</div>';
   }
@@ -411,7 +609,9 @@
     var decCls = lc.retryDecision === 'escalate' ? 'escalate'
       : (lc.retryDecision === 'retry' || lc.retryDecision === 'retry_focused') ? 'retry' : 'proceed';
     var decLabel = lc.retryDecision === 'retry_focused' ? 'RETRY (focused)' : lc.retryDecision.toUpperCase();
-    var modelLabel = lc.model === 'composer' ? getEngModelId() : getPmModelId();
+    var modelLabel = lc.model === 'coding' || lc.model === 'composer'
+      ? (vm.roleRouting?.roles?.coding?.displayLabel || 'coding')
+      : (vm.roleRouting?.roles?.critic?.displayLabel || 'critic');
     var issueNote = lc.issueCount != null ? ' · ' + lc.issueCount + ' issue(s)' : '';
     return '<div class="loop-critique-panel">' +
       '<span class="loop-critique-decision ' + decCls + '">' + esc(decLabel) + '</span>' +
@@ -429,6 +629,86 @@
       '<span title="Retry count this run">Retries <strong>' + esc(String(m.retryCount)) + '</strong></span>' +
       '<span title="Estimated loop completion">Progress <strong>' + esc(String(computeProgressPct(vm))) + '%</strong></span>' +
       '</div>';
+  }
+
+  function renderSpawnPulseHistory(vm) {
+    var pulses = vm.spawnActivityHistory || [];
+    if (!pulses.length) return '';
+    var recent = pulses.slice(-8).reverse();
+    var rows = recent.map(function (p) {
+      return '<li class="loop-spawn-pulse-item">' +
+        '<span class="loop-spawn-time">' + esc(new Date(p.at).toLocaleTimeString()) + '</span> ' +
+        '<strong>' + esc(p.role) + '</strong> · ' + esc(p.phase) +
+        (p.count > 1 ? ' <span class="loop-spawn-count">×' + esc(String(p.count)) + '</span>' : '') +
+        '</li>';
+    }).join('');
+    return '<div class="loop-spawn-pulses">' +
+      '<h5>Spawn Activity</h5>' +
+      '<ul class="loop-spawn-pulse-list">' + rows + '</ul>' +
+      '</div>';
+  }
+
+  function renderGitCommitApprovalPanel(vm) {
+    var pending = vm.pendingGitCommitApproval;
+    if (!pending || pending.status !== 'pending') return '';
+    var timeoutLabel = pending.timeoutAt
+      ? new Date(pending.timeoutAt).toLocaleTimeString()
+      : '—';
+    return '<div class="loop-git-approval-panel">' +
+      '<h5>Git Commit Approval Required</h5>' +
+      '<p class="loop-git-approval-sub">Iteration ' + esc(String(pending.iteration)) +
+        ' · timeout ' + esc(timeoutLabel) + '</p>' +
+      '<label class="loop-git-approval-label">Proposed message</label>' +
+      '<textarea class="loop-git-approval-message" id="loop-git-approval-message" rows="3">' +
+        esc(pending.message) +
+      '</textarea>' +
+      '<pre class="loop-git-approval-diff">' + esc(pending.statusPreview) + '</pre>' +
+      '<div class="loop-git-approval-actions">' +
+        '<button type="button" class="btn-hitl btn-resume loop-git-approve-btn" data-approval-id="' +
+          esc(pending.id) + '">✓ Approve Commit</button>' +
+        '<button type="button" class="btn-hitl btn-abort loop-git-reject-btn" data-approval-id="' +
+          esc(pending.id) + '">✕ Reject</button>' +
+      '</div>' +
+      '</div>';
+  }
+
+  function renderLiveActivityPanel(vm) {
+    var la = vm.liveActivity;
+    var spawnBlock = renderSpawnPulseHistory(vm);
+    if (!la || !vm.isActive) {
+      return spawnBlock;
+    }
+    var stratRows = '';
+    if (la.verificationStrategies && la.verificationStrategies.length) {
+      stratRows = la.verificationStrategies.map(function (s) {
+        var icon = s.status === 'running' ? '●' : s.status === 'pass' ? '✓' : s.status === 'fail' ? '✕' : s.status === 'skipped' ? '—' : '○';
+        var wt = s.weight != null ? ' w=' + s.weight : '';
+        return '<span class="loop-live-strat status-' + esc(s.status) + '">' + icon + ' ' + esc(s.type) + wt + '</span>';
+      }).join('');
+    }
+    var hookLine = la.activeHook
+      ? '<div class="loop-live-hook">Hook: <strong>' + esc(la.activeHook.label) + '</strong>' +
+        (la.activeHook.dryRun ? ' <span class="loop-live-dry">dry-run</span>' : '') +
+        (la.activeHook.requireApproval ? ' <span class="loop-live-hitl">HITL</span>' : '') +
+        (la.activeHook.action ? ' (' + esc(la.activeHook.action) + ')' : '') +
+        '</div>'
+      : '';
+    var modeLine = (la.dispatchMethod || la.executionMode)
+      ? '<div class="loop-live-mode">' +
+        (la.dispatchMethod ? 'Dispatch: <strong>' + esc(la.dispatchMethod) + '</strong>' : '') +
+        (la.executionMode ? ' · Mode: <strong>' + esc(la.executionMode) + '</strong>' : '') +
+        '</div>'
+      : '';
+    return '<div class="loop-live-activity">' +
+      '<h5>Live Activity · ' + esc(la.kind) + '</h5>' +
+      '<div class="loop-live-label"><strong>' + esc(la.label) + '</strong>' +
+        (la.detail ? ' — ' + esc(la.detail) : '') +
+      '</div>' +
+      (la.progressSummary ? '<div class="loop-live-progress">' + esc(la.progressSummary) + '</div>' : '') +
+      (stratRows ? '<div class="loop-live-strategies">' + stratRows + '</div>' : '') +
+      hookLine + modeLine +
+      '</div>' +
+      spawnBlock;
   }
 
   function renderHarnessCore(vm, opts) {
@@ -502,8 +782,13 @@
     return panelClass + '|' + (
       '<div class="' + panelClass + '" data-loop-harness="1">' +
         header + metaRow + progressBlock +
+        renderGitCommitApprovalPanel(vm) +
+        renderLiveActivityPanel(vm) +
+        renderPmIntegrationPanel(vm) +
         renderMetricsRow(vm) +
+        renderModelRoutingPanel(vm) +
         renderTimeline(vm, opts) +
+        renderLoopSummaryPanel(vm) +
         renderExitConditionsPanel(vm) +
         renderReflectionPanel(vm) +
         renderCritiquePanel(vm) +
@@ -564,6 +849,24 @@
     onHitl(cmd);
   }
 
+  async function doGitCommitApproval(decision, approvalId) {
+    var msgEl = document.getElementById('loop-git-approval-message');
+    var message = msgEl ? msgEl.value : '';
+    try {
+      var res = await fetch('/api/git-commit-approval/' + decision, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: approvalId, message: message }),
+      });
+      if (!res.ok) {
+        var errBody = await res.json().catch(function () { return {}; });
+        console.warn('[LoopEngine] git-commit approval failed', errBody);
+      }
+    } catch (e) {
+      console.warn('[LoopEngine] git-commit approval error', e);
+    }
+  }
+
   /** Bind loop control buttons after Live Status re-render. */
   function bindLivePanel(root) {
     var container = root || document.getElementById('live-section');
@@ -575,6 +878,20 @@
         doControl(btn.getAttribute('data-loop-cmd'));
       });
     });
+    container.querySelectorAll('.loop-git-approve-btn').forEach(function (btn) {
+      if (btn.dataset.approvalBound) return;
+      btn.dataset.approvalBound = '1';
+      btn.addEventListener('click', function () {
+        doGitCommitApproval('approve', btn.getAttribute('data-approval-id'));
+      });
+    });
+    container.querySelectorAll('.loop-git-reject-btn').forEach(function (btn) {
+      if (btn.dataset.approvalBound) return;
+      btn.dataset.approvalBound = '1';
+      btn.addEventListener('click', function () {
+        doGitCommitApproval('reject', btn.getAttribute('data-approval-id'));
+      });
+    });
   }
 
   global.LoopEngine = {
@@ -582,6 +899,10 @@
     getHealth: getHealth,
     setHealth: setHealth,
     fetchHealth: fetchHealth,
+    fetchLoopTemplates: fetchLoopTemplates,
+    getLoopTemplatesCatalog: getLoopTemplatesCatalog,
+    populateTemplateSelect: populateTemplateSelect,
+    renderTemplateCatalog: renderTemplateCatalog,
     renderSummary: renderSummary,
     renderLivePanel: renderLivePanel,
     bindLivePanel: bindLivePanel,

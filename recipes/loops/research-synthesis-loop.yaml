@@ -1,11 +1,14 @@
+# Deprecated — use research-and-spec-loop.
 name: research-synthesis-loop
+deprecated: true
+alias_of: research-and-spec-loop
 description: >
-  Research synthesis loop — plan investigation, gather and synthesize intel,
-  verify findings, critique synthesis quality, retry gaps, observe learnings.
+  [Deprecated] Alias for research-and-spec-loop. Use --loop-template=research-and-spec-loop
+  for new missions.
 phases:
   - phase: plan
     label: Plan research
-    agent: lead-pm
+    agent: pm
   - phase: act
     label: Research & synthesize
     agent: researcher
@@ -20,6 +23,7 @@ phases:
     optional: true
   - phase: observe
     label: Record learnings
+    agent: researcher
 maxIterations: 3
 maxRetries: 2
 escalationThreshold: 3

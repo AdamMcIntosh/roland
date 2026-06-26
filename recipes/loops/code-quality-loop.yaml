@@ -1,20 +1,20 @@
+# Deprecated — use refactor-and-modernize-loop.
 name: code-quality-loop
+deprecated: true
+alias_of: refactor-and-modernize-loop
 description: >
-  Code quality loop — de-sloppify pattern from loops.elorm.xyz. Plan improvements, implement fixes,
-  verify lint/unit/typecheck, critique quality gaps, reflect, and loop until clean.
-kickoff: >
-  Start the Code Quality loop. Goal: recent changes are clean, minimal, and convention-aligned.
-  After each iteration run lint and tests, reflect on review findings, and stop when exit conditions pass.
+  [Deprecated] Alias for refactor-and-modernize-loop. Use --loop-template=refactor-and-modernize-loop
+  for new missions.
 phases:
   - phase: plan
     label: Plan quality work
-    agent: lead-pm
+    agent: pm
   - phase: act
     label: Implement fixes
-    agent: executor
+    agent: coding
   - phase: verify
     label: Quality gates
-    agent: test-executor
+    agent: verifier
     verification:
       - lint
       - unit
@@ -38,10 +38,7 @@ escalationThreshold: 4
 testModeMaxRetries: 6
 testModeEscalationThreshold: 8
 min_confidence: 0.8
-between_iterations: npm run lint && npm test
 reflection: true
 exit_conditions:
   - type: all_gates_pass
     description: Lint, unit, and typecheck gates pass
-  - type: command_success
-    description: Lint and test command exits 0

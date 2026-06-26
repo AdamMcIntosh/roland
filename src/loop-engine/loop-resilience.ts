@@ -1,70 +1,77 @@
 /**
- * Loop resilience — model degradation and rate-limit handling.
+ * Loop resilience — model degradation and rate-limit handling via ModelRouter roles.
  */
 
 import type { CritiqueModel } from './self-improvement/types.js';
+import { ModelRouter } from '../models/model-router.js';
 
-const RATE_LIMIT_PATTERNS = [
-  /rate.?limit/i,
-  /429/,
-  /too many requests/i,
-  /quota exceeded/i,
-  /model.*unavailable/i,
-  /overloaded/i,
-  /capacity/i,
-];
-
-/** Detect API rate-limit or model-unavailable errors from agent output or errors. */
-export function isRateLimitOrUnavailableError(message: string): boolean {
-  if (!message) return false;
-  return RATE_LIMIT_PATTERNS.some((re) => re.test(message));
-}
-
-/** Fallback model when primary lane is rate-limited. */
-export function degradedCritiqueModel(current: CritiqueModel): CritiqueModel {
-  return current === 'grok' ? 'composer' : 'grok';
+/** Fallback lane when primary critique lane is rate-limited. */
+export function degradedCritiqueLane(current: CritiqueModel): CritiqueModel {
+  return current === 'critic' ? 'coding' : 'critic';
 }
 
 export interface DegradationState {
-  grokDegraded: boolean;
-  composerDegraded: boolean;
+  degradedLanes: CritiqueModel[];
   lastDegradedAt?: number;
   reason?: string;
 }
 
 export class ModelDegradationPolicy {
-  private state: DegradationState = { grokDegraded: false, composerDegraded: false };
+  private readonly router: ModelRouter;
+  private degradedLanes = new Set<CritiqueModel>();
+  private lastDegradedAt?: number;
+  private reason?: string;
 
-  recordFailure(model: CritiqueModel, errorMessage: string): CritiqueModel {
-    if (!isRateLimitOrUnavailableError(errorMessage)) return model;
+  constructor(router?: ModelRouter) {
+    this.router = router ?? ModelRouter.fromConfig();
+  }
 
-    if (model === 'grok') this.state.grokDegraded = true;
-    else this.state.composerDegraded = true;
-    this.state.lastDegradedAt = Date.now();
-    this.state.reason = errorMessage.slice(0, 200);
+  recordFailure(lane: CritiqueModel, errorMessage: string): CritiqueModel {
+    if (!this.router.isRateLimitOrUnavailable(errorMessage)) return lane;
 
-    const fallback = degradedCritiqueModel(model);
+    this.degradedLanes.add(lane);
+    this.lastDegradedAt = Date.now();
+    this.reason = errorMessage.slice(0, 200);
+
+    const fallback = degradedCritiqueLane(lane);
+    this.router.recordFailure(lane, errorMessage);
     console.error(
-      `[Loop][degrade] model=${model} unavailable — falling back to ${fallback}: ` +
-        `"${this.state.reason}"`,
+      `[Loop][degrade] lane=${lane} unavailable — falling back to ${fallback}: "${this.reason}"`,
     );
     return fallback;
   }
 
-  selectModel(preferred: CritiqueModel): CritiqueModel {
-    if (preferred === 'grok' && this.state.grokDegraded) return 'composer';
-    if (preferred === 'composer' && this.state.composerDegraded) return 'grok';
+  selectLane(preferred: CritiqueModel): CritiqueModel {
+    if (preferred === 'critic' && this.degradedLanes.has('critic')) return 'coding';
+    if (preferred === 'coding' && this.degradedLanes.has('coding')) return 'critic';
     return preferred;
   }
 
   getState(): DegradationState {
-    return { ...this.state };
+    return {
+      degradedLanes: [...this.degradedLanes],
+      lastDegradedAt: this.lastDegradedAt,
+      reason: this.reason,
+    };
   }
 
   reset(): void {
-    this.state = { grokDegraded: false, composerDegraded: false };
+    this.degradedLanes.clear();
+    this.lastDegradedAt = undefined;
+    this.reason = undefined;
+    this.router.resetDegradation();
   }
 }
 
 /** Shared policy instance — persists degradation state across phases in one loop run. */
 export const loopDegradationPolicy = new ModelDegradationPolicy();
+
+/** @deprecated Use degradedCritiqueLane */
+export function degradedCritiqueModel(current: CritiqueModel): CritiqueModel {
+  return degradedCritiqueLane(current);
+}
+
+/** Detect API rate-limit or model-unavailable errors from agent output or errors. */
+export function isRateLimitOrUnavailableError(message: string): boolean {
+  return ModelRouter.fromConfig().isRateLimitOrUnavailable(message);
+}

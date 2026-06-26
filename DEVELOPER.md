@@ -1,8 +1,11 @@
-# Roland — CLAUDE.md
+# Roland — Developer Guide
 
-Roland is a multi-agent AI orchestration platform delivered as an MCP server for Cursor, VS Code,
-and Claude Desktop. It ships agent personas, workflow recipes, a standalone CLI orchestrator (RCO),
-and a PM-style team execution engine driven by the Cursor SDK.
+Internal reference for Roland repo contributors: conventions, smoke tests, and subsystem internals.
+
+Roland is a **Loop Engineering platform** — MCP tools for Cursor, a global CLI, closed-loop harness,
+agent personas, workflow recipes, and PM team execution via the Cursor SDK.
+
+**Operator docs:** [README.md](README.md) · **Architecture:** [docs/evolution/README.md](docs/evolution/README.md) · **Loops:** [docs/guides/closed-loop-harness.md](docs/guides/closed-loop-harness.md)
 
 ---
 
@@ -38,7 +41,8 @@ src/
   index.ts              ← MCP server entry + CLI dispatcher (serve | mcp-config | doctor | pm-log | team | pause | resume | unblock | inject | replan | abort | bg-status | bg-logs | bg-stop)
   rco/
     team-cli.ts         ← `roland team "<goal>"` — renders progress, delegates to team-orchestrator
-    team-orchestrator.ts← PM control loop: plan → waves → review → synthesis; polls HITL queue
+    team-orchestrator.ts← PM control loop OR routes loop templates → loop-orchestrator → ClosedLoop
+    loop-orchestrator.ts← ClosedLoop routing when `--loop-template` is set (Loop Engineering pivot)
     pm-prompts.ts       ← All three Lead PM prompts (planning, review, synthesis)
     prompts.ts          ← Worker agent prompt builder
     worker-signals.ts   ← Parses BLOCKER / MESSAGE signals from agent prose
@@ -64,7 +68,7 @@ config.yaml             ← Model routing tiers, RCO settings, dashboard port
 
 ## PM Team Mode
 
-The primary execution path for complex goals.
+The execution path for complex goals **without** a loop template. When `--loop-template` is set, missions route to ClosedLoop instead (see Loop Engineering below).
 
 ```bash
 roland team "Add input validation to the registration endpoint"
@@ -83,6 +87,41 @@ roland team "..." --state-dir /tmp  # use alternate state directory
 - `blackboard.json` — shared key/value store agents read and write
 - `messages.json` — point-to-point message queue between agents
 - `usage-history.json` — per-run token/cost estimates appended by `usage-tracker.ts` after every run
+
+---
+
+## Loop Engineering (ClosedLoop)
+
+When `--loop-template` is set, `runTeam()` routes to `loop-orchestrator.ts` → `ClosedLoop.run()` instead of the legacy PM wave engine.
+
+```bash
+roland team "ship OAuth callback with tests green" --loop-template closed-loop-harness
+roland team "add profile settings page" --loop-template feature-implementation-loop
+```
+
+**Routing** (`team-orchestrator.ts`):
+
+```typescript
+if (hasLoopTemplate(opts.loopTemplate)) {
+  return runClosedLoopMission(opts); // ClosedLoop — primary path
+}
+// else legacy PM plan → waves → synthesis
+```
+
+**ClosedLoop owns:** EvaluationGate (verify), LoopMemory, reflection, exit conditions, SpecialistSpawner, checkpoint/recovery, and PR formatting (`closed-loop-pr.json`).
+
+**PM Team (legacy, opt-in):** Pure ClosedLoop is the default for Plan/Act (`lightweight-plan-act.ts`). Legacy PM Team runs only when `loop_engine.use_pm_team: true`, template `use_pm_team: true`, or `enablePmIntegration: true`. Templates with `pm_plan/pm_act: auto` no longer invoke PM without explicit opt-in.
+
+**Model routing:** All loop components resolve models via `ModelRouter.getModel(role)` in `src/models/model-router.ts`. Switch OpenRouter ↔ Ollama by editing `config.yaml` `models` section only (see file comments). Startup prints a routing banner; dashboard Loop panel shows live role + phase routing and PM Integration status.
+
+**Entry points:** `roland team --loop-template`, MCP `roland_run_team` with `loop_template`, dashboard `POST /api/mission { loopTemplate }`.
+
+**State files** (loop missions):
+- `loop-state.json` — phase, iteration, verification, critique snapshots
+- `loops/<loop-id>/` — LoopMemory artifacts and reflections
+- `closed-loop-pr.json` — formatted PR draft on completion
+
+See `docs/guides/closed-loop-harness.md` and `src/rco/loop-orchestrator.ts`.
 
 ---
 
@@ -293,7 +332,7 @@ Two files serve the browser-based usage dashboard:
 
 **Usage tracker** (`src/rco/usage-tracker.ts`):
 
-- Called at the end of every `runTeam()` in `team-orchestrator.ts`
+- Called at the end of every `runTeam()` — legacy PM path in `team-orchestrator.ts` and loop path in `loop-orchestrator.ts`
 - Estimates tokens as `chars / 4` and cost from per-model rate table (`MODEL_PRICING`)
 - Appends one `RunUsageRecord` to `.roland/usage-history.json` (creates the file on first run)
 - Rate table lives at the top of `usage-tracker.ts` — update it if you have better pricing data
@@ -535,6 +574,7 @@ roland abort                          # stop after current wave completes
 |------|-------|
 | CLI entry point | `src/index.ts` |
 | PM team execution | `src/rco/team-orchestrator.ts` |
+| Loop orchestrator (ClosedLoop) | `src/rco/loop-orchestrator.ts` |
 | PM prompts | `src/rco/pm-prompts.ts` |
 | Worker prompts | `src/rco/prompts.ts` |
 | Model routing | `src/rco/model-routing.ts` |

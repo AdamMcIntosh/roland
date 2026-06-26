@@ -28,6 +28,9 @@ export interface LoopVerificationStrategySnapshot {
   pass: boolean;
   durationMs: number;
   failures?: string[];
+  weight?: number;
+  confidence?: number;
+  status?: 'pending' | 'running' | 'pass' | 'fail' | 'skipped';
 }
 
 export interface LoopVerificationSnapshot {
@@ -89,6 +92,56 @@ export interface LoopState {
     reason: string;
     at: number;
   };
+  /** Real-time activity for dashboard live panel during running loops. */
+  liveActivity?: LoopLiveActivity;
+  /** Pending git-commit HITL approval (when require_approval is enabled). */
+  pendingGitCommitApproval?: LoopGitCommitApprovalSnapshot;
+  /** Recent specialist spawn pulses for dashboard history. */
+  spawnActivityHistory?: LoopSpawnPulse[];
+}
+
+export interface LoopSpawnPulse {
+  role: string;
+  phase: Phase;
+  count: number;
+  label: string;
+  at: number;
+}
+
+export interface LoopGitCommitApprovalSnapshot {
+  id: string;
+  message: string;
+  statusPreview: string;
+  iteration: number;
+  requestedAt: number;
+  timeoutAt: number;
+  status: 'pending' | 'approved' | 'rejected' | 'timeout';
+}
+
+export interface LoopLiveActivity {
+  kind: 'phase' | 'verification' | 'hook' | 'spawn' | 'idle' | 'approval';
+  label: string;
+  detail?: string;
+  startedAt: number;
+  dispatchMethod?: string;
+  executionMode?: string;
+  verificationStrategies?: Array<{
+    type: string;
+    status: 'pending' | 'running' | 'pass' | 'fail' | 'skipped';
+    weight?: number;
+    confidence?: number;
+  }>;
+  activeHook?: {
+    label: string;
+    dryRun?: boolean;
+    action?: string;
+    requireApproval?: boolean;
+  };
+  progressSummary?: string;
+  /** Most recent spawn pulse (kind=spawn). */
+  spawnPulse?: LoopSpawnPulse;
+  /** Rolling spawn history for dashboard (newest last). */
+  recentSpawns?: LoopSpawnPulse[];
 }
 
 export function createInitialLoopState(
@@ -164,6 +217,11 @@ export class LoopStateStore {
         ? { ...this.state.lastExitEvaluation }
         : undefined,
       loopId: this.state.loopId,
+      liveActivity: this.state.liveActivity ? { ...this.state.liveActivity } : undefined,
+      pendingGitCommitApproval: this.state.pendingGitCommitApproval
+        ? { ...this.state.pendingGitCommitApproval }
+        : undefined,
+      spawnActivityHistory: this.state.spawnActivityHistory?.map((s) => ({ ...s })),
     };
   }
 
@@ -250,6 +308,34 @@ export class LoopStateStore {
     this.state.lastExitEvaluation = evaluation;
     this.state.updatedAt = Date.now();
     this.flush();
+  }
+
+  setLiveActivity(activity: LoopLiveActivity | undefined): void {
+    this.state.liveActivity = activity;
+    this.state.updatedAt = Date.now();
+    this.flush();
+  }
+
+  setPendingGitCommitApproval(snapshot: LoopGitCommitApprovalSnapshot | undefined): void {
+    this.state.pendingGitCommitApproval = snapshot;
+    this.state.updatedAt = Date.now();
+    this.flush();
+  }
+
+  appendSpawnPulse(pulse: LoopSpawnPulse, maxHistory = 24): void {
+    if (!this.state.spawnActivityHistory) {
+      this.state.spawnActivityHistory = [];
+    }
+    this.state.spawnActivityHistory.push(pulse);
+    if (this.state.spawnActivityHistory.length > maxHistory) {
+      this.state.spawnActivityHistory = this.state.spawnActivityHistory.slice(-maxHistory);
+    }
+    this.state.updatedAt = Date.now();
+    this.flush();
+  }
+
+  getRecentSpawns(): LoopSpawnPulse[] {
+    return this.state.spawnActivityHistory?.map((s) => ({ ...s })) ?? [];
   }
 
   private flush(): void {

@@ -2,8 +2,9 @@
  * LoopEngine E2E — team-cli / coordinator wiring (standard-code-loop).
  *
  * Exercises production paths without calling LoopEngine.run() in isolation:
- *   parseTeamArgs (--loop-template) → team-orchestrator options shape
- *   LoopEngineCoordinator lifecycle (onMissionStart → waves → synthesis)
+ * E2E: legacy LoopEngineCoordinator lifecycle (deprecated — loop missions use ClosedLoop).
+ *   parseTeamArgs (--loop-template) → team-orchestrator → runClosedLoopMission
+ *   LoopEngineCoordinator retained for backward-compat unit coverage only
  *   onLoopStateChange → RunStateWriter.updateLoopState (run-state.json dashboard fields)
  *   runFullLoop() with team state sync — 2+ Plan→Act→Verify→Critique→Retry cycles
  *

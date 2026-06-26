@@ -58,7 +58,7 @@ import { renderTimeline, renderUsage } from '../pm/render.js';
 import type { PMEventAction } from '../pm/event-log.js';
 import { QualityTracker, initializeQualityTracker } from '../orchestrator/quality-tracker.js';
 import { selectRelevantFiles, bundleFileContents, formatBundleAsMarkdown, DEFAULT_CONTEXT_GATHERING_CONFIG } from '../utils/file-gatherer.js';
-import { DEFAULT_PM_MODEL } from '../rco/cursor-models.js';
+import { modelPolicyFromRouter } from '../pm/model-policy.js';
 import { resolveAgentsDir as resolveAgentsDirShared } from '../rco/loadConfig.js';
 import { classifyExecutionPath } from '../rco/execution-path.js';
 import type { FileBundle } from '../utils/file-gatherer.js';
@@ -295,14 +295,15 @@ export class McpServer {
     // Routing is Cursor-native (Phase 3): an optional `pm:` config section can
     // override the three Cursor models and per-engineer lanes.
     const pmCfg = (config as { pm?: { lead_model?: string; fast_model?: string; standard_model?: string; lane_overrides?: Record<string, 'pm' | 'reasoning' | 'coding' | 'light'> } }).pm;
+    const loopPolicy = modelPolicyFromRouter();
     this.leadPm = new LeadPM(this.coordination, {
       policy: pmCfg
         ? {
-            pm: pmCfg.lead_model ?? DEFAULT_PM_MODEL,
-            fast: pmCfg.fast_model ?? 'composer-2.5',
-            standard: pmCfg.standard_model ?? 'composer-2.5',
+            pm: pmCfg.lead_model ?? loopPolicy.pm,
+            fast: pmCfg.fast_model ?? loopPolicy.fast,
+            standard: pmCfg.standard_model ?? loopPolicy.standard,
           }
-        : undefined,
+        : loopPolicy,
       laneOverrides: pmCfg?.lane_overrides,
     });
 
@@ -3468,7 +3469,7 @@ What would you like to work on?`;
     // ── roland_run_team ───────────────────────────────────────────────────────
     this.registerTool(
       'roland_run_team',
-      'Launch a background PM team run for goals on the **Team** execution path. Use when work needs multi-file changes, Sparrow + Vanguard test orchestration, Command Blackboard tracking, wave synthesis, or > 30–45 min effort. Also use when the operator forces team mode via --force-team, "force team", "full team", "run as team", or "spawn team" (no confirmation needed — launch immediately). Do NOT use for single-file edits, Q&A, or quick fixes unless force-team was explicitly requested. Trade-off: team runs add PM overhead but provide parallel callsigns, blocker surfacing, and Mission Complete synthesis. Returns immediately; track with pm_standup() or get_team_context().',
+      'Launch a background PM team run for goals on the **Team** execution path. Use when work needs multi-file changes, Sparrow + Vanguard test orchestration, Command Blackboard tracking, wave synthesis, or > 30–45 min effort. Pass `loop_template` (e.g. closed-loop-harness, feature-implementation-loop) to route through **ClosedLoop** instead of legacy PM waves. Also use when the operator forces team mode via --force-team, "force team", "full team", "run as team", or "spawn team" (no confirmation needed — launch immediately). Do NOT use for single-file edits, Q&A, or quick fixes unless force-team was explicitly requested. Trade-off: team runs add PM overhead but provide parallel callsigns, blocker surfacing, and Mission Complete synthesis. Returns immediately; track with pm_standup() or get_team_context().',
       async (args: Record<string, unknown>) => {
         const goal = args.goal as string;
         if (!goal || typeof goal !== 'string' || !goal.trim()) {
@@ -3519,7 +3520,7 @@ What would you like to work on?`;
           },
           loop_template: {
             type: 'string',
-            description: 'Optional loop template id (e.g. standard-code-loop, research-loop, minimal-3-phase). Attaches Loop Engineering phase tracking.',
+            description: 'Optional loop template id (e.g. closed-loop-harness, feature-implementation-loop). Routes through ClosedLoop harness — not legacy PM waves.',
           },
         },
         required: ['goal'],

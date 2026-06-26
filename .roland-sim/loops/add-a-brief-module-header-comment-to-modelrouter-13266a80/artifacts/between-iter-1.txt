@@ -1,0 +1,20 @@
+# Between-iterations (iteration 1)
+Command: 
+Exit: 0
+Duration: 168ms
+
+--- stdout ---
+git-commit hook (dry-run — no commit created)
+
+Proposed message:
+feat(loop): iteration 1 — Add a brief module header comment to ModelRouter (simulation only — no repo edits)
+
+git status --short:
+M docs/guides/closed-loop-harness.md
+ M package.json
+ M src/index.ts
+ M src/rco/git-commit-approval-cli.ts
+?? .roland-sim/
+?? scripts/loop-e2e-sim.ts
+
+--- stderr ---

@@ -1,0 +1,41 @@
+name: mcp-extension-loop
+description: >
+  MCP / server extension loop — plan API surface, implement handlers, verify with unit and
+  integration smoke gates. Configure smoke/integration commands in loop_engine.verification.strategies
+  for your project's test harness.
+kickoff: >
+  Start the MCP extension loop. Goal: new tools or handlers are implemented, typed, tested, and
+  integration-smoke verified. Configure verification commands in config.yaml for your stack.
+phases:
+  - phase: plan
+    label: Plan extension surface
+    agent: pm
+  - phase: act
+    label: Implement handlers
+    agent: coding
+  - phase: verify
+    label: Unit and smoke gates
+    agent: verifier
+    verification:
+      - unit
+      - smoke
+      - integration
+  - phase: critique
+    label: Critique API design
+    agent: critic
+  - phase: retry
+    label: Retry fixes
+    optional: true
+  - phase: observe
+    label: Observe tool registry
+    agent: researcher
+maxIterations: 6
+maxRetries: 3
+escalationThreshold: 4
+testModeMaxRetries: 6
+testModeEscalationThreshold: 8
+min_confidence: 0.85
+reflection: true
+exit_conditions:
+  - type: all_gates_pass
+    description: Unit, smoke, and integration gates pass

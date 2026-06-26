@@ -9,7 +9,7 @@
 | **Git awareness** | 4 MCP tools (`git_status`, `git_diff`, `git_log`, `git_commit`) | Native | Tie |
 | **Streaming output** | Real-time via `spawn` piping | Native | Tie |
 | **Session memory** | `SessionContextManager` — structured decisions, patterns, files | Conversation history | Tie — different approach, same result |
-| **Persistent project context** | `roland-context.json` + `MIGRATION.md` — auto-loaded on every session | `CLAUDE.md` — auto-loaded on every session | Tie |
+| **Persistent project context** | `roland-context.json` + `MIGRATION.md` — auto-loaded on every session | Claude Code context file — auto-loaded on every session | Tie |
 | **Screenshot/vision** | `analyze_screenshot` via OpenRouter vision models | Native | Tie |
 | **Permission gating** | Docker container isolation + `.roland-permissions.json` policy | Per-tool approval dialog | Tie — Docker is stronger than prompt-level |
 | **Inline diff UI** | VS Code extension (`roland-diff`) with native `vscode.diff` — Apply/Discard buttons | Native accept/reject in editor | Tie |

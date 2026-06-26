@@ -10,6 +10,7 @@ import type { Blackboard } from '../rco/blackboard.js';
 import {
   TestExecutor,
   resolveStrategies,
+  coerceVerificationStrategies,
   type CommandRunner,
 } from './verification/index.js';
 import type {
@@ -19,6 +20,10 @@ import type {
 } from './verification/verify-result.js';
 import { loadLoopEngineConfig } from './loop-config.js';
 import type { VerificationStrategyConfig } from './verification/verification-strategies.js';
+import {
+  getStrategyWeight,
+  getStrategySuccessThreshold,
+} from './verification/verification-strategies.js';
 
 export type GateVerifierType =
   | VerificationStrategyType
@@ -75,6 +80,8 @@ export interface EvaluationGateOptions {
   iteration?: number;
   hadWaveBlockers?: boolean;
   templateFilter?: VerificationStrategyType[];
+  /** Pre-resolved strategies — when set, overrides config + templateFilter merge. */
+  strategies?: VerificationStrategyConfig[];
   customCriteria?: CustomCriterion[];
   /** When true, manual_review gate must explicitly approve. */
   requireManualReview?: boolean;
@@ -85,9 +92,15 @@ export interface EvaluationGateOptions {
   blackboard?: Blackboard;
   /** Exit conditions evaluated after gate run (informational in gate summary). */
   exitConditions?: import('./loop-phases.js').ExitConditionConfig[];
+  /** Live dashboard callback during strategy execution. */
+  onStrategyProgress?: (
+    type: VerificationStrategyType,
+    status: 'running' | 'pass' | 'fail' | 'skipped',
+    meta?: { weight?: number; confidence?: number },
+  ) => void;
 }
 
-const DEFAULT_MIN_CONFIDENCE = 0.75;
+const DEFAULT_MIN_CONFIDENCE = 0.85;
 
 function logGate(msg: string, detail?: Record<string, unknown>): void {
   const line = `[Loop][eval-gate] ${msg}`;
@@ -113,16 +126,45 @@ function computeOverallConfidence(gates: GateResult[]): number {
   return Math.round((weighted / totalWeight) * 1000) / 1000;
 }
 
-function strategyToGate(strategy: StrategyResult, weight = 1): GateResult {
-  const required = !strategy.skipped;
+function strategyToGate(
+  strategy: StrategyResult,
+  config?: VerificationStrategyConfig,
+): GateResult {
+  const optional = Boolean(config?.optional);
+  const required = !strategy.skipped && !optional;
+  const weight = getStrategyWeight(strategy.type, config?.weight);
+  const passThreshold = getStrategySuccessThreshold(
+    strategy.type,
+    optional,
+    config?.successThreshold,
+  );
+  const minStrategyConf = config?.minConfidence;
+
+  let confidence: number;
+  if (strategy.skipped) {
+    confidence = 1;
+  } else if (strategy.pass) {
+    confidence = passThreshold;
+    if (minStrategyConf !== undefined && confidence < minStrategyConf) {
+      confidence = minStrategyConf;
+    }
+  } else {
+    confidence = optional ? Math.min(passThreshold * 0.5, 0.5) : 0;
+  }
+
+  const strategyPass = strategy.pass || Boolean(strategy.skipped);
+  const gatePass =
+    strategyPass &&
+    (minStrategyConf === undefined || !strategy.pass || confidence >= minStrategyConf);
+
   return {
     type: strategy.type,
     name: strategy.type,
-    pass: strategy.pass || Boolean(strategy.skipped),
+    pass: gatePass,
     required,
     weight,
     durationMs: strategy.durationMs,
-    confidence: gateConfidence(strategy.pass, required, Boolean(strategy.skipped)),
+    confidence,
     failures: strategy.failures.map((f) => f.message),
     skipped: strategy.skipped,
     skipReason: strategy.skipReason,
@@ -144,13 +186,26 @@ export class EvaluationGate {
     const startedAt = Date.now();
     const gates: GateResult[] = [];
     const cfg = loadLoopEngineConfig();
-    const strategies = resolveStrategies(cfg.verification?.strategies, this.opts.templateFilter);
+    const strategies =
+      this.opts.strategies ??
+      resolveStrategies(
+        coerceVerificationStrategies(cfg.verification?.strategies),
+        this.opts.templateFilter,
+      );
 
     logGate('starting evaluation', {
-      strategies: strategies.map((s) => s.type),
+      strategies: strategies.map((s) => ({
+        type: s.type,
+        weight: s.weight ?? getStrategyWeight(s.type),
+        successThreshold: s.successThreshold,
+        optional: s.optional,
+      })),
+      minConfidence: this.opts.minConfidence ?? DEFAULT_MIN_CONFIDENCE,
       customCriteria: this.opts.customCriteria?.length ?? 0,
       iteration: this.opts.iteration,
     });
+
+    const strategyConfigByType = new Map(strategies.map((s) => [s.type, s]));
 
     let strategyResults: StrategyResult[] = [];
     try {
@@ -159,11 +214,17 @@ export class EvaluationGate {
         strategies,
         hadWaveBlockers: this.opts.hadWaveBlockers,
         runner: this.opts.runner,
+        onStrategyProgress: (type, status) => {
+          const cfg = strategyConfigByType.get(type);
+          this.opts.onStrategyProgress?.(type, status, {
+            weight: cfg?.weight ?? getStrategyWeight(type),
+          });
+        },
       });
       const verification = await executor.runAll();
       strategyResults = verification.strategies;
       for (const s of strategyResults) {
-        gates.push(strategyToGate(s));
+        gates.push(strategyToGate(s, strategyConfigByType.get(s.type)));
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

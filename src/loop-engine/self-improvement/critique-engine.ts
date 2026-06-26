@@ -1,12 +1,11 @@
 /**
  * CritiqueEngine — rule-based structured critique from verification + phase history.
  *
- * Selects critique model lane (PM default vs Composer) for future LLM integration.
+ * Selects critique lane (critic vs coding) and resolves model via ModelRouter.
  * Does not invoke LLMs directly — deterministic analysis for loop reliability.
  */
 
-import { DEFAULT_ENGINEER_MODEL, DEFAULT_PM_MODEL } from '../../rco/cursor-models.js';
-import { toCursorModelId } from '../../rco/model-routing.js';
+import { ModelRouter } from '../../models/model-router.js';
 import { generateImprovementProposals } from './improvement-proposals.js';
 import { resolveRetryStrategy } from './retry-strategies.js';
 import type {
@@ -22,15 +21,18 @@ import { loopDegradationPolicy } from '../loop-resilience.js';
 export interface CritiqueEngineOptions {
   /** Override max retries (template maxRetries takes precedence at handler level). */
   maxRetries?: number;
+  modelRouter?: ModelRouter;
 }
 
 const CODE_SPECIFIC_TYPES = new Set(['unit', 'lint', 'typecheck', 'integration', 'e2e', 'smoke']);
 
 export class CritiqueEngine {
   private readonly opts: CritiqueEngineOptions;
+  private readonly router: ModelRouter;
 
   constructor(opts: CritiqueEngineOptions = {}) {
     this.opts = opts;
+    this.router = opts.modelRouter ?? ModelRouter.fromConfig();
   }
 
   critique(input: CritiqueInput): CritiqueOutput {
@@ -44,17 +46,14 @@ export class CritiqueEngine {
     const suggestions = collectSuggestions(enriched);
     const proposals = generateImprovementProposals(enriched);
     const retryResult = resolveRetryStrategy(enriched);
-    const model = loopDegradationPolicy.selectModel(selectCritiqueModel(enriched, issues));
+    const preferredLane = selectCritiqueLane(enriched, issues);
+    const lane = loopDegradationPolicy.selectLane(preferredLane);
+    const dispatch = this.router.resolveDispatch(lane, { phase: 'critique', log: true });
 
-    // Log model routing for observability (matches team-orchestrator banner pattern).
-    const routedModelId = toCursorModelId(
-      model === 'grok' ? DEFAULT_PM_MODEL : DEFAULT_ENGINEER_MODEL,
-      model === 'grok' ? 'critic' : 'executor',
-    );
     console.error(
-      `[Loop][critique] model=${model} routed=${routedModelId} decision=${retryResult.decision} ` +
-        `retry=${input.retryCount}/${maxRetries} escalationThreshold=${escalationThreshold} ` +
-        `reason="${retryResult.reason}"`,
+      `[Loop][critique] role=${lane} dispatch=${dispatch.method} model=${dispatch.displayLabel} ` +
+        `fallback=${dispatch.isFallback} decision=${retryResult.decision} retry=${input.retryCount}/${maxRetries} ` +
+        `escalationThreshold=${escalationThreshold} reason="${retryResult.reason}"`,
     );
 
     const summary = buildSummary(enriched, retryResult.decision, retryResult.reason);
@@ -65,7 +64,7 @@ export class CritiqueEngine {
       suggestions,
       proposals,
       retryDecision: retryResult.decision,
-      model,
+      model: lane,
       summary,
       at: Date.now(),
       iteration: input.iteration,
@@ -144,16 +143,16 @@ function collectSuggestions(input: CritiqueInput): string[] {
 }
 
 /**
- * PM default model for high-level / multi-failure critique; Composer for localized code issues.
+ * Critic role for high-level / multi-failure critique; coding role for localized code issues.
  */
-function selectCritiqueModel(input: CritiqueInput, issues: string[]): CritiqueModel {
-  if (input.hadBlockers) return 'grok';
+function selectCritiqueLane(input: CritiqueInput, issues: string[]): CritiqueModel {
+  if (input.hadBlockers) return 'critic';
   const failed = (input.verification?.strategies ?? []).filter((s) => !s.pass);
-  if (failed.length === 0) return 'grok';
-  if (failed.length > 2) return 'grok';
+  if (failed.length === 0) return 'critic';
+  if (failed.length > 2) return 'critic';
   const allCodeSpecific = failed.every((s) => CODE_SPECIFIC_TYPES.has(s.type));
-  if (allCodeSpecific && issues.length <= 3) return 'composer';
-  return 'grok';
+  if (allCodeSpecific && issues.length <= 3) return 'coding';
+  return 'critic';
 }
 
 function buildSummary(

@@ -34,6 +34,8 @@ export interface TaskUsageRecord {
   taskTitle:                string;
   agent:                    string;
   model:                    string;
+  /** Dispatch backend used for this task (Loop Engineering observability). */
+  dispatchMethod?:          'cursor_sdk' | 'direct';
   inputChars:               number;
   outputChars:              number;
   estimatedInputTokens:     number;
@@ -81,11 +83,13 @@ export function buildTaskUsage(
   inputChars:  number,
   outputChars: number,
   durationMs:  number,
+  dispatchMethod?: 'cursor_sdk' | 'direct',
 ): TaskUsageRecord {
   const estimatedInputTokens  = Math.round(inputChars  / CHARS_PER_TOKEN);
   const estimatedOutputTokens = Math.round(outputChars / CHARS_PER_TOKEN);
   return {
     taskId, taskTitle, agent, model,
+    dispatchMethod,
     inputChars, outputChars,
     estimatedInputTokens, estimatedOutputTokens,
     durationMs,

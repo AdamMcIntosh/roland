@@ -56,12 +56,19 @@ Product vision: [docs/vision.md](../vision.md)
                             ▼
               ┌─────────────────────────────┐
               │  team-orchestrator.ts       │
-              │  Plan → Waves → Review →    │
-              │  Synthesis                  │
+              │  hasLoopTemplate?           │
               └─────────────┬───────────────┘
                             │
-         ┌──────────────────┼──────────────────┐
-         ▼                  ▼                  ▼
+              ┌─────────────┴───────────────┐
+              ▼                             ▼
+┌─────────────────────────┐   ┌─────────────────────────────┐
+│ loop-orchestrator.ts    │   │ Legacy PM path              │
+│ ClosedLoop.run()        │   │ Plan → Waves → Synthesis    │
+│ (Loop Engineering)      │   │ (no --loop-template)        │
+└─────────────┬───────────┘   └─────────────────────────────┘
+              │
+         ┌────┼──────────────────┐
+         ▼    ▼                  ▼
 ┌─────────────────┐ ┌───────────────┐ ┌─────────────────┐
 │ ClosedLoop      │ │ Worker agents │ │ State layer     │
 │ EvaluationGate  │ │ Sparrow ·     │ │ blackboard ·    │
@@ -106,6 +113,7 @@ Cursor rules (`.cursor/rules/roland.mdc`, `roland-autopilot.mdc`) require visibl
 | Execution-path triage | `src/rco/execution-path.ts` |
 | SDK agent loader | `src/rco/unsc-agents.ts` |
 | PM team loop | `src/rco/team-orchestrator.ts` |
+| Loop orchestrator (ClosedLoop routing) | `src/rco/loop-orchestrator.ts` |
 | Board status report | `src/rco/board-report.ts` |
 | Reference orchestration | `scripts/roland-orchestrate.mjs` |
 | Global CLI shim | `bin/roland.js` |
@@ -290,4 +298,4 @@ Every turn — in Cursor or CLI synthesis:
 - [PR title convention](../guides/pr-title-convention.md) — clean PR formatting
 - [Mini PC deployment](../guides/mini-pc-deployment.md) — Tailscale, mobile, systemd
 - [PM workflow](../guides/pm-workflow.md) — manual PM mode in Cursor
-- [CLAUDE.md](../../CLAUDE.md) — developer conventions and smoke tests
+- [DEVELOPER.md](../../DEVELOPER.md) — developer conventions and smoke tests

@@ -218,9 +218,22 @@ Same as Linux with these extras:
 - `ROLAND_SIMPLE_TUI=1` helps when SSH clients mangle Unicode.
 - Antivirus may lock `.roland/*.json` during writes — exclude `.roland/` from real-time scan if you see corrupt-state warnings.
 
-### sqlite3 / @cursor/sdk native binding
+### @cursor/sdk runtime (team / orchestrate)
 
-`roland team`, `roland orchestrate`, and any `@cursor/sdk` path require **sqlite3** (`node_sqlite3.node`). If you see:
+`roland team` and `roland orchestrate` require `@cursor/sdk`. **Current SDK releases (≥ 1.0.21)** ship platform packages (`@cursor/sdk-win32-x64`, etc.) and bundled SQLite — **no npm `sqlite3` compile step** on Windows.
+
+Verify:
+
+```powershell
+node -e "import('@cursor/sdk').then(() => console.log('SDK OK'))"
+roland doctor
+```
+
+You should see `@cursor/sdk platform package (@cursor/sdk-win32-x64)` pass on Windows x64.
+
+### Legacy sqlite3 native binding (older @cursor/sdk)
+
+If `npm ls sqlite3` shows a dependency and `roland doctor` mentions **sqlite3 binding**, you are on an older SDK tree that used npm `sqlite3` (`node_sqlite3.node`). If you see:
 
 ```text
 Error: Could not locate the bindings file. Tried: ... node_sqlite3.node
@@ -250,7 +263,7 @@ roland doctor
 | Stale tasks in prompts | Prior mission not cleaned | `roland board-cleanup` (also auto-runs at team start) |
 | `dist/ not found` | Skipped build | `npm run build` |
 | Stale `dist/agents/` | YAML edited without rebuild | `npm run build` after agent changes |
-| sqlite3 bindings missing | Native addon not built | VS C++ workload + `npm rebuild sqlite3` |
+| sqlite3 bindings missing (legacy SDK) | Old @cursor/sdk used npm sqlite3 | Upgrade SDK / `npm ci`; or VS C++ + `npm rebuild sqlite3` |
 | High RAM use | Too many concurrent agents | `ROLAND_MAX_CONCURRENT=1` |
 | Garbled TUI over SSH | Unicode / narrow terminal | `ROLAND_SIMPLE_TUI=1` or `--simple-tui` |
 

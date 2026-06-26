@@ -66,6 +66,30 @@ const DiffStreamConfigSchema = z.object({
   port: z.number().min(1024).max(65535).default(8089),
 });
 
+const RoleModelConfigSchema = z.object({
+  provider: z.string().default('openrouter'),
+  model: z.string().min(1),
+  fallback: z
+    .object({
+      provider: z.string().default('openrouter'),
+      model: z.string().min(1),
+    })
+    .optional(),
+});
+
+const ModelsConfigSchema = z.object({
+  pm: RoleModelConfigSchema.optional(),
+  coding: RoleModelConfigSchema.optional(),
+  critic: RoleModelConfigSchema.optional(),
+  verifier: RoleModelConfigSchema.optional(),
+  researcher: RoleModelConfigSchema.optional(),
+  planner: RoleModelConfigSchema.optional(),
+  executor: RoleModelConfigSchema.optional(),
+  reviewer: RoleModelConfigSchema.optional(),
+  reasoning: RoleModelConfigSchema.optional(),
+  light: RoleModelConfigSchema.optional(),
+});
+
 // PM team (Phase 3) — Cursor-native model routing. Independent of OpenRouter.
 const PmConfigSchema = z.object({
   lead_model: z.string().default('gpt-5.4-nano'),
@@ -83,6 +107,7 @@ const AppConfigSchema = z.object({
   ollama: OllamaConfigSchema.optional(),
   classifier: ClassifierConfigSchema.optional(),
   diff_stream: DiffStreamConfigSchema.optional(),
+  models: ModelsConfigSchema.optional(),
   pm: PmConfigSchema.optional(),
 });
 

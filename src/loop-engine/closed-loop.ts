@@ -20,11 +20,13 @@ import {
   type LoopHooks,
   type LoopRunResult,
 } from './loop-engine.js';
-import { LoopTemplates } from './loop-templates.js';
+import { LoopTemplates, summarizeTemplateSpawns } from './loop-templates.js';
 import {
-  createDefaultHandlers,
+  createDefaultHandlersWithoutPm,
   VerifyPhaseHandler,
   ReflectionPhaseHandler,
+  PlanPhaseHandler,
+  ActPhaseHandler,
   type PhaseResult,
 } from './phase-handlers/index.js';
 import type { LoopState, LoopRunStatus } from './loop-state.js';
@@ -32,6 +34,21 @@ import type { CustomCriterion } from './evaluation-gate.js';
 import { SpecialistSpawner } from './specialist-spawner.js';
 import type { CommandRunner } from './verification/index.js';
 import { LoopMemory } from './loop-memory.js';
+import { LoopPmBridge } from './pm-integration.js';
+import { ModelRouter, initModelRouter, ModelRouterError } from '../models/model-router.js';
+import { loadLoopEngineConfig, resolveBetweenIterations } from './loop-config.js';
+import {
+  summarizeVerificationConfig,
+  summarizeBetweenIterationsConfig,
+  resolveBetweenIterationsHook,
+  resolveMinConfidence,
+} from './loop-template-resolution.js';
+import {
+  isLoopPmTeamEnabled,
+  resolvePmIntegrationStatus,
+  type PmIntegrationStatus,
+} from './loop-pm-policy.js';
+import type { TeamOrchestratorOptions } from '../rco/team-orchestrator.js';
 
 export const CLOSED_LOOP_PR_FILE = 'closed-loop-pr.json';
 
@@ -58,6 +75,10 @@ export interface ClosedLoopOptions {
   manualReviewApproved?: boolean;
   minConfidence?: number;
   hooks?: LoopHooks;
+  /** Explicit opt-in for legacy PM Team (overrides config/template). When false, pure ClosedLoop only. */
+  enablePmIntegration?: boolean;
+  /** Forwarded to embedded PM Team runs (HITL, wave callbacks). */
+  teamOpts?: Partial<TeamOrchestratorOptions>;
 }
 
 export interface ClosedLoopResult extends LoopRunResult {
@@ -65,6 +86,7 @@ export interface ClosedLoopResult extends LoopRunResult {
   spawnCount: number;
   loopId: string;
   loopDir: string;
+  pmIntegration: PmIntegrationStatus;
 }
 
 /**
@@ -73,15 +95,55 @@ export interface ClosedLoopResult extends LoopRunResult {
  * Lifecycle: PLAN → ACT → VERIFY → CRITIQUE → RETRY → ESCALATE (optional) → OBSERVE → REFLECT → exit check.
  */
 export class ClosedLoop {
-  private readonly engine: LoopEngine;
+  private readonly engine!: LoopEngine;
   private readonly spawner: SpecialistSpawner;
   private readonly opts: ClosedLoopOptions;
   private readonly template: LoopTemplate;
   private readonly memory: LoopMemory;
+  private readonly modelRouter: ModelRouter;
+  private readonly pmIntegration: PmIntegrationStatus;
 
   constructor(opts: ClosedLoopOptions) {
     this.opts = opts;
+    this.modelRouter = initModelRouter();
+    const validation = ModelRouter.validateOnStartup(this.modelRouter);
+    if (!validation.ok) {
+      throw new ModelRouterError(
+        `ClosedLoop cannot start — missing model roles: ${validation.missing.join(', ')}. ` +
+          'Configure models.pm, models.coding, models.critic, models.verifier in config.yaml.',
+        validation.missing[0],
+      );
+    }
+    for (const w of validation.warnings.slice(0, 3)) {
+      console.error(`[ModelRouter] Note: ${w}`);
+    }
+    for (const w of validation.dispatchWarnings.slice(0, 5)) {
+      console.error(`[ModelRouter] Dispatch: ${w}`);
+    }
     this.template = ClosedLoop.resolveTemplate(opts.template);
+    this.pmIntegration = resolvePmIntegrationStatus(this.template, opts);
+    const loopCfg = loadLoopEngineConfig();
+    const spawnSummary = summarizeTemplateSpawns(this.template);
+    const verificationSummary = summarizeVerificationConfig(this.template);
+    const betweenIterSummary = summarizeBetweenIterationsConfig(this.template);
+    const betweenHook = resolveBetweenIterationsHook(this.template);
+    const hitlGitCommitEnabled = Boolean(
+      betweenHook?.gitCommit?.requireApproval && !betweenHook.gitCommit.dryRun,
+    );
+    const minConfidence = resolveMinConfidence(this.template, opts.minConfidence);
+    this.modelRouter.logLoopRunConfigSummary({
+      templateId: this.template.name,
+      canonicalTemplateId: new LoopTemplates().resolveName(this.template.name),
+      pmEnabled: this.pmIntegration.enabled,
+      pmReason: this.pmIntegration.reason,
+      usePmTeam: loopCfg.usePmTeam,
+      defaultDispatch: loopCfg.defaultDispatch ?? 'cursor_sdk',
+      spawnSummary,
+      verificationSummary,
+      betweenIterSummary,
+      minConfidence,
+      hitlGitCommitEnabled,
+    });
     this.memory = new LoopMemory({
       stateDir: opts.stateDir,
       loopId: opts.loopId,
@@ -92,15 +154,42 @@ export class ClosedLoop {
       blackboard: opts.blackboard,
       commandBoard: opts.commandBoard,
       goal: opts.goal,
+      modelRouter: this.modelRouter,
+      onSpawnPulse: (pulse) => {
+        this.engine?.recordSpawnPulse(pulse);
+      },
     });
 
-    const minConfidence =
-      opts.minConfidence ?? this.template.minConfidence ?? undefined;
+    const pmEnabled = isLoopPmTeamEnabled(this.template, opts);
+    const lightweightCtx = {
+      stateDir: opts.stateDir,
+      goal: opts.goal,
+      template: this.template,
+      blackboard: opts.blackboard,
+      commandBoard: opts.commandBoard,
+      modelRouter: this.modelRouter,
+    };
 
-    const handlers = createDefaultHandlers();
+    const pmBridge = pmEnabled
+      ? new LoopPmBridge({
+          stateDir: opts.stateDir,
+          goal: opts.goal,
+          template: this.template,
+          blackboard: opts.blackboard,
+          commandBoard: opts.commandBoard,
+          isTestMode: opts.isTestMode,
+          teamOpts: opts.teamOpts,
+          modelRouter: this.modelRouter,
+        })
+      : undefined;
+
+    const handlers = createDefaultHandlersWithoutPm();
+    handlers.set(P.Plan, new PlanPhaseHandler({ pmBridge, lightweight: lightweightCtx }));
+    handlers.set(P.Act, new ActPhaseHandler({ pmBridge, lightweight: lightweightCtx }));
     handlers.set(
       P.Verify,
       new VerifyPhaseHandler({
+        template: this.template,
         cwd: opts.cwd,
         runner: opts.runner,
         customCriteria: opts.customCriteria,
@@ -130,18 +219,33 @@ export class ClosedLoop {
       loopMemory: this.memory,
       runner: opts.runner,
       cwd: opts.cwd,
+      liveContext: {
+        dispatchMethod: loopCfg.defaultDispatch ?? 'cursor_sdk',
+        executionMode: pmEnabled ? 'PM-Enhanced' : 'Pure ClosedLoop',
+      },
     });
 
     console.error(
       `[Loop][closed-loop] harness ready template="${this.template.name}" loopId=${this.memory.loopId} ` +
         `phases=${this.template.phases.map((p) => p.phase).join('→')} ` +
-        `exitRules=${this.template.exitConditions?.length ?? 1} betweenIter=${Boolean(this.template.betweenIterations)}`,
+        `exitRules=${this.template.exitConditions?.length ?? 1} betweenIter=${Boolean(resolveBetweenIterations(this.template))} ` +
+        `pmIntegration=${pmEnabled ? 'legacy-enabled' : 'pure-closed-loop'}` +
+        (spawnSummary ? ` customSpawns="${spawnSummary}"` : '') +
+        (verificationSummary ? ` verification="${verificationSummary}"` : '') +
+        (betweenIterSummary ? ` betweenIter="${betweenIterSummary}"` : ''),
     );
+  }
+
+  getPmIntegration(): PmIntegrationStatus {
+    return this.pmIntegration;
   }
 
   /** Run the full closed loop until complete, escalate, fail, timeout, or exit conditions met. */
   async run(context: { hadBlockers?: boolean; waveNumber?: number } = {}): Promise<ClosedLoopResult> {
-    this.spawner.spawnForPhase(P.Plan, 1, this.findPhaseConfig(P.Plan));
+    this.spawner.spawnForPhase(P.Plan, 1, this.findPhaseConfig(P.Plan), {
+      retryCount: 0,
+      goal: this.opts.goal,
+    });
 
     const result = await this.engine.runFullLoop(context);
     const formattedPr = this.persistFormattedPr(result.state, result.status);
@@ -160,6 +264,7 @@ export class ClosedLoop {
       spawnCount: this.spawner.getHistory().length,
       loopId: this.memory.loopId,
       loopDir: this.memory.loopDir,
+      pmIntegration: this.pmIntegration,
     };
   }
 
@@ -192,6 +297,7 @@ export class ClosedLoop {
       agent: 'closed-loop',
       testingNotes: buildTestingNotes(s, st),
       impactNote: buildImpactNote(s, st),
+      modelRoutingNotes: this.modelRouter.formatRoutingSummary(),
     });
   }
 
@@ -246,7 +352,11 @@ export class ClosedLoop {
   }
 
   private onPhaseStart(phase: Phase, iteration: number): void {
-    this.spawner.spawnForPhase(phase, iteration, this.findPhaseConfig(phase));
+    const state = this.engine.getState();
+    this.spawner.spawnForPhase(phase, iteration, this.findPhaseConfig(phase), {
+      retryCount: state.retryCount,
+      goal: this.opts.goal,
+    });
   }
 
   private onPhaseComplete(phase: Phase, result: PhaseResult, iteration: number): void {
@@ -261,7 +371,7 @@ export class ClosedLoop {
   private static resolveTemplate(template?: string | LoopTemplate): LoopTemplate {
     if (template && typeof template !== 'string') return template;
     const loader = new LoopTemplates();
-    const name = template ?? loader.getDefault()?.name ?? 'closed-loop-harness';
+    const name = template ?? loader.getDefault()?.name ?? 'standard-code-loop';
     const resolved = loader.get(name);
     if (!resolved) {
       throw new Error(`ClosedLoop: unknown loop template "${name}"`);
@@ -329,23 +439,17 @@ export function createClosedLoop(opts: ClosedLoopOptions): ClosedLoop {
 }
 
 /**
- * ## Loop Integration Complete
+ * ## Final Decoupling + Model Router Integration Complete
  *
- * Usage:
- * ```typescript
- * import { ClosedLoop } from './loop-engine/index.js';
+ * Default: pure ClosedLoop Plan/Act via lightweight-plan-act.ts.
+ * Legacy PM Team: opt-in via loop_engine.use_pm_team, template use_pm_team, or enablePmIntegration.
  *
- * const loop = new ClosedLoop({
- *   stateDir: '.roland',
- *   goal: 'Ship feature X with tests green',
- *   template: 'feature-implementation-loop',
- *   blackboard,
- *   runId: 'run-123',
- * });
- * const result = await loop.run();
- * console.log(result.loopId, result.state.lastExitEvaluation);
+ * ```yaml
+ * loop_engine:
+ *   use_pm_team: false   # default — pure ClosedLoop
+ * models:
+ *   pm: { provider: openrouter, model: grok-4.3 }
+ *   coding: { provider: ollama, model: qwen3.5-coder:14b }
  * ```
- *
- * CLI: `roland team "goal" --loop-template closed-loop-harness`
  */
 export {};
