@@ -632,6 +632,23 @@ async function main(): Promise<void> {
         console.error(`  Paused:        ${hitlState.paused ? y('yes ⏸') : dim('no')}`);
         console.error(`  Abort pending: ${hitlState.abortPending ? y('yes ⚠️') : dim('no')}`);
         console.error(`  Queue length:  ${queueLen > 0 ? y(String(queueLen)) : dim('0')}`);
+        {
+          const { readLoopState } = await import('./loop-engine/loop-state.js');
+          const loopState = readLoopState(stateDir);
+          if (loopState) {
+            const spawns = loopState.spawnActivityHistory?.length ?? 0;
+            const phase = loopState.currentPhase ?? '—';
+            const tpl = loopState.templateId ?? '—';
+            console.error(`  Loop:          ${dim(`${tpl} · phase=${phase} · iter=${loopState.iteration}`)}`);
+            if (spawns > 0) {
+              console.error(`  Spawn pulses:  ${String(spawns)} recorded`);
+            }
+            const la = loopState.liveActivity;
+            if (la?.kind === 'approval' || la?.activeHook?.requireApproval) {
+              console.error(`  Loop activity: ${y(`${la.label}${la.detail ? ` — ${la.detail}` : ''}`)}`);
+            }
+          }
+        }
         console.error('');
         if (active && !hitlState.paused) {
           console.error(`  ${cy('roland pause')}             Pause before next wave`);

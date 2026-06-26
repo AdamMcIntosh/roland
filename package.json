@@ -28,6 +28,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "loop:ready-check": "npx tsx scripts/loop-ready-check.ts",
+    "loop:e2e-sim": "npx tsx scripts/loop-e2e-sim.ts",
     "test:rco": "vitest run tests/rco",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "vitest run tests/e2e",

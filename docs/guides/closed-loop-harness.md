@@ -463,6 +463,54 @@ console.log(result.loopId, result.state.status, result.formattedPr?.title);
 
 Test overrides: set `ROLAND_LOOP_TEST_MODE=1` or pass `isTestMode: true` for relaxed retry/escalation limits.
 
+### End-to-end simulation (safe local dry-run)
+
+Before a production mission, run the bundled simulator — it exercises Pure ClosedLoop, weighted verification, git-commit dry-run, specialist spawn pulses, dashboard `/api/loop-health`, and one HITL approve-commit cycle **without** mutating the repo:
+
+```bash
+npm run build
+npm run loop:ready-check          # must print READY
+npm run loop:e2e-sim              # uses .roland-sim state dir + dashboard :8081
+
+# Options
+npx tsx scripts/loop-e2e-sim.ts --no-dashboard
+npx tsx scripts/loop-e2e-sim.ts --template full-cycle-verified-loop
+```
+
+The simulator:
+
+1. Prints the Loop Engineering startup banner (verification weights, between-iter hook, dispatch mode)
+2. Runs `feature-implementation-loop` (Pure ClosedLoop, `enablePmIntegration=false`) with a pass-through verify runner
+3. Records YAML specialist spawn pulses to `loop-state.json` → dashboard live panel
+4. Runs git-commit **dry-run** hooks between phases (safe default from template YAML)
+5. Simulates one **HITL** cycle via `roland approve-commit` against `.roland-sim/git-commit-approval.json`
+6. Prints `roland hitl-status --state-dir .roland-sim`
+
+Set `CURSOR_API_KEY` in the environment for true Cursor SDK dispatch; without it the banner shows `Cursor SDK: unavailable — direct fallback active` (expected in CI/local sim).
+
+### Daily Roland usage pattern
+
+```bash
+# 1. Preflight
+npm run loop:ready-check
+
+# 2. Dashboard (optional but recommended for live PACVRE + HITL panels)
+npm run serve-dashboard
+
+# 3. Launch a loop-template mission (Pure ClosedLoop default)
+roland team "your goal here" --loop-template full-cycle-verified-loop
+
+# 4. Monitor
+roland hitl-status                    # pause/abort queue + git-commit approval
+roland board-status --concise
+
+# 5. When git-commit HITL is enabled (dry_run: false, require_approval: true)
+roland approve-commit --message "feat: iteration checkpoint"
+# or use dashboard Git Commit Approval panel
+```
+
+For feature work with YAML specialist spawns and integration/smoke gates, prefer `feature-implementation-loop`. For production missions with reflection and declarative exit conditions, use `full-cycle-verified-loop`.
+
 ---
 
 ## Dashboard & observability

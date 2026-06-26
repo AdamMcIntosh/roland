@@ -288,10 +288,18 @@ export function printGitCommitApprovalStatus(stateDir: string): void {
   const pending = readPendingGitCommitApproval(stateDir);
   const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
   const y = (s: string) => `\x1b[33m${s}\x1b[0m`;
+  const g = (s: string) => `\x1b[32m${s}\x1b[0m`;
   const cy = (s: string) => `\x1b[36m${s}\x1b[0m`;
 
-  process.stderr.write(`  Git-commit:    ${pending ? y(`pending (${pending.id})`) : dim('none')}\n`);
+  const queue = new GitCommitApprovalQueue(stateDir);
+  const current = queue.read();
+
   if (pending) {
+    process.stderr.write(`  Git-commit:    ${y(`pending (${pending.id})`)} — "${pending.message.slice(0, 50)}${pending.message.length > 50 ? '…' : ''}"\n`);
     process.stderr.write(`  ${cy('roland approve-commit')} / ${cy('roland reject-commit')}\n`);
+  } else if (current && current.status !== 'pending') {
+    process.stderr.write(`  Git-commit:    ${g(`${current.status} (${current.id})`)}${current.reason ? dim(` — ${current.reason}`) : ''}\n`);
+  } else {
+    process.stderr.write(`  Git-commit:    ${dim('none pending')}\n`);
   }
 }

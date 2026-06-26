@@ -193,6 +193,7 @@ export type {
 export type { ResolvedBetweenIterationsHook } from './loop-template-resolution.js';
 export type { LoopLiveActivity, LoopSpawnPulse, LoopGitCommitApprovalSnapshot } from './loop-state.js';
 export type { LoopHealthReport, LoopHealthStatus } from './loop-health.js';
+export { buildLoopHealthReport } from './loop-health.js';
 
 export {
   createDefaultHandlers,
