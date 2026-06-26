@@ -16,6 +16,8 @@ export {
   INTEGRATION_STRATEGY,
   E2E_STRATEGY,
   resolveStrategies,
+  coerceVerificationStrategies,
+  getBuiltinStrategy,
   isVerificationStrategyType,
 } from './verification-strategies.js';
 

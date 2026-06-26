@@ -141,6 +141,46 @@ export interface RunState {
     reason: string;
     executionPath?: 'pm_team' | 'lightweight';
   };
+  /** Real-time loop activity for live dashboard panel. */
+  liveActivity?: {
+    kind: 'phase' | 'verification' | 'hook' | 'spawn' | 'idle' | 'approval';
+    label: string;
+    detail?: string;
+    startedAt: number;
+    dispatchMethod?: string;
+    executionMode?: string;
+    verificationStrategies?: Array<{
+      type: string;
+      status: 'pending' | 'running' | 'pass' | 'fail' | 'skipped';
+      weight?: number;
+      confidence?: number;
+    }>;
+    activeHook?: {
+      label: string;
+      dryRun?: boolean;
+      action?: string;
+      requireApproval?: boolean;
+    };
+    progressSummary?: string;
+  };
+  /** Pending git-commit HITL approval for dashboard. */
+  pendingGitCommitApproval?: {
+    id: string;
+    message: string;
+    statusPreview: string;
+    iteration: number;
+    requestedAt: number;
+    timeoutAt: number;
+    status: 'pending' | 'approved' | 'rejected' | 'timeout';
+  };
+  /** Recent specialist spawn pulses. */
+  spawnActivityHistory?: Array<{
+    role: string;
+    phase: string;
+    count: number;
+    label: string;
+    at: number;
+  }>;
 }
 
 // ── Writer (used by team-cli / orchestrator callbacks) ────────────────────────
@@ -343,6 +383,9 @@ export class RunStateWriter {
     };
     modelRouting?: RunState['modelRouting'];
     pmIntegration?: RunState['pmIntegration'];
+    liveActivity?: RunState['liveActivity'];
+    pendingGitCommitApproval?: RunState['pendingGitCommitApproval'];
+    spawnActivityHistory?: RunState['spawnActivityHistory'];
   }): void {
     if (fields.loopTemplateId !== undefined) {
       this.state.loopTemplateId = fields.loopTemplateId;
@@ -376,6 +419,15 @@ export class RunStateWriter {
     }
     if (fields.pmIntegration !== undefined) {
       this.state.pmIntegration = fields.pmIntegration;
+    }
+    if (fields.liveActivity !== undefined) {
+      this.state.liveActivity = fields.liveActivity;
+    }
+    if (fields.pendingGitCommitApproval !== undefined) {
+      this.state.pendingGitCommitApproval = fields.pendingGitCommitApproval;
+    }
+    if (fields.spawnActivityHistory !== undefined) {
+      this.state.spawnActivityHistory = fields.spawnActivityHistory;
     }
     this.flush();
   }

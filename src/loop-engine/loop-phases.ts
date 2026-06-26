@@ -31,6 +31,56 @@ export const ALL_PHASES: readonly Phase[] = [
 /** Verification strategy types selectable in loop templates. */
 export type TemplateVerificationStep = 'unit' | 'integration' | 'smoke' | 'e2e' | 'lint' | 'typecheck';
 
+/** Full verification strategy definition in template YAML (merged with config by type). */
+export interface VerificationStrategyDefinition {
+  type: TemplateVerificationStep;
+  /** Shell command — falls back to config/builtin for this type when omitted. */
+  command?: string;
+  timeoutMs?: number;
+  optional?: boolean;
+  /** Relative weight in EvaluationGate confidence scoring (0–1 typical). */
+  weight?: number;
+  /** Confidence contribution when this strategy passes (0–1). */
+  successThreshold?: number;
+  /** Per-strategy minimum confidence floor when passed. */
+  minConfidence?: number;
+  /** Log only — do not execute the command. */
+  dryRun?: boolean;
+}
+
+/** Shorthand or full verification config on a verify phase. */
+export type PhaseVerificationEntry = TemplateVerificationStep | VerificationStrategyDefinition;
+
+/** Built-in between-iterations / phase-after actions. */
+export type BetweenIterationsBuiltinAction = 'run-tests' | 'git-commit' | 'critique-only';
+
+/** Declarative hook run between iterations or after a phase. */
+export interface BetweenIterationsHookConfig {
+  /** Shell command — use alone or let `action` expand to a default command. */
+  command?: string;
+  /** Built-in declarative action (expands via loop-template-resolution). */
+  action?: BetweenIterationsBuiltinAction;
+  timeoutMs?: number;
+  /** When true, hook failure is recorded but does not block the loop. */
+  optional?: boolean;
+  /** Log hook intent without executing (safety preview). Default true for git-commit action. */
+  dryRun?: boolean;
+  /** When true, loop fails/stops if the hook exits non-zero. */
+  exitOnFailure?: boolean;
+  /** git-commit action: commit message template ({goal}, {iteration}, {phase}, {template}). */
+  messageTemplate?: string;
+  /** git-commit action: stage only these paths (default: all changes when autoStage). */
+  includeFiles?: string[];
+  /** git-commit action: stage includeFiles or all changes before commit (default false in dry_run). */
+  autoStage?: boolean;
+  /** git-commit: pause loop and require operator approval before real commit (default false). */
+  requireApproval?: boolean;
+  /** git-commit HITL: max wait for operator decision (default 30 min). */
+  approvalTimeoutMs?: number;
+  /** git-commit HITL: auto-reject when approval_timeout_ms elapses (default true). */
+  autoRejectOnTimeout?: boolean;
+}
+
 /** Exit condition types — inspired by loops.elorm.xyz explicit exit rules. */
 export type ExitConditionType =
   | 'all_gates_pass'
@@ -57,6 +107,36 @@ export interface ExitConditionConfig {
 /** PM Team Engine routing for Plan/Act phases inside ClosedLoop. */
 export type PmTeamMode = 'auto' | 'always' | 'never';
 
+/** Optional gating for YAML-defined specialist spawns. */
+export interface SpawnConditions {
+  /** Spawn only when iteration >= this value (1-based). */
+  iterationMin?: number;
+  /** Spawn only when iteration <= this value (1-based). */
+  iterationMax?: number;
+  /** Spawn only when retryCount >= this value. */
+  retryMin?: number;
+  /** Spawn only on the first iteration. */
+  firstIterationOnly?: boolean;
+  /** Skip the first iteration. */
+  afterFirstIteration?: boolean;
+}
+
+/** YAML-configurable specialist spawn for a loop phase. */
+export interface SpecialistSpawnDefinition {
+  /** Agent persona or generic role (pm, coding, verifier, researcher, etc.). */
+  role: string;
+  /** Number of spawn intents for this role (default 1). */
+  count?: number;
+  /** When true, this spawn becomes the phase primary agent. */
+  primary?: boolean;
+  /** Prompt/reason template — supports {goal}, {iteration}, {phase}, {retry}. */
+  promptTemplate?: string;
+  /** Optional spawn gating conditions. */
+  conditions?: SpawnConditions;
+  /** When true, spawn failure does not block the phase. */
+  optional?: boolean;
+}
+
 /** Per-phase configuration within a loop template. */
 export interface PhaseConfig {
   phase: Phase;
@@ -66,16 +146,29 @@ export interface PhaseConfig {
   agent?: string;
   /** Skip this phase when optional and no handler result is required */
   optional?: boolean;
-  /** Verify-phase only — subset of verification strategies to run */
-  verification?: TemplateVerificationStep[];
+  /**
+   * Verify-phase strategies — shorthand type list or full strategy objects.
+   * Merged with loop_engine.verification.strategies in loop-template-resolution.
+   */
+  verification?: PhaseVerificationEntry[];
+  /** Hook run after this phase completes (shell, script, or built-in action). */
+  after?: BetweenIterationsHookConfig;
+  /** Phase-scoped between-iteration hook (alias for after on long-running phases). */
+  betweenIterations?: BetweenIterationsHookConfig;
   /** Override template-level PM Team routing for this phase. */
   pmTeam?: PmTeamMode;
+  /** YAML-defined specialist spawns — overrides PHASE_SPECIALIST_DEFAULTS when present. */
+  specialistSpawns?: SpecialistSpawnDefinition[];
 }
 
 /** A reusable loop template — loaded from recipes/loops/*.yaml */
 export interface LoopTemplate {
   name: string;
   description: string;
+  /** When true, prefer the canonical name in aliasOf for new missions. */
+  deprecated?: boolean;
+  /** Canonical template this deprecated name mirrors. */
+  aliasOf?: string;
   phases: PhaseConfig[];
   /** Outer loop iterations before escalation (default: 5) */
   maxIterations?: number;
@@ -92,8 +185,8 @@ export interface LoopTemplate {
   exponentialBackoff?: boolean;
   /** Structured kickoff prompt shown at loop start (loops.elorm.xyz pattern). */
   kickoff?: string;
-  /** Shell command run between iterations for self-pacing checks. */
-  betweenIterations?: string;
+  /** Between-iteration hook — legacy shell string or declarative hook object. */
+  betweenIterations?: string | BetweenIterationsHookConfig;
   /** Write reflection learnings to LoopMemory before next iteration. */
   reflection?: boolean;
   /** Explicit exit rules — all must pass to complete early. */

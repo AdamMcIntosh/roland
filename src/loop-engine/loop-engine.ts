@@ -17,6 +17,8 @@ import {
   createInitialLoopState,
   type LoopState,
   type LoopRunStatus,
+  type LoopLiveActivity,
+  type LoopSpawnPulse,
 } from './loop-state.js';
 import {
   createDefaultHandlers,
@@ -25,7 +27,8 @@ import {
   type PhaseHandler,
   type PhaseResult,
 } from './phase-handlers/index.js';
-import { loadLoopEngineConfig, resolveCritiqueThresholds } from './loop-config.js';
+import { loadLoopEngineConfig, resolveCritiqueThresholds, resolveBetweenIterations } from './loop-config.js';
+import { resolveBetweenIterationsHook } from './loop-template-resolution.js';
 import { LoopObservability } from './loop-observability.js';
 import { saveLoopCheckpoint, tryRecoverLoopState } from './loop-checkpoint.js';
 import type { LoopMemory } from './loop-memory.js';
@@ -68,6 +71,11 @@ export interface LoopEngineOptions {
   /** Shell command runner for between-iterations checks. */
   runner?: CommandRunner;
   cwd?: string;
+  /** Dashboard live panel context (dispatch + execution mode). */
+  liveContext?: {
+    dispatchMethod?: string;
+    executionMode?: string;
+  };
 }
 
 export interface LoopRunResult {
@@ -94,6 +102,7 @@ export class LoopEngine {
   private readonly loopMemory?: LoopMemory;
   private readonly runner?: CommandRunner;
   private readonly cwd: string;
+  private readonly liveContext?: LoopEngineOptions['liveContext'];
   private lastEvaluation?: EvaluationGateResult;
 
   constructor(opts: LoopEngineOptions) {
@@ -118,6 +127,7 @@ export class LoopEngine {
     this.loopMemory = opts.loopMemory;
     this.runner = opts.runner;
     this.cwd = opts.cwd ?? process.cwd();
+    this.liveContext = opts.liveContext;
     this.observability = new LoopObservability(opts.stateDir, opts.blackboard);
     this.critiqueThresholds = resolveCritiqueThresholds(opts.template, {
       isTestMode: opts.isTestMode,
@@ -160,7 +170,7 @@ export class LoopEngine {
       `[Loop][engine] template="${opts.template.name}" maxIterations=${opts.template.maxIterations ?? 1} ` +
         `maxRetries=${this.critiqueThresholds.maxRetries} timeoutMs=${this.timeoutMs} ` +
         `resume=${Boolean(opts.resumeFromState)} recover=${opts.recoverOnStart !== false} ` +
-        `betweenIter=${Boolean(opts.template.betweenIterations)} reflection=${Boolean(opts.template.reflection)}`,
+        `betweenIter=${Boolean(resolveBetweenIterations(opts.template))} reflection=${Boolean(opts.template.reflection)}`,
     );
     if (opts.loopMemory) {
       this.store.setLoopId(opts.loopMemory.loopId);
@@ -252,6 +262,19 @@ export class LoopEngine {
 
       const postIter = await this.runPostIterationHooks(iter);
       phasesCompleted += postIter.phasesCompleted;
+
+      if (postIter.terminalStatus) {
+        this.emitState();
+        this.observability.persistMetrics(this.store.get());
+        this.observability.postHistoryToBlackboard(this.store.get());
+        this.hooks.onLoopComplete?.(this.store.get(), postIter.terminalStatus);
+        return {
+          status: postIter.terminalStatus,
+          state: this.store.get(),
+          phasesCompleted,
+          iterationsRun,
+        };
+      }
 
       if (postIter.exitMet) {
         this.store.setStatus('completed');
@@ -363,6 +386,11 @@ export class LoopEngine {
       });
       phasesCompleted++;
 
+      await this.runPhaseAfterHook(phaseConfig, iter);
+      if (this.store.get().status === 'failed') {
+        return { phasesCompleted, shouldRetryLoop: false, terminalStatus: 'failed' };
+      }
+
       if (result.shouldEscalate) {
         const escalateConfig = this.template.phases.find((p) => p.phase === P.Escalate);
         if (escalateConfig) {
@@ -391,24 +419,134 @@ export class LoopEngine {
     return { phasesCompleted, shouldRetryLoop };
   }
 
+  /** Run phase.after / phase.between_iterations hook when declared in template. */
+  private buildBetweenIterationsOpts(
+    hook: import('./loop-template-resolution.js').ResolvedBetweenIterationsHook,
+    iter: number,
+    hookVars: Record<string, string | number | undefined>,
+  ): import('./between-iterations.js').BetweenIterationsOptions {
+    return {
+      hook,
+      iteration: iter,
+      cwd: this.cwd,
+      runner: this.runner,
+      memory: this.loopMemory!,
+      stateDir: this.stateDir,
+      hookVars,
+      onApprovalPending: (snapshot) => {
+        this.store.setPendingGitCommitApproval(snapshot);
+        this.setLiveActivity({
+          kind: 'approval',
+          label: 'git-commit approval pending',
+          detail: snapshot.message,
+          startedAt: Date.now(),
+          activeHook: {
+            label: hook.label,
+            dryRun: false,
+            action: 'git-commit',
+            requireApproval: true,
+          },
+          dispatchMethod: this.liveContext?.dispatchMethod,
+          executionMode: this.liveContext?.executionMode,
+          recentSpawns: this.store.getRecentSpawns(),
+        });
+      },
+      onApprovalResolved: () => {
+        this.store.setPendingGitCommitApproval(undefined);
+      },
+    };
+  }
+
+  /** Run phase.after / phase.between_iterations hook when declared in template. */
+  private async runPhaseAfterHook(phaseConfig: PhaseConfig, iter: number): Promise<void> {
+    const hook = resolveBetweenIterationsHook(this.template, { phaseConfig });
+    if (!hook || !this.loopMemory) return;
+
+    const requireApproval = hook.gitCommit?.requireApproval && !hook.gitCommit.dryRun;
+    this.setLiveActivity({
+      kind: requireApproval ? 'approval' : 'hook',
+      label: hook.label,
+      detail: hook.action === 'git-commit'
+        ? requireApproval
+          ? 'awaiting operator approval'
+          : 'git-commit preview'
+        : hook.command,
+      startedAt: Date.now(),
+      activeHook: {
+        label: hook.label,
+        dryRun: hook.dryRun,
+        action: hook.action,
+        requireApproval: hook.gitCommit?.requireApproval,
+      },
+      dispatchMethod: this.liveContext?.dispatchMethod,
+      executionMode: this.liveContext?.executionMode,
+      recentSpawns: this.store.getRecentSpawns(),
+    });
+
+    const result = await runBetweenIterations(
+      this.buildBetweenIterationsOpts(hook, iter, {
+        goal: this.goal,
+        template: this.template.name,
+        phase: phaseConfig.phase,
+      }),
+    );
+    this.store.setLiveActivity(undefined);
+    this.hooks.onBetweenIterations?.(iter, `${phaseConfig.phase}:${hook.label}`, result.success);
+    if (result.fatal) {
+      console.error(
+        `[Loop][engine] phase after-hook failed exit_on_failure phase=${phaseConfig.phase} iter=${iter}`,
+      );
+      this.store.setStatus('failed');
+    }
+  }
+
   /** Between-iterations check, reflection, and exit condition evaluation. */
   private async runPostIterationHooks(iter: number): Promise<{
     phasesCompleted: number;
     exitMet: boolean;
+    terminalStatus?: LoopRunStatus;
   }> {
     let phasesCompleted = 0;
     let lastBetweenRun;
 
-    if (this.template.betweenIterations && this.loopMemory) {
-      const between = await runBetweenIterations({
-        command: this.template.betweenIterations,
-        iteration: iter,
-        cwd: this.cwd,
-        runner: this.runner,
-        memory: this.loopMemory,
+    const betweenHook = resolveBetweenIterationsHook(this.template);
+    if (betweenHook && this.loopMemory) {
+      const requireApproval =
+        betweenHook.gitCommit?.requireApproval && !betweenHook.gitCommit.dryRun;
+      this.setLiveActivity({
+        kind: requireApproval ? 'approval' : 'hook',
+        label: betweenHook.label,
+        detail: betweenHook.action === 'git-commit'
+          ? requireApproval
+            ? 'awaiting operator approval'
+            : 'git-commit preview'
+          : betweenHook.command,
+        startedAt: Date.now(),
+        activeHook: {
+          label: betweenHook.label,
+          dryRun: betweenHook.dryRun,
+          action: betweenHook.action,
+          requireApproval: betweenHook.gitCommit?.requireApproval,
+        },
+        dispatchMethod: this.liveContext?.dispatchMethod,
+        executionMode: this.liveContext?.executionMode,
+        recentSpawns: this.store.getRecentSpawns(),
       });
+      const between = await runBetweenIterations(
+        this.buildBetweenIterationsOpts(betweenHook, iter, {
+          goal: this.goal,
+          template: this.template.name,
+          phase: 'between-iterations',
+        }),
+      );
+      this.store.setLiveActivity(undefined);
       lastBetweenRun = between.run;
-      this.hooks.onBetweenIterations?.(iter, this.template.betweenIterations, between.success);
+      this.hooks.onBetweenIterations?.(iter, betweenHook.command || betweenHook.label, between.success);
+      if (between.fatal) {
+        console.error(`[Loop][engine] between-iterations hook failed with exit_on_failure at iter=${iter}`);
+        this.store.setStatus('failed');
+        return { phasesCompleted, exitMet: false, terminalStatus: 'failed' };
+      }
     }
 
     const shouldReflect =
@@ -501,6 +639,15 @@ export class LoopEngine {
       `[Loop][engine] phase transition → ${phase} iteration=${ctx.iteration} retryCount=${this.store.get().retryCount}`,
     );
     this.store.transitionTo(phase);
+    this.setLiveActivity({
+      kind: 'phase',
+      label: phase,
+      detail: phaseConfig.label ?? phase,
+      startedAt: Date.now(),
+      progressSummary: `Iteration ${ctx.iteration} · ${phase}`,
+      dispatchMethod: this.liveContext?.dispatchMethod,
+      executionMode: this.liveContext?.executionMode,
+    });
     this.emitState();
     this.hooks.onPhaseStart?.(phase, ctx.iteration);
 
@@ -530,6 +677,7 @@ export class LoopEngine {
         phaseConfig,
         maxRetries: this.critiqueThresholds.maxRetries,
         escalationThreshold: this.critiqueThresholds.escalationThreshold,
+        reportLiveActivity: (activity) => this.setLiveActivity(activity),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -610,6 +758,34 @@ export class LoopEngine {
 
   private emitState(): void {
     this.hooks.onStateChange?.(this.store.get());
+  }
+
+  /** Record specialist spawn pulse for dashboard live panel + history. */
+  recordSpawnPulse(pulse: LoopSpawnPulse): void {
+    this.store.appendSpawnPulse(pulse);
+    this.setLiveActivity({
+      kind: 'spawn',
+      label: pulse.label,
+      detail: `${pulse.role} · ${pulse.phase} (×${pulse.count})`,
+      startedAt: pulse.at,
+      spawnPulse: pulse,
+      recentSpawns: this.store.getRecentSpawns(),
+      dispatchMethod: this.liveContext?.dispatchMethod,
+      executionMode: this.liveContext?.executionMode,
+    });
+  }
+
+  private setLiveActivity(activity: LoopLiveActivity | undefined): void {
+    this.store.setLiveActivity(
+      activity
+        ? {
+            ...activity,
+            dispatchMethod: activity.dispatchMethod ?? this.liveContext?.dispatchMethod,
+            executionMode: activity.executionMode ?? this.liveContext?.executionMode,
+          }
+        : undefined,
+    );
+    this.emitState();
   }
 }
 

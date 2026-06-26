@@ -5,10 +5,13 @@ import {
   EvaluationGate,
   evaluationResultToLoopState,
 } from '../evaluation-gate.js';
+import { resolveVerificationStrategies } from '../loop-template-resolution.js';
 import type { CommandRunner } from '../verification/index.js';
 
 export interface VerifyPhaseHandlerOptions {
   cwd?: string;
+  /** Loop template for verification strategy resolution. */
+  template?: import('../loop-phases.js').LoopTemplate;
   /** Inject for unit tests — bypasses real npm test */
   runner?: CommandRunner;
   customCriteria?: import('../evaluation-gate.js').CustomCriterion[];
@@ -27,12 +30,37 @@ export class VerifyPhaseHandler implements PhaseHandler {
   }
 
   async execute(ctx: PhaseHandlerContext): Promise<PhaseResult> {
+    const template =
+      this.opts.template ??
+      ({ name: 'inline', description: '', phases: ctx.phaseConfig ? [ctx.phaseConfig] : [] } as import('../loop-phases.js').LoopTemplate);
+    const strategies = resolveVerificationStrategies(template, ctx.phaseConfig);
+
+    const strategyStatuses: Array<{
+      type: string;
+      status: 'pending' | 'running' | 'pass' | 'fail' | 'skipped';
+      weight?: number;
+      confidence?: number;
+    }> = strategies.map((s) => ({
+      type: s.type,
+      status: 'pending',
+      weight: s.weight,
+    }));
+
+    ctx.reportLiveActivity?.({
+      kind: 'verification',
+      label: 'EvaluationGate',
+      detail: `Running ${strategies.length} verification strateg${strategies.length === 1 ? 'y' : 'ies'}`,
+      startedAt: Date.now(),
+      verificationStrategies: strategyStatuses,
+      progressSummary: strategies.map((s) => s.type).join(' → '),
+    });
+
     const gate = new EvaluationGate({
       cwd: this.opts.cwd ?? process.cwd(),
       goal: ctx.goal,
       iteration: ctx.iteration,
       hadWaveBlockers: ctx.hadBlockers,
-      templateFilter: ctx.phaseConfig?.verification,
+      strategies,
       runner: this.opts.runner,
       blackboard: ctx.blackboard,
       customCriteria: this.opts.customCriteria,
@@ -40,6 +68,27 @@ export class VerifyPhaseHandler implements PhaseHandler {
       manualReviewApproved: this.opts.manualReviewApproved,
       minConfidence: this.opts.minConfidence,
       exitConditions: this.opts.exitConditions,
+      onStrategyProgress: (type, status, meta) => {
+        const idx = strategyStatuses.findIndex((s) => s.type === type);
+        if (idx >= 0) {
+          strategyStatuses[idx] = {
+            ...strategyStatuses[idx]!,
+            status,
+            confidence: meta?.confidence,
+            weight: meta?.weight ?? strategyStatuses[idx]!.weight,
+          };
+        }
+        ctx.reportLiveActivity?.({
+          kind: 'verification',
+          label: 'EvaluationGate',
+          detail: `${type}: ${status}`,
+          startedAt: Date.now(),
+          verificationStrategies: [...strategyStatuses],
+          progressSummary: strategyStatuses
+            .map((s) => `${s.type}(${s.status})`)
+            .join(' · '),
+        });
+      },
     });
 
     let evaluation;

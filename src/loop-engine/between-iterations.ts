@@ -1,25 +1,45 @@
 /**
  * ## Assumptions
- * - Between-iterations commands run via the same CommandRunner as TestExecutor (shell, injectable).
- * - Output is truncated for storage; full tail preserved in loop memory artifacts.
- * - Failures are non-fatal — the loop records the result and exit conditions decide whether to continue.
+ * - Between-iterations hooks run via the same CommandRunner as TestExecutor (shell, injectable).
+ * - git-commit with require_approval + dry_run:false pauses until operator approves via dashboard.
+ * - dry_run / noOp hooks log intent without executing.
+ * - exit_on_failure stops the loop when hook fails (unless optional).
  */
 
 import type { CommandRunner } from './verification/index.js';
 import type { LoopMemory, BetweenIterationRun } from './loop-memory.js';
+import type { ResolvedBetweenIterationsHook } from './loop-template-resolution.js';
+import { runGitCommitAction } from './git-commit-action.js';
+import {
+  GitCommitApprovalQueue,
+  DEFAULT_GIT_COMMIT_APPROVAL_TIMEOUT_MS,
+} from './git-commit-approval.js';
+import type { LoopGitCommitApprovalSnapshot } from './loop-state.js';
 
 export interface BetweenIterationsOptions {
-  command: string;
+  /** Legacy: raw command string. Prefer `hook` for full config. */
+  command?: string;
+  hook?: ResolvedBetweenIterationsHook;
   iteration: number;
   cwd?: string;
   timeoutMs?: number;
   runner?: CommandRunner;
   memory: LoopMemory;
+  /** Interpolation vars for git-commit message_template. */
+  hookVars?: Record<string, string | number | undefined>;
+  /** State dir for HITL approval file (`.roland/git-commit-approval.json`). */
+  stateDir?: string;
+  /** Called when git-commit approval is pending (dashboard visibility). */
+  onApprovalPending?: (snapshot: LoopGitCommitApprovalSnapshot) => void;
+  /** Called when approval resolves (approve/reject/timeout). */
+  onApprovalResolved?: () => void;
 }
 
 export interface BetweenIterationsResult {
   run: BetweenIterationRun;
   success: boolean;
+  /** When exit_on_failure is set and hook failed. */
+  fatal?: boolean;
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -33,29 +53,178 @@ function logBetween(msg: string, detail?: Record<string, unknown>): void {
   }
 }
 
+function resolveHook(opts: BetweenIterationsOptions): ResolvedBetweenIterationsHook {
+  if (opts.hook) return opts.hook;
+  const command = opts.command ?? '';
+  return {
+    command,
+    label: command || 'between-iterations',
+    timeoutMs: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    optional: false,
+    dryRun: false,
+    exitOnFailure: false,
+    noOp: !command,
+    source: 'template',
+  };
+}
+
+async function runGitCommitHook(
+  hook: ResolvedBetweenIterationsHook,
+  opts: BetweenIterationsOptions,
+  cwd: string,
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const gc = hook.gitCommit!;
+  const vars = {
+    iteration: opts.iteration,
+    ...opts.hookVars,
+  };
+
+  if (gc.dryRun) {
+    const preview = runGitCommitAction({
+      cwd,
+      messageTemplate: gc.messageTemplate,
+      includeFiles: gc.includeFiles,
+      autoStage: gc.autoStage,
+      dryRun: true,
+      vars,
+    });
+    return { exitCode: preview.exitCode, stdout: preview.stdout, stderr: preview.stderr };
+  }
+
+  const preview = runGitCommitAction({
+    cwd,
+    messageTemplate: gc.messageTemplate,
+    includeFiles: gc.includeFiles,
+    autoStage: gc.autoStage,
+    dryRun: true,
+    vars,
+  });
+
+  if (!gc.requireApproval) {
+    const result = runGitCommitAction({
+      cwd,
+      messageTemplate: gc.messageTemplate,
+      includeFiles: gc.includeFiles,
+      autoStage: gc.autoStage,
+      dryRun: false,
+      vars,
+    });
+    return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr };
+  }
+
+  if (!opts.stateDir) {
+    return {
+      exitCode: 1,
+      stdout: preview.stdout,
+      stderr: 'git-commit: require_approval is true but stateDir was not provided',
+    };
+  }
+
+  const queue = new GitCommitApprovalQueue(opts.stateDir);
+  const timeoutMs = gc.approvalTimeoutMs ?? DEFAULT_GIT_COMMIT_APPROVAL_TIMEOUT_MS;
+  const request = queue.submit({
+    iteration: opts.iteration,
+    hookLabel: hook.label,
+    message: preview.message,
+    statusPreview: preview.stdout,
+    cwd,
+    autoRejectOnTimeout: gc.autoRejectOnTimeout ?? true,
+    timeoutMs,
+  });
+
+  opts.onApprovalPending?.({
+    id: request.id,
+    message: request.message,
+    statusPreview: request.statusPreview,
+    iteration: request.iteration,
+    requestedAt: request.createdAt,
+    timeoutAt: request.timeoutAt,
+    status: 'pending',
+  });
+
+  const decision = await queue.waitForDecision(request.id, timeoutMs + 5_000);
+  opts.onApprovalResolved?.();
+
+  if (!decision.approved) {
+    const reason = decision.reason ?? 'Commit not approved';
+    return {
+      exitCode: 1,
+      stdout: preview.stdout,
+      stderr: `git-commit HITL: ${reason}`,
+    };
+  }
+
+  const result = runGitCommitAction({
+    cwd,
+    messageTemplate: gc.messageTemplate,
+    includeFiles: gc.includeFiles,
+    autoStage: gc.autoStage,
+    dryRun: false,
+    vars,
+    literalMessage: decision.message,
+  });
+
+  queue.clear();
+  return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr };
+}
+
 /**
- * Run the template's between-iterations check command and persist results to LoopMemory.
+ * Run a between-iterations hook and persist results to LoopMemory.
  */
 export async function runBetweenIterations(
   opts: BetweenIterationsOptions,
 ): Promise<BetweenIterationsResult> {
+  const hook = resolveHook(opts);
   const startedAt = Date.now();
   const cwd = opts.cwd ?? process.cwd();
-  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutMs = hook.timeoutMs ?? opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const runner = opts.runner;
+  const command = hook.command;
 
-  logBetween('running check command', { iteration: opts.iteration, command: opts.command });
+  if (hook.noOp || (hook.dryRun && hook.action !== 'git-commit')) {
+    logBetween('hook skipped (dry-run / no-op)', {
+      iteration: opts.iteration,
+      label: hook.label,
+      source: hook.source,
+    });
+    const run: BetweenIterationRun = {
+      iteration: opts.iteration,
+      command: command || `[${hook.label}]`,
+      exitCode: 0,
+      stdout: hook.dryRun ? 'dry-run — command not executed' : 'no-op hook',
+      stderr: '',
+      timedOut: false,
+      at: startedAt,
+      durationMs: Date.now() - startedAt,
+    };
+    opts.memory.recordBetweenIteration(run);
+    return { run, success: true };
+  }
+
+  logBetween('running hook', {
+    iteration: opts.iteration,
+    label: hook.label,
+    command: hook.action === 'git-commit' ? '[git-commit action]' : command,
+    source: hook.source,
+    dryRun: hook.dryRun,
+    requireApproval: hook.gitCommit?.requireApproval ?? false,
+  });
 
   let exitCode: number | null = 1;
   let stdout = '';
   let stderr = '';
   let timedOut = false;
 
-  if (!runner) {
+  if (hook.action === 'git-commit' && hook.gitCommit) {
+    const gcResult = await runGitCommitHook(hook, opts, cwd);
+    exitCode = gcResult.exitCode;
+    stdout = gcResult.stdout;
+    stderr = gcResult.stderr;
+  } else if (!runner) {
     stderr = 'No command runner configured';
   } else {
     try {
-      const result = await runner(opts.command, { cwd, timeoutMs });
+      const result = await runner(command, { cwd, timeoutMs });
       exitCode = result.exitCode;
       stdout = result.stdout;
       stderr = result.stderr;
@@ -67,9 +236,10 @@ export async function runBetweenIterations(
   }
 
   const durationMs = Date.now() - startedAt;
+  const success = exitCode === 0 && !timedOut;
   const run: BetweenIterationRun = {
     iteration: opts.iteration,
-    command: opts.command,
+    command,
     exitCode,
     stdout: stdout.slice(-8000),
     stderr: stderr.slice(-4000),
@@ -80,21 +250,27 @@ export async function runBetweenIterations(
 
   opts.memory.recordBetweenIteration(run);
 
-  logBetween('check complete', {
+  logBetween('hook complete', {
     iteration: opts.iteration,
+    label: hook.label,
     exitCode,
     durationMs,
-    success: exitCode === 0 && !timedOut,
+    success,
+    optional: hook.optional,
+    exitOnFailure: hook.exitOnFailure,
   });
+
+  const fatal = !success && hook.exitOnFailure && !hook.optional;
 
   return {
     run,
-    success: exitCode === 0 && !timedOut,
+    success: hook.optional ? true : success,
+    fatal,
   };
 }
 
 /**
- * ## Loop Integration Complete
- * Between-iterations commands implement the loops.elorm.xyz self-pacing pattern —
- * run a check after each pass, read output, continue only if exit conditions are unmet.
+ * ## HITL Git-Commit Approval + Between-Iterations Hooks Complete
+ *
+ * git-commit supports require_approval for operator confirm/reject/edit via dashboard.
  */

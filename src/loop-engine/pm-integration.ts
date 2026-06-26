@@ -132,9 +132,10 @@ export class LoopPmBridge {
     const { usePm, reason } = shouldUsePmTeam(this.opts.goal, mode, { pmOptIn: this.pmOptIn });
     const executionPath: LoopPmExecutionPath = usePm ? 'pm_team' : 'lightweight';
 
+    const planDispatch = this.router.resolveDispatch('pm', { phase: 'plan', log: true });
     console.error(
       `[Loop][PM Team] Plan iteration=${iteration} path=${executionPath} (${reason}) ` +
-        `model=${this.router.getModel('pm').displayLabel}`,
+        `dispatch=${planDispatch.method} model=${planDispatch.displayLabel}`,
     );
 
     this.opts.commandBoard?.appendBullet(
@@ -170,9 +171,10 @@ export class LoopPmBridge {
     }
 
     const executionPath: LoopPmExecutionPath = usePm ? 'pm_team' : 'lightweight';
+    const actDispatch = this.router.resolveDispatch('coding', { phase: 'act', log: true });
     console.error(
       `[Loop][PM Team] Act iteration=${iteration} path=${executionPath} (${reason}) ` +
-        `model=${this.router.getModel('coding').displayLabel}`,
+        `dispatch=${actDispatch.method} model=${actDispatch.displayLabel}`,
     );
 
     this.opts.commandBoard?.setAgentStatus({

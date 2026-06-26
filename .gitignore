@@ -7,7 +7,9 @@ pnpm-lock.yaml
 .omc
 .roland
 .goose
-.cursor
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 
 # Build output
 dist/

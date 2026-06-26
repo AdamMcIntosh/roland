@@ -112,6 +112,9 @@ function syncLoopStateToRun(runState: RunStateWriter, loopState: LoopState, stat
           at: loopState.lastRetry.at,
         }
       : undefined,
+    liveActivity: loopState.liveActivity,
+    pendingGitCommitApproval: loopState.pendingGitCommitApproval,
+    spawnActivityHistory: loopState.spawnActivityHistory,
   });
 }
 

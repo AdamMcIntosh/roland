@@ -290,6 +290,8 @@ function printHelp(): void {
   ln(`    ${cy('roland')} ${b('replan')}                     Ask PM to re-evaluate the plan`);
   ln(`    ${cy('roland')} ${b('abort')}                      Stop the run after current wave`);
   ln(`    ${cy('roland')} ${b('hitl-status')}                Show HITL queue state and pause status`);
+  ln(`    ${cy('roland')} ${b('approve-commit')} [id]        Approve pending git-commit (loop HITL)`);
+  ln(`    ${cy('roland')} ${b('reject-commit')} [id]         Reject pending git-commit (loop HITL)`);
   ln();
   ln('  ' + b('UTILITY COMMANDS'));
   ln(`    ${cy('roland')} doctor              Diagnose your Roland install`);
@@ -319,8 +321,9 @@ function printHelp(): void {
   ln(`    ${d('# Review a PR and push fixes')}`);
   ln(`    roland pr 42 --fix --notify`);
   ln();
-  ln(`    ${d('# Always notify (set once in shell profile)')}`);
-  ln(`    export ROLAND_NOTIFY=1`);
+  ln(`    ${d('# Approve a loop git-commit from terminal (HITL)')}`);
+  ln(`    roland approve-commit --message "feat: ship iteration 2"`);
+  ln(`    roland reject-commit --reason "needs more tests"`);
   ln();
 }
 
@@ -331,6 +334,7 @@ const KNOWN_CMDS = new Set([
   'team', 'run', 'goal', 'start', 'status', 'watch', 'pr', 'chat',
   // HITL controls
   'pause', 'resume', 'unblock', 'inject', 'replan', 'abort', 'hitl-status',
+  'approve-commit', 'reject-commit',
   'board-status', 'board-cleanup', 'pr-cleanup', 'orchestrate',
   // Background supervisor
   'bg-status', 'bg-logs', 'bg-stop',
@@ -636,7 +640,23 @@ async function main(): Promise<void> {
         } else if (hitlState.paused) {
           console.error(`  ${cy('roland resume')}            Resume the paused run`);
         }
+        {
+          const { printGitCommitApprovalStatus } = await import('./rco/git-commit-approval-cli.js');
+          printGitCommitApprovalStatus(stateDir);
+        }
         console.error('');
+        break;
+      }
+      case 'approve-commit': {
+        const { runApproveCommitCli } = await import('./rco/git-commit-approval-cli.js');
+        const code = runApproveCommitCli(rest);
+        if (code !== 0) process.exit(code);
+        break;
+      }
+      case 'reject-commit': {
+        const { runRejectCommitCli } = await import('./rco/git-commit-approval-cli.js');
+        const code = runRejectCommitCli(rest);
+        if (code !== 0) process.exit(code);
         break;
       }
 

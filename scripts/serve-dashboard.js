@@ -27,7 +27,10 @@
  *   GET  /api/github/repos           → list authenticated user repos (short TTL cache)
  *   POST /api/github/clone           → clone repo, init .roland/, npm install, switch context
  *   GET  /api/board-status         → UNSC concise summary (blackboard + command board)
- *   GET  /api/loop-health          → loop observability, metrics, checkpoint diagnostics
+ *   GET  /api/git-commit-approval     → pending git-commit HITL approval
+ *   POST /api/git-commit-approval/approve → approve (optional edited message)
+ *   POST /api/git-commit-approval/reject  → reject commit
+ *   GET  /api/loop-templates         → LoopTemplates.listDetailed() catalog
  *   POST /api/board-cleanup        → archive stale board entries before a new mission
  *   POST /api/blockers/:id/ignore  → mark a blackboard blocker ignored or snoozed
  *   GET  /api/models               → available Cursor PM / engineer models
@@ -502,6 +505,32 @@ function _syncHitlObserverState(cmdType, queueLen = 0) {
   catch (e) { console.error('[HITL] state write error:', e.message); }
 }
 
+const GIT_COMMIT_APPROVAL_FILE = 'git-commit-approval.json';
+
+function readGitCommitApproval() {
+  return readJson(path.join(activeStateDir, GIT_COMMIT_APPROVAL_FILE), null);
+}
+
+function decideGitCommitApproval(id, decision, opts = {}) {
+  const filePath = path.join(activeStateDir, GIT_COMMIT_APPROVAL_FILE);
+  const current = readGitCommitApproval();
+  if (!current || current.id !== id || current.status !== 'pending') {
+    return false;
+  }
+  const next = {
+    ...current,
+    status: decision === 'approve' ? 'approved' : 'rejected',
+    decisionAt: Date.now(),
+    approvedMessage: decision === 'approve'
+      ? (String(opts.message || '').trim() || current.message)
+      : undefined,
+    reason: opts.reason,
+  };
+  fs.mkdirSync(activeStateDir, { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(next, null, 2), 'utf-8');
+  return true;
+}
+
 // ── WebSocket broadcast ───────────────────────────────────────────────────────
 
 const wsClients = new Set();
@@ -574,6 +603,30 @@ async function loadLoopHealthModule() {
   } catch {
     return null;
   }
+}
+
+async function loadLoopTemplatesModule() {
+  const modPath = path.join(__dirname, '..', 'dist', 'loop-engine', 'loop-templates.js');
+  try {
+    return await import(pathToFileURL(modPath).href);
+  } catch {
+    return null;
+  }
+}
+
+async function readLoopTemplatesPayload() {
+  const mod = await loadLoopTemplatesModule();
+  if (!mod?.buildLoopTemplateCatalog) {
+    return {
+      templates: [],
+      defaultTemplate: 'standard-code-loop',
+      coreGeneric: [],
+      loadErrors: [],
+      message: 'Loop templates unavailable — run `npm run build`',
+      timestamp: Date.now(),
+    };
+  }
+  return { ...mod.buildLoopTemplateCatalog(), timestamp: Date.now() };
 }
 
 async function readLoopHealthPayload() {
@@ -2034,6 +2087,7 @@ const WATCH_TARGETS = new Set([
   'blackboard.json', 'command-blackboard.md', 'mission-dag.json', 'mission-meta.json',
   'supervisor.pid', 'task-git.json',
   'loop-state.json', 'loop-metrics.json', 'loop-execution-history.json', 'loop-checkpoint.json',
+  'git-commit-approval.json',
 ]);
 
 setupStateWatcher();
@@ -2560,6 +2614,19 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ── /api/loop-templates GET ──────────────────────────────────────────────
+  if (url === '/api/loop-templates' && method === 'GET') {
+    try {
+      const catalog = await readLoopTemplatesPayload();
+      logApi('GET', url, 'ok', { count: catalog.templates?.length ?? 0 });
+      jsonOk(res, catalog);
+    } catch (e) {
+      logApi('GET', url, `error: ${e.message}`);
+      jsonErr(res, e.message, 500);
+    }
+    return;
+  }
+
   // ── /api/board-status GET ────────────────────────────────────────────────
   if (url === '/api/board-status' && method === 'GET') {
     try {
@@ -2632,6 +2699,31 @@ const server = http.createServer(async (req, res) => {
       const status = e.code === 'NOT_FOUND' ? 404 : e.code === 'NOT_BLOCKER' ? 400 : 500;
       jsonErr(res, e.message, status);
     }
+    return;
+  }
+
+  // ── /api/git-commit-approval GET ─────────────────────────────────────────
+  if (url === '/api/git-commit-approval' && method === 'GET') {
+    jsonOk(res, readGitCommitApproval() ?? { status: 'none' });
+    return;
+  }
+
+  // ── /api/git-commit-approval/:decision POST ──────────────────────────────
+  const gcApprovalMatch = url.match(/^\/api\/git-commit-approval\/(approve|reject)$/);
+  if (gcApprovalMatch && method === 'POST') {
+    const decision = gcApprovalMatch[1];
+    try {
+      const body = await readBody(req);
+      const id = String(body.id ?? '').trim();
+      if (!id) { jsonErr(res, 'id required'); return; }
+      const ok = decideGitCommitApproval(id, decision, {
+        message: body.message,
+        reason: body.reason,
+      });
+      if (!ok) { jsonErr(res, 'approval not pending or id mismatch', 409); return; }
+      void pushCurrentState();
+      jsonOk(res, { ok: true, decision });
+    } catch (e) { jsonErr(res, e.message); }
     return;
   }
 
@@ -2730,6 +2822,7 @@ server.listen(port, host, () => {
   console.log(`              ${localBase}/api/team-goal`);
   console.log(`              ${localBase}/api/blockers/:id/ignore`);
   console.log(`              ${localBase}/api/loop-health`);
+  console.log(`              ${localBase}/api/loop-templates`);
   console.log(`              ${localBase}/api/projects`);
   console.log(`              ${localBase}/api/project-templates  ${localBase}/api/create-project`);
   console.log(`              ${localBase}/api/github/status  ${localBase}/api/github/repos`);

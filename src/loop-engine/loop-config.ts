@@ -1,5 +1,8 @@
 /**
- * Loop engine configuration — loaded from config.yaml `loop_engine` section.
+ * ## Assumptions
+ * - Loaded from config.yaml `loop_engine` section only.
+ * - `default_dispatch: cursor_sdk` is the Loop Engineering default unless overridden.
+ * - Env `ROLAND_DEFAULT_DISPATCH=direct` overrides YAML.
  */
 
 import fs from 'fs';
@@ -7,26 +10,49 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
 import { z } from 'zod';
-import { isVerificationStrategyType } from './verification/verification-strategies.js';
+import { isVerificationStrategyType, DEFAULT_VERIFICATION_STRATEGIES } from './verification/verification-strategies.js';
 import {
   DEFAULT_ESCALATION_THRESHOLD,
   DEFAULT_MAX_RETRIES,
 } from './self-improvement/escalation.js';
 import type { LoopTemplate } from './loop-phases.js';
+import { resolveBetweenIterationsCommand } from './loop-template-resolution.js';
 
 const VerificationStrategySchema = z.object({
   type: z.string().refine(isVerificationStrategyType, { message: 'Invalid verification strategy type' }),
-  command: z.string().min(1),
+  command: z.string().min(1).optional(),
   timeout_ms: z.number().int().positive().optional(),
   optional: z.boolean().optional(),
+  weight: z.number().min(0).max(2).optional(),
+  success_threshold: z.number().min(0).max(1).optional(),
+  min_confidence: z.number().min(0).max(1).optional(),
+  dry_run: z.boolean().optional(),
+});
+
+const BetweenIterationsHookSchema = z.object({
+  action: z.enum(['run-tests', 'git-commit', 'critique-only']).optional(),
+  command: z.string().optional(),
+  timeout_ms: z.number().int().positive().optional(),
+  optional: z.boolean().optional(),
+  dry_run: z.boolean().optional(),
+  exit_on_failure: z.boolean().optional(),
+  message_template: z.string().optional(),
+  include_files: z.array(z.string()).optional(),
+  auto_stage: z.boolean().optional(),
+  require_approval: z.boolean().optional(),
+  approval_timeout_ms: z.number().int().positive().optional(),
+  auto_reject_on_timeout: z.boolean().optional(),
 });
 
 export const LoopEngineConfigSchema = z.object({
   default_template: z.string().optional(),
   templates_dir: z.string().optional(),
+  /** Default between-iteration shell command when template omits between_iterations. */
+  between_iterations: z.union([z.string(), BetweenIterationsHookSchema]).optional(),
   verification: z
     .object({
       require_pass_before_critique: z.boolean().optional(),
+      min_confidence: z.number().min(0).max(1).optional(),
       strategies: z.array(VerificationStrategySchema).optional(),
     })
     .optional(),
@@ -55,16 +81,22 @@ export const LoopEngineConfigSchema = z.object({
     .optional(),
   timeout_ms: z.number().int().positive().optional(),
   use_pm_team: z.boolean().optional(),
+  default_dispatch: z.enum(['cursor_sdk', 'direct']).optional(),
 });
 
 export type LoopEngineConfig = z.infer<typeof LoopEngineConfigSchema> & {
   verification?: {
     require_pass_before_critique?: boolean;
+    minConfidence?: number;
     strategies?: Array<{
       type: string;
-      command: string;
+      command?: string;
       timeoutMs?: number;
       optional?: boolean;
+      weight?: number;
+      successThreshold?: number;
+      minConfidence?: number;
+      dryRun?: boolean;
     }>;
   };
   critique?: {
@@ -86,6 +118,10 @@ export type LoopEngineConfig = z.infer<typeof LoopEngineConfigSchema> & {
   timeoutMs?: number;
   /** When true, templates with pm_plan/pm_act: auto may invoke legacy PM Team (default false). */
   usePmTeam?: boolean;
+  /** Default model dispatch backend for Loop Engineering (default cursor_sdk). */
+  defaultDispatch?: 'cursor_sdk' | 'direct';
+  /** Project-wide between-iteration hook (templates may override). */
+  betweenIterations?: string | import('./loop-phases.js').BetweenIterationsHookConfig;
 };
 
 export interface CritiqueThresholds {
@@ -111,6 +147,8 @@ const DEFAULT_CONFIG: LoopEngineConfig = {
     },
   },
   timeoutMs: 1_800_000,
+  usePmTeam: false,
+  defaultDispatch: 'cursor_sdk',
 };
 
 let cached: LoopEngineConfig | null = null;
@@ -133,17 +171,27 @@ function resolveConfigPath(): string | null {
   return null;
 }
 
+function commandForStrategyType(type: string): string {
+  const hit = DEFAULT_VERIFICATION_STRATEGIES.find((s) => s.type === type);
+  return hit?.command ?? 'npm test';
+}
+
 function normaliseVerification(
   raw: z.infer<typeof LoopEngineConfigSchema>['verification'],
 ): LoopEngineConfig['verification'] {
   if (!raw) return DEFAULT_CONFIG.verification;
   return {
     require_pass_before_critique: raw.require_pass_before_critique ?? false,
+    minConfidence: raw.min_confidence,
     strategies: raw.strategies?.map((s) => ({
       type: s.type,
-      command: s.command,
+      command: s.command ?? commandForStrategyType(s.type),
       timeoutMs: s.timeout_ms,
       optional: s.optional,
+      weight: s.weight,
+      successThreshold: s.success_threshold,
+      minConfidence: s.min_confidence,
+      dryRun: s.dry_run,
     })),
   };
 }
@@ -238,6 +286,8 @@ export function loadLoopEngineConfig(): LoopEngineConfig {
       retry: normaliseRetry(parsed.data.retry),
       timeoutMs: parsed.data.timeout_ms ?? DEFAULT_CONFIG.timeoutMs,
       usePmTeam: parsed.data.use_pm_team ?? false,
+      defaultDispatch: parsed.data.default_dispatch ?? DEFAULT_CONFIG.defaultDispatch,
+      betweenIterations: parsed.data.between_iterations,
     };
     return cached;
   } catch {
@@ -246,6 +296,21 @@ export function loadLoopEngineConfig(): LoopEngineConfig {
   }
 }
 
+/** Resolve default dispatch policy — env overrides YAML. */
+export function loadDefaultDispatchPolicy(): 'cursor_sdk' | 'direct' {
+  const env = process.env.ROLAND_DEFAULT_DISPATCH?.trim().toLowerCase();
+  if (env === 'direct' || env === 'cursor_sdk') return env;
+  return loadLoopEngineConfig().defaultDispatch ?? 'cursor_sdk';
+}
+
 export function clearLoopEngineConfigCache(): void {
   cached = null;
 }
+
+/** Resolve between-iteration command: template override → config → undefined. */
+export function resolveBetweenIterations(template: LoopTemplate): string | undefined {
+  return resolveBetweenIterationsCommand(template);
+}
+
+export { resolveBetweenIterationsCommand } from './loop-template-resolution.js';
+export type { ResolvedBetweenIterationsHook } from './loop-template-resolution.js';

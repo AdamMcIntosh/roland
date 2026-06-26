@@ -7,7 +7,7 @@
  * - LoopEngineCoordinator + inline LoopEngine construction in team-orchestrator is deprecated for loop missions.
  */
 
-import { ClosedLoop, LoopTemplates, readLoopPmSession, resolvePmIntegrationStatus, logPmIntegrationMode, type ClosedLoopResult } from '../loop-engine/index.js';
+import { ClosedLoop, LoopTemplates, readLoopPmSession, resolvePmIntegrationStatus, type ClosedLoopResult } from '../loop-engine/index.js';
 import { ModelRouter } from '../models/model-router.js';
 import { Blackboard } from './blackboard.js';
 import { CommandBlackboard } from './command-blackboard.js';
@@ -59,23 +59,9 @@ export async function runClosedLoopMission(opts: ClosedLoopMissionOptions): Prom
 
   const template = templates.get(templateName)!;
   const pmStatus = resolvePmIntegrationStatus(template, { enablePmIntegration: opts.enablePmIntegration });
-  logPmIntegrationMode(pmStatus, templateName);
-
   const modelRouter = ModelRouter.fromConfig();
-  const validation = ModelRouter.validateOnStartup(modelRouter);
-  if (!validation.ok) {
-    console.error(
-      `[ModelRouter] Missing required loop roles: ${validation.missing.join(', ')}. ` +
-        'Add models.<role> to config.yaml (pm, coding, critic, verifier) or set ROLAND_MODEL_<ROLE>.',
-    );
-  }
-  for (const w of validation.warnings.slice(0, 2)) {
-    console.error(`[ModelRouter] Note: ${w}`);
-  }
-  modelRouter.logStartupBanner(templateName);
 
   console.error('[Loop] ClosedLoop mission — Loop Engineering primary path');
-  console.error('[Loop] Verify/Critique/Reflect/ExitConditions remain in ClosedLoop harness');
 
   const blackboard = new Blackboard(stateDir);
   const commandBoard = new CommandBlackboard(stateDir);
@@ -104,7 +90,7 @@ export async function runClosedLoopMission(opts: ClosedLoopMissionOptions): Prom
   commandBoard.appendBullet('Mission Objectives', `[P2 active] ${goal}`);
   commandBoard.appendBullet(
     'Mission Objectives',
-    `Loop template: ${templateName} · PM Integration: ${pmStatus.enabled ? 'ENABLED' : 'DISABLED'}`,
+    `Loop template: ${templateName} · ${pmStatus.enabled ? 'PM-Enhanced (Legacy)' : 'Pure ClosedLoop'}`,
   );
   commandBoard.setAgentStatus({
     callsign: 'Roland',

@@ -20,7 +20,7 @@ import {
   type LoopHooks,
   type LoopRunResult,
 } from './loop-engine.js';
-import { LoopTemplates } from './loop-templates.js';
+import { LoopTemplates, summarizeTemplateSpawns } from './loop-templates.js';
 import {
   createDefaultHandlersWithoutPm,
   VerifyPhaseHandler,
@@ -36,9 +36,15 @@ import type { CommandRunner } from './verification/index.js';
 import { LoopMemory } from './loop-memory.js';
 import { LoopPmBridge } from './pm-integration.js';
 import { ModelRouter, initModelRouter, ModelRouterError } from '../models/model-router.js';
+import { loadLoopEngineConfig, resolveBetweenIterations } from './loop-config.js';
+import {
+  summarizeVerificationConfig,
+  summarizeBetweenIterationsConfig,
+  resolveBetweenIterationsHook,
+  resolveMinConfidence,
+} from './loop-template-resolution.js';
 import {
   isLoopPmTeamEnabled,
-  logPmIntegrationMode,
   resolvePmIntegrationStatus,
   type PmIntegrationStatus,
 } from './loop-pm-policy.js';
@@ -89,7 +95,7 @@ export interface ClosedLoopResult extends LoopRunResult {
  * Lifecycle: PLAN → ACT → VERIFY → CRITIQUE → RETRY → ESCALATE (optional) → OBSERVE → REFLECT → exit check.
  */
 export class ClosedLoop {
-  private readonly engine: LoopEngine;
+  private readonly engine!: LoopEngine;
   private readonly spawner: SpecialistSpawner;
   private readonly opts: ClosedLoopOptions;
   private readonly template: LoopTemplate;
@@ -111,10 +117,33 @@ export class ClosedLoop {
     for (const w of validation.warnings.slice(0, 3)) {
       console.error(`[ModelRouter] Note: ${w}`);
     }
+    for (const w of validation.dispatchWarnings.slice(0, 5)) {
+      console.error(`[ModelRouter] Dispatch: ${w}`);
+    }
     this.template = ClosedLoop.resolveTemplate(opts.template);
     this.pmIntegration = resolvePmIntegrationStatus(this.template, opts);
-    logPmIntegrationMode(this.pmIntegration, this.template.name);
-    this.modelRouter.logStartupBanner(this.template.name);
+    const loopCfg = loadLoopEngineConfig();
+    const spawnSummary = summarizeTemplateSpawns(this.template);
+    const verificationSummary = summarizeVerificationConfig(this.template);
+    const betweenIterSummary = summarizeBetweenIterationsConfig(this.template);
+    const betweenHook = resolveBetweenIterationsHook(this.template);
+    const hitlGitCommitEnabled = Boolean(
+      betweenHook?.gitCommit?.requireApproval && !betweenHook.gitCommit.dryRun,
+    );
+    const minConfidence = resolveMinConfidence(this.template, opts.minConfidence);
+    this.modelRouter.logLoopRunConfigSummary({
+      templateId: this.template.name,
+      canonicalTemplateId: new LoopTemplates().resolveName(this.template.name),
+      pmEnabled: this.pmIntegration.enabled,
+      pmReason: this.pmIntegration.reason,
+      usePmTeam: loopCfg.usePmTeam,
+      defaultDispatch: loopCfg.defaultDispatch ?? 'cursor_sdk',
+      spawnSummary,
+      verificationSummary,
+      betweenIterSummary,
+      minConfidence,
+      hitlGitCommitEnabled,
+    });
     this.memory = new LoopMemory({
       stateDir: opts.stateDir,
       loopId: opts.loopId,
@@ -126,10 +155,10 @@ export class ClosedLoop {
       commandBoard: opts.commandBoard,
       goal: opts.goal,
       modelRouter: this.modelRouter,
+      onSpawnPulse: (pulse) => {
+        this.engine?.recordSpawnPulse(pulse);
+      },
     });
-
-    const minConfidence =
-      opts.minConfidence ?? this.template.minConfidence ?? undefined;
 
     const pmEnabled = isLoopPmTeamEnabled(this.template, opts);
     const lightweightCtx = {
@@ -160,6 +189,7 @@ export class ClosedLoop {
     handlers.set(
       P.Verify,
       new VerifyPhaseHandler({
+        template: this.template,
         cwd: opts.cwd,
         runner: opts.runner,
         customCriteria: opts.customCriteria,
@@ -189,13 +219,20 @@ export class ClosedLoop {
       loopMemory: this.memory,
       runner: opts.runner,
       cwd: opts.cwd,
+      liveContext: {
+        dispatchMethod: loopCfg.defaultDispatch ?? 'cursor_sdk',
+        executionMode: pmEnabled ? 'PM-Enhanced' : 'Pure ClosedLoop',
+      },
     });
 
     console.error(
       `[Loop][closed-loop] harness ready template="${this.template.name}" loopId=${this.memory.loopId} ` +
         `phases=${this.template.phases.map((p) => p.phase).join('→')} ` +
-        `exitRules=${this.template.exitConditions?.length ?? 1} betweenIter=${Boolean(this.template.betweenIterations)} ` +
-        `pmIntegration=${pmEnabled ? 'legacy-enabled' : 'pure-closed-loop'}`,
+        `exitRules=${this.template.exitConditions?.length ?? 1} betweenIter=${Boolean(resolveBetweenIterations(this.template))} ` +
+        `pmIntegration=${pmEnabled ? 'legacy-enabled' : 'pure-closed-loop'}` +
+        (spawnSummary ? ` customSpawns="${spawnSummary}"` : '') +
+        (verificationSummary ? ` verification="${verificationSummary}"` : '') +
+        (betweenIterSummary ? ` betweenIter="${betweenIterSummary}"` : ''),
     );
   }
 
@@ -205,7 +242,10 @@ export class ClosedLoop {
 
   /** Run the full closed loop until complete, escalate, fail, timeout, or exit conditions met. */
   async run(context: { hadBlockers?: boolean; waveNumber?: number } = {}): Promise<ClosedLoopResult> {
-    this.spawner.spawnForPhase(P.Plan, 1, this.findPhaseConfig(P.Plan));
+    this.spawner.spawnForPhase(P.Plan, 1, this.findPhaseConfig(P.Plan), {
+      retryCount: 0,
+      goal: this.opts.goal,
+    });
 
     const result = await this.engine.runFullLoop(context);
     const formattedPr = this.persistFormattedPr(result.state, result.status);
@@ -312,7 +352,11 @@ export class ClosedLoop {
   }
 
   private onPhaseStart(phase: Phase, iteration: number): void {
-    this.spawner.spawnForPhase(phase, iteration, this.findPhaseConfig(phase));
+    const state = this.engine.getState();
+    this.spawner.spawnForPhase(phase, iteration, this.findPhaseConfig(phase), {
+      retryCount: state.retryCount,
+      goal: this.opts.goal,
+    });
   }
 
   private onPhaseComplete(phase: Phase, result: PhaseResult, iteration: number): void {
@@ -327,7 +371,7 @@ export class ClosedLoop {
   private static resolveTemplate(template?: string | LoopTemplate): LoopTemplate {
     if (template && typeof template !== 'string') return template;
     const loader = new LoopTemplates();
-    const name = template ?? loader.getDefault()?.name ?? 'closed-loop-harness';
+    const name = template ?? loader.getDefault()?.name ?? 'standard-code-loop';
     const resolved = loader.get(name);
     if (!resolved) {
       throw new Error(`ClosedLoop: unknown loop template "${name}"`);

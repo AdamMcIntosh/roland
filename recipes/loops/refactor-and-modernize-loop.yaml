@@ -1,19 +1,21 @@
-# Deprecated — use refactor-and-modernize-loop.
-name: code-quality-loop
-deprecated: true
-alias_of: refactor-and-modernize-loop
+name: refactor-and-modernize-loop
 description: >
-  [Deprecated] Alias for refactor-and-modernize-loop. Use --loop-template=refactor-and-modernize-loop
-  for new missions.
+  Refactor and modernize loop — plan structural improvements, implement incrementally, verify
+  behavior unchanged, critique quality gaps, reflect, and loop until clean. Verification commands
+  are project-defined in config.yaml (loop_engine.verification.strategies).
+kickoff: >
+  Start the refactor and modernize loop. Goal: code is cleaner, conventions-aligned, and behavior
+  preserved. After each iteration run configured quality gates, reflect on findings, and stop when
+  exit conditions pass.
 phases:
   - phase: plan
-    label: Plan quality work
+    label: Plan refactor scope
     agent: pm
   - phase: act
-    label: Implement fixes
+    label: Implement refactor
     agent: coding
   - phase: verify
-    label: Quality gates
+    label: Quality and regression gates
     agent: verifier
     verification:
       - lint

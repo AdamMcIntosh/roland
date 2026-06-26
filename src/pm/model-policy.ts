@@ -1,20 +1,12 @@
 /**
- * Cursor-native model policy for the PM team (Phase 3).
- *
- * The PM team runs entirely on Cursor's native models — there is no OpenRouter
- * here. Routing is deterministic and lane-based:
- *
- *   pm        → gpt-5.4-nano  (Lead PM only — orchestration + planning)
- *   reasoning → composer-2.5  (architect, reviewer, critic, planner, security…)
- *   coding    → composer-2.5  (executor, builder — cost-efficient default)
- *   light     → composer-2.5  (docs, tests, research — also standard)
- *
- * Cost strategy: gpt-5.4-nano for the one orchestration agent; composer-2.5 for engineers;
- * composer-2.5 for every engineer regardless of lane.
- *
- * This module is intentionally self-contained: it imports none of the legacy
- * OpenRouter constants and shares nothing with the RCO/triage routing path.
+ * ## Assumptions
+ * - Legacy PM Team lane routing bridges to Loop Engineering ModelRouter when no explicit policy is passed.
+ * - DEFAULT_MODEL_POLICY uses Cursor SDK ids derived from config.yaml `models` section.
+ * - TODO: Legacy PM Team — scheduled for deprecation; prefer ClosedLoop + ModelRouter directly.
  */
+
+import { getModelRouter, type ModelRouter } from '../models/model-router.js';
+import { DEFAULT_ENGINEER_MODEL, DEFAULT_PM_MODEL } from '../rco/cursor-models.js';
 
 export type Lane = 'pm' | 'reasoning' | 'coding' | 'light';
 export type ModelVariant = 'opus' | 'fast' | 'standard';
@@ -31,10 +23,20 @@ export interface ModelPolicy {
   standard: string;
 }
 
+/** Build a legacy PM Team policy from Loop Engineering ModelRouter. */
+export function modelPolicyFromRouter(router?: ModelRouter): ModelPolicy {
+  const r = router ?? getModelRouter();
+  return {
+    pm: r.resolveSdkModelId('lead-pm'),
+    fast: r.resolveSdkModelId('architect'),
+    standard: r.resolveSdkModelId('executor'),
+  };
+}
+
 export const DEFAULT_MODEL_POLICY: ModelPolicy = {
-  pm: 'gpt-5.4-nano',
-  fast: 'composer-2.5',
-  standard: 'composer-2.5',
+  pm: DEFAULT_PM_MODEL,
+  fast: DEFAULT_ENGINEER_MODEL,
+  standard: DEFAULT_ENGINEER_MODEL,
 };
 
 /** Map a lane to its Cursor model id + variant under a given policy. */

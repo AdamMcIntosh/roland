@@ -27,6 +27,7 @@
     "format": "prettier --write src/**/*.ts",
     "test": "vitest",
     "test:run": "vitest run",
+    "loop:ready-check": "npx tsx scripts/loop-ready-check.ts",
     "test:rco": "vitest run tests/rco",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "vitest run tests/e2e",

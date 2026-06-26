@@ -21,6 +21,7 @@ import type {
   WorkerInput,
   WorkerOutput,
 } from './types.js';
+import { getModelRouter } from '../models/model-router.js';
 
 export type RunWorkerFn = (workerPath: string, input: WorkerInput) => Promise<WorkerOutput>;
 
@@ -113,7 +114,7 @@ function resolveAgentYaml(
     return {
       name: stepAgent,
       role_prompt: sub.prompt ?? ref?.role_prompt,
-      claude_model: sub.claude_model ?? ref?.claude_model ?? 'composer-2.5',
+      claude_model: sub.claude_model ?? ref?.claude_model ?? getModelRouter().resolveSdkModelId(stepAgent),
       tools: ref?.tools,
     };
   }
@@ -121,7 +122,7 @@ function resolveAgentYaml(
   return {
     name: stepAgent,
     role_prompt: `You are ${stepAgent}. Complete your assigned workflow step.`,
-    claude_model: 'composer-2.5',
+    claude_model: getModelRouter().resolveSdkModelId(stepAgent),
   };
 }
 

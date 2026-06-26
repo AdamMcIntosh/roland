@@ -2,7 +2,7 @@ import type { Blackboard } from '../../rco/blackboard.js';
 import type { CommandBlackboard } from '../../rco/command-blackboard.js';
 import type { Phase, PhaseConfig } from '../loop-phases.js';
 import type { LoopCritiqueSnapshot } from '../self-improvement/types.js';
-import type { LoopRetrySnapshot, LoopState, LoopVerificationSnapshot } from '../loop-state.js';
+import type { LoopRetrySnapshot, LoopState, LoopVerificationSnapshot, LoopLiveActivity } from '../loop-state.js';
 
 export interface PhaseResult {
   success: boolean;
@@ -34,6 +34,8 @@ export interface PhaseHandlerContext {
   maxRetries?: number;
   /** Consecutive verify failures before HITL (from loop template / config). */
   escalationThreshold?: number;
+  /** Push live dashboard activity updates during long-running phases. */
+  reportLiveActivity?: (activity: LoopLiveActivity) => void;
 }
 
 export interface PhaseHandler {

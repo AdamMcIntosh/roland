@@ -1,10 +1,15 @@
 /**
  * ## Assumptions
  * - Role-based routing for Loop Engineering — independent of orchestrator/model-router.ts (complexity tiers).
- * - Default provider is OpenRouter; switch to full Ollama by changing config.yaml `models` section only.
- * - `provider: cursor` uses Cursor SDK model IDs (backward compat with pm.* config).
+ * - Default dispatch is Cursor SDK (`loop_engine.default_dispatch: cursor_sdk`); direct OpenRouter/Ollama when disabled.
+ * - Dispatch decision tree (per role):
+ *     1. SDK circuit open after SDK failures → direct provider chain
+ *     2. models.<role>.use_cursor_sdk: false → direct
+ *     3. ROLAND_MODEL_<ROLE>_PROVIDER set to non-cursor → direct (e.g. ollama)
+ *     4. loop_engine.default_dispatch: direct → direct
+ *     5. Otherwise → Cursor SDK (maps configured model → SDK id)
+ * - Provider fallback (recordFailure) applies to direct dispatch; SDK failures use recordSdkFailure().
  * - Env vars ROLAND_MODEL_<ROLE> and ROLAND_MODEL_<ROLE>_PROVIDER override per-role YAML.
- * - Fallback activates on rate-limit / model-unavailable errors via recordFailure().
  */
 
 import fs from 'fs';
@@ -17,6 +22,7 @@ import {
   VALID_CURSOR_MODELS,
   isValidCursorModel,
 } from '../rco/cursor-models.js';
+import { loadDefaultDispatchPolicy } from '../loop-engine/loop-config.js';
 
 // ============================================================================
 // Types
@@ -24,22 +30,18 @@ import {
 
 export type ModelProvider = 'openrouter' | 'ollama' | 'cursor' | 'groq' | 'openai';
 
-export type ModelRole =
-  | 'pm'
-  | 'coding'
-  | 'critic'
-  | 'verifier'
-  | 'researcher'
-  | 'planner'
-  | 'executor'
-  | 'reviewer'
-  | 'reasoning'
-  | 'light';
+/** How a role's model call is executed at runtime. */
+export type DispatchMethod = 'cursor_sdk' | 'direct';
+
+/** Global default dispatch backend from loop_engine.default_dispatch. */
+export type DefaultDispatchPolicy = DispatchMethod;
 
 export interface RoleModelSpec {
   provider: ModelProvider;
   model: string;
   fallback?: RoleModelSpec;
+  /** Per-role override: false forces direct; true forces SDK when available. */
+  use_cursor_sdk?: boolean;
 }
 
 export interface ModelsConfig {
@@ -55,6 +57,18 @@ export interface ModelsConfig {
   light?: RoleModelSpec;
 }
 
+export type ModelRole =
+  | 'pm'
+  | 'coding'
+  | 'critic'
+  | 'verifier'
+  | 'researcher'
+  | 'planner'
+  | 'executor'
+  | 'reviewer'
+  | 'reasoning'
+  | 'light';
+
 export interface ResolvedModel {
   role: ModelRole;
   provider: ModelProvider;
@@ -62,6 +76,22 @@ export interface ResolvedModel {
   isFallback: boolean;
   /** Human-readable label for logs, dashboard, and PR metadata. */
   displayLabel: string;
+}
+
+/** Full dispatch resolution — SDK id or direct provider model. */
+export interface ResolvedDispatch {
+  role: ModelRole;
+  method: DispatchMethod;
+  /** Effective model id/string for the active backend. */
+  model: string;
+  provider: ModelProvider;
+  sdkModelId?: string;
+  /** Underlying direct provider config (always populated for fallback chain). */
+  directModel: ResolvedModel;
+  displayLabel: string;
+  isFallback: boolean;
+  /** Human-readable explanation of dispatch method selection. */
+  reason: string;
 }
 
 export interface ModelWithFallbackChain {
@@ -77,6 +107,10 @@ export interface ModelRouterValidation {
   ok: boolean;
   missing: ModelRole[];
   warnings: string[];
+  /** Dispatch-specific startup warnings (SDK context, circuit state). */
+  dispatchWarnings: string[];
+  defaultDispatch: DefaultDispatchPolicy;
+  cursorSdkAvailable: boolean;
 }
 
 export class ModelRouterError extends Error {
@@ -213,6 +247,21 @@ const RATE_LIMIT_PATTERNS = [
   /capacity/i,
 ];
 
+/** SDK-specific failure patterns — trigger SDK→direct circuit. */
+const SDK_FAILURE_PATTERNS = [
+  ...RATE_LIMIT_PATTERNS,
+  /401/,
+  /403/,
+  /unauthorized/i,
+  /invalid.*api.*key/i,
+  /CURSOR_API_KEY/i,
+  /authentication/i,
+  /sdk.*error/i,
+  /agent.*failed/i,
+  /ECONNREFUSED/,
+  /ETIMEDOUT/,
+];
+
 // ============================================================================
 // Config loading
 // ============================================================================
@@ -237,6 +286,9 @@ function parseRoleSpec(raw: unknown): RoleModelSpec | undefined {
   if (obj.fallback && typeof obj.fallback === 'object') {
     const fb = parseRoleSpec(obj.fallback);
     if (fb) spec.fallback = fb;
+  }
+  if (typeof obj.use_cursor_sdk === 'boolean') {
+    spec.use_cursor_sdk = obj.use_cursor_sdk;
   }
   return spec;
 }
@@ -354,8 +406,11 @@ export function getModelRouter(): ModelRouter {
   return _instance;
 }
 
-export function initModelRouter(config?: ModelsConfig): ModelRouter {
-  _instance = new ModelRouter(config ?? applyEnvOverrides(loadModelsConfigFromYaml()));
+export function initModelRouter(config?: ModelsConfig, defaultDispatch?: DefaultDispatchPolicy): ModelRouter {
+  _instance = new ModelRouter(
+    config ?? applyEnvOverrides(loadModelsConfigFromYaml()),
+    defaultDispatch,
+  );
   return _instance;
 }
 
@@ -365,15 +420,22 @@ export function resetModelRouter(): void {
 
 export class ModelRouter {
   private readonly roleConfigs: Map<ModelRole, RoleModelSpec>;
+  private readonly defaultDispatch: DefaultDispatchPolicy;
   private readonly degradedRoles = new Set<ModelRole>();
+  private readonly sdkDisabledRoles = new Set<ModelRole>();
   private lastDegradeReason?: string;
+  private lastSdkDisableReason?: string;
 
-  constructor(config: ModelsConfig = DEFAULT_MODELS_CONFIG) {
+  constructor(
+    config: ModelsConfig = DEFAULT_MODELS_CONFIG,
+    defaultDispatch?: DefaultDispatchPolicy,
+  ) {
     this.roleConfigs = new Map();
     for (const role of ALL_ROLES) {
       const spec = config[role] ?? DEFAULT_MODELS_CONFIG[role];
       if (spec) this.roleConfigs.set(role, spec);
     }
+    this.defaultDispatch = defaultDispatch ?? loadDefaultDispatchPolicy();
   }
 
   static fromConfig(configPath?: string): ModelRouter {
@@ -442,6 +504,7 @@ export class ModelRouter {
     const r = router ?? ModelRouter.fromConfig();
     const missing: ModelRole[] = [];
     const warnings: string[] = [];
+    const dispatchWarnings: string[] = [];
 
     for (const role of REQUIRED_LOOP_ROLES) {
       try {
@@ -459,7 +522,34 @@ export class ModelRouter {
       }
     }
 
-    return { ok: missing.length === 0, missing, warnings };
+    const sdkAvailable = r.isCursorSdkAvailable();
+    if (r.getDefaultDispatch() === 'cursor_sdk' && !sdkAvailable) {
+      dispatchWarnings.push(
+        'default_dispatch=cursor_sdk but CURSOR_API_KEY is not set — runtime will use direct provider fallback',
+      );
+    }
+
+    for (const role of REQUIRED_LOOP_ROLES) {
+      const envP = process.env[`ROLAND_MODEL_${role.toUpperCase()}_PROVIDER`]?.trim();
+      if (envP && parseProvider(envP) !== 'cursor') {
+        dispatchWarnings.push(`Role "${role}" forced direct via ROLAND_MODEL_${role.toUpperCase()}_PROVIDER=${envP}`);
+      }
+    }
+
+    if (r.getSdkDisabledRoles().size > 0) {
+      dispatchWarnings.push(
+        `SDK circuit open for: ${[...r.getSdkDisabledRoles()].join(', ')} — using direct provider`,
+      );
+    }
+
+    return {
+      ok: missing.length === 0,
+      missing,
+      warnings,
+      dispatchWarnings,
+      defaultDispatch: r.getDefaultDispatch(),
+      cursorSdkAvailable: sdkAvailable,
+    };
   }
 
   private getRoleSpec(canonical: ModelRole): RoleModelSpec {
@@ -479,6 +569,159 @@ export class ModelRouter {
 
   getModelForAgent(agentName: string): ResolvedModel {
     return this.getModel(ModelRouter.roleForAgent(agentName));
+  }
+
+  getDefaultDispatch(): DefaultDispatchPolicy {
+    return this.defaultDispatch;
+  }
+
+  /** True when CURSOR_API_KEY is set (SDK dispatch can run). */
+  isCursorSdkAvailable(): boolean {
+    return Boolean(process.env.CURSOR_API_KEY?.trim());
+  }
+
+  getSdkDisabledRoles(): ReadonlySet<ModelRole> {
+    return new Set(this.sdkDisabledRoles);
+  }
+
+  /**
+   * Resolve dispatch method + effective model for a role.
+   * Cursor SDK is attempted first unless disabled by config/env/circuit.
+   */
+  resolveDispatch(
+    role: ModelRole | string,
+    opts: { agentName?: string; yamlModel?: string; phase?: string; log?: boolean } = {},
+  ): ResolvedDispatch {
+    const canonical = typeof role === 'string' ? ModelRouter.normalizeRole(role) : role;
+    const directModel = this.getModel(canonical);
+    const method = this.pickDispatchMethod(canonical);
+    const yaml = opts.yamlModel?.trim() ?? '';
+
+    if (method === 'cursor_sdk') {
+      let sdkId: string;
+      if (yaml && yaml !== 'auto' && isValidCursorModel(yaml)) {
+        sdkId = yaml;
+      } else if (directModel.provider === 'cursor' && isValidCursorModel(directModel.model)) {
+        sdkId = directModel.model;
+      } else {
+        sdkId = mapProviderModelToCursorSdk(directModel.model, canonical);
+      }
+      const dispatch: ResolvedDispatch = {
+        role: canonical,
+        method: 'cursor_sdk',
+        model: sdkId,
+        provider: 'cursor',
+        sdkModelId: sdkId,
+        directModel,
+        displayLabel: `${sdkId}@cursor_sdk`,
+        isFallback: directModel.isFallback,
+        reason: this.buildDispatchReason(canonical, 'cursor_sdk'),
+      };
+      if (opts.log !== false) this.logDispatch(dispatch, opts.phase);
+      return dispatch;
+    }
+
+    const dispatch: ResolvedDispatch = {
+      role: canonical,
+      method: 'direct',
+      model: directModel.model,
+      provider: directModel.provider,
+      directModel,
+      displayLabel: `${directModel.displayLabel} (direct)`,
+      isFallback: directModel.isFallback,
+      reason: this.buildDispatchReason(canonical, 'direct'),
+    };
+    if (opts.log !== false) this.logDispatch(dispatch, opts.phase);
+    return dispatch;
+  }
+
+  resolveDispatchForPhase(
+    phase: string,
+    opts: { agentName?: string; yamlModel?: string; log?: boolean } = {},
+  ): ResolvedDispatch {
+    return this.resolveDispatch(ModelRouter.roleForPhase(phase), { ...opts, phase });
+  }
+
+  /** Log dispatch decision — call once per phase transition or agent spawn. */
+  logDispatch(dispatch: ResolvedDispatch, phase?: string): void {
+    const phaseTag = phase ? ` phase=${phase}` : '';
+    const fb = dispatch.isFallback ? ' fallback=active' : '';
+    const sdkCircuit = this.sdkDisabledRoles.has(dispatch.role) ? ' sdk_circuit=open' : '';
+    const methodLabel =
+      dispatch.method === 'cursor_sdk'
+        ? 'Dispatching via Cursor SDK'
+        : `Direct provider (${dispatch.provider})`;
+    console.error(
+      `[ModelRouter] role=${dispatch.role}${phaseTag} ${methodLabel} → ${dispatch.displayLabel}${fb}${sdkCircuit} (${dispatch.reason})`,
+    );
+  }
+
+  /**
+   * Record SDK dispatch failure — opens SDK circuit for role and returns direct dispatch.
+   * Chain: SDK failure → direct primary → recordFailure() for provider fallback.
+   */
+  recordSdkFailure(role: ModelRole | string, errorMessage: string): ResolvedDispatch {
+    const canonical = typeof role === 'string' ? ModelRouter.normalizeRole(role) : role;
+    if (!this.isSdkFailure(errorMessage)) {
+      return this.resolveDispatch(canonical, { log: false });
+    }
+
+    this.sdkDisabledRoles.add(canonical);
+    this.lastSdkDisableReason = errorMessage.slice(0, 200);
+    console.error(
+      `[ModelRouter] role=${canonical} SDK circuit OPEN — switching to direct provider: "${this.lastSdkDisableReason}"`,
+    );
+
+    const direct = this.resolveDispatch(canonical, { log: false });
+    if (this.isRateLimitOrUnavailable(errorMessage)) {
+      this.recordFailure(canonical, errorMessage);
+    }
+    return this.resolveDispatch(canonical);
+  }
+
+  isSdkFailure(message: string): boolean {
+    if (!message) return false;
+    return SDK_FAILURE_PATTERNS.some((re) => re.test(message));
+  }
+
+  private pickDispatchMethod(canonical: ModelRole): DispatchMethod {
+    const spec = this.getRoleSpec(canonical);
+
+    if (this.sdkDisabledRoles.has(canonical)) return 'direct';
+    if (spec.use_cursor_sdk === false) return 'direct';
+
+    const envProvider = process.env[`ROLAND_MODEL_${canonical.toUpperCase()}_PROVIDER`]?.trim();
+    if (envProvider && parseProvider(envProvider) !== 'cursor') return 'direct';
+
+    if (spec.use_cursor_sdk === true) {
+      return this.isCursorSdkAvailable() ? 'cursor_sdk' : 'direct';
+    }
+
+    if (this.defaultDispatch === 'direct') return 'direct';
+
+    if (!this.isCursorSdkAvailable()) return 'direct';
+
+    return 'cursor_sdk';
+  }
+
+  private buildDispatchReason(role: ModelRole, method: DispatchMethod): string {
+    const spec = this.getRoleSpec(role);
+    if (this.sdkDisabledRoles.has(role)) {
+      return `SDK circuit open${this.lastSdkDisableReason ? ` — ${this.lastSdkDisableReason}` : ''}`;
+    }
+    if (spec.use_cursor_sdk === false) return 'models.' + role + '.use_cursor_sdk=false';
+    if (spec.use_cursor_sdk === true) {
+      return this.isCursorSdkAvailable()
+        ? 'models.' + role + '.use_cursor_sdk=true'
+        : 'use_cursor_sdk=true but CURSOR_API_KEY missing';
+    }
+    const envProvider = process.env[`ROLAND_MODEL_${role.toUpperCase()}_PROVIDER`]?.trim();
+    if (envProvider && parseProvider(envProvider) !== 'cursor') {
+      return `ROLAND_MODEL_${role.toUpperCase()}_PROVIDER=${envProvider}`;
+    }
+    if (this.defaultDispatch === 'direct') return 'loop_engine.default_dispatch=direct';
+    if (!this.isCursorSdkAvailable()) return 'default cursor_sdk but CURSOR_API_KEY missing';
+    return 'loop_engine.default_dispatch=cursor_sdk (default)';
   }
 
   /**
@@ -526,7 +769,13 @@ export class ModelRouter {
   /** One-line summary for CLI banners. */
   formatRoutingSummary(): string {
     const keys: ModelRole[] = ['pm', 'coding', 'critic', 'verifier', 'researcher'];
-    return keys.map((r) => `${r}=${this.getModel(r).displayLabel}`).join(' · ');
+    return keys
+      .map((r) => {
+        const d = this.resolveDispatch(r, { log: false });
+        const tag = d.method === 'cursor_sdk' ? 'sdk' : d.provider;
+        return `${r}=${d.model}@${tag}`;
+      })
+      .join(' · ');
   }
 
   /** Multi-line table for logs and Mission Objectives. */
@@ -543,7 +792,7 @@ export class ModelRouter {
   /**
    * Beautiful startup banner — printed at the start of every loop-template mission.
    */
-  formatStartupBanner(templateId?: string): string[] {
+  formatStartupBanner(templateId?: string, executionMode?: string): string[] {
     const width = 58;
     const border = '═'.repeat(width);
     const lines: string[] = [
@@ -553,63 +802,173 @@ export class ModelRouter {
     if (templateId) {
       lines.push(`[Loop] ║${` Template: ${templateId}`.slice(0, width).padEnd(width)}║`);
     }
+    if (executionMode) {
+      lines.push(`[Loop] ║${` Mode: ${executionMode}`.slice(0, width).padEnd(width)}║`);
+    }
     lines.push(`[Loop] ╠${border}╣`);
     for (const role of ['pm', 'coding', 'critic', 'verifier', 'researcher'] as ModelRole[]) {
-      const chain = this.getModelWithFallback(role);
-      const active = chain.active;
-      const fb = active.isFallback ? ' ← fallback active' : '';
-      const row = ` ${role.padEnd(11)} ${active.displayLabel}${fb}`;
+      const dispatch = this.resolveDispatch(role, { log: false });
+      const fb = dispatch.isFallback ? ' ← provider fallback' : '';
+      const sdkCircuit = this.sdkDisabledRoles.has(role) ? ' [SDK circuit open]' : '';
+      const method =
+        dispatch.method === 'cursor_sdk' ? 'SDK' : `Direct/${dispatch.provider}`;
+      const row = ` ${role.padEnd(11)} ${dispatch.model} (${method})${fb}${sdkCircuit}`;
       lines.push(`[Loop] ║${row.slice(0, width).padEnd(width)}║`);
     }
+    const dispatchBackend =
+      this.defaultDispatch === 'cursor_sdk'
+        ? (this.isCursorSdkAvailable() ? 'Cursor SDK (default)' : 'Cursor SDK (no API key → direct)')
+        : 'Direct provider (configured)';
+    lines.push(`[Loop] ╠${border}╣`);
+    lines.push(
+      `[Loop] ║${` Dispatch: ${dispatchBackend}`.slice(0, width).padEnd(width)}║`,
+    );
     lines.push(`[Loop] ╚${border}╝`);
+    return lines;
+  }
+
+  /** Full config summary for loop mission startup (banner + PM mode + routing). */
+  formatLoopRunConfigSummary(ctx: {
+    templateId: string;
+    canonicalTemplateId?: string;
+    pmEnabled: boolean;
+    pmReason: string;
+    usePmTeam?: boolean;
+    defaultDispatch?: DefaultDispatchPolicy;
+    spawnSummary?: string | null;
+    verificationSummary?: string | null;
+    betweenIterSummary?: string | null;
+    minConfidence?: number;
+    hitlGitCommitEnabled?: boolean;
+  }): string[] {
+    const mode = ctx.pmEnabled
+      ? 'PM-Enhanced (legacy PM Team opt-in)'
+      : 'Pure ClosedLoop (default)';
+    const canonical =
+      ctx.canonicalTemplateId && ctx.canonicalTemplateId !== ctx.templateId
+        ? `${ctx.templateId} → ${ctx.canonicalTemplateId}`
+        : ctx.templateId;
+    const lines = this.formatStartupBanner(canonical, mode);
+    lines.push('[Loop] ── Mission Config ──');
+    lines.push(`[Loop]   Template: ${ctx.templateId}`);
+    if (ctx.canonicalTemplateId && ctx.canonicalTemplateId !== ctx.templateId) {
+      lines.push(`[Loop]   Canonical: ${ctx.canonicalTemplateId} (deprecated alias)`);
+    }
+    lines.push(`[Loop]   Execution: ${mode}`);
+    lines.push(`[Loop]   Dispatch default: ${ctx.defaultDispatch ?? this.defaultDispatch}`);
+    lines.push(
+      `[Loop]   Cursor SDK: ${this.isCursorSdkAvailable() ? 'available (CURSOR_API_KEY set)' : 'unavailable — direct fallback active'}`,
+    );
+    lines.push(`[Loop]   PM policy: ${ctx.pmReason}`);
+    if (ctx.usePmTeam !== undefined) {
+      lines.push(`[Loop]   loop_engine.use_pm_team: ${ctx.usePmTeam}`);
+    }
+    if (ctx.spawnSummary) {
+      lines.push(`[Loop]   Specialist spawns (template): ${ctx.spawnSummary}`);
+    }
+    if (ctx.verificationSummary) {
+      lines.push(`[Loop]   Verification strategies: ${ctx.verificationSummary}`);
+    }
+    if (ctx.minConfidence !== undefined) {
+      lines.push(`[Loop]   min_confidence: ${ctx.minConfidence}`);
+    }
+    if (ctx.betweenIterSummary) {
+      lines.push(`[Loop]   Between-iterations hook: ${ctx.betweenIterSummary}`);
+    }
+    if (ctx.hitlGitCommitEnabled) {
+      lines.push('[Loop]   HITL git-commit approval: enabled (dashboard or `roland approve-commit`)');
+    }
+    lines.push(`[Loop]   Effective routing: ${this.formatRoutingSummary()}`);
+    const degraded = this.getDegradedRoles();
+    if (degraded.size > 0) {
+      lines.push(
+        `[Loop]   ⚠ Provider fallback active: ${[...degraded].join(', ')} — direct dispatch uses secondary models`,
+      );
+    }
+    const sdkDisabled = this.getSdkDisabledRoles();
+    if (sdkDisabled.size > 0) {
+      lines.push(
+        `[Loop]   ⚠ SDK circuit open: ${[...sdkDisabled].join(', ')} — forced direct provider dispatch`,
+      );
+    }
+    if (ctx.pmEnabled) {
+      lines.push(
+        '[Loop]   ⚠ Legacy PM Team delegates Plan/Act to team-orchestrator — prefer Pure ClosedLoop',
+      );
+    } else {
+      lines.push('[Loop]   Plan/Act: lightweight handlers · Verify/Critique/Reflect in harness');
+    }
     return lines;
   }
 
   /** JSON-safe snapshot for run-state.json and dashboard. */
   serializeRoutingForState(): {
     summary: string;
-    roles: Record<string, { provider: string; model: string; displayLabel: string; isFallback: boolean }>;
+    defaultDispatch: DefaultDispatchPolicy;
+    cursorSdkAvailable: boolean;
+    roles: Record<string, {
+      provider: string;
+      model: string;
+      displayLabel: string;
+      isFallback: boolean;
+      dispatchMethod: DispatchMethod;
+      sdkModelId?: string;
+      directProvider: string;
+      directModel: string;
+    }>;
     phaseModels: Record<string, string>;
+    phaseDispatch: Record<string, DispatchMethod>;
   } {
     const routing = this.getActiveRouting();
     return {
       summary: this.formatRoutingSummary(),
+      defaultDispatch: this.defaultDispatch,
+      cursorSdkAvailable: this.isCursorSdkAvailable(),
       roles: Object.fromEntries(
-        Object.entries(routing).map(([role, m]) => [
-          role,
-          {
-            provider: m.provider,
-            model: m.model,
-            displayLabel: m.displayLabel,
-            isFallback: m.isFallback,
-          },
-        ]),
+        ALL_ROLES.map((role) => {
+          const dispatch = this.resolveDispatch(role, { log: false });
+          const direct = routing[role];
+          return [
+            role,
+            {
+              provider: dispatch.provider,
+              model: dispatch.model,
+              displayLabel: dispatch.displayLabel,
+              isFallback: dispatch.isFallback,
+              dispatchMethod: dispatch.method,
+              sdkModelId: dispatch.sdkModelId,
+              directProvider: direct.provider,
+              directModel: direct.model,
+            },
+          ];
+        }),
       ),
       phaseModels: Object.fromEntries(
-        ['plan', 'act', 'verify', 'critique', 'retry', 'observe', 'reflect'].map((phase) => [
-          phase,
-          this.getModelForPhase(phase).displayLabel,
-        ]),
+        ['plan', 'act', 'verify', 'critique', 'retry', 'observe', 'reflect'].map((phase) => {
+          const d = this.resolveDispatchForPhase(phase, { log: false });
+          return [phase, d.displayLabel];
+        }),
+      ),
+      phaseDispatch: Object.fromEntries(
+        ['plan', 'act', 'verify', 'critique', 'retry', 'observe', 'reflect'].map((phase) => {
+          const d = this.resolveDispatchForPhase(phase, { log: false });
+          return [phase, d.method];
+        }),
       ),
     };
   }
 
   /**
-   * Resolve a Cursor SDK model id for legacy PM Team agent dispatch.
-   * Uses role routing from config; falls back to keyword mapping for non-cursor providers.
+   * Resolve a Cursor SDK model id — delegates to resolveDispatch().
+   * Returns SDK id when dispatch method is cursor_sdk; direct model string otherwise.
    */
   resolveSdkModelId(agentName: string, yamlModel?: string): string {
-    const yaml = yamlModel?.toLowerCase().trim() ?? '';
-    if (yaml && yaml !== 'auto' && isValidCursorModel(yaml)) return yaml;
-
-    const role = ModelRouter.roleForAgent(agentName);
-    const resolved = this.getModel(role);
-
-    if (resolved.provider === 'cursor' && isValidCursorModel(resolved.model)) {
-      return resolved.model;
-    }
-
-    return mapProviderModelToCursorSdk(resolved.model, role);
+    const dispatch = this.resolveDispatch(ModelRouter.roleForAgent(agentName), {
+      agentName,
+      yamlModel,
+      log: false,
+    });
+    return dispatch.method === 'cursor_sdk' ? (dispatch.sdkModelId ?? dispatch.model) : dispatch.model;
   }
 
   logRoutingBanner(): void {
@@ -618,8 +977,26 @@ export class ModelRouter {
     }
   }
 
-  logStartupBanner(templateId?: string): void {
-    for (const line of this.formatStartupBanner(templateId)) {
+  logStartupBanner(templateId?: string, executionMode?: string): void {
+    for (const line of this.formatStartupBanner(templateId, executionMode)) {
+      console.error(line);
+    }
+  }
+
+  logLoopRunConfigSummary(ctx: {
+    templateId: string;
+    canonicalTemplateId?: string;
+    pmEnabled: boolean;
+    pmReason: string;
+    usePmTeam?: boolean;
+    defaultDispatch?: DefaultDispatchPolicy;
+    spawnSummary?: string | null;
+    verificationSummary?: string | null;
+    betweenIterSummary?: string | null;
+    minConfidence?: number;
+    hitlGitCommitEnabled?: boolean;
+  }): void {
+    for (const line of this.formatLoopRunConfigSummary(ctx)) {
       console.error(line);
     }
   }
@@ -630,7 +1007,9 @@ export class ModelRouter {
 
   resetDegradation(): void {
     this.degradedRoles.clear();
+    this.sdkDisabledRoles.clear();
     this.lastDegradeReason = undefined;
+    this.lastSdkDisableReason = undefined;
   }
 }
 
@@ -652,32 +1031,20 @@ function mapProviderModelToCursorSdk(model: string, role: ModelRole): string {
 }
 
 /**
- * ## Final Legacy Cleanup + Model Router Integration Complete
+ * ## Cursor SDK Default Confirmed + Loop Engineering Readiness
  *
- * Loop Engineering routes all roles via `getModel()` / `getModelWithFallback()`.
- * Legacy PM Team (`team-orchestrator.ts`) bridges through `resolveSdkModelId()` for Cursor SDK dispatch.
+ * Dispatch decision tree lives in `resolveDispatch()` / `recordSdkFailure()`.
+ * Default: Cursor SDK for all roles unless disabled via config/env/circuit.
  *
- * **OpenRouter (default)** — `config.yaml`:
  * ```yaml
+ * loop_engine:
+ *   default_dispatch: cursor_sdk   # default
+ *   use_pm_team: false
  * models:
- *   pm:     { provider: openrouter, model: grok-4.3, fallback: { provider: openrouter, model: gpt-5.4-nano } }
- *   coding: { provider: openrouter, model: qwen/qwen3-coder-next }
- *   critic: { provider: openrouter, model: deepseek/deepseek-chat }
- *   verifier: { provider: openrouter, model: deepseek/deepseek-v3-0324 }
+ *   pm: { provider: openrouter, model: grok-4.3, use_cursor_sdk: true }
+ *   coding: { provider: openrouter, model: qwen/qwen3-coder-next, use_cursor_sdk: false }  # force direct
  * ```
  *
- * **Full Ollama (local)** — change provider per role only:
- * ```yaml
- * models:
- *   pm:     { provider: ollama, model: llama3.2:latest }
- *   coding: { provider: ollama, model: qwen3.5-coder:14b }
- *   critic: { provider: ollama, model: deepseek-r1:7b }
- *   verifier: { provider: ollama, model: qwen3.5-coder:14b }
- * ollama:
- *   enabled: true
- *   base_url: http://localhost:11434
- * ```
- *
- * Env overrides: `ROLAND_MODEL_CODING=qwen3.5-coder:14b` + `ROLAND_MODEL_CODING_PROVIDER=ollama`
+ * Env: `ROLAND_DEFAULT_DISPATCH=direct` · `ROLAND_MODEL_CODING_PROVIDER=ollama` forces direct for coding.
  */
 export {};

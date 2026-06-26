@@ -26,7 +26,7 @@ export function runLightweightPlan(
   opts: LightweightPlanActContext,
 ): PhaseResult {
   const router = opts.modelRouter ?? ModelRouter.fromConfig();
-  const pmModel = router.getModelForPhase('plan');
+  const planDispatch = router.resolveDispatchForPhase('plan', { log: true });
 
   writeLoopPmSession(opts.stateDir, {
     iteration,
@@ -51,11 +51,11 @@ export function runLightweightPlan(
   });
   opts.commandBoard?.appendBullet(
     'Key Decisions',
-    `[Pure ClosedLoop] Plan iter ${iteration} — model ${pmModel.displayLabel}`,
+    `[Pure ClosedLoop] Plan iter ${iteration} — ${planDispatch.displayLabel} (${planDispatch.method})`,
   );
 
   console.error(
-    `[Loop][pure] Plan iteration=${iteration} path=lightweight model=${pmModel.displayLabel}`,
+    `[Loop][pure] Plan iteration=${iteration} path=lightweight dispatch=${planDispatch.method} model=${planDispatch.displayLabel}`,
   );
 
   return {
@@ -71,7 +71,7 @@ export function runLightweightAct(
   waveNumber = 0,
 ): PhaseResult {
   const router = opts.modelRouter ?? ModelRouter.fromConfig();
-  const actModel = router.getModelForPhase('act');
+  const actDispatch = router.resolveDispatchForPhase('act', { log: true });
 
   opts.commandBoard?.setAgentStatus({
     callsign: 'Roland',
@@ -92,7 +92,7 @@ export function runLightweightAct(
   });
 
   console.error(
-    `[Loop][pure] Act iteration=${iteration} path=lightweight model=${actModel.displayLabel}`,
+    `[Loop][pure] Act iteration=${iteration} path=lightweight dispatch=${actDispatch.method} model=${actDispatch.displayLabel}`,
   );
 
   return {

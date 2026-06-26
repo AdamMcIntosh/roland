@@ -16,7 +16,7 @@ import {
   VALID_CURSOR_MODELS,
   isValidCursorModel,
 } from './cursor-models.js';
-import { getModelRouter } from '../models/model-router.js';
+import { getModelRouter, ModelRouter } from '../models/model-router.js';
 
 export { VALID_CURSOR_MODELS, isValidCursorModel } from './cursor-models.js';
 export { DEFAULT_PM_MODEL, DEFAULT_ENGINEER_MODEL } from './cursor-models.js';
@@ -27,7 +27,14 @@ export { DEFAULT_PM_MODEL, DEFAULT_ENGINEER_MODEL } from './cursor-models.js';
  */
 export function toCursorModelId(model: string, agentName: string = ''): string {
   try {
-    return getModelRouter().resolveSdkModelId(agentName, model);
+    const dispatch = getModelRouter().resolveDispatch(
+      agentName ? ModelRouter.roleForAgent(agentName) : 'coding',
+      { agentName, yamlModel: model, log: false },
+    );
+    if (dispatch.method === 'cursor_sdk') {
+      return dispatch.sdkModelId ?? dispatch.model;
+    }
+    return dispatch.model;
   } catch {
     return toCursorModelIdLegacy(model, agentName);
   }

@@ -9,6 +9,7 @@ import type {
   StrategyResult,
   VerificationFailure,
   VerificationResult,
+  VerificationStrategyType,
 } from './verify-result.js';
 import { aggregateVerificationResult } from './verify-result.js';
 import type { VerificationStrategyConfig } from './verification-strategies.js';
@@ -111,6 +112,10 @@ export interface TestExecutorOptions {
   strategies: VerificationStrategyConfig[];
   hadWaveBlockers?: boolean;
   runner?: CommandRunner;
+  onStrategyProgress?: (
+    type: VerificationStrategyType,
+    status: 'running' | 'pass' | 'fail' | 'skipped',
+  ) => void;
 }
 
 export class TestExecutor {
@@ -118,12 +123,14 @@ export class TestExecutor {
   private readonly strategies: VerificationStrategyConfig[];
   private readonly hadWaveBlockers: boolean;
   private readonly runner: CommandRunner;
+  private readonly onStrategyProgress?: TestExecutorOptions['onStrategyProgress'];
 
   constructor(opts: TestExecutorOptions) {
     this.cwd = opts.cwd ?? process.cwd();
     this.strategies = opts.strategies;
     this.hadWaveBlockers = Boolean(opts.hadWaveBlockers);
     this.runner = opts.runner ?? defaultRunner;
+    this.onStrategyProgress = opts.onStrategyProgress;
   }
 
   async runAll(): Promise<VerificationResult> {
@@ -132,7 +139,12 @@ export class TestExecutor {
 
     for (const strategy of this.strategies) {
       logVerify(`Running ${strategy.type}`, { command: strategy.command });
+      this.onStrategyProgress?.(strategy.type, 'running');
       const result = await this.runStrategy(strategy);
+      this.onStrategyProgress?.(
+        strategy.type,
+        result.skipped ? 'skipped' : result.pass ? 'pass' : 'fail',
+      );
       strategyResults.push(result);
       logVerify(`${strategy.type} ${result.pass ? 'passed' : 'failed'}`, {
         durationMs: result.durationMs,
@@ -156,6 +168,20 @@ export class TestExecutor {
   private async runStrategy(strategy: VerificationStrategyConfig): Promise<StrategyResult> {
     const started = Date.now();
     const timeoutMs = strategy.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
+    if (strategy.dryRun) {
+      logVerify(`Dry-run ${strategy.type} — skipped execution`, { command: strategy.command });
+      return {
+        type: strategy.type,
+        pass: true,
+        command: strategy.command,
+        durationMs: Date.now() - started,
+        exitCode: 0,
+        failures: [],
+        skipped: true,
+        skipReason: 'dry-run — command not executed',
+      };
+    }
 
     try {
       const { exitCode, stdout, stderr, timedOut } = await this.runner(strategy.command, {

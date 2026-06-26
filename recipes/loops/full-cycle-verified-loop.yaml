@@ -1,0 +1,75 @@
+name: full-cycle-verified-loop
+description: >
+  Production full-cycle loop — plan, implement, verify with evaluation gates, critique, optional
+  escalation, observe, reflect. Declarative exit conditions and between-iteration checks come from
+  project config (loop_engine.between_iterations) unless overridden via recipe params.
+kickoff: >
+  Start the full-cycle verified loop. Self-pace each iteration: plan scope, implement, run
+  evaluation gates, critique results, reflect on learnings, and stop when exit conditions pass
+  or max iterations is reached.
+phases:
+  - phase: plan
+    label: Plan work
+    agent: pm
+  - phase: act
+    label: Implement changes
+    agent: coding
+  - phase: verify
+    label: Evaluation gates
+    agent: verifier
+    verification:
+      - type: lint
+        weight: 0.65
+        success_threshold: 0.75
+        optional: true
+      - type: unit
+        weight: 0.9
+        success_threshold: 1.0
+      - type: typecheck
+        weight: 0.7
+        success_threshold: 0.8
+        optional: true
+  - phase: critique
+    label: Self-critique
+    agent: critic
+  - phase: retry
+    label: Smart retry
+    optional: true
+  - phase: escalate
+    label: Human escalation
+    optional: true
+    agent: pm
+  - phase: observe
+    label: Observe and record
+    agent: researcher
+  - phase: reflect
+    label: Reflect on learnings
+    optional: true
+    agent: researcher
+maxIterations: 10
+maxRetries: 3
+escalationThreshold: 4
+testModeMaxRetries: 8
+testModeEscalationThreshold: 10
+timeout_ms: 1800000
+exponential_backoff: true
+min_confidence: 0.85
+between_iterations:
+  action: git-commit
+  dry_run: true
+  optional: true
+  message_template: "chore(loop): verified iteration {iteration}"
+  # HITL example (uncomment for operator-approved real commits):
+  # dry_run: false
+  # auto_stage: true
+  # require_approval: true
+  # approval_timeout_ms: 900000
+  # auto_reject_on_timeout: true
+reflection: true
+exit_conditions:
+  - type: all_gates_pass
+    description: All evaluation gates pass with accepted confidence
+  - type: confidence_streak
+    description: Success confidence ≥ 0.85 for 2 consecutive iterations
+    minConfidence: 0.85
+    consecutiveIterations: 2

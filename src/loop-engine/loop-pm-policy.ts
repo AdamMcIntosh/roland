@@ -95,9 +95,14 @@ export function isLoopPmTeamEnabled(
   return resolvePmIntegrationStatus(template, opts).enabled;
 }
 
-/** Structured log lines for loop mission startup. */
+/** Dashboard / health label — Pure ClosedLoop vs PM-Enhanced. */
+export function formatPmIntegrationLabel(status: PmIntegrationStatus): string {
+  return status.enabled ? 'PM-Enhanced (Legacy)' : 'Pure ClosedLoop';
+}
+
+/** Structured log lines for loop mission startup (used when ModelRouter summary is skipped). */
 export function logPmIntegrationMode(status: PmIntegrationStatus, templateName: string): void {
-  const label = status.enabled ? 'ENABLED (legacy PM Team)' : 'DISABLED (pure ClosedLoop)';
+  const label = formatPmIntegrationLabel(status);
   console.error(`[Loop] PM Integration: ${label}`);
   console.error(`[Loop]   template=${templateName} reason=${status.reason}`);
   if (status.enabled) {

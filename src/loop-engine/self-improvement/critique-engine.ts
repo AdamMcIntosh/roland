@@ -48,11 +48,11 @@ export class CritiqueEngine {
     const retryResult = resolveRetryStrategy(enriched);
     const preferredLane = selectCritiqueLane(enriched, issues);
     const lane = loopDegradationPolicy.selectLane(preferredLane);
-    const resolved = this.router.getModel(lane);
+    const dispatch = this.router.resolveDispatch(lane, { phase: 'critique', log: true });
 
     console.error(
-      `[Loop][critique] role=${lane} model=${resolved.displayLabel} fallback=${resolved.isFallback} ` +
-        `decision=${retryResult.decision} retry=${input.retryCount}/${maxRetries} ` +
+      `[Loop][critique] role=${lane} dispatch=${dispatch.method} model=${dispatch.displayLabel} ` +
+        `fallback=${dispatch.isFallback} decision=${retryResult.decision} retry=${input.retryCount}/${maxRetries} ` +
         `escalationThreshold=${escalationThreshold} reason="${retryResult.reason}"`,
     );
 

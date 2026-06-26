@@ -181,6 +181,8 @@ roland:
     const result = ModelRouter.validateOnStartup(new ModelRouter(DEFAULT_MODELS_CONFIG));
     expect(result.ok).toBe(true);
     expect(result.missing).toHaveLength(0);
+    expect(result.dispatchWarnings).toBeDefined();
+    expect(result.defaultDispatch).toBeTruthy();
   });
 
   it('formatRoutingSummary includes primary roles', () => {
@@ -193,20 +195,39 @@ roland:
 
   it('formatStartupBanner includes template and core roles', () => {
     const router = new ModelRouter(DEFAULT_MODELS_CONFIG);
-    const lines = router.formatStartupBanner('closed-loop-harness');
+    const lines = router.formatStartupBanner('closed-loop-harness', 'Pure ClosedLoop (default)');
     const joined = lines.join('\n');
     expect(joined).toContain('closed-loop-harness');
+    expect(joined).toContain('Pure ClosedLoop');
     expect(joined).toContain('pm');
     expect(joined).toContain('coding');
+    expect(joined).toContain('Dispatch:');
     expect(joined).toContain('╔');
   });
 
-  it('serializeRoutingForState includes phase models', () => {
+  it('formatLoopRunConfigSummary includes PM mode and routing', () => {
     const router = new ModelRouter(DEFAULT_MODELS_CONFIG);
+    const lines = router.formatLoopRunConfigSummary({
+      templateId: 'closed-loop-harness',
+      pmEnabled: false,
+      pmReason: 'no PM Team opt-in — pure ClosedLoop',
+      usePmTeam: false,
+    });
+    const joined = lines.join('\n');
+    expect(joined).toContain('Mission Config');
+    expect(joined).toContain('Pure ClosedLoop');
+    expect(joined).toContain('use_pm_team: false');
+    expect(joined).toContain('pm=');
+  });
+
+  it('serializeRoutingForState includes phase models and dispatch', () => {
+    process.env.CURSOR_API_KEY = 'test-key';
+    const router = new ModelRouter(DEFAULT_MODELS_CONFIG, 'cursor_sdk');
     const snap = router.serializeRoutingForState();
     expect(snap.summary).toContain('pm=');
     expect(snap.phaseModels.plan).toBeTruthy();
-    expect(snap.phaseModels.critique).toBeTruthy();
+    expect(snap.phaseDispatch.plan).toBe('cursor_sdk');
+    delete process.env.CURSOR_API_KEY;
   });
 
   it('resolveSdkModelId maps roles to Cursor SDK ids', () => {

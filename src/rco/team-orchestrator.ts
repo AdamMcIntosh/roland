@@ -827,16 +827,16 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
   const roster: AgentYaml[] = Array.from(rosterMap.values());
   console.error(`[Team] Roster: ${roster.length} agents from ${agentsDir}`);
 
-  // ── Model config banner (legacy PM path — routes via ModelRouter → Cursor SDK) ─
+  // ── Model config banner (legacy PM path — routes via ModelRouter dispatch) ─
   const legacyRouter = ModelRouter.fromConfig();
-  const pmResolved = legacyRouter.getModel('pm');
-  const codingResolved = legacyRouter.getModel('coding');
-  const pmModelId = toCursorModelId(pmResolved.model, 'lead-pm');
-  const engineerModelId = toCursorModelId(codingResolved.model, 'executor');
+  const pmDispatch = legacyRouter.resolveDispatch('pm', { agentName: 'lead-pm', log: false });
+  const codingDispatch = legacyRouter.resolveDispatch('coding', { agentName: 'executor', log: false });
+  const pmModelId = toCursorModelId(pmDispatch.model, 'lead-pm');
+  const engineerModelId = toCursorModelId(codingDispatch.model, 'executor');
   console.error('[Team] ─────────────────────────────────────────────────────');
-  console.error('[Team] Legacy PM Team — ModelRouter → Cursor SDK');
-  console.error(`[Team]   Lead PM (pm)     → ${pmResolved.displayLabel} → SDK ${pmModelId}`);
-  console.error(`[Team]   Engineers (coding)→ ${codingResolved.displayLabel} → SDK ${engineerModelId}`);
+  console.error('[Team] Legacy PM Team — ModelRouter dispatch');
+  console.error(`[Team]   Lead PM     → ${pmDispatch.method} ${pmDispatch.displayLabel} → SDK ${pmModelId}`);
+  console.error(`[Team]   Engineers   → ${codingDispatch.method} ${codingDispatch.displayLabel} → SDK ${engineerModelId}`);
   console.error('[Team] ─────────────────────────────────────────────────────');
 
   // ── Shared execution state ─────────────────────────────────────────────────
@@ -990,7 +990,7 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
     syncMissionGraph();
     const taskCallStart = Date.now();
     const output = await callCursorAgent(callsign, modelId, workerPrompt, waveCircuit, workerCallOpts);
-    allTaskUsage.push(buildTaskUsage(task.id, task.title, task.agent, modelId, workerPrompt.length, output.length, Date.now() - taskCallStart));
+    allTaskUsage.push(buildTaskUsage(task.id, task.title, task.agent, modelId, workerPrompt.length, output.length, Date.now() - taskCallStart, legacyRouter.resolveDispatch(task.agent, { log: false }).method));
 
     // ── Parse worker signals ───────────────────────────────────────────────
     const signals = parseWorkerSignals(output);
@@ -1114,7 +1114,7 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
     });
     const pmPlanStart = Date.now();
     planText = await callCursorAgent('Lead-PM', pmModelId, planningPrompt, undefined, supervisorCallOpts);
-    allTaskUsage.push(buildTaskUsage('pm-planning', 'Lead PM: Planning', 'Lead-PM', pmModelId, planningPrompt.length, planText.length, Date.now() - pmPlanStart));
+    allTaskUsage.push(buildTaskUsage('pm-planning', 'Lead PM: Planning', 'Lead-PM', pmModelId, planningPrompt.length, planText.length, Date.now() - pmPlanStart, pmDispatch.method));
 
     const rawPlan = extractJsonBlock(planText);
     plan = isTeamPlan(rawPlan) ? rawPlan : fallbackPlan(goal);

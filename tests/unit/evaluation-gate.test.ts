@@ -33,7 +33,7 @@ describe('EvaluationGate', () => {
     const result = await gate.evaluate();
     expect(result.pass).toBe(true);
     expect(result.accepted).toBe(true);
-    expect(result.confidence).toBeGreaterThanOrEqual(0.75);
+    expect(result.confidence).toBeGreaterThanOrEqual(0.8);
     expect(result.gates.some((g) => g.type === 'unit' && g.pass)).toBe(true);
   });
 
@@ -48,7 +48,39 @@ describe('EvaluationGate', () => {
     const result = await gate.evaluate();
     expect(result.pass).toBe(false);
     expect(result.accepted).toBe(false);
-    expect(result.confidence).toBeLessThan(0.75);
+    expect(result.confidence).toBeLessThan(0.85);
+  });
+
+  it('applies per-strategy weight and success_threshold in confidence scoring', async () => {
+    const gate = new EvaluationGate({
+      strategies: [
+        {
+          type: 'unit',
+          command: 'npm test',
+          weight: 0.9,
+          successThreshold: 1,
+        },
+        {
+          type: 'smoke',
+          command: 'npm test',
+          optional: true,
+          weight: 0.6,
+          successThreshold: 0.6,
+        },
+      ],
+      runner: passRunner,
+      minConfidence: 0.8,
+    });
+
+    const result = await gate.evaluate();
+    expect(result.accepted).toBe(true);
+    expect(result.confidence).toBeCloseTo(0.84, 2);
+    const unitGate = result.gates.find((g) => g.name === 'unit');
+    const smokeGate = result.gates.find((g) => g.name === 'smoke');
+    expect(unitGate?.weight).toBe(0.9);
+    expect(smokeGate?.weight).toBe(0.6);
+    expect(unitGate?.confidence).toBe(1);
+    expect(result.confidence).toBeGreaterThanOrEqual(0.8);
   });
 
   it('runs custom criteria alongside automated verifiers', async () => {

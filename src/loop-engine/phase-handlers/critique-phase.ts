@@ -121,7 +121,8 @@ export class CritiquePhaseHandler implements PhaseHandler {
     );
     ctx.commandBoard?.appendBullet(
       'Open Intel',
-      `[CRITIQUE] role=${critique.model} model=${this.router.getModel(critique.model).displayLabel} ` +
+      `[CRITIQUE] role=${critique.model} dispatch=${this.router.resolveDispatch(critique.model, { log: false }).method} ` +
+        `model=${critiqueModelLabel(critique.model, this.router)} ` +
         `decision=${critique.retryDecision} retry=${ctx.state.retryCount}/${maxRetries} ` +
         `escalationThreshold=${escalationThreshold} issues=${critique.issues.length}`,
     );
@@ -142,7 +143,11 @@ export class CritiquePhaseHandler implements PhaseHandler {
 }
 
 function critiqueModelLabel(lane: CritiqueModel, router: ModelRouter): string {
-  const resolved = router.getModel(lane);
+  const dispatch = router.resolveDispatch(lane, { phase: 'critique', log: false });
   const laneDesc = lane === 'critic' ? 'high-level' : 'code-specific';
-  return `${resolved.displayLabel} (${laneDesc})`;
+  const base =
+    dispatch.method === 'cursor_sdk'
+      ? `${dispatch.sdkModelId ?? dispatch.model}@cursor_sdk`
+      : `${dispatch.directModel.model}@${dispatch.directModel.provider}`;
+  return `${base} (${laneDesc})`;
 }

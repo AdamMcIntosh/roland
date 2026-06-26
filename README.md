@@ -55,14 +55,15 @@ roland board-status --concise
 
 ```bash
 roland team "add rate limiting to the password reset endpoint" \
-  --loop-template closed-loop-harness
+  --loop-template full-cycle-verified-loop
 ```
 
 Other common templates:
 
 ```bash
 roland team "ship user profile settings" --loop-template feature-implementation-loop
-roland team "clean up recent slop in src/" --loop-template code-quality-loop
+roland team "clean up recent slop in src/" --loop-template refactor-and-modernize-loop
+roland team "add MCP tool for triage" --loop-template mcp-extension-loop
 ```
 
 ### 3. Command center (dashboard)
@@ -101,17 +102,20 @@ Key MCP tools: `triage` · `roland_run_team` · `pm_standup` · `board_status`
 
 ## Loop Templates
 
-Templates live in `recipes/loops/`. Attach with `--loop-template <name>`.
+Templates live in `recipes/loops/`. Attach with `--loop-template <name>`. Verification commands and between-iteration checks are configured in `config.yaml` (`loop_engine.verification`, `loop_engine.between_iterations`).
 
 | Template | When to use | Max iter | Key gates |
 |----------|-------------|----------|-----------|
-| **closed-loop-harness** | Production missions — full harness with reflection, exit conditions, PR formatting | 10 | lint, unit, typecheck |
+| **full-cycle-verified-loop** | Production missions — reflection, exit conditions, PR formatting | 10 | lint, unit, typecheck |
 | **feature-implementation-loop** | Ship a feature with integration + smoke | 8 | unit, integration, smoke |
-| **code-quality-loop** | De-sloppify recent changes (loops.elorm.xyz pattern) | 4 | lint, unit, typecheck |
-| **standard-code-loop** | Canonical plan → act → verify → critique | 5 | unit, lint, typecheck |
-| **research-loop** | Investigation and synthesis | 3 | critic validation |
-| **research-synthesis-loop** | Deeper research with synthesis critique | 3 | critic validation |
+| **refactor-and-modernize-loop** | Refactor / de-sloppify without behavior change | 4 | lint, unit, typecheck |
+| **research-and-spec-loop** | Research → actionable spec | 3 | critic validation |
+| **mcp-extension-loop** | MCP tools / server handlers | 6 | unit, smoke, integration |
+| **standard-code-loop** | Default canonical loop (default template) | 5 | unit, lint, typecheck |
+| **research-loop** | Lightweight investigation | 3 | critic validation |
 | **minimal-3-phase** | E2E reference (plan, act, verify only) | 1 | unit |
+
+Deprecated aliases still work: `closed-loop-harness`, `code-quality-loop`, `research-synthesis-loop`.
 
 Full guide: [docs/guides/closed-loop-harness.md](docs/guides/closed-loop-harness.md)
 

@@ -1,21 +1,20 @@
+# Deprecated — use full-cycle-verified-loop. Kept for backward compatibility with in-flight runs.
 name: closed-loop-harness
+deprecated: true
+alias_of: full-cycle-verified-loop
 description: >
-  Production closed-loop harness — structured kickoff, evaluation gates, between-iteration checks,
-  reflection memory, explicit exit conditions, specialist spawning, checkpoint recovery, and PR formatting.
-kickoff: >
-  Start the closed-loop harness. Self-pace each iteration: implement, verify with evaluation gates,
-  critique, reflect on learnings, run the between-iterations check, and stop when exit conditions pass
-  or max iterations is reached. Give a short status update each pass.
+  [Deprecated] Alias for full-cycle-verified-loop. Use --loop-template=full-cycle-verified-loop
+  for new missions. This template resolves to the same phase graph and thresholds.
 phases:
   - phase: plan
     label: Plan work
-    agent: lead-pm
+    agent: pm
   - phase: act
     label: Implement changes
-    agent: executor
+    agent: coding
   - phase: verify
     label: Evaluation gates
-    agent: test-executor
+    agent: verifier
     verification:
       - lint
       - unit
@@ -29,7 +28,7 @@ phases:
   - phase: escalate
     label: Human escalation
     optional: true
-    agent: lead-pm
+    agent: pm
   - phase: observe
     label: Observe and record
     agent: researcher
@@ -45,7 +44,6 @@ testModeEscalationThreshold: 10
 timeout_ms: 1800000
 exponential_backoff: true
 min_confidence: 0.85
-between_iterations: npm test
 reflection: true
 exit_conditions:
   - type: all_gates_pass

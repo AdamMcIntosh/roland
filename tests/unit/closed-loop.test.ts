@@ -18,7 +18,7 @@ import {
   type CommandRunner,
 } from '../../src/loop-engine/index.js';
 import { Blackboard } from '../../src/rco/blackboard.js';
-import { clearLoopEngineConfigCache } from '../../src/loop-engine/loop-config.js';
+import { clearLoopEngineConfigCache, resolveBetweenIterations } from '../../src/loop-engine/loop-config.js';
 
 const passRunner: CommandRunner = async () => ({
   exitCode: 0,
@@ -48,7 +48,7 @@ describe('ClosedLoop harness', () => {
     const template = templates.get('closed-loop-harness');
     expect(template).toBeDefined();
     expect(template!.exitConditions?.length).toBeGreaterThan(0);
-    expect(template!.betweenIterations).toBeDefined();
+    expect(resolveBetweenIterations(template!)).toBeDefined();
     expect(template!.reflection).toBe(true);
 
     const goal = 'Improve loop-engine evaluation gates and confidence scoring';
@@ -102,6 +102,26 @@ describe('ClosedLoop harness', () => {
     const spawns = loop.getSpawner().getHistory();
     expect(spawns.some((s) => s.phase === Phase.Plan)).toBe(true);
     expect(spawns.some((s) => s.phase === Phase.Verify)).toBe(true);
+  });
+
+  it('spawns YAML-defined specialists from feature-implementation-loop', async () => {
+    const loop = new ClosedLoop({
+      stateDir,
+      goal: 'Add dashboard template picker',
+      template: 'feature-implementation-loop',
+      blackboard,
+      runner: passRunner,
+      isTestMode: true,
+      skipBackoff: true,
+      enablePmIntegration: false,
+    });
+
+    await loop.run();
+    const spawns = loop.getSpawner().getHistory();
+    const actSpawns = spawns.filter((s) => s.phase === Phase.Act);
+    expect(actSpawns.some((s) => s.primaryAgent === 'coding')).toBe(true);
+    expect(actSpawns.some((s) => s.primaryAgent === 'test-author')).toBe(true);
+    expect(actSpawns.some((s) => s.fromTemplate)).toBe(true);
   });
 
   it('persists loop-state.json for checkpoint recovery', async () => {
