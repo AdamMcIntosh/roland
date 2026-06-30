@@ -16,19 +16,20 @@ Roland is a multi-agent platform for **reliable, iterative software missions**:
 
 | Layer | Role |
 |-------|------|
+| **Hermes** | Primary conversational interface — plan missions, trigger loops, triage work (`roland chat`, Cursor `@roland`, `roland team`) |
 | **Closed-Loop Harness** | Structured iterations with evaluation gates, reflection, exit conditions, and checkpoint recovery ([guide](docs/guides/closed-loop-harness.md)) |
 | **PM Team Engine** | Lead PM plans parallel waves, dispatches UNSC callsigns, synthesizes results |
 | **Global CLI + MCP** | `roland team`, interactive chat, Cursor MCP tools |
-| **Command Center** | Web dashboard — live progress, HITL, loop health, GitHub clone |
+| **Command Center** | Web dashboard — **monitor & control only**: live progress, HITL, loop health, GitHub clone |
 
 Inspired by [loops.elorm.xyz](https://loops.elorm.xyz) patterns: self-paced iterations, between-iteration checks, explicit exit conditions, and reflection memory.
 
 ```
-  Operator ──► ClosedLoop / Lead PM ──► PLAN → ACT → VERIFY → CRITIQUE → REFLECT
-                    │                         │
-                    ▼                         ▼
-           .roland/loops/<id>/          EvaluationGate · LoopMemory
-           command-blackboard.md        clean PR on completion
+  Operator ──► Hermes (chat / CLI / Cursor) ──► ClosedLoop / Lead PM ──► PLAN → ACT → VERIFY → CRITIQUE → REFLECT
+                    │                                    │
+                    ▼                                    ▼
+           Roland Dashboard (monitor)          EvaluationGate · LoopMemory
+           HITL · pause/resume · history       clean PR on completion
 ```
 
 ---
@@ -66,9 +67,16 @@ roland team "clean up recent slop in src/" --loop-template refactor-and-moderniz
 roland team "add MCP tool for triage" --loop-template mcp-extension-loop
 ```
 
-### 3. Command center (dashboard)
+### 3. Command center (dashboard — monitor & control)
+
+Use **Hermes** to plan and launch loops. The dashboard watches and controls active runs.
 
 ```bash
+# Launch via Hermes
+roland chat
+# or: roland team "goal" --loop-template full-cycle-verified-loop
+
+# Monitor via dashboard
 npm run serve-dashboard
 # → http://127.0.0.1:8081
 ```
@@ -232,7 +240,7 @@ Roland is designed for comfortable operation from a phone:
 1. **Tailscale** — install on your home server and iPhone; bind dashboard with `--host 0.0.0.0`
 2. **Safari** — open `http://<tailscale-ip>:8081`; dashboard is mobile-first with touch-friendly controls
 3. **Simple TUI** — `roland team "goal" --simple-tui` for ASCII-only SSH sessions (Termius, Blink)
-4. **HITL from phone** — pause, resume, inject directives from the dashboard Mission panel
+4. **HITL from phone** — pause, resume, inject directives from the dashboard Live Run Control panel
 
 Details: [docs/guides/mini-pc-deployment.md](docs/guides/mini-pc-deployment.md) (Tailscale section)
 

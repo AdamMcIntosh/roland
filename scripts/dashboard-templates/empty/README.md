@@ -4,5 +4,5 @@ Created with Roland Dashboard.
 
 ## Next steps
 
-- Run `roland team "your first mission goal"` from this directory
-- Or open the Roland dashboard and launch a mission from the UI
+- Run `roland chat` or `roland team "your first mission goal"` from this directory (Hermes — primary interface)
+- Or open the Roland dashboard to monitor active runs and HITL controls

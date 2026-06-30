@@ -5,7 +5,7 @@
  * via Puppeteer at iPhone-like viewports, and asserts layout stability:
  *   - no horizontal page scroll (portrait + landscape)
  *   - project/quick action buttons stay within viewport
- *   - New Mission form touch + iOS zoom-safe input sizing
+ *   - Hermes banner + advanced mission panel (collapsed) touch targets
  *   - Loop timeline phase chips visible and tappable in portrait
  *
  * Setup: npm run build (serve-dashboard imports dist/rco/* and dist/loop-engine/*).
@@ -394,13 +394,38 @@ describe('dashboard mobile responsiveness (wired HTTP + Puppeteer)', () => {
     }, 60_000);
   });
 
-  it('New Mission form fields are mobile-usable (16px inputs, full-width launch, touch target)', async () => {
+  it('Hermes banner visible and advanced mission panel collapsed by default', async () => {
     const page = await openOverviewPage(harness.baseUrl, { width: 390, height: 844 });
     try {
+      const banner = await page.$('#hermes-banner');
+      expect(banner).not.toBeNull();
+
+      const bannerText = await page.$eval('#hermes-banner', (el) => el.textContent ?? '');
+      expect(bannerText).toMatch(/Hermes/i);
+      expect(bannerText).toMatch(/monitor/i);
+
+      const advancedOpen = await page.$eval('#advanced-mission-panel', (el) => (el as HTMLDetailsElement).open);
+      expect(advancedOpen).toBe(false);
+
+      const modelPicker = await page.$('#mission-pm-model-trigger');
+      expect(modelPicker).toBeNull();
+    } finally {
+      await page.close();
+    }
+  }, 60_000);
+
+  it('Advanced mission panel fields are mobile-usable when expanded', async () => {
+    const page = await openOverviewPage(harness.baseUrl, { width: 390, height: 844 });
+    try {
+      await page.evaluate(() => {
+        const panel = document.getElementById('advanced-mission-panel') as HTMLDetailsElement | null;
+        if (panel) panel.open = true;
+      });
+
       const missionOverflow = await probeSectionOverflow(page, '#mission-section');
       expect(missionOverflow).toMatchObject({ ok: true });
 
-      for (const sel of ['#mission-goal', '#mission-run-name', '#mission-priority', '#mission-pm-model-trigger']) {
+      for (const sel of ['#mission-goal', '#mission-run-name', '#mission-priority']) {
         const fontSize = await readFontSizePx(page, sel);
         expect(fontSize, `${sel} font-size`).toBeGreaterThanOrEqual(16);
       }

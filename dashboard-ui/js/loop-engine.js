@@ -1,4 +1,8 @@
 /**
+ * ## Assumptions
+ * Hermes (roland chat / Cursor @roland) is the primary interface for launching loops.
+ * This module renders monitor/control UI only — template catalog is read-only reference.
+ *
  * Loop Engine dashboard UI — Closed-Loop Harness visualization.
  *
  * Renders PACVRE phase timeline, EvaluationGate confidence, specialist spawns,
@@ -151,8 +155,8 @@
     }).join('');
 
     return '<div class="loop-template-catalog">' +
-      '<h4>Loop Templates</h4>' +
-      '<p class="loop-template-catalog-sub">Generic-first templates from <code>recipes/loops/</code>. Select one when starting a mission or pass <code>--loop-template</code> to Roland CLI.</p>' +
+      '<h4>Loop Templates <span class="loop-template-readonly-badge">read-only catalog</span></h4>' +
+      '<p class="loop-template-catalog-sub">Reference catalog from <code>recipes/loops/</code>. Launch loops via <strong>Hermes</strong> (<code>roland chat</code>, <code>roland team "…" --loop-template &lt;name&gt;</code>, or Cursor <code>@roland</code>). Model routing is automatic.</p>' +
       '<div class="loop-template-grid">' + rows + '</div>' +
     '</div>';
   }

@@ -7,10 +7,12 @@
 ## ⚡ The 30-Second Version
 
 ```bash
-roland          # open the chat interface
+roland chat      # Hermes — primary conversational interface
 ```
 
 Type a goal. Watch the team work. Read the synthesis. Type another goal.
+
+Use the **Roland dashboard** (`npm run serve-dashboard`) to monitor live loop progress and HITL controls — not to plan or chat.
 
 That's the whole loop.
 

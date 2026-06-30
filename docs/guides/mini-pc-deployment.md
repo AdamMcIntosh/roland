@@ -164,10 +164,13 @@ Default bind is `127.0.0.1`. Options for phone access:
 
 From the dashboard on your phone you can:
 
-- Launch missions with loop templates
+- Monitor live loop progress (PACVRE phases, verification gates, specialist spawns)
 - Pause / resume / inject HITL directives
+- Approve or reject HITL git-commit requests
 - Connect GitHub and one-click clone repos
-- Monitor loop health and exit conditions
+- Browse read-only loop template catalog and run history
+
+Launch loops via **Hermes** (`roland chat` or `roland team "…"`) — not the dashboard. An Advanced panel provides a fallback launcher when CLI is unavailable.
 
 For ASCII-only SSH sessions from Termius or Blink, use `roland team "goal" --simple-tui`.
 

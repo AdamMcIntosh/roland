@@ -6,6 +6,31 @@ The design follows [loops.elorm.xyz](https://loops.elorm.xyz) patterns: self-pac
 
 ---
 
+## Hybrid architecture: Hermes + Roland Dashboard
+
+Roland uses a **two-surface** model — one interface for conversation, one for observability:
+
+| Surface | Role | How to access |
+|---------|------|---------------|
+| **Hermes** | Primary conversational interface — plan missions, trigger loops, triage work, PM chat | `roland chat` · Cursor `@roland` · `roland team "…"` |
+| **Roland Dashboard** | Dedicated monitor & control — live PACVRE progress, HITL git-commit approvals, pause/resume, run history, read-only template catalog | `npm run serve-dashboard` → http://127.0.0.1:8081 |
+
+**Hermes** handles all planning and loop triggering. Models are routed automatically via ModelRouter and `config.yaml` — you do not pick models in the dashboard.
+
+**The dashboard** is purpose-built for watching active loops and operator controls (HITL, pause/resume, git-commit approval). It does not replace Hermes for general chat or mission planning.
+
+```
+  Operator ──► Hermes (chat / CLI / Cursor) ──► roland team + loop template
+                    │
+                    ▼
+           Roland Dashboard (monitor + control)
+                    │
+                    ▼
+           Live PACVRE · Verification gates · HITL · History
+```
+
+---
+
 ## Quick start
 
 Loop-template missions route through **ClosedLoop** (`src/rco/loop-orchestrator.ts`) — not the legacy PM wave engine. The orchestrator detects `--loop-template` and calls `ClosedLoop.run()` for the full lifecycle (verify gates, reflection, exit conditions, PR formatting).
@@ -24,7 +49,13 @@ roland team "clean up slop in recent auth changes" \
   --loop-template refactor-and-modernize-loop
 ```
 
-From the dashboard Mission panel, select a loop template when launching a run. Loop health appears in the Loop Engineering panel and `/api/loop-health`.
+From **Hermes** (`roland chat`, Cursor `@roland`, or CLI), attach a loop template when launching a run:
+
+```bash
+roland team "your goal" --loop-template full-cycle-verified-loop
+```
+
+Loop health appears in the dashboard Loop Engineering panel and `/api/loop-health`. The dashboard template catalog is **read-only** — use Hermes to launch, the dashboard to monitor.
 
 ---
 
@@ -515,11 +546,23 @@ For feature work with YAML specialist spawns and integration/smoke gates, prefer
 
 ## Dashboard & observability
 
+The dashboard is a **monitor and control surface** — not a chat or mission-planning UI. Use Hermes to launch loops; use the dashboard to watch them run.
+
 ```bash
 npm run serve-dashboard
 # GET /api/loop-health — metrics, checkpoint diagnostics, exit condition status
-# GET /api/loop-templates — full template catalog (phases, execution modes, spawns)
+# GET /api/loop-templates — read-only template catalog (phases, execution modes, spawns)
 ```
+
+From the dashboard you can:
+
+- Watch live PACVRE phase progress, verification gates, and specialist spawns
+- Approve or reject HITL git-commit requests
+- Pause, resume, inject directives, and abort active runs
+- Browse loop history and the read-only template catalog
+- Copy `roland hitl-status` for CLI-side HITL queue inspection
+
+An **Advanced** panel (collapsed by default) provides a fallback mission launcher for phone-only Tailscale access when Hermes is unavailable. Model selection is not exposed — ModelRouter handles routing.
 
 Example `/api/loop-templates` response (truncated):
 

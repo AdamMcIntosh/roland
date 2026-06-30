@@ -1,4 +1,9 @@
 <!DOCTYPE html>
+<!-- ## Assumptions
+     Hermes (roland chat / Cursor @roland / roland team CLI) is the primary conversational
+     interface for planning and triggering loops. This dashboard is monitor + control only.
+     Model routing is handled by ModelRouter + config.yaml — no model pickers in main UI.
+-->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -8,7 +13,7 @@
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>Roland Dashboard</title>
+  <title>Roland — Loop Monitor &amp; Control</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <style>
@@ -123,6 +128,8 @@
 
     .site-title { font-size: 1.05rem; font-weight: 700; margin: 0; letter-spacing: -.01em; }
     .site-title span { color: var(--indigo); }
+    .header-brand { display: flex; flex-direction: column; gap: 0.05rem; }
+    .site-subtitle { margin: 0; font-size: 0.62rem; font-weight: 500; color: var(--muted); letter-spacing: 0.02em; }
 
     .live-indicator { display: flex; align-items: center; gap: .4rem; font-size: .78rem; color: var(--muted); }
     .live-dot {
@@ -376,6 +383,14 @@
     .loop-harness-meta strong { color: var(--text); }
     .loop-template-catalog { margin-top: .75rem; padding: .65rem .75rem; border-radius: 8px; border: 1px solid rgba(255,255,255,.08); background: rgba(0,0,0,.15); }
     .loop-template-catalog h4 { margin: 0 0 .35rem; font-size: .72rem; color: var(--emerald); }
+    .loop-template-readonly-badge {
+      font-size: 0.58rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-left: 0.35rem;
+    }
     .loop-template-catalog-sub { margin: 0 0 .55rem; font-size: .64rem; color: var(--muted); line-height: 1.45; }
     .loop-template-grid { display: grid; gap: .45rem; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); max-height: 280px; overflow-y: auto; }
     .loop-template-card { padding: .45rem .55rem; border-radius: 6px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.02); font-size: .64rem; }
@@ -1914,7 +1929,78 @@
       font-size: 0.74rem;
     }
 
-    /* New Mission form */
+    /* Hermes primary-interface banner */
+    .hermes-banner {
+      margin-bottom: 0.85rem;
+      border-radius: var(--radius);
+      border: 1px solid rgba(99,102,241,0.28);
+      background: linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(6,182,212,0.08) 100%);
+      overflow: hidden;
+    }
+    .hermes-banner-inner {
+      display: flex;
+      gap: 0.75rem;
+      padding: 0.85rem 1rem;
+      align-items: flex-start;
+    }
+    .hermes-banner-icon { font-size: 1.35rem; line-height: 1; flex-shrink: 0; margin-top: 0.1rem; }
+    .hermes-banner-title {
+      margin: 0 0 0.35rem;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--fg);
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .hermes-banner-content p {
+      margin: 0 0 0.45rem;
+      font-size: 0.74rem;
+      line-height: 1.5;
+      color: var(--muted);
+    }
+    .hermes-banner-content p:last-child { margin-bottom: 0; }
+    .hermes-banner-commands {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin-top: 0.4rem;
+    }
+    .hermes-cmd-chip {
+      font-family: ui-monospace, 'Cascadia Code', monospace;
+      font-size: 0.66rem;
+      padding: 0.22rem 0.45rem;
+      border-radius: 5px;
+      background: rgba(0,0,0,0.22);
+      border: 1px solid var(--border);
+      color: var(--cyan);
+    }
+    [data-theme="light"] .hermes-cmd-chip { background: rgba(99,102,241,0.08); }
+    .advanced-panel {
+      margin-bottom: 0.85rem;
+      border-radius: var(--radius);
+      border: 1px dashed var(--border2);
+      background: rgba(0,0,0,0.08);
+    }
+    .advanced-panel-summary {
+      padding: 0.55rem 0.85rem;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      list-style: none;
+      user-select: none;
+    }
+    .advanced-panel-summary::-webkit-details-marker { display: none; }
+    .advanced-panel-note {
+      margin: 0 0.85rem 0.65rem;
+      font-size: 0.68rem;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .advanced-panel .mission-box { border: none; margin: 0; background: transparent; }
+    .board-add-goal-section { display: none !important; }
+
+    /* New Mission form (advanced panel only) */
     .mission-box {
       background: linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(16,185,129,0.06) 100%);
       border: 1px solid rgba(99,102,241,0.35);
@@ -2732,7 +2818,10 @@
     <!-- ── Header ───────────────────────────────────────────────────────────── -->
     <header class="header">
       <div class="header-left">
-        <h1 class="site-title"><span>Roland</span></h1>
+        <div class="header-brand">
+          <h1 class="site-title"><span>Roland</span></h1>
+          <p class="site-subtitle" title="Hermes is the primary conversational interface">Loop Monitor &amp; Control</p>
+        </div>
         <div class="live-indicator">
           <div class="live-dot" id="live-dot"></div>
           <span id="live-label">Idle</span>
@@ -2782,9 +2871,27 @@
         <div class="project-context-details" id="project-context-details" hidden></div>
       </section>
 
+      <!-- Hermes primary interface -->
+      <section class="hermes-banner" id="hermes-banner" aria-label="About Hermes and this dashboard">
+        <div class="hermes-banner-inner">
+          <div class="hermes-banner-icon" aria-hidden="true">💬</div>
+          <div class="hermes-banner-content">
+            <h2 class="hermes-banner-title">Hermes — Primary Interface</h2>
+            <p>Plan missions, trigger loops, and converse with Roland through <strong>Hermes</strong> — the conversational layer (<code>roland chat</code>, Cursor <code>@roland</code>, or <code>roland team "…"</code>). Models are routed automatically via ModelRouter and <code>config.yaml</code>.</p>
+            <p><strong>This dashboard</strong> is your dedicated monitor &amp; control surface: live PACVRE progress, specialist spawns, verification gates, HITL git-commit approvals, pause/resume, and run history.</p>
+            <div class="hermes-banner-commands" aria-label="Hermes launch commands">
+              <span class="hermes-cmd-chip">roland chat</span>
+              <span class="hermes-cmd-chip">roland team "goal" --loop-template full-cycle-verified-loop</span>
+              <span class="hermes-cmd-chip">@roland in Cursor</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Quick actions -->
       <div class="quick-actions u-stack-row u-touch-row">
         <button class="btn-secondary" id="btn-qa-board" type="button">🎖 Board Status</button>
+        <button class="btn-secondary" id="btn-qa-hitl" type="button" title="Copy roland hitl-status">🎮 HITL Status</button>
         <button class="btn-secondary" id="btn-qa-cleanup" type="button">🧹 Cleanup</button>
         <button class="btn-secondary" id="btn-qa-refresh" type="button">↻ Refresh</button>
       </div>
@@ -2809,12 +2916,15 @@
         <div class="ops-last" id="ops-last"></div>
       </section>
 
-      <!-- New Mission -->
+      <!-- Advanced: dashboard mission launch (Hermes is preferred) -->
+      <details class="advanced-panel" id="advanced-mission-panel">
+        <summary class="advanced-panel-summary">⚙️ Advanced — Launch mission from dashboard</summary>
+        <p class="advanced-panel-note">Prefer Hermes for planning and triggering loops. Use this fallback only when CLI/Cursor chat is unavailable (e.g. phone-only Tailscale access).</p>
       <section class="section mission-box" id="mission-section">
         <div class="mission-header">
           <div>
-            <h2 class="mission-title">🚀 <span>New Mission</span></h2>
-            <p class="mission-sub">Launch a Roland team run from phone or browser (Tailscale-safe)</p>
+            <h2 class="mission-title">🚀 <span>Dashboard Mission Launch</span></h2>
+            <p class="mission-sub">Fallback launcher — models routed automatically via ModelRouter</p>
           </div>
         </div>
         <div class="mission-body">
@@ -2827,36 +2937,6 @@
               rows="3"
               enterkeyhint="done"
             ></textarea>
-          </div>
-          <div class="mission-row">
-            <div class="mission-field">
-              <label for="mission-pm-model-trigger">Lead PM model</label>
-              <div class="model-picker" id="mission-pm-model-picker" data-role="pm">
-                <button type="button" class="model-picker-trigger" id="mission-pm-model-trigger" aria-haspopup="listbox" aria-expanded="false">
-                  <span class="model-picker-label">Loading…</span>
-                  <span class="model-picker-hint"></span>
-                </button>
-                <div class="model-picker-dropdown" role="listbox">
-                  <input type="search" class="model-picker-search" placeholder="Search models…" autocomplete="off" aria-label="Search Lead PM models" />
-                  <div class="model-picker-list"></div>
-                </div>
-                <input type="hidden" id="mission-pm-model" value="gpt-5.4-nano" />
-              </div>
-            </div>
-            <div class="mission-field">
-              <label for="mission-eng-model-trigger">Engineer model</label>
-              <div class="model-picker" id="mission-eng-model-picker" data-role="engineer">
-                <button type="button" class="model-picker-trigger" id="mission-eng-model-trigger" aria-haspopup="listbox" aria-expanded="false">
-                  <span class="model-picker-label">Loading…</span>
-                  <span class="model-picker-hint"></span>
-                </button>
-                <div class="model-picker-dropdown" role="listbox">
-                  <input type="search" class="model-picker-search" placeholder="Search models…" autocomplete="off" aria-label="Search engineer models" />
-                  <div class="model-picker-list"></div>
-                </div>
-                <input type="hidden" id="mission-eng-model" value="composer-2.5" />
-              </div>
-            </div>
           </div>
           <div class="mission-row">
             <div class="mission-field">
@@ -2901,6 +2981,7 @@
           <div class="mission-status" id="mission-status" role="status" aria-live="polite"></div>
         </div>
       </section>
+      </details>
 
       <!-- Period filter -->
       <div class="period-row">
@@ -3109,26 +3190,22 @@
           </div>
         </div>
 
-        <!-- New Team Run -->
+        <!-- Hermes launch guidance -->
         <div class="action-card">
-          <div class="action-card-header">🚀 New Team Run</div>
+          <div class="action-card-header">💬 Start via Hermes</div>
           <div class="action-card-body">
-            <div class="new-run-form">
-              <div class="form-label">Goal</div>
-              <textarea id="new-run-goal" class="goal-textarea" placeholder="Describe what you want Roland to build or fix…" oninput="updateRunCmd()"></textarea>
-              <div class="new-run-opts">
-                <label class="new-run-opt">
-                  <input type="checkbox" id="run-stream" onchange="updateRunCmd()" /> Stream output
-                </label>
-                <label class="new-run-opt">
-                  <input type="checkbox" id="run-notify" onchange="updateRunCmd()" /> Notify on complete
-                </label>
-              </div>
-              <div class="form-label">Command to run in your terminal:</div>
-              <div class="run-cmd-display" id="run-cmd-display">roland team "…"</div>
-              <div class="run-cmd-actions">
-                <button class="btn-primary" onclick="copyRunCmd()">⎘ Copy Command</button>
-              </div>
+            <p style="font-size:.74rem;color:var(--muted);margin:0 0 .55rem;line-height:1.45">Plan and trigger loops through Hermes — not this dashboard. Copy a command to run in your terminal or Cursor chat.</p>
+            <div class="cmd-block">
+              <div class="cmd-block-label">Interactive chat (recommended)</div>
+              <div class="cmd-block-code" id="hermes-chat-cmd">roland chat</div>
+            </div>
+            <div class="cmd-block" style="margin-top:.45rem">
+              <div class="cmd-block-label">One-shot loop mission</div>
+              <div class="cmd-block-code" id="hermes-team-cmd">roland team "your goal" --loop-template full-cycle-verified-loop</div>
+            </div>
+            <div class="run-cmd-actions" style="margin-top:.45rem">
+              <button class="btn-primary" onclick="copyHermesChatCmd()">⎘ Copy chat command</button>
+              <button class="btn-secondary" onclick="copyHermesTeamCmd()">⎘ Copy team command</button>
             </div>
           </div>
         </div>
@@ -4957,7 +5034,7 @@
       badge.textContent = 'Idle';
       goalEl.textContent = 'No active background mission';
       goalEl.removeAttribute('title');
-      metaEl.innerHTML = '<span>Ready for new orders</span> <a href="#" id="ops-view-board">View Board</a>';
+      metaEl.innerHTML = '<span>Monitor via this dashboard · launch loops via Hermes</span> <a href="#" id="ops-view-board">View Board</a>';
       if (progWrap) progWrap.style.display = 'none';
       if (!opsLogOpen) {
         document.getElementById('ops-log-preview')?.classList.remove('open');
@@ -5081,8 +5158,6 @@
 
     const payload = {
       goal,
-      pmModel: document.getElementById('mission-pm-model')?.value,
-      engineerModel: document.getElementById('mission-eng-model')?.value,
       priority: document.getElementById('mission-priority')?.value || 'P3',
       runName: document.getElementById('mission-run-name')?.value?.trim() || '',
       loopTemplate: document.getElementById('mission-loop-template')?.value?.trim() || '',
@@ -5231,6 +5306,7 @@
   });
   document.getElementById('btn-qa-cleanup')?.addEventListener('click', runBoardCleanup);
   document.getElementById('btn-qa-refresh')?.addEventListener('click', refreshDashboard);
+  document.getElementById('btn-qa-hitl')?.addEventListener('click', copyHitlStatusCmd);
   document.getElementById('project-context-toggle')?.addEventListener('click', () => toggleProjectContextDetails());
   document.getElementById('btn-project-switch')?.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -5821,9 +5897,8 @@
   function renderBoardAddGoalSection() {
     const section = document.getElementById('board-add-goal-section');
     if (!section) return;
-    const active = isMissionActive();
-    section.hidden = !active;
-    section.setAttribute('aria-hidden', active ? 'false' : 'true');
+    section.hidden = true;
+    section.setAttribute('aria-hidden', 'true');
   }
 
   async function submitTeamGoal() {
@@ -7000,27 +7075,31 @@
       .catch(() => toast('Copy failed — command: ' + cmd, 'error'));
   }
 
-  // New run command builder
-  function updateRunCmd() {
-    const goal    = (document.getElementById('new-run-goal')?.value || '').trim();
-    const stream  = document.getElementById('run-stream')?.checked;
-    const notify  = document.getElementById('run-notify')?.checked;
-    const display = document.getElementById('run-cmd-display');
-    if (!display) return;
-    if (!goal) { display.textContent = 'roland team "…"'; return; }
-    let cmd = 'roland team "' + goal.replace(/\\/g,'\\\\').replace(/"/g,'\\"') + '"';
-    if (stream) cmd += ' --stream';
-    if (notify) cmd += ' --notify';
-    display.textContent = cmd;
-  }
-
-  function copyRunCmd() {
-    const text = document.getElementById('run-cmd-display')?.textContent || '';
-    if (!text || text === 'roland team "…"') { toast('Enter a goal first', 'warning'); return; }
+  // Hermes command helpers (primary interface — dashboard is monitor/control only)
+  function copyHermesChatCmd() {
+    const text = document.getElementById('hermes-chat-cmd')?.textContent || 'roland chat';
     navigator.clipboard.writeText(text)
-      .then(() => toast('Command copied!', 'success'))
+      .then(() => toast('Copied: ' + text, 'success'))
       .catch(() => toast('Copy failed', 'error'));
   }
+
+  function copyHermesTeamCmd() {
+    const text = document.getElementById('hermes-team-cmd')?.textContent || '';
+    navigator.clipboard.writeText(text)
+      .then(() => toast('Copied team command', 'success'))
+      .catch(() => toast('Copy failed', 'error'));
+  }
+
+  function copyHitlStatusCmd() {
+    const cmd = 'roland hitl-status';
+    navigator.clipboard.writeText(cmd)
+      .then(() => toast('Copied: ' + cmd, 'success'))
+      .catch(() => toast('Copy failed — run: roland hitl-status', 'error'));
+  }
+
+  // Legacy run command builder (deprecated — kept for any stale DOM references)
+  function updateRunCmd() { /* no-op: New Team Run removed */ }
+  function copyRunCmd() { copyHermesTeamCmd(); }
 
   function updatePrCmd() {
     const num = document.getElementById('pr-number')?.value;
