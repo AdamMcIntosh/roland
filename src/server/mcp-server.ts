@@ -41,8 +41,15 @@ import { spawnBackground } from '../rco/supervisor.js';
 import { randomUUID } from 'crypto';
 import {
   writeMissionMetaFile,
+  cleanupPreviousRuns,
+  sanitizeStaleMissionState,
   type MissionTriggeredVia,
 } from '../rco/mission-state.js';
+import {
+  applyMcpProjectEnv,
+  resolveMcpProjectContext,
+  type McpProjectContext,
+} from '../utils/mcp-project-context.js';
 import { configureSdkProcessLimits } from '../utils/sdk-lifecycle.js';
 import { analyzeScreenshot } from '../utils/screenshot.js';
 import { getDiffStreamServer, initDiffStreamServer } from './diff-stream.js';
@@ -59,7 +66,7 @@ import {
 import { SessionContextManager } from './session-context.js';
 import { ProjectContextManager } from './project-context.js';
 import { CoordinationManager, ConcurrencyError } from '../coordination/index.js';
-import { LeadPM } from '../pm/lead-pm.js';
+import { LeadPM, type LeadPMOptions } from '../pm/lead-pm.js';
 import { renderTimeline, renderUsage } from '../pm/render.js';
 import type { PMEventAction } from '../pm/event-log.js';
 import { QualityTracker, initializeQualityTracker } from '../orchestrator/quality-tracker.js';
@@ -274,6 +281,7 @@ export class McpServer {
   private qualityTracker: QualityTracker;
   private coordination: CoordinationManager;
   private leadPm: LeadPM;
+  private readonly leadPmOpts: LeadPMOptions;
   private recipesDir: string;
   private transport: Transport | null = null;
   private shuttingDown = false;
@@ -319,7 +327,7 @@ export class McpServer {
     // override the three Cursor models and per-engineer lanes.
     const pmCfg = (config as { pm?: { lead_model?: string; fast_model?: string; standard_model?: string; lane_overrides?: Record<string, 'pm' | 'reasoning' | 'coding' | 'light'> } }).pm;
     const loopPolicy = modelPolicyFromRouter();
-    this.leadPm = new LeadPM(this.coordination, {
+    this.leadPmOpts = {
       policy: pmCfg
         ? {
             pm: pmCfg.lead_model ?? loopPolicy.pm,
@@ -328,7 +336,8 @@ export class McpServer {
           }
         : loopPolicy,
       laneOverrides: pmCfg?.lane_overrides,
-    });
+    };
+    this.leadPm = new LeadPM(this.coordination, this.leadPmOpts);
 
     // Initialize budget manager with config from config.yaml
     BudgetManager.initialize();
@@ -2833,6 +2842,41 @@ export class McpServer {
   }
 
   // ==========================================================================
+  // MCP project context — per-request isolation for Hermes / multi-repo MCP
+  // ==========================================================================
+
+  /** Shared schema fragment for project-scoped MCP tools. */
+  private static readonly PROJECT_CONTEXT_SCHEMA = {
+    project_root: {
+      type: 'string',
+      description: 'Absolute path to the target project directory (Hermes cwd). Default: ROLAND_PROJECT_ROOT env, then MCP server cwd.',
+    },
+    cwd: {
+      type: 'string',
+      description: 'Alias for project_root — working directory of the calling client.',
+    },
+    state_dir: {
+      type: 'string',
+      description: 'Path to .roland state directory (default: <project_root>/.roland).',
+    },
+  } as const;
+
+  private resolveToolProjectContext(args: Record<string, unknown>): McpProjectContext {
+    const ctx = resolveMcpProjectContext(args);
+    applyMcpProjectEnv(ctx);
+    return ctx;
+  }
+
+  private scopedCoordination(args: Record<string, unknown>): CoordinationManager {
+    const ctx = this.resolveToolProjectContext(args);
+    return new CoordinationManager({ dir: ctx.stateDir });
+  }
+
+  private scopedLeadPm(args: Record<string, unknown>): LeadPM {
+    return new LeadPM(this.scopedCoordination(args), this.leadPmOpts);
+  }
+
+  // ==========================================================================
   // Tool Registration Helper
   // ==========================================================================
 
@@ -2852,7 +2896,7 @@ export class McpServer {
       'Publish or update a shared entry on the team Blackboard (a fact, decision, task, artifact, blocker, or status). Re-posting the same key updates it and bumps its rev. Pass expectedRev to guard against overwriting a concurrent change.',
       async (args: Record<string, unknown>) => {
         try {
-          const entry = this.coordination.blackboard.post({
+          const entry = this.scopedCoordination(args).blackboard.post({
             key: args.key as string,
             type: args.type as never,
             value: args.value,
@@ -2879,6 +2923,7 @@ export class McpServer {
           author: { type: 'string', description: 'Agent id posting this, e.g. "lead-pm" or "executor#3".' },
           status: { type: 'string', enum: ['open', 'in_progress', 'blocked', 'done', 'archived'], description: 'Optional lifecycle status (most useful for tasks/blockers).' },
           expectedRev: { type: 'number', description: 'If set and the stored rev differs, the post is rejected with a concurrency error.' },
+          ...McpServer.PROJECT_CONTEXT_SCHEMA,
         },
         required: ['key', 'type', 'value', 'author'],
       }
@@ -2889,7 +2934,7 @@ export class McpServer {
       'blackboard_read',
       'Read entries from the team Blackboard, newest first. All filters are optional; with none, returns the most recent entries. Use this to get shared awareness of tasks, decisions, and blockers across the team.',
       async (args: Record<string, unknown>) => {
-        const entries = this.coordination.blackboard.read({
+        const entries = this.scopedCoordination(args).blackboard.read({
           key: args.key as string | undefined,
           type: args.type as never,
           tags: args.tags as string[] | undefined,
@@ -2912,6 +2957,7 @@ export class McpServer {
           since: { type: 'number', description: 'Only entries updated at or after this epoch-ms timestamp.' },
           includeArchived: { type: 'boolean', description: 'Include archived entries (default false).' },
           limit: { type: 'number', description: 'Max entries to return (default 50, max 200).' },
+          ...McpServer.PROJECT_CONTEXT_SCHEMA,
         },
         required: [],
       }
@@ -2923,7 +2969,7 @@ export class McpServer {
       'Partially update an existing Blackboard entry (e.g. transition a task status to in_progress/done, or revise its value). Bumps rev. Fails if the key does not exist.',
       async (args: Record<string, unknown>) => {
         try {
-          const entry = this.coordination.blackboard.patch({
+          const entry = this.scopedCoordination(args).blackboard.patch({
             key: args.key as string,
             author: args.author as string,
             changes: (args.changes as Record<string, unknown>) ?? {},
@@ -2963,7 +3009,7 @@ export class McpServer {
       'bus_send',
       'Send a message on the team Message Bus to a specific agent, or to "*" to broadcast to everyone but the sender. Use this for direct peer-to-peer coordination that does not belong on the shared Blackboard.',
       async (args: Record<string, unknown>) => {
-        const message = this.coordination.bus.send({
+        const message = this.scopedCoordination(args).bus.send({
           from: args.from as string,
           to: args.to as string,
           topic: args.topic as string | undefined,
@@ -2990,7 +3036,7 @@ export class McpServer {
       'bus_poll',
       'Drain undelivered messages addressed to an agent (directly or via broadcast). By default acknowledges them so they are not returned again. Returns messages oldest-first plus a nextSince cursor for the next poll.',
       async (args: Record<string, unknown>) => {
-        const messages = this.coordination.bus.poll({
+        const messages = this.scopedCoordination(args).bus.poll({
           recipient: args.recipient as string,
           since: args.since as number | undefined,
           topic: args.topic as string | undefined,
@@ -3035,22 +3081,30 @@ export class McpServer {
     this.registerTool(
       'pm_standup',
       'Cursor daily-driver: rendered Markdown standup with blockers first, board state, usage, UNSC mission summary, and your next 3 actions. Call at the start of each chat turn when @roland is active, or after roland_run_team to track progress.',
-      async () => {
-        const standup = this.leadPm.getStandup();
+      async (args: Record<string, unknown>) => {
+        const standup = this.scopedLeadPm(args).getStandup();
         try {
-          const { coordDir } = await import('../coordination/paths.js');
+          const ctx = this.resolveToolProjectContext(args);
           const { buildBoardStatusReport, formatConciseUnscSummary } = await import('../rco/board-report.js');
-          const unsc = formatConciseUnscSummary(buildBoardStatusReport(coordDir()));
+          const unsc = formatConciseUnscSummary(buildBoardStatusReport(ctx.stateDir));
           return {
             ...standup,
             markdown: `${standup.markdown}\n\n---\n\n${unsc}`,
             unscSummary: unsc,
+            project_root: ctx.projectRoot,
+            state_dir: ctx.stateDir,
           };
         } catch {
           return standup;
         }
       },
-      { type: 'object', properties: {}, required: [] }
+      {
+        type: 'object',
+        properties: {
+          ...McpServer.PROJECT_CONTEXT_SCHEMA,
+        },
+        required: [],
+      }
     );
 
     // board_status — concise UNSC summary for end-of-task reporting
@@ -3058,26 +3112,23 @@ export class McpServer {
       'board_status',
       'Concise UNSC mission status from .roland/blackboard.json and command-blackboard.md. Use after team runs or at end of major tasks. Blockers listed first. Pass format:"json" for structured output, format:"verbose" for full report.',
       async (args: Record<string, unknown>) => {
-        const projectRoot = process.env['ROLAND_PROJECT_ROOT']?.trim() || process.cwd();
-        const stateDir = typeof args.state_dir === 'string' && args.state_dir
-          ? args.state_dir
-          : path.join(projectRoot, '.roland');
+        const ctx = this.resolveToolProjectContext(args);
         const { buildBoardStatusReport, formatConciseUnscSummary, formatBoardStatusReport } =
           await import('../rco/board-report.js');
-        const report = buildBoardStatusReport(stateDir, typeof args.goal === 'string' ? args.goal : undefined);
+        const report = buildBoardStatusReport(ctx.stateDir, typeof args.goal === 'string' ? args.goal : undefined);
         const concise = formatConciseUnscSummary(report);
         if (args.format === 'json') {
-          return { ...report, concise };
+          return { ...report, concise, project_root: ctx.projectRoot, state_dir: ctx.stateDir };
         }
         if (args.format === 'verbose') {
-          return { markdown: formatBoardStatusReport(report), report, concise };
+          return { markdown: formatBoardStatusReport(report), report, concise, project_root: ctx.projectRoot, state_dir: ctx.stateDir };
         }
-        return { markdown: concise, report, concise };
+        return { markdown: concise, report, concise, project_root: ctx.projectRoot, state_dir: ctx.stateDir };
       },
       {
         type: 'object',
         properties: {
-          state_dir: { type: 'string', description: 'Path to .roland state directory' },
+          ...McpServer.PROJECT_CONTEXT_SCHEMA,
           goal: { type: 'string', description: 'Optional goal hint for smart command-board recall' },
           format: { type: 'string', enum: ['markdown', 'json', 'verbose'], description: 'Output shape (default: markdown concise summary)' },
         },
@@ -3090,13 +3141,15 @@ export class McpServer {
       'get_team_context',
       'The PM heartbeat. Returns the full team digest: status counts, the blockers/reviews/stalled/ready items that need your attention (blockers first), your inbox, recent decisions, and concrete suggested next actions. Pass format:"markdown" for a rendered standup. Act on needsAttention top-down — unblock before starting new work.',
       async (args: Record<string, unknown>) => {
-        if (args.format === 'markdown') return this.leadPm.getStandup();
-        return this.leadPm.getTeamContext();
+        const leadPm = this.scopedLeadPm(args);
+        if (args.format === 'markdown') return leadPm.getStandup();
+        return leadPm.getTeamContext();
       },
       {
         type: 'object',
         properties: {
           format: { type: 'string', enum: ['json', 'markdown'], description: 'Output format. "markdown" returns a rendered standup; default is structured JSON.' },
+          ...McpServer.PROJECT_CONTEXT_SCHEMA,
         },
         required: [],
       }
@@ -3106,8 +3159,12 @@ export class McpServer {
     this.registerTool(
       'list_team',
       'List Roland engineer personas (executor, architect, test-author, etc.) with specialties and recommended models. Use before spawn_task or assign_task.',
-      async () => ({ engineers: this.leadPm.listTeam() }),
-      { type: 'object', properties: {}, required: [] }
+      async (args: Record<string, unknown>) => ({ engineers: this.scopedLeadPm(args).listTeam() }),
+      {
+        type: 'object',
+        properties: { ...McpServer.PROJECT_CONTEXT_SCHEMA },
+        required: [],
+      }
     );
 
     // spawn_task — register a decomposed task
@@ -3115,7 +3172,7 @@ export class McpServer {
       'spawn_task',
       'Register a decomposed unit of work as a task on the board (status: open). Returns the task plus a dispatch packet (engineer persona, recommended model, assembled brief, context files) you use to launch the engineer in your IDE.',
       async (args: Record<string, unknown>) => {
-        return this.leadPm.spawnTask({
+        return this.scopedLeadPm(args).spawnTask({
           slug: args.slug as string,
           title: args.title as string,
           description: args.description as string,
@@ -3135,6 +3192,7 @@ export class McpServer {
           dependsOn: { type: 'array', items: { type: 'string' }, description: 'Task keys that must be done before this can start.' },
           priority: { type: 'string', enum: ['low', 'normal', 'high'] },
           acceptanceCriteria: { type: 'string', description: 'Concrete bar the work is reviewed against.' },
+          ...McpServer.PROJECT_CONTEXT_SCHEMA,
         },
         required: ['slug', 'title', 'description'],
       }
@@ -3145,7 +3203,7 @@ export class McpServer {
       'assign_task',
       'Assign a task to an engineer (open/in_progress → in_progress), notify them on the bus, and return a fresh dispatch packet to launch them.',
       async (args: Record<string, unknown>) => {
-        return this.leadPm.assignTask({
+        return this.scopedLeadPm(args).assignTask({
           taskKey: args.taskKey as string,
           assignee: args.assignee as string,
         });
@@ -3155,6 +3213,7 @@ export class McpServer {
         properties: {
           taskKey: { type: 'string', description: 'Key of the task, e.g. "task:login-ui".' },
           assignee: { type: 'string', description: 'Engineer persona id (see list_team).' },
+          ...McpServer.PROJECT_CONTEXT_SCHEMA,
         },
         required: ['taskKey', 'assignee'],
       }
@@ -3165,7 +3224,7 @@ export class McpServer {
       'mark_blocked',
       'Flag a task as blocked (in_progress → blocked), recording exactly what is needed and notifying the PM. Engineers call this the moment they are stuck.',
       async (args: Record<string, unknown>) => {
-        return this.leadPm.markBlocked({
+        return this.scopedLeadPm(args).markBlocked({
           taskKey: args.taskKey as string,
           need: args.need as string,
           raisedBy: args.raisedBy as string,
@@ -3189,7 +3248,7 @@ export class McpServer {
       'unblock_task',
       'Resolve a blocker with a concrete decision. Records the decision on the board, archives the blocker, returns the task to in_progress once no blockers remain, and notifies the assignee. This is your highest-priority action.',
       async (args: Record<string, unknown>) => {
-        return this.leadPm.unblockTask({
+        return this.scopedLeadPm(args).unblockTask({
           taskKey: args.taskKey as string,
           blockerKey: args.blockerKey as string,
           resolution: args.resolution as string,
@@ -3211,7 +3270,7 @@ export class McpServer {
       'complete_task',
       'Submit completed work: attaches an artifact and moves the task to in_review, notifying the PM. Engineers call this when done. Optionally pass model + input_tokens/output_tokens to attribute Cursor usage in the same call (no need to also call report_usage).',
       async (args: Record<string, unknown>) => {
-        return this.leadPm.completeTask({
+        return this.scopedLeadPm(args).completeTask({
           taskKey: args.taskKey as string,
           summary: args.summary as string,
           content: args.content as string | undefined,
@@ -3243,7 +3302,7 @@ export class McpServer {
       'review_task',
       'Review submitted work against its acceptance criteria. accept → done; reject → back to in_progress with your notes, and the engineer is notified to rework.',
       async (args: Record<string, unknown>) => {
-        return this.leadPm.reviewTask({
+        return this.scopedLeadPm(args).reviewTask({
           taskKey: args.taskKey as string,
           decision: args.decision as 'accept' | 'reject',
           notes: args.notes as string | undefined,
@@ -3264,16 +3323,24 @@ export class McpServer {
     this.registerTool(
       'synthesize_deliverable',
       'Roll up all completed tasks and their artifacts into a single deliverable summary for the human PM. Call this when nothing is open/in_progress/blocked/in_review.',
-      async () => this.leadPm.synthesizeDeliverable(),
-      { type: 'object', properties: {}, required: [] }
+      async (args: Record<string, unknown>) => this.scopedLeadPm(args).synthesizeDeliverable(),
+      {
+        type: 'object',
+        properties: { ...McpServer.PROJECT_CONTEXT_SCHEMA },
+        required: [],
+      }
     );
 
     // list_team_recipes — the pre-decomposed team templates
     this.registerTool(
       'list_team_recipes',
       'List the bundled team recipes (e.g. full-feature-team, bugfix-team, refactor-team) — pre-decomposed task graphs you can drop onto the board in one call with start_team_recipe.',
-      async () => ({ recipes: this.leadPm.listTeamRecipes() }),
-      { type: 'object', properties: {}, required: [] }
+      async (args: Record<string, unknown>) => ({ recipes: this.scopedLeadPm(args).listTeamRecipes() }),
+      {
+        type: 'object',
+        properties: { ...McpServer.PROJECT_CONTEXT_SCHEMA },
+        required: [],
+      }
     );
 
     // start_team_recipe — instantiate a whole task graph for a goal
@@ -3281,7 +3348,7 @@ export class McpServer {
       'start_team_recipe',
       'Instantiate a team recipe for a goal: seeds the entire task graph on the board (namespaced + dependency-linked) and returns dispatch packets for the tasks ready to start now. Use this to kick off a standard workflow without decomposing by hand.',
       async (args: Record<string, unknown>) => {
-        return this.leadPm.startTeamRecipe({
+        return this.scopedLeadPm(args).startTeamRecipe({
           recipe: args.recipe as string,
           goal: args.goal as string,
           namespace: args.namespace as string | undefined,
@@ -3303,7 +3370,7 @@ export class McpServer {
       'report_usage',
       'Attribute Cursor token usage to a task and engineer. Records usage for visibility (cost is $0 — Cursor billing is by subscription) and rolls it onto the task. Engineers can instead pass these fields directly to complete_task.',
       async (args: Record<string, unknown>) => {
-        return this.leadPm.recordUsage({
+        return this.scopedLeadPm(args).recordUsage({
           taskKey: args.taskKey as string,
           engineer: args.engineer as string,
           model: args.model as string,
@@ -3329,7 +3396,7 @@ export class McpServer {
       'get_team_usage',
       'Cursor usage attribution across the team: token/request totals broken down by engineer, model, and task. Figures are usage, not dollars (the PM team runs on the Cursor subscription). Pass format:"markdown" for a rendered view.',
       async (args: Record<string, unknown>) => {
-        const usage = this.leadPm.getTeamUsage();
+        const usage = this.scopedLeadPm(args).getTeamUsage();
         if (args.format === 'markdown') return { markdown: renderUsage(usage), usage };
         return usage;
       },
@@ -3347,7 +3414,7 @@ export class McpServer {
       'get_pm_events',
       'The PM event timeline: a reverse-chronological audit trail of lifecycle actions (spawn/assign/block/unblock/complete/review/usage/recipe-start) from .roland/pm-events.log. Use this to answer "what happened on this feature?". Pass format:"markdown" for a rendered timeline.',
       async (args: Record<string, unknown>) => {
-        const events = this.leadPm.getPmEvents(
+        const events = this.scopedLeadPm(args).getPmEvents(
           (args.limit as number | undefined) ?? 50,
           {
             action: args.action as PMEventAction | undefined,
@@ -3383,10 +3450,8 @@ export class McpServer {
       'roland_hello',
       'Start-of-session handshake for @roland in Cursor chat. Returns a welcome banner, capabilities table, current board/memory state, and quick-start hints. Call when the user first mentions @roland.',
       async (args: Record<string, unknown>) => {
-        const projectRoot = process.env['ROLAND_PROJECT_ROOT']?.trim() || process.cwd();
-        const stateDir = typeof args.state_dir === 'string' && args.state_dir
-          ? args.state_dir
-          : path.join(projectRoot, '.roland');
+        const ctx = this.resolveToolProjectContext(args);
+        const { projectRoot, stateDir } = ctx;
 
         // ── Memory summary ───────────────────────────────────────────────────
         let memoryStatus = 'No project memory yet — builds automatically after each run.';
@@ -3500,6 +3565,7 @@ What would you like to work on?`;
             board: boardStatus,
             blockers: blockerCount,
             state_dir: stateDir,
+            project_root: projectRoot,
           },
           quick_start: blockerCount > 0
             ? 'Call pm_standup() first — there are open blockers to resolve.'
@@ -3509,10 +3575,7 @@ What would you like to work on?`;
       {
         type: 'object',
         properties: {
-          state_dir: {
-            type: 'string',
-            description: 'Path to .roland state directory (default: .roland/ in project root)',
-          },
+          ...McpServer.PROJECT_CONTEXT_SCHEMA,
         },
         required: [],
       }
@@ -3521,33 +3584,39 @@ What would you like to work on?`;
     // ── roland_run_team ───────────────────────────────────────────────────────
     this.registerTool(
       'roland_run_team',
-      'Launch a background PM team run for goals on the **Team** execution path. Use when work needs multi-file changes, Sparrow + Vanguard test orchestration, Command Blackboard tracking, wave synthesis, or > 30–45 min effort. Pass `loop_template` (e.g. closed-loop-harness, feature-implementation-loop) to route through **ClosedLoop** instead of legacy PM waves. Also use when the operator forces team mode via --force-team, "force team", "full team", "run as team", or "spawn team" (no confirmation needed — launch immediately). Do NOT use for single-file edits, Q&A, or quick fixes unless force-team was explicitly requested. Trade-off: team runs add PM overhead but provide parallel callsigns, blocker surfacing, and Mission Complete synthesis. Returns immediately; track with pm_standup() or get_team_context().',
+      'Launch a background PM team run for goals on the **Team** execution path. Use when work needs multi-file changes, Sparrow + Vanguard test orchestration, Command Blackboard tracking, wave synthesis, or > 30–45 min effort. Pass `project_root` (or `cwd`) when triggering from Hermes in a repo other than the MCP server cwd. Pass `loop_template` (e.g. closed-loop-harness, feature-implementation-loop) to route through **ClosedLoop** instead of legacy PM waves. Also use when the operator forces team mode via --force-team, "force team", "full team", "run as team", or "spawn team" (no confirmation needed — launch immediately). Do NOT use for single-file edits, Q&A, or quick fixes unless force-team was explicitly requested. Trade-off: team runs add PM overhead but provide parallel callsigns, blocker surfacing, and Mission Complete synthesis. Returns immediately; track with pm_standup() or get_team_context().',
       async (args: Record<string, unknown>) => {
         const goal = args.goal as string;
         if (!goal || typeof goal !== 'string' || !goal.trim()) {
           throw new McpToolError('roland_run_team', '"goal" is required — describe what you want the team to build or fix');
         }
 
-        const rawStateDir = typeof args.state_dir === 'string' && args.state_dir.trim()
-          ? args.state_dir.trim()
-          : '';
-        const projectRoot = process.env['ROLAND_PROJECT_ROOT']?.trim()
-          || (rawStateDir && (rawStateDir.endsWith('.roland') || rawStateDir.endsWith(`${path.sep}.roland`))
-            ? path.dirname(path.resolve(rawStateDir))
-            : process.cwd());
-        const resolvedStateDir = rawStateDir
-          ? (path.isAbsolute(rawStateDir) ? rawStateDir : path.join(projectRoot, rawStateDir))
-          : path.join(projectRoot, '.roland');
+        const ctx = this.resolveToolProjectContext(args);
+        const { projectRoot, stateDir: resolvedStateDir } = ctx;
 
         const loopTemplate = typeof args.loop_template === 'string' ? args.loop_template.trim() : '';
-        const teamArgv = ['team', goal.trim(), '--background', '--quiet', '--no-tui'];
+        const teamArgv = [
+          'team',
+          goal.trim(),
+          '--background',
+          '--quiet',
+          '--no-tui',
+          '--state-dir',
+          resolvedStateDir,
+        ];
         if (loopTemplate) teamArgv.push('--loop-template', loopTemplate);
 
-        process.env.ROLAND_STATE_DIR = resolvedStateDir;
-        process.env.ROLAND_PROJECT_ROOT = projectRoot;
-        process.env.ROLAND_TRIGGERED_VIA = 'mcp';
+        process.env['ROLAND_TRIGGERED_VIA'] = 'mcp';
 
-        const { pid, logFile } = await spawnBackground(goal.trim(), teamArgv, resolvedStateDir, { quiet: true });
+        sanitizeStaleMissionState(resolvedStateDir);
+        cleanupPreviousRuns(resolvedStateDir, goal.trim());
+
+        const { pid, logFile } = await spawnBackground(
+          goal.trim(),
+          teamArgv,
+          resolvedStateDir,
+          { quiet: true, projectRoot },
+        );
         const truncatedGoal = goal.trim().slice(0, 100) + (goal.trim().length > 100 ? '…' : '');
 
         writeMissionMetaFile(resolvedStateDir, {
@@ -3574,8 +3643,8 @@ What would you like to work on?`;
           triggered_via: 'mcp',
           message: `✅ PM team started (PID ${pid}):\n"${truncatedGoal}"`,
           next_steps: [
-            'Call pm_standup() in ~30 seconds to see the task plan once Wave 1 begins',
-            'Call get_team_context() for the full structured board state',
+            `Call pm_standup({ project_root: "${projectRoot}" }) in ~30 seconds to see the task plan once Wave 1 begins`,
+            `Call get_team_context({ project_root: "${projectRoot}" }) for the full structured board state`,
             'Run `roland bg-status` in your terminal to check background job health',
             `Logs: ${logFile}`,
           ],
@@ -3589,10 +3658,7 @@ What would you like to work on?`;
             type: 'string',
             description: 'The engineering goal for the PM team. Be specific: include scope, constraints, and what "done" looks like. Examples: "add JWT refresh token rotation — 15-min access, 7-day refresh, stored in Redis" or "fix the N+1 query in GET /users — use eager loading for the roles relation".',
           },
-          state_dir: {
-            type: 'string',
-            description: 'Path to .roland state directory (default: .roland/ in project root). Omit to use the project default.',
-          },
+          ...McpServer.PROJECT_CONTEXT_SCHEMA,
           loop_template: {
             type: 'string',
             description: 'Optional loop template id (e.g. closed-loop-harness, feature-implementation-loop). Routes through ClosedLoop harness — not legacy PM waves.',

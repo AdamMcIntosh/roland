@@ -246,6 +246,7 @@ describe('dashboard /api/run-state and WebSocket parity', () => {
   });
 
   it('POST /api/force-refresh returns MCP-triggered mission metadata', async () => {
+    const projectRoot = path.join(path.dirname(stateDir), 'mcp-project');
     writeRunState(stateDir, {
       runId: 'mcp-run',
       status: 'planning',
@@ -262,6 +263,8 @@ describe('dashboard /api/run-state and WebSocket parity', () => {
         startedAt: Date.now(),
         triggeredVia: 'mcp',
         pid: process.pid,
+        projectRoot,
+        stateDir,
       }),
     );
 
@@ -271,11 +274,13 @@ describe('dashboard /api/run-state and WebSocket parity', () => {
       ok: boolean;
       missionActive: boolean;
       triggeredVia: string;
+      projectRoot?: string;
       runState: { runId: string; triggeredVia?: string };
     };
     expect(body.ok).toBe(true);
     expect(body.missionActive).toBe(true);
     expect(body.triggeredVia).toBe('mcp');
+    expect(body.projectRoot).toBe(projectRoot);
     expect(body.runState?.runId).toBe('mcp-run');
   });
 });

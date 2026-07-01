@@ -1,5 +1,5 @@
 /**
- * ## MCP Live Sync Improvements
+ * ## MCP Project Context Fix
  *
  * RunState — persists real-time orchestrator state to .roland/run-state.json.
  *

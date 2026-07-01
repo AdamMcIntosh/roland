@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 /**
+ * ## MCP Project Context Fix
+ *
  * RCO Team CLI — PM-style parallel agent execution.
  *
  * After global install:
@@ -30,6 +32,14 @@ import { spawnBackground } from './supervisor.js';
 import type { LoopState } from '../loop-engine/index.js';
 import { readLoopPmSession } from '../loop-engine/index.js';
 import { ModelRouter } from '../models/model-router.js';
+import {
+  applyMcpProjectEnv,
+  resolveMcpProjectContext,
+} from '../utils/mcp-project-context.js';
+import {
+  cleanupPreviousRuns,
+  sanitizeStaleMissionState,
+} from './mission-state.js';
 
 // ── Terminal helpers ──────────────────────────────────────────────────────────
 
@@ -237,7 +247,12 @@ function firstSentences(body: string, maxChars = 200): string {
 // ── Main CLI logic (exported so index.ts can delegate without re-running main) ─
 
 export async function runTeamCli(argv: string[]): Promise<void> {
-  const { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel, loopTemplate } = parseTeamArgs(argv);
+  const parsed = parseTeamArgs(argv);
+  let { goal, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel, loopTemplate } = parsed;
+
+  const ctx = resolveMcpProjectContext({ state_dir: parsed.stateDir });
+  applyMcpProjectEnv(ctx);
+  const stateDir = ctx.stateDir;
 
   if (!goal) {
     err(c.bold('Roland — PM Team Mode'));
@@ -295,8 +310,15 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     if (!process.env['ROLAND_TRIGGERED_VIA']) {
       process.env['ROLAND_TRIGGERED_VIA'] = 'cli';
     }
-    await spawnBackground(goal, argv, stateDir);
+    sanitizeStaleMissionState(stateDir);
+    cleanupPreviousRuns(stateDir, goal);
+    await spawnBackground(goal, argv, stateDir, { projectRoot: ctx.projectRoot });
     return; // parent exits immediately
+  }
+
+  if (process.env['ROLAND_TRIGGERED_VIA'] === 'mcp' && !clean) {
+    sanitizeStaleMissionState(stateDir);
+    cleanupPreviousRuns(stateDir, goal);
   }
 
   // ── Web mode — streaming terminal-style output for browser / chat UI ────────

@@ -570,6 +570,9 @@ function summarizeSupervisorPayload() {
   const alive = rec?.pid ? isProcessAlive(rec.pid) : false;
   const run = summarizeRunState();
   const meta = readMissionMeta();
+  const projectRoot = meta?.projectRoot
+    ? path.resolve(String(meta.projectRoot))
+    : activeProjectRoot;
   return {
     record: alive ? rec : null,
     alive,
@@ -577,7 +580,7 @@ function summarizeSupervisorPayload() {
     run,
     missionMeta: meta,
     missionActive: Boolean(alive || run?.active),
-    projectRoot: activeProjectRoot,
+    projectRoot,
     stateDir: activeStateDir,
   };
 }
@@ -2890,6 +2893,7 @@ const server = http.createServer(async (req, res) => {
       jsonOk(res, {
         ok: true,
         missionActive: Boolean(supervisor?.missionActive),
+        projectRoot: supervisor?.projectRoot ?? activeProjectRoot,
         runState,
         supervisor,
         triggeredVia: readMissionMetaFile(activeStateDir)?.triggeredVia ?? runState?.triggeredVia ?? null,

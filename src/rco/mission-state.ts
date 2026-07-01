@@ -1,5 +1,5 @@
 /**
- * ## MCP Live Sync Improvements
+ * ## MCP Project Context Fix
  *
  * Mission state isolation — per-project cleanup, archival, and stale-file hygiene.
  *

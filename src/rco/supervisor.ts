@@ -1,4 +1,6 @@
 /**
+ * ## MCP Project Context Fix
+ *
  * Roland Supervisor — true background / detached process mode.
  *
  * Usage (from CLI):
@@ -33,6 +35,12 @@ import path             from 'path';
 import { fileURLToPath } from 'url';
 import { readRunState }  from './run-state.js';
 import { sanitizeStaleMissionState } from './mission-state.js';
+import {
+  applyMcpProjectEnv,
+  chdirToProject,
+  deriveProjectRootFromStateDir,
+  resolveMcpProjectContext,
+} from '../utils/mcp-project-context.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -416,8 +424,12 @@ export async function spawnBackground(
   goal:     string,
   teamArgv: string[],  // full argv as passed to runTeamCli, includes 'team' prefix
   stateDir: string,
-  opts?: { quiet?: boolean },
+  opts?: { quiet?: boolean; projectRoot?: string },
 ): Promise<SpawnBackgroundResult> {
+  const resolvedStateDir = path.resolve(stateDir);
+  const projectRoot = opts?.projectRoot?.trim()
+    ? path.resolve(opts.projectRoot)
+    : deriveProjectRootFromStateDir(resolvedStateDir);
   const supervisorScript = path.join(__dirname, 'supervisor.js');
   if (!fs.existsSync(supervisorScript)) {
     throw new Error(
@@ -425,7 +437,7 @@ export async function spawnBackground(
     );
   }
 
-  const logDir  = path.join(stateDir, SUPERVISOR_LOG_DIR);
+  const logDir  = path.join(resolvedStateDir, SUPERVISOR_LOG_DIR);
   fs.mkdirSync(logDir, { recursive: true });
 
   const ts      = Date.now();
@@ -440,8 +452,11 @@ export async function spawnBackground(
     process.execPath,
     [supervisorScript, '--background-worker', goal, ...filteredArgs],
     {
+      cwd: projectRoot,
       env: {
-        ROLAND_STATE_DIR: stateDir,
+        ROLAND_STATE_DIR: resolvedStateDir,
+        ROLAND_PROJECT_ROOT: projectRoot,
+        ROLAND_ROOT: projectRoot,
         ...(process.env['ROLAND_TRIGGERED_VIA']
           ? { ROLAND_TRIGGERED_VIA: process.env['ROLAND_TRIGGERED_VIA'] }
           : {}),
@@ -454,7 +469,7 @@ export async function spawnBackground(
     throw new Error('Failed to spawn background process — no PID assigned');
   }
 
-  writeSupervisorRecord(stateDir, {
+  writeSupervisorRecord(resolvedStateDir, {
     pid:       child.pid,
     goal:      goal.slice(0, 120),
     startedAt: ts,
@@ -494,7 +509,10 @@ async function supervisorWorkerMain(argv: string[]): Promise<void> {
   // argv[0] = '--background-worker', argv[1] = goal, argv[2+] = team args
   const goal     = argv[1] ?? '';
   const teamArgs = argv.slice(2);
-  const stateDir = process.env.ROLAND_STATE_DIR ?? '.roland';
+  const ctx = resolveMcpProjectContext({ state_dir: process.env['ROLAND_STATE_DIR'] ?? '.roland' });
+  applyMcpProjectEnv(ctx);
+  chdirToProject(ctx);
+  const stateDir = ctx.stateDir;
 
   // Inject --notify when ROLAND_NOTIFY=1 is set globally but --notify wasn't passed
   const needsNotify =
