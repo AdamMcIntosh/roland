@@ -16,22 +16,23 @@ Roland is a multi-agent platform for **reliable, iterative software missions**:
 
 | Layer | Role |
 |-------|------|
-| **Hermes** | Primary PM / strategist — plan missions, trigger loops, triage work (`roland chat`, Cursor `@roland`, `roland team`) |
-| **Roland Closed-Loop Harness** | Specialized loop execution engine — PACVRE iterations, evaluation gates, reflection, exit conditions ([guide](docs/guides/closed-loop-harness.md)) |
-| **Global CLI + MCP** | `roland team`, interactive chat, Cursor MCP tools |
-| **Command Center** | Web dashboard — **monitor & control only**: live progress, HITL, loop health, GitHub clone |
+| **@roland (Cursor)** | PM, triage, direct edits — self-contained via MCP (no Hermes required) |
+| **Roland Closed-Loop Harness** | Loop execution engine — PACVRE iterations, gates, reflection ([guide](docs/guides/closed-loop-harness.md)) |
+| **Global CLI + MCP** | `roland team`, `roland_run_team`, Cursor MCP tools |
+| **Command Center** | Dashboard — monitor & control only |
 
-> [DEPRECATED] The in-loop **PM Team Engine** (LeadPM, `use_pm_team: true`) remains as an advanced/legacy opt-in for backward compatibility. **Hermes** handles high-level PM duties in the recommended hybrid setup.
+> **Hermes** (`roland chat` CLI) is optional for terminal-only workflows — **not required in Cursor**.
 
 Inspired by [loops.elorm.xyz](https://loops.elorm.xyz) patterns: self-paced iterations, between-iteration checks, explicit exit conditions, and reflection memory.
 
 ```
-  Operator ──► Hermes (PM / strategist) ──► roland team + loop template ──► Roland ClosedLoop (PACVRE)
-                    │                                    │
-                    ▼                                    ▼
-           Roland Dashboard (monitor)          EvaluationGate · LoopMemory
-           HITL · pause/resume · history       clean PR on completion
+  Operator ──► @roland in Cursor (PM + triage) ──► roland team + loop template ──► Roland ClosedLoop (PACVRE)
+                    │                                        │
+                    ▼                                        ▼
+           Roland Dashboard (monitor)              EvaluationGate · LoopMemory
 ```
+
+> [DEPRECATED] In-loop PM Team (`use_pm_team: true`) is legacy opt-in only.
 
 ---
 
@@ -70,14 +71,13 @@ roland team "add MCP tool for triage" --loop-template mcp-extension-loop
 
 ### 3. Command center (dashboard — monitor & control)
 
-Use **Hermes** to plan and launch loops. The dashboard watches and controls active runs.
+Use **@roland in Cursor** or `roland team` to launch loops. The dashboard watches and controls active runs.
 
 ```bash
-# Launch via Hermes
-roland chat
-# or: roland team "goal" --loop-template full-cycle-verified-loop
+# In Cursor: @roland, or terminal:
+roland team "goal" --loop-template full-cycle-verified-loop
 
-# Monitor via dashboard
+# Monitor:
 npm run serve-dashboard
 # → http://127.0.0.1:8081
 ```

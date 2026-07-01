@@ -302,7 +302,7 @@ export class TuiRenderer {
 
     // ── Header ──────────────────────────────────────────────────────────────
     const elapsedStr = elapsed(now - state.startedAt);
-    const titleLeft  = ` ${b('🚀  Roland · Hermes PM')}`;
+    const titleLeft  = ` ${b('🚀  Roland')}`;
     const titleRight = d(`[${elapsedStr}]`) + ' ';
     const titlePad   = C - vlen(titleLeft) - vlen(titleRight);
     lines.push(top);

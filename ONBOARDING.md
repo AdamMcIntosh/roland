@@ -1,15 +1,14 @@
-# Onboarding — Hermes + Roland Hybrid
+# Onboarding — Roland in Cursor
 
-Welcome. Roland is a **hybrid agent platform**:
+Welcome. Roland turns Cursor into an AI engineering supervisor with **no separate Hermes layer required**.
 
-| Layer | Role |
-|-------|------|
-| **Hermes** | Primary PM / strategist — plan missions, triage work, trigger loops (`roland chat`, Cursor `@roland`, `roland team`) |
-| **Roland** | Loop execution engine — PACVRE closed-loop harness, verification gates, specialist spawns |
+| Surface | Role |
+|---------|------|
+| **@roland in Cursor** | PM, triage, direct edits — MCP (`triage`, `roland_run_team`, `pm_standup`) |
+| **Roland ClosedLoop** | Loop execution — `roland team "…" --loop-template …` |
+| **Dashboard** | Monitor & control active loops (`npm run serve-dashboard`) |
 
-You converse with **Hermes** to plan work. **Roland** runs structured loop iterations when you attach a template.
-
-> [DEPRECATED] The legacy in-loop **PM Team** persona (LeadPM, `use_pm_team: true`) remains for backward compatibility only. Hermes is the recommended PM layer.
+> **Hermes** (`roland chat` CLI) is optional for terminal-only workflows outside Cursor.
 
 ## 60-second setup
 
@@ -26,40 +25,24 @@ Restart Cursor. Verify with:
 roland doctor
 ```
 
-You should see ✅ for the binary, personas, team recipes, the Cursor MCP entry,
-and a writable `.roland/`.
+## Your first session (Cursor)
 
-## Your first session
-
-In any project, in Cursor chat:
-
-1. Mention `@roland` or run `roland chat` — **Hermes** greets you and triages work.
-2. For a multi-step goal: `roland team "your goal" --loop-template full-cycle-verified-loop`
-3. Monitor progress: `npm run serve-dashboard` → http://127.0.0.1:8081
-4. `roland board-status --concise` for battlespace summary.
-
-For legacy board-driven PM workflows (advanced):
-
-1. `get_pm_playbook` — adopt the [DEPRECATED] legacy PM posture.
-2. `start_team_recipe { recipe: "full-feature-team", goal: "<your goal>" }`
-3. `pm_standup` every turn. **Unblock first**, then review, then start new work.
+1. Mention `@roland` in chat — triage runs automatically.
+2. Small task → handled directly in chat.
+3. Multi-step goal → `roland team "goal" --loop-template full-cycle-verified-loop` or confirm `roland_run_team`.
+4. Monitor: `npm run serve-dashboard` → http://127.0.0.1:8081
 
 ## The mindset
 
-> **Hermes plans. Roland executes loops. Keep blockers cleared.**
+> **@roland triages and plans. Roland ClosedLoop executes loops. Keep blockers cleared.**
 
-For loop missions, prefer **Pure ClosedLoop** (default) — Hermes handles PM scope; Roland runs PACVRE iterations.
+Prefer **Pure ClosedLoop** (default) — `use_pm_team: false`.
 
 ## Where state lives
 
-Everything is per-project under `.roland/` (gitignored): the Blackboard, the
-message bus, loop memory, and `pm-events.log` (the audit timeline). The binary is installed
-once, globally — it works in every project off a single `~/.cursor/mcp.json`
-entry.
+Per-project under `.roland/` (gitignored): Blackboard, loop memory, `pm-events.log`.
 
 ## Learn more
 
 - **Closed-loop harness:** `docs/guides/closed-loop-harness.md`
-- **Legacy PM workflow:** `docs/guides/pm-workflow.md` ([DEPRECATED] — prefer Hermes)
-- **Install details & config:** `INSTALLATION.md`
-- **Routing:** Models configured in `config.yaml` under `models:` — routed automatically by ModelRouter.
+- **Install:** `INSTALLATION.md`

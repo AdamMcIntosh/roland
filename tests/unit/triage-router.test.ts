@@ -8,7 +8,7 @@ import {
 describe('triage-router', () => {
   it('exports hybrid-architecture prompt with Pure ClosedLoop default', () => {
     expect(TRIAGE_ROUTER_PROMPT).toContain('Roland Triage Router');
-    expect(TRIAGE_ROUTER_PROMPT).toContain('Hermes');
+    expect(TRIAGE_ROUTER_PROMPT).toContain('no separate Hermes');
     expect(TRIAGE_ROUTER_PROMPT).toContain('use_pm_team: false');
     expect(TRIAGE_ROUTER_PROMPT).toContain('full-cycle-verified-loop');
     expect(TRIAGE_ROUTER_PROMPT).toContain('[DEPRECATED]');

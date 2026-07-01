@@ -1,8 +1,9 @@
 /**
  * ## Assumptions
- * - Hermes (`roland chat`, Cursor `@roland`, `roland team`) is the primary PM / strategist layer.
+ * - In Cursor, `@roland` + MCP triage is self-contained — no Hermes dependency.
+ * - `roland chat` (Hermes) is an optional CLI alternative for terminal-only workflows.
  * - Roland ClosedLoop is the specialized loop execution engine (PACVRE harness).
- * - Legacy LeadPM / PM Team (`use_pm_team: true`, `pm_plan`/`pm_act`) remains for backward compatibility only.
+ * - Legacy LeadPM / PM Team (`use_pm_team: true`) remains for backward compatibility only.
  */
 
 /** Short tag for inline comments, labels, and log prefixes. */
@@ -10,7 +11,10 @@ export const DEPRECATED_LEGACY_PM_TAG = '[DEPRECATED]';
 
 /** Canonical recommendation shown in runtime warnings and docs. */
 export const HERMES_PM_RECOMMENDATION =
-  'Hermes is now the recommended PM layer. Prefer Pure ClosedLoop (default).';
+  'Prefer Pure ClosedLoop (default). In Cursor use @roland; legacy use_pm_team is deprecated.';
+
+/** @deprecated Use HERMES_PM_RECOMMENDATION — name retained for export stability. */
+export const PURE_CLOSEDLOOP_RECOMMENDATION = HERMES_PM_RECOMMENDATION;
 
 /** Full runtime warning when legacy PM Team path is active. */
 export const LEGACY_PM_TEAM_WARNING =
@@ -19,7 +23,7 @@ export const LEGACY_PM_TEAM_WARNING =
 
 /**
  * Emit a deprecation warning when legacy PM Team code paths run.
- * @deprecated Legacy PM Team — use Hermes + Pure ClosedLoop instead.
+ * @deprecated Legacy PM Team — use Pure ClosedLoop + @roland in Cursor instead.
  */
 export function warnLegacyPmTeam(source: string, detail?: string): void {
   const suffix = detail ? ` (${detail})` : '';

@@ -1,6 +1,6 @@
 /**
  * ## Assumptions
- * - Hermes is the primary PM / strategist — plan missions via `roland chat`, Cursor `@roland`, or `roland team`.
+ * - In Cursor, `@roland` + MCP triage handles PM — no Hermes dependency.
  * - Roland ClosedLoop is the loop execution engine (PACVRE harness); Pure ClosedLoop is the default.
  * - [DEPRECATED] Legacy PM Team (LeadPM, `use_pm_team: true`, `pm_plan`/`pm_act`) is advanced/legacy opt-in only.
  * - Global: `loop_engine.use_pm_team` in config.yaml (default false).
@@ -26,7 +26,7 @@ export interface PmIntegrationResolveOptions {
 
 /**
  * Resolve whether [DEPRECATED] legacy PM Team is wired into this loop mission.
- * @deprecated Prefer Hermes + Pure ClosedLoop. Legacy path kept for backward compatibility.
+ * @deprecated Prefer Pure ClosedLoop + @roland in Cursor. Legacy path kept for backward compatibility.
  */
 export function resolvePmIntegrationStatus(
   template: LoopTemplate,
@@ -108,8 +108,8 @@ export function isLoopPmTeamEnabled(
 /** Dashboard / health label — Hermes + Pure ClosedLoop vs [DEPRECATED] legacy PM Team. */
 export function formatPmIntegrationLabel(status: PmIntegrationStatus): string {
   return status.enabled
-    ? 'PM-Enhanced [DEPRECATED] — use Hermes + Pure ClosedLoop'
-    : 'Pure ClosedLoop (Hermes PM + Roland Loop Engine)';
+    ? 'PM-Enhanced [DEPRECATED] — use Pure ClosedLoop'
+    : 'Pure ClosedLoop (Roland @ Cursor + Loop Engine)';
 }
 
 /** Structured log lines for loop mission startup (used when ModelRouter summary is skipped). */
@@ -120,20 +120,20 @@ export function logPmIntegrationMode(status: PmIntegrationStatus, templateName: 
   if (status.enabled) {
     console.error(
       '[Loop] [DEPRECATED] Legacy PM Team will delegate Plan/Act to team-orchestrator (pmSlice). ' +
-        'Hermes is now the recommended PM layer — prefer Pure ClosedLoop (use_pm_team: false).',
+        'Prefer Pure ClosedLoop (use_pm_team: false).',
     );
   } else {
     console.error(
-      '[Loop] Hermes handles mission PM · Roland runs PACVRE loop (lightweight Plan/Act handlers).',
+      '[Loop] @roland / Pure ClosedLoop — lightweight Plan/Act · PACVRE verify/critique/reflect in harness.',
     );
   }
 }
 
 /**
- * ## Old PM Persona Deprecated — Hermes is Primary PM
+ * ## Old PM Persona Deprecated — Pure ClosedLoop + @roland
  *
  * ```yaml
- * # Recommended: Hermes + Pure ClosedLoop (default)
+ * # Recommended: Pure ClosedLoop (default) — triage via @roland in Cursor
  * loop_engine:
  *   use_pm_team: false
  *

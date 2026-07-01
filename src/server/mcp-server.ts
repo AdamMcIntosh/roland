@@ -645,7 +645,7 @@ export class McpServer {
   private registerTriage(): void {
     this.registerTool(
       'triage',
-      'Auto-pilot: analyze any user message and recommend agent persona, recipe workflow, and execution path (direct in chat vs Pure ClosedLoop team mission). Call FIRST on new coding requests. Returns execution_path.path ("direct" | "team"), execution_path.summary, execution_path.team_offer, execution_path.team_command (roland team + --loop-template), execution_path.loop_template, execution_path.loop_template_reason, execution_path.forced, execution_path.cleaned_goal, plus agent and complexity routing. Hermes = primary PM; Roland = ClosedLoop engine; Pure ClosedLoop default (use_pm_team: false). Power-user override: --force-team or "force team", "full team", "run as team", "spawn team".',
+      'Auto-pilot: analyze any user message and recommend agent persona, recipe workflow, and execution path (direct in chat vs Pure ClosedLoop team mission). Call FIRST on new coding requests. In Cursor, @roland + triage is self-contained — no Hermes required. Returns execution_path.path, summary, team_offer, team_command (roland team + --loop-template), loop_template, loop_template_reason, forced, cleaned_goal, plus agent and complexity routing. Pure ClosedLoop default (use_pm_team: false). Power-user override: --force-team or force team / full team / run as team / spawn team.',
       async (args: Record<string, unknown>) => {
         const message = args.message as string;
         if (!message) {
@@ -3404,25 +3404,25 @@ export class McpServer {
         const greeting = `# 👋 Roland is ready
 
 ${blockerWarning}
-## Hybrid architecture
+## In Cursor (no Hermes required)
 
-| Layer | Role |
-|-------|------|
-| **Hermes** | Primary PM / strategist — plan missions, triage work, trigger loops |
-| **Roland** | Loop execution engine — PACVRE closed-loop harness, specialist spawns, verification gates |
+| Mode | Role |
+|------|------|
+| **@roland in chat** | PM, triage, direct edits — self-contained via MCP |
+| **ClosedLoop** | \`roland team "…" --loop-template …\` or \`roland_run_team\` for PACVRE missions |
+| **Dashboard** | Monitor active loops only (\`npm run serve-dashboard\`) |
 
-Use **Hermes** (roland chat, Cursor @roland, or \`roland team "…"\`) for planning. The dashboard monitors active loops.
+> **Hermes** (\`roland chat\` CLI) is optional for terminal-only workflows — Cursor users do not need it.
 
 ## What I can do
 
 | Mode | Use when | How |
 |------|----------|-----|
 | **Direct in chat** | Single-file edits · Q&A · Quick fixes · < 30 min | I edit files here in Cursor |
-| **Team run (Hermes PM)** | Features · Refactors · Tests · Multi-file · > 30 min | \`roland_run_team({ goal })\` after you confirm |
-| **Closed-loop mission** | Iterative PACVRE with verification gates | \`roland team "goal" --loop-template full-cycle-verified-loop\` |
+| **Team / ClosedLoop** | Features · Refactors · Tests · Multi-file · > 30 min | \`roland_run_team({ goal })\` or \`roland team … --loop-template …\` |
 | **Background mode** | Long-running goals while you keep working | \`roland team "goal" --background\` in terminal |
 
-> [DEPRECATED] Legacy in-loop PM Team (\`use_pm_team: true\`) remains for backward compatibility — Hermes is the recommended PM layer.
+> [DEPRECATED] Legacy in-loop PM Team (\`use_pm_team: true\`) — prefer Pure ClosedLoop (default).
 
 Every request is triaged to **Direct** or **Team** — I show the path and reasoning before acting.
 
@@ -3522,7 +3522,7 @@ What would you like to work on?`;
             'Run `roland bg-status` in your terminal to check background job health',
             `Logs: ${logFile}`,
           ],
-          tip: '[DEPRECATED] Legacy Lead PM is decomposing your goal. Prefer Hermes for PM — call pm_standup() to see the plan and any early blockers.',
+          tip: '[DEPRECATED] Legacy Lead PM is decomposing your goal. Prefer Pure ClosedLoop — call pm_standup() to see the plan and any early blockers.',
         };
       },
       {

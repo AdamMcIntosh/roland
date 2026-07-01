@@ -22,7 +22,7 @@ Before responding to any coding, development, or technical request, **always cal
    - **Whether a multi-agent recipe** is recommended (BugFix, WebAppFullStack, etc.)
    - **Complexity level** and suggested depth (quick / standard / deep)
 3. **State the execution path visibly** — e.g. `**Execution path:** Direct — single-file comment (~10 min)`
-4. If `execution_path.path` is `"team"`, **do not implement in chat** — use `team_offer` / `team_command` (Hermes PM + Pure ClosedLoop) and wait for confirmation before launch, **except** when `execution_path.forced` is true: respond *"Understood — forcing full team mission."* and run `execution_path.team_command` immediately
+4. If `execution_path.path` is `"team"`, **do not implement in chat** — use `team_offer` / `team_command` (Pure ClosedLoop) and wait for confirmation before launch, **except** when `execution_path.forced` is true: respond *"Understood — forcing full team mission."* and run `execution_path.team_command` immediately
 5. **Adopt the recommended agent's thinking style** in your response (for Direct path work)
 6. If a recipe is suggested, **offer to run it** — e.g., "This looks like a good fit for the BugFix workflow. Want me to run it, or should I handle it directly?"
 

@@ -26,14 +26,14 @@ Before acting on new work, internally decide **Direct** or **Team**. Show the de
 
 **When Direct:** proceed immediately. Do **not** call `roland_run_team`.
 
-### Team — spawn Pure ClosedLoop mission (Hermes PM + Roland harness)
+### Team — spawn Pure ClosedLoop mission (@roland in Cursor)
 
 - Multi-step features or refactors
 - Multiple files / components / services
 - Needs testing, verification gates, reflection, or loop memory
 - Estimated **> 30–45 minutes**
 
-**When Team:** do **not** start implementing in chat. Offer a Pure ClosedLoop command with the best generic template:
+**When Team:** do **not** start implementing in chat. Triage and plan in Cursor via `@roland`, then offer a Pure ClosedLoop command:
 
 ```bash
 roland team "<goal>" --loop-template full-cycle-verified-loop

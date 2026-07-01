@@ -842,8 +842,8 @@ export class ModelRouter {
     hitlGitCommitEnabled?: boolean;
   }): string[] {
     const mode = ctx.pmEnabled
-      ? 'PM-Enhanced [DEPRECATED] — Hermes is recommended PM'
-      : 'Pure ClosedLoop — Hermes PM + Roland Loop Engine';
+      ? 'PM-Enhanced [DEPRECATED] — use Pure ClosedLoop'
+      : 'Pure ClosedLoop — @roland + Roland Loop Engine';
     const canonical =
       ctx.canonicalTemplateId && ctx.canonicalTemplateId !== ctx.templateId
         ? `${ctx.templateId} → ${ctx.canonicalTemplateId}`
@@ -894,10 +894,10 @@ export class ModelRouter {
     if (ctx.pmEnabled) {
       lines.push(
         '[Loop]   [DEPRECATED] Legacy PM Team delegates Plan/Act to team-orchestrator — ' +
-          'Hermes is now the recommended PM layer; prefer Pure ClosedLoop (use_pm_team: false)',
+          'Prefer Pure ClosedLoop (use_pm_team: false)',
       );
     } else {
-      lines.push('[Loop]   Hermes PM · Roland PACVRE loop (lightweight Plan/Act · verify/critique/reflect in harness)');
+      lines.push('[Loop]   @roland / Pure ClosedLoop — lightweight Plan/Act · PACVRE harness');
     }
     return lines;
   }

@@ -73,7 +73,7 @@ export function stripForceTeamTriggers(message: string): string {
 /** Embedded in Roland system prompts — keep in sync with classifyExecutionPath heuristics. */
 export const EXECUTION_PATH_FRAMEWORK = `## Execution Path Triage (mandatory — every new request)
 
-**Hybrid model:** Hermes = primary PM / strategist · Roland = ClosedLoop execution engine · Pure ClosedLoop default (\`use_pm_team: false\`).
+**Hybrid model:** In Cursor, \`@roland\` + MCP triage is self-contained (no Hermes). Roland ClosedLoop = execution engine · Pure ClosedLoop default (\`use_pm_team: false\`).
 
 Before acting, classify the request as **Direct** or **Team (ClosedLoop mission)**. State your decision visibly in one line (use the \`summary\` shape from \`triage\` when available).
 
@@ -94,7 +94,7 @@ Before acting, classify the request as **Direct** or **Team (ClosedLoop mission)
 - Needs testing, verification gates, reflection, or loop memory
 - Estimated **> 30–45 minutes**
 
-**When Team:** do **not** start implementing in chat. Recommend Hermes for planning if scope is unclear, then offer:
+**When Team:** do **not** start implementing in chat. Triage in Cursor via \`@roland\`, then offer:
 
 \`\`\`bash
 roland team "<goal>" --loop-template full-cycle-verified-loop
@@ -123,7 +123,7 @@ Operators can bypass scoring and force **Team** with any of these triggers (case
 | Path | Pros | Cons |
 |------|------|------|
 | **Direct** | Fast feedback, low overhead, ideal for Q&A and tiny edits | No PACVRE loop, verification gates, or loop memory |
-| **Team + ClosedLoop** | Hermes PM + Roland harness, EvaluationGate, reflection, clean PR output | Higher latency; overkill for trivial edits |`;
+| **Team + ClosedLoop** | @roland triage + Roland harness, EvaluationGate, reflection, clean PR output | Higher latency; overkill for trivial edits |`;
 
 const DIRECT_SIGNALS: Array<{ pattern: RegExp; reason: string; weight: number }> = [
   { pattern: /\badd (a )?comment\b/i, reason: 'Single-file comment edit', weight: 5 },

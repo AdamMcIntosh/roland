@@ -1,6 +1,6 @@
 /**
  * ## Assumptions
- * Hermes (roland chat / Cursor @roland) is the primary interface for launching loops.
+ * @roland in Cursor is the primary interface for launching loops (no Hermes required).
  * This module renders monitor/control UI only — template catalog is read-only reference.
  *
  * Loop Engine dashboard UI — Closed-Loop Harness visualization.
@@ -133,7 +133,7 @@
       var isSelected = t.name === selected;
       var mode = t.executionModes.usePmTeam
         ? 'PM-Enhanced [DEPRECATED]'
-        : 'Pure ClosedLoop (Hermes PM)';
+        : 'Pure ClosedLoop';
       var spawnNote = t.spawnSummary
         ? '<div class="loop-template-spawns" title="YAML specialist_spawns">Spawns: ' + esc(t.spawnSummary) + '</div>'
         : '';
@@ -529,11 +529,11 @@
     if (!pm) return '';
     var enabled = pm.enabled || pm.configured;
     var cls = enabled ? 'loop-pm-enabled' : 'loop-pm-disabled';
-    var label = pm.label || (enabled ? 'PM-Enhanced [DEPRECATED]' : 'Pure ClosedLoop (Hermes PM)');
+    var label = pm.label || (enabled ? 'PM-Enhanced [DEPRECATED]' : 'Pure ClosedLoop');
     var badgeCls = enabled ? 'loop-pm-badge-enhanced' : 'loop-pm-badge-pure';
     var pathLabel = pm.executionPath === 'pm_team'
-      ? '[DEPRECATED] Plan/Act → legacy PM Team waves — use Hermes + Pure ClosedLoop'
-      : 'Plan/Act → lightweight ClosedLoop (Hermes PM + Roland Loop Engine)';
+      ? '[DEPRECATED] Plan/Act → legacy PM Team waves — use Pure ClosedLoop'
+      : 'Plan/Act → lightweight ClosedLoop (@roland + Loop Engine)';
     return '<div class="loop-pm-panel ' + cls + '">' +
       '<h5>Execution Mode</h5>' +
       '<div class="loop-pm-status">' +

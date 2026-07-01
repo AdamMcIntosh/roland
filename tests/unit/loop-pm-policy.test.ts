@@ -74,9 +74,9 @@ describe('loop-pm-policy', () => {
     ).toBe(true);
   });
 
-  it('formatPmIntegrationLabel reflects Hermes hybrid model', () => {
+  it('formatPmIntegrationLabel reflects Pure ClosedLoop default', () => {
     expect(formatPmIntegrationLabel({ enabled: false, reason: '', source: 'disabled' })).toContain(
-      'Hermes PM',
+      'Pure ClosedLoop',
     );
     expect(formatPmIntegrationLabel({ enabled: true, reason: '', source: 'opt-in' })).toContain(
       '[DEPRECATED]',

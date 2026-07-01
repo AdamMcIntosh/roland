@@ -6,24 +6,22 @@ The design follows [loops.elorm.xyz](https://loops.elorm.xyz) patterns: self-pac
 
 ---
 
-## Hybrid architecture: Hermes + Roland
+## Hybrid architecture: Cursor + Roland
 
-Roland uses a **two-layer** hybrid model:
+| Surface | Role | How to access |
+|---------|------|---------------|
+| **@roland (Cursor)** | PM, triage, direct edits — self-contained via MCP | Cursor chat + `roland mcp-config` |
+| **Roland ClosedLoop** | Loop execution engine — PACVRE harness | `roland team "…" --loop-template …` |
+| **Roland Dashboard** | Monitor & control — HITL, pause/resume, history | `npm run serve-dashboard` → http://127.0.0.1:8081 |
 
-| Layer | Role | How to access |
-|-------|------|---------------|
-| **Hermes** | **Primary PM / strategist** — plan missions, triage work, trigger loops, conversational PM | `roland chat` · Cursor `@roland` · `roland team "…"` |
-| **Roland** | **Loop execution engine** — PACVRE closed-loop harness, verification gates, specialist spawns, HITL | `--loop-template <name>` on team runs |
-| **Roland Dashboard** | Monitor & control — live PACVRE progress, HITL git-commit approvals, pause/resume, run history | `npm run serve-dashboard` → http://127.0.0.1:8081 |
+> **Hermes** (`roland chat` CLI) is optional for terminal-only workflows — **not required in Cursor**.
 
-**Hermes** handles all high-level PM duties and loop triggering. **Roland** runs the structured iteration harness. Models are routed automatically via ModelRouter and `config.yaml` — you do not pick models in the dashboard.
+**In Cursor**, `@roland` handles triage and PM. **Roland** runs the structured iteration harness when you attach a loop template.
 
-**The dashboard** is purpose-built for watching active loops and operator controls (HITL, pause/resume, git-commit approval). It does not replace Hermes for mission planning or PM chat.
-
-> [DEPRECATED] Legacy in-loop **PM Team** (`use_pm_team: true`, LeadPM, `pm_plan`/`pm_act`) remains for backward compatibility as an advanced opt-in only. Prefer **Hermes + Pure ClosedLoop** (default).
+> [DEPRECATED] Legacy in-loop **PM Team** (`use_pm_team: true`) — advanced opt-in only. Prefer **Pure ClosedLoop** (default).
 
 ```
-  Operator ──► Hermes (PM / strategist) ──► roland team + loop template
+  Operator ──► @roland in Cursor (PM + triage) ──► roland team + loop template
                     │
                     ▼
            Roland ClosedLoop (PACVRE execution)
@@ -55,7 +53,7 @@ roland team "clean up slop in recent auth changes" \
   --loop-template refactor-and-modernize-loop
 ```
 
-From **Hermes** (`roland chat`, Cursor `@roland`, or CLI), attach a loop template when launching a run:
+From **Cursor** (`@roland`) or the CLI, attach a loop template when launching a run:
 
 ```bash
 roland team "your goal" --loop-template full-cycle-verified-loop

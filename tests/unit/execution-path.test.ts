@@ -74,7 +74,7 @@ describe('classifyExecutionPath', () => {
 
   it('exposes framework text for orchestrator prompts', () => {
     expect(EXECUTION_PATH_FRAMEWORK).toContain('Execution Path Triage');
-    expect(EXECUTION_PATH_FRAMEWORK).toContain('Hermes');
+    expect(EXECUTION_PATH_FRAMEWORK).toContain('@roland');
     expect(EXECUTION_PATH_FRAMEWORK).toContain('full-cycle-verified-loop');
     expect(EXECUTION_PATH_FRAMEWORK).toContain('Force-team override');
     expect(EXECUTION_PATH_FRAMEWORK).toContain('--force-team');

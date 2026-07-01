@@ -7,7 +7,7 @@
 ## ⚡ The 30-Second Version
 
 ```bash
-roland chat      # Hermes — primary conversational interface
+roland chat      # optional CLI chat (Hermes) — not required in Cursor
 ```
 
 Type a goal. Watch the team work. Read the synthesis. Type another goal.
