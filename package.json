@@ -57,7 +57,7 @@
     "@cursor/sdk": "^1.0.17",
     "@modelcontextprotocol/sdk": "^1.0.4",
     "@octokit/rest": "^21.1.1",
-    "@sentry/node": "^8.0.0",
+    "@sentry/node": "^10.63.0",
     "chart.js": "^4.4.6",
     "hotkeys-js": "^3.13.0",
     "js-yaml": "^4.1.0",
