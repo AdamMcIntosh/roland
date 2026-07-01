@@ -24,6 +24,7 @@ import {
   CallToolRequestSchema,
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { AppConfig } from '../utils/types.js';
 import { McpServerError, McpToolError } from '../utils/errors.js';
@@ -106,7 +107,12 @@ export function resolveMcpServerEntry(): string {
   }
 }
 
-/** Build the `mcpServers.roland` block for ~/.cursor/mcp.json */
+export interface McpServerOptions {
+  /** Skip diff-stream sidecar (ephemeral HTTP sessions). */
+  skipSidecars?: boolean;
+}
+
+/** Build the `mcpServers.roland` block for ~/.cursor/mcp.json (stdio — Cursor / VS Code). */
 export function buildCursorMcpServerEntry(options?: {
   rolandRoot?: string;
   projectRoot?: string;
@@ -128,6 +134,15 @@ export function buildCursorMcpServerEntry(options?: {
     block.autoApprove = [...MCP_AUTO_APPROVE_TOOLS];
   }
   return block;
+}
+
+/** Build HTTP MCP client config for Hermes and other Streamable HTTP clients. */
+export function buildGeneralMcpHttpEntry(baseUrl = 'http://127.0.0.1:8081/mcp'): Record<string, unknown> {
+  const url = baseUrl.replace(/\/$/, '');
+  return {
+    url,
+    transport: 'streamable-http',
+  };
 }
 
 function sleep(ms: number): Promise<void> {
@@ -255,11 +270,14 @@ export class McpServer {
   private coordination: CoordinationManager;
   private leadPm: LeadPM;
   private recipesDir: string;
-  private transport: StdioServerTransport | null = null;
+  private transport: Transport | null = null;
   private shuttingDown = false;
   private connected = false;
+  private transportMode: 'stdio' | 'http' = 'stdio';
+  private readonly skipSidecars: boolean;
 
-  constructor(config: AppConfig) {
+  constructor(config: AppConfig, options: McpServerOptions = {}) {
+    this.skipSidecars = options.skipSidecars ?? false;
     this.config = config;
     this.tools = new Map();
     this.toolDefinitions = new Map();
@@ -2161,8 +2179,8 @@ export class McpServer {
 
     this.server.onclose = () => {
       this.connected = false;
-      logger.info('MCP stdio transport closed');
-      if (!this.shuttingDown) {
+      logger.info(`MCP ${this.transportMode} transport closed`);
+      if (this.transportMode === 'stdio' && !this.shuttingDown) {
         // Stdio cannot reconnect in-process — exit cleanly so Cursor respawns us.
         logger.warn('Client disconnected — exiting for Cursor to restart the MCP server');
         process.exit(0);
@@ -2558,7 +2576,7 @@ export class McpServer {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        await this.connectTransport();
+        await this.connectStdioTransport();
         return;
       } catch (error) {
         lastError = error;
@@ -2578,25 +2596,36 @@ export class McpServer {
     throw new McpServerError(`Failed to start MCP server after ${maxRetries} attempts: ${message}`);
   }
 
-  private async connectTransport(): Promise<void> {
-    logger.info('Connecting Roland MCP server via stdio transport…');
-    this.transport = new StdioServerTransport();
-    await this.server.connect(this.transport);
+  /** Connect an arbitrary MCP transport (HTTP Streamable, stdio, etc.). */
+  async connectTransport(transport: Transport, mode: 'stdio' | 'http' = 'http'): Promise<void> {
+    this.transportMode = mode;
+    this.transport = transport;
+    await this.server.connect(transport);
     this.connected = true;
-    logger.success(`MCP server connected (${this.getTools().length} tools)`);
-    logger.info(`Tools: ${this.getTools().join(', ')}`);
+    logger.success(`MCP server connected via ${mode} (${this.getTools().length} tools)`);
 
-    // Start the diff stream WebSocket server (optional sidecar)
+    if (!this.skipSidecars && mode === 'stdio') {
+      this.startDiffStreamSidecar();
+    }
+  }
+
+  private async connectStdioTransport(): Promise<void> {
+    logger.info('Connecting Roland MCP server via stdio transport…');
+    const stdio = new StdioServerTransport();
+    await this.connectTransport(stdio, 'stdio');
+    logger.info(`Tools: ${this.getTools().join(', ')}`);
+  }
+
+  private startDiffStreamSidecar(): void {
     const diffStreamPort = this.config.diff_stream?.port ?? 8089;
     const diffStreamEnabled = this.config.diff_stream?.enabled !== false;
-    if (diffStreamEnabled) {
-      try {
-        const diffServer = initDiffStreamServer(diffStreamPort);
-        diffServer.start();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        logger.warn(`Diff stream server unavailable (non-fatal): ${message}`);
-      }
+    if (!diffStreamEnabled) return;
+    try {
+      const diffServer = initDiffStreamServer(diffStreamPort);
+      diffServer.start();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(`Diff stream server unavailable (non-fatal): ${message}`);
     }
   }
 

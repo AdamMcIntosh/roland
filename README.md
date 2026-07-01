@@ -107,6 +107,30 @@ Restart Cursor. Roland triages new work automatically:
 
 Key MCP tools: `triage` · `roland_run_team` · `pm_standup` · `board_status`
 
+### 5. General MCP (Hermes & external clients)
+
+Roland also exposes a **Streamable HTTP** MCP endpoint for tools like Hermes, in addition to the Cursor stdio integration:
+
+```bash
+# With dashboard (default — MCP enabled on port 8081):
+npm run serve-dashboard
+
+# Standalone HTTP MCP only:
+roland mcp --host 0.0.0.0 --port 8081
+
+# Discovery + health:
+curl http://127.0.0.1:8081/mcp
+curl http://127.0.0.1:8081/mcp/health
+
+# Hermes:
+hermes mcp add roland --url http://127.0.0.1:8081/mcp
+
+# Print HTTP client config (Cursor stdio unchanged):
+roland mcp-config --general
+```
+
+Cursor users should keep `roland mcp-config --write` (stdio). Hermes and other HTTP MCP clients use the URL above.
+
 ---
 
 ## Loop Templates

@@ -10,8 +10,9 @@
  *   roland status       Live TUI observer for a running job
  *
  * Utility commands:
- *   roland serve        Start the stdio MCP server (default when no subcommand)
- *   roland mcp-config   Print / merge the ~/.cursor/mcp.json entry
+ *   roland serve        Start stdio MCP (Cursor) or HTTP MCP with --mcp
+ *   roland mcp          Streamable HTTP MCP server (Hermes / external clients)
+ *   roland mcp-config   Print / merge ~/.cursor/mcp.json (or --general for HTTP)
  *   roland doctor       Diagnose the install
  *   roland pm-log       Print the PM event timeline for the current project
  *
@@ -25,7 +26,8 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { buildCursorMcpServerEntry, runMcpServer } from './server/mcp-server.js';
+import { buildCursorMcpServerEntry, buildGeneralMcpHttpEntry, runMcpServer } from './server/mcp-server.js';
+import { runMcpHttpServer } from './server/mcp-http.js';
 import { bootstrapRolandEnv, resolveRolandInstallRoot } from './utils/project-root.js';
 import { configureSdkProcessLimits } from './utils/sdk-lifecycle.js';
 import { logger } from './utils/logger.js';
@@ -50,8 +52,24 @@ function rolandMcpEntry(): Record<string, unknown> {
   });
 }
 
-async function serve(): Promise<void> {
+async function serve(rest: string[]): Promise<void> {
+  if (rest.includes('--mcp')) {
+    const portIdx = rest.indexOf('--port');
+    const hostIdx = rest.indexOf('--host');
+    const port = portIdx >= 0 ? Number(rest[portIdx + 1]) || 8081 : 8081;
+    const host = hostIdx >= 0 ? rest[hostIdx + 1] : '0.0.0.0';
+    await runMcpHttpServer({ host, port });
+    return;
+  }
   await runMcpServer();
+}
+
+async function mcpHttp(rest: string[]): Promise<void> {
+  const portIdx = rest.indexOf('--port');
+  const hostIdx = rest.indexOf('--host');
+  const port = portIdx >= 0 ? Number(rest[portIdx + 1]) || 8081 : 8081;
+  const host = hostIdx >= 0 ? rest[hostIdx + 1] : '0.0.0.0';
+  await runMcpHttpServer({ host, port });
 }
 
 /** Verify @cursor/sdk is installable for `roland team` / orchestrate on this platform. */
@@ -117,7 +135,29 @@ function checkCursorSdkRuntime(installRoot: string): { ok: boolean; label: strin
   };
 }
 
-function mcpConfig(write: boolean): void {
+function mcpConfig(write: boolean, rest: string[]): void {
+  const general = rest.includes('--general') || rest.includes('--http');
+  const portIdx = rest.indexOf('--port');
+  const port = portIdx >= 0 ? Number(rest[portIdx + 1]) || 8081 : 8081;
+  const baseUrl = rest.find((a, i) => rest[i - 1] === '--url') ?? `http://127.0.0.1:${port}/mcp`;
+
+  if (general) {
+    const block = { mcpServers: { roland: buildGeneralMcpHttpEntry(baseUrl) } };
+    if (!write) {
+      console.log('General MCP (Streamable HTTP) — for Hermes and other HTTP MCP clients:\n');
+      console.log(JSON.stringify(block, null, 2));
+      console.log('\nHermes:');
+      console.log(`  hermes mcp add roland --url ${baseUrl.replace(/\/$/, '')}`);
+      console.log('\nHealth check:');
+      console.log(`  curl ${baseUrl.replace(/\/$/, '')}/health`);
+      console.log('\nCursor stdio (unchanged): roland mcp-config --write');
+      return;
+    }
+    console.log('Note: --write applies Cursor stdio config only. For Hermes, use:');
+    console.log(`  hermes mcp add roland --url ${baseUrl.replace(/\/$/, '')}`);
+    return;
+  }
+
   const block = { mcpServers: { roland: rolandMcpEntry() } };
   if (!write) {
     console.log('Add this to ~/.cursor/mcp.json (merge into any existing mcpServers):\n');
@@ -296,8 +336,9 @@ function printHelp(): void {
   ln('  ' + b('UTILITY COMMANDS'));
   ln(`    ${cy('roland')} doctor              Diagnose your Roland install`);
   ln(`    ${cy('roland')} pm-log              Print the PM event timeline`);
-  ln(`    ${cy('roland')} mcp-config          Print Cursor MCP config entry`);
-  ln(`    ${cy('roland')} serve               Start the MCP server (Cursor / VS Code)`);
+  ln(`    ${cy('roland')} mcp-config          Print Cursor MCP config (--general for HTTP)`);
+  ln(`    ${cy('roland')} mcp [--port N]      Streamable HTTP MCP on 0.0.0.0 (Hermes-ready)`);
+  ln(`    ${cy('roland')} serve [--mcp]       Stdio MCP (default) or HTTP with --mcp`);
   ln();
   ln('  ' + b('ENVIRONMENT'));
   ln(`    ${b('ROLAND_NOTIFY=1')}            Enable notifications for all commands`);
@@ -330,7 +371,7 @@ function printHelp(): void {
 // ── Known subcommands (used for bare-goal shortcut detection) ─────────────────
 
 const KNOWN_CMDS = new Set([
-  'serve', 'mcp-config', 'doctor', 'pm-log',
+  'serve', 'mcp', 'mcp-config', 'doctor', 'pm-log',
   'team', 'run', 'goal', 'start', 'status', 'watch', 'pr', 'chat',
   // HITL controls
   'pause', 'resume', 'unblock', 'inject', 'replan', 'abort', 'hitl-status',
@@ -388,10 +429,13 @@ async function main(): Promise<void> {
     switch (cmd) {
       case undefined:
       case 'serve':
-        await serve();
+        await serve(rest);
+        break;
+      case 'mcp':
+        await mcpHttp(rest);
         break;
       case 'mcp-config':
-        mcpConfig(rest.includes('--write'));
+        mcpConfig(rest.includes('--write'), rest);
         break;
       case 'doctor':
         doctor();

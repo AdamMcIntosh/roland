@@ -19,6 +19,8 @@
     "build-npm": "npm run clean && tsc && node scripts/copy-assets.js",
     "iterate": "node scripts/iterate.js",
     "dev": "tsc --watch",
+    "dev:stack": "npm run build && node scripts/serve-dashboard.js --host 0.0.0.0",
+    "mcp:http": "node dist/index.js mcp --host 0.0.0.0",
     "start": "node dist/index.js",
     "mcp": "node dist/server/mcp-server.js",
     "export-configs": "npx tsx scripts/export-ide-configs.ts",

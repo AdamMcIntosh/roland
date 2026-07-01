@@ -36,12 +36,16 @@
  *   GET  /api/models               → available Cursor PM / engineer models
  *   POST /api/mission              → spawn `roland team` in background
  *   GET  /api/supervisor           → background supervisor PID + status
- *   WS   /                         → push run-state on file changes (200 ms debounce)
+ *   GET  /mcp                        → MCP discovery (Streamable HTTP)
+ *   GET  /mcp/health                 → MCP health check
+ *   POST /mcp                        → MCP JSON-RPC (tools/list, tools/call, …)
+ *   GET  /api/mcp                    → alias for /mcp
  *
  * Usage:
  *   node scripts/serve-dashboard.js
  *   node scripts/serve-dashboard.js --state-dir /path/to/.roland --port 8082
  *   node scripts/serve-dashboard.js --host 0.0.0.0   # Tailscale / LAN access
+ *   node scripts/serve-dashboard.js --no-mcp         # disable HTTP MCP endpoint
  */
 
 import http from 'http';
@@ -157,6 +161,7 @@ function argValue(name) {
 
 const port        = Number(argValue('port') ?? 8081);
 const host        = argValue('host') ?? '0.0.0.0';
+const mcpEnabled  = !args.includes('--no-mcp');
 const rolandInstallRoot = path.resolve(path.join(__dirname, '..'));
 const rolandEntry = path.join(rolandInstallRoot, 'dist', 'index.js');
 
@@ -2092,6 +2097,17 @@ const WATCH_TARGETS = new Set([
 
 setupStateWatcher();
 
+// ── MCP HTTP (Streamable HTTP — Hermes / external clients) ───────────────────
+
+let mcpHttpModule = null;
+
+async function loadMcpHttpModule() {
+  if (mcpHttpModule) return mcpHttpModule;
+  const modPath = path.join(rolandInstallRoot, 'dist', 'server', 'mcp-http.js');
+  mcpHttpModule = await import(pathToFileURL(modPath).href);
+  return mcpHttpModule;
+}
+
 // ── Request handler ───────────────────────────────────────────────────────────
 
 const server = http.createServer(async (req, res) => {
@@ -2101,6 +2117,31 @@ const server = http.createServer(async (req, res) => {
   // CORS preflight
   if (method === 'OPTIONS') {
     setCors(res); res.statusCode = 204; res.end(); return;
+  }
+
+  // ── MCP Streamable HTTP (/mcp, /api/mcp, /mcp/health) ─────────────────────
+  if (mcpEnabled) {
+    try {
+      const mcp = await loadMcpHttpModule();
+      const mcpMatch = mcp.matchMcpHttpPath(url) ?? mcp.matchMcpHttpPath(url, '/api/mcp');
+      if (mcpMatch === 'health') {
+        jsonOk(res, await mcp.buildMcpHealth());
+        return;
+      }
+      if (mcpMatch === 'mcp') {
+        let body;
+        if (method === 'POST') {
+          try { body = await readBody(req); } catch (e) { jsonErr(res, e.message); return; }
+        }
+        await mcp.handleMcpHttpRequest(req, res, body);
+        return;
+      }
+    } catch (e) {
+      if (url === '/mcp' || url === '/api/mcp' || url === '/mcp/health') {
+        jsonErr(res, `MCP unavailable — run npm run build (${e.message})`, 503);
+        return;
+      }
+    }
   }
 
   // ── /api/run-state ───────────────────────────────────────────────────────
@@ -2826,5 +2867,9 @@ server.listen(port, host, () => {
   console.log(`              ${localBase}/api/projects`);
   console.log(`              ${localBase}/api/project-templates  ${localBase}/api/create-project`);
   console.log(`              ${localBase}/api/github/status  ${localBase}/api/github/repos`);
+  if (mcpEnabled) {
+    console.log(`  MCP       : ${localBase}/mcp  (health: ${localBase}/mcp/health)`);
+    console.log(`  Hermes    : hermes mcp add roland --url ${localBase}/mcp`);
+  }
   console.log(`\n  Open the URL above in your browser (Tailscale: use machine IP).\n`);
 });

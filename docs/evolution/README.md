@@ -31,7 +31,7 @@ Product vision: [docs/vision.md](../vision.md)
 | **Mobile-responsive dashboard** | ✅ Production | `dashboard-ui/styles/mobile-responsive.css` |
 | HITL controls | ✅ Production | `pause`, `resume`, `inject`, … |
 | Background supervisor | ✅ Production | `--background`, `bg-status`, `bg-logs` |
-| MCP server (47+ tools) | ✅ Production | `roland mcp-config --write` |
+| MCP server (47+ tools) | ✅ Production | `roland mcp-config --write` (stdio) · `roland mcp` (HTTP / Hermes) |
 | Project memory + smart recall | ✅ Production | `.roland/memory.md` |
 | Self-improvement loop | ✅ Production | post-synthesis retrospective |
 | Web dashboard 2.0 | ✅ Production | `npm run serve-dashboard` |
@@ -229,6 +229,19 @@ Recommended env in MCP config:
 Key tools: `roland_hello`, `triage`, `roland_run_team`, `pm_standup`, `board_status`, `start_team_recipe`, `blackboard_read`, `git_status`.
 
 Full tool list: see [README.md](../../README.md#using-roland-in-cursor).
+
+## General MCP (HTTP — Hermes & external clients)
+
+```bash
+npm run serve-dashboard        # MCP at http://127.0.0.1:8081/mcp (enabled by default)
+roland mcp --host 0.0.0.0      # standalone HTTP MCP
+roland mcp-config --general    # print Hermes / HTTP client config
+curl http://127.0.0.1:8081/mcp # discovery JSON
+```
+
+Hermes: `hermes mcp add roland --url http://127.0.0.1:8081/mcp`
+
+Cursor stdio integration is unchanged — use `roland mcp-config --write` for IDE config.
 
 ---
 

@@ -15,6 +15,7 @@ agent personas, workflow recipes, and PM team execution via the Cursor SDK.
 npm run build           # tsc + copy agents/recipes/fixtures to dist/
 npm run dev             # watch mode (no copy-assets)
 npm start               # start MCP server (stdio JSON-RPC)
+roland mcp              # Streamable HTTP MCP on 0.0.0.0:8081 (Hermes / external clients)
 npm run rco:dev         # run RCO orchestrator without building (tsx)
 npm run rco:team:dev    # PM team mode without building
 npm test                # Vitest unit tests
@@ -57,6 +58,7 @@ src/
     types.ts            ← Core interfaces (TeamTask, AgentYaml, …)
   server/
     mcp-server.ts       ← MCP tool definitions + agent/recipe catalogue
+    mcp-http.ts         ← Streamable HTTP transport (/mcp, Hermes integration)
   pm/
     model-policy.ts     ← laneForEngineer() → 'pm' | 'reasoning' | 'coding' | 'light'
 agents/                 ← 45 YAML persona files (copied to dist/agents/ on build)
