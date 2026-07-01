@@ -292,6 +292,9 @@ export async function runTeamCli(argv: string[]): Promise<void> {
 
   // ── Background / detach mode ───────────────────────────────────────────────
   if (background) {
+    if (!process.env['ROLAND_TRIGGERED_VIA']) {
+      process.env['ROLAND_TRIGGERED_VIA'] = 'cli';
+    }
     await spawnBackground(goal, argv, stateDir);
     return; // parent exits immediately
   }

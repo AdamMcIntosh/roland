@@ -1,4 +1,6 @@
 /**
+ * ## MCP Live Sync Improvements
+ *
  * RunState — persists real-time orchestrator state to .roland/run-state.json.
  *
  * Written by the orchestrator (via RunStateWriter) during every lifecycle event.
@@ -54,6 +56,8 @@ export interface RunState {
   goal: string;
   startedAt: number;
   updatedAt: number;
+  /** Launch channel mirrored from mission-meta / ROLAND_TRIGGERED_VIA. */
+  triggeredVia?: 'mcp' | 'cli' | 'dashboard' | 'cursor';
   status: RunStatus;
   currentWave: number;
   totalTasks: number;
@@ -189,9 +193,11 @@ export class RunStateWriter {
   private state: RunState;
   private readonly filePath: string;
 
-  constructor(stateDir: string, goal: string) {
+  constructor(stateDir: string, goal: string, opts?: { triggeredVia?: RunState['triggeredVia'] }) {
     fs.mkdirSync(stateDir, { recursive: true });
     this.filePath = path.join(stateDir, RUN_STATE_FILE);
+    const envVia = process.env['ROLAND_TRIGGERED_VIA']?.trim() as RunState['triggeredVia'] | undefined;
+    const triggeredVia = opts?.triggeredVia ?? envVia;
     this.state = {
       runId: randomUUID().slice(0, 8),
       goal,
@@ -203,6 +209,7 @@ export class RunStateWriter {
       completedTasks: 0,
       tasks: [],
       activeTaskIds: [],
+      ...(triggeredVia ? { triggeredVia } : {}),
     };
     this.flush();
   }

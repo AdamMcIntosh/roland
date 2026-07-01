@@ -38,6 +38,11 @@ import { generateDiff } from '../utils/diff-engine.js';
 import { normaliseGooseModel, spawnGooseSession, isGooseAvailable } from '../utils/goose-runner.js';
 import { gitStatus, gitDiff, gitLog, gitCommit } from '../utils/git-tools.js';
 import { spawnBackground } from '../rco/supervisor.js';
+import { randomUUID } from 'crypto';
+import {
+  writeMissionMetaFile,
+  type MissionTriggeredVia,
+} from '../rco/mission-state.js';
 import { configureSdkProcessLimits } from '../utils/sdk-lifecycle.js';
 import { analyzeScreenshot } from '../utils/screenshot.js';
 import { getDiffStreamServer, initDiffStreamServer } from './diff-stream.js';
@@ -3523,27 +3528,50 @@ What would you like to work on?`;
           throw new McpToolError('roland_run_team', '"goal" is required — describe what you want the team to build or fix');
         }
 
-        const projectRoot = process.env['ROLAND_PROJECT_ROOT']?.trim() || process.cwd();
-        const stateDir = typeof args.state_dir === 'string' && args.state_dir
-          ? args.state_dir
+        const rawStateDir = typeof args.state_dir === 'string' && args.state_dir.trim()
+          ? args.state_dir.trim()
+          : '';
+        const projectRoot = process.env['ROLAND_PROJECT_ROOT']?.trim()
+          || (rawStateDir && (rawStateDir.endsWith('.roland') || rawStateDir.endsWith(`${path.sep}.roland`))
+            ? path.dirname(path.resolve(rawStateDir))
+            : process.cwd());
+        const resolvedStateDir = rawStateDir
+          ? (path.isAbsolute(rawStateDir) ? rawStateDir : path.join(projectRoot, rawStateDir))
           : path.join(projectRoot, '.roland');
 
         const loopTemplate = typeof args.loop_template === 'string' ? args.loop_template.trim() : '';
         const teamArgv = ['team', goal.trim(), '--background', '--quiet', '--no-tui'];
         if (loopTemplate) teamArgv.push('--loop-template', loopTemplate);
 
-        process.env.ROLAND_STATE_DIR = stateDir;
+        process.env.ROLAND_STATE_DIR = resolvedStateDir;
         process.env.ROLAND_PROJECT_ROOT = projectRoot;
+        process.env.ROLAND_TRIGGERED_VIA = 'mcp';
 
-        const { pid, logFile } = await spawnBackground(goal.trim(), teamArgv, stateDir, { quiet: true });
+        const { pid, logFile } = await spawnBackground(goal.trim(), teamArgv, resolvedStateDir, { quiet: true });
         const truncatedGoal = goal.trim().slice(0, 100) + (goal.trim().length > 100 ? '…' : '');
+
+        writeMissionMetaFile(resolvedStateDir, {
+          id: randomUUID(),
+          goal: goal.trim(),
+          effectiveGoal: goal.trim(),
+          status: 'active',
+          startedAt: Date.now(),
+          pid,
+          logFile,
+          projectRoot,
+          stateDir: resolvedStateDir,
+          triggeredVia: 'mcp' satisfies MissionTriggeredVia,
+          loopTemplate: loopTemplate || null,
+        });
 
         return {
           started: true,
           goal: truncatedGoal,
           pid,
           log_file: logFile,
-          state_dir: stateDir,
+          state_dir: resolvedStateDir,
+          project_root: projectRoot,
+          triggered_via: 'mcp',
           message: `✅ PM team started (PID ${pid}):\n"${truncatedGoal}"`,
           next_steps: [
             'Call pm_standup() in ~30 seconds to see the task plan once Wave 1 begins',

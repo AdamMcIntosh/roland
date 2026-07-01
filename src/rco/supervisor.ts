@@ -440,7 +440,12 @@ export async function spawnBackground(
     process.execPath,
     [supervisorScript, '--background-worker', goal, ...filteredArgs],
     {
-      env: { ROLAND_STATE_DIR: stateDir },
+      env: {
+        ROLAND_STATE_DIR: stateDir,
+        ...(process.env['ROLAND_TRIGGERED_VIA']
+          ? { ROLAND_TRIGGERED_VIA: process.env['ROLAND_TRIGGERED_VIA'] }
+          : {}),
+      },
       log: { logFile, logMode: 'w' },
     },
   );

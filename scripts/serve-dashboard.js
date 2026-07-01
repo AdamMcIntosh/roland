@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 /**
+ * ## MCP Live Sync Improvements
+ *
  * Roland Dashboard Server — Dashboard 2.0
  *
  * HTTP + WebSocket server for the Roland command center.
@@ -73,6 +75,7 @@ import {
   isRunStateActive,
   waitForSupervisorReady,
   buildSupervisorStartDiagnostics,
+  onMissionStateChange,
 } from '../dist/rco/mission-state.js';
 import { isComplexGoalForDag } from '../dist/rco/mission-dag.js';
 import {
@@ -243,22 +246,27 @@ function bootstrapActiveProject() {
   let bootProjectRoot = resolveInitialProjectRoot(initialStateDir);
   let bootStateDir = initialStateDir;
 
-  // Always restore lastProjectPath when valid — survives CLI flags and server restart.
   const cfg = readDashboardConfig();
-  if (cfg.lastProjectPath && isValidProjectRoot(cfg.lastProjectPath)) {
-    bootProjectRoot = path.resolve(cfg.lastProjectPath);
-    bootStateDir = path.join(bootProjectRoot, '.roland');
-    logProject('Boot restored persisted project', {
-      projectRoot: bootProjectRoot,
-      source: 'lastProjectPath',
-      cliOverride: cliOverridesProject,
-    });
-  } else if (cliOverridesProject) {
+
+  if (cliOverridesProject) {
     if (path.basename(bootStateDir) === '.roland') {
       bootProjectRoot = path.dirname(bootStateDir);
     } else if (cliProjectRootArg) {
       bootStateDir = path.join(bootProjectRoot, '.roland');
     }
+    logProject('Boot using CLI project override', {
+      projectRoot: bootProjectRoot,
+      stateDir: bootStateDir,
+    });
+  } else if (cfg.lastProjectPath && isValidProjectRoot(cfg.lastProjectPath)) {
+    bootProjectRoot = path.resolve(cfg.lastProjectPath);
+    bootStateDir = path.join(bootProjectRoot, '.roland');
+    logProject('Boot restored persisted project', {
+      projectRoot: bootProjectRoot,
+      source: 'lastProjectPath',
+    });
+  } else if (path.basename(bootStateDir) === '.roland') {
+    bootProjectRoot = path.dirname(bootStateDir);
   }
 
   return { projectRoot: bootProjectRoot, stateDir: bootStateDir };
@@ -268,6 +276,15 @@ function bootstrapActiveProject() {
 const _boot = bootstrapActiveProject();
 let activeProjectRoot = _boot.projectRoot;
 let activeStateDir    = _boot.stateDir;
+
+/** Keep MCP HTTP tool calls aligned with the dashboard's active project. */
+function syncProcessEnvToActiveProject() {
+  process.env.ROLAND_PROJECT_ROOT = activeProjectRoot;
+  process.env.ROLAND_STATE_DIR = activeStateDir;
+  process.env.ROLAND_ROOT = activeProjectRoot;
+}
+
+syncProcessEnvToActiveProject();
 
 function getRolandEntryForProject(projectPath) {
   const localEntry = path.join(projectPath, 'dist', 'index.js');
@@ -569,6 +586,62 @@ function readTaskGitPayload() {
   return readJson(path.join(activeStateDir, 'task-git.json'), null);
 }
 
+// ── Server heartbeat (fallback when fs.watch misses MCP / external writes) ───
+
+const SERVER_HEARTBEAT_ACTIVE_MS = 2_500;
+const SERVER_HEARTBEAT_IDLE_MS = 6_000;
+let currentHeartbeatMs = SERVER_HEARTBEAT_IDLE_MS;
+let serverHeartbeatTimer = null;
+let lastStateFingerprint = '';
+
+function computeStateFingerprint(runState, hitlState, supervisor) {
+  const loopState = readJson(path.join(activeStateDir, 'loop-state.json'), null);
+  const meta = readMissionMetaFile(activeStateDir);
+  return [
+    runState?.runId ?? '',
+    runState?.status ?? '',
+    runState?.updatedAt ?? '',
+    runState?.completedTasks ?? '',
+    runState?.loopPhase ?? '',
+    hitlState?.paused ?? '',
+    hitlState?.abortPending ?? '',
+    supervisor?.record?.pid ?? '',
+    supervisor?.alive ?? '',
+    meta?.triggeredVia ?? '',
+    meta?.startedAt ?? '',
+    loopState?.phase ?? '',
+    loopState?.updatedAt ?? '',
+  ].join('|');
+}
+
+function adjustServerHeartbeat() {
+  const want = isMissionActive() ? SERVER_HEARTBEAT_ACTIVE_MS : SERVER_HEARTBEAT_IDLE_MS;
+  if (want === currentHeartbeatMs && serverHeartbeatTimer) return;
+  currentHeartbeatMs = want;
+  if (serverHeartbeatTimer) clearInterval(serverHeartbeatTimer);
+  serverHeartbeatTimer = setInterval(() => { void tickServerHeartbeat(); }, currentHeartbeatMs);
+  logDashboard('Server heartbeat interval', { ms: currentHeartbeatMs, missionActive: isMissionActive() });
+}
+
+async function tickServerHeartbeat() {
+  sanitizeStaleMissionState(activeStateDir, (msg, detail) => logState(msg, detail));
+  const runState = readActiveRunStateForClient(activeStateDir);
+  const hitlState = readJson(path.join(activeStateDir, 'hitl-state.json'), null);
+  const supervisor = summarizeSupervisorPayload();
+  const fp = computeStateFingerprint(runState, hitlState, supervisor);
+  if (fp !== lastStateFingerprint) {
+    await pushCurrentState();
+    return;
+  }
+  adjustServerHeartbeat();
+}
+
+onMissionStateChange((stateDir, reason) => {
+  if (path.resolve(stateDir) !== path.resolve(activeStateDir)) return;
+  logState('Mission state change — pushing live update', { reason, stateDir });
+  void pushCurrentState();
+});
+
 async function pushCurrentState() {
   sanitizeStaleMissionState(activeStateDir, (msg, detail) => logState(msg, detail));
   const runState  = readActiveRunStateForClient(activeStateDir);
@@ -579,6 +652,7 @@ async function pushCurrentState() {
   const taskGit = readTaskGitPayload();
   const supervisor = summarizeSupervisorPayload();
   const loopHealth = await readLoopHealthPayload();
+  lastStateFingerprint = computeStateFingerprint(runState, hitlState, supervisor);
   broadcast({
     type: 'state-update',
     runState,
@@ -589,7 +663,16 @@ async function pushCurrentState() {
     taskGit,
     supervisor,
     loopHealth,
+    liveSync: {
+      missionActive: Boolean(supervisor?.missionActive),
+      triggeredVia: readMissionMetaFile(activeStateDir)?.triggeredVia
+        ?? runState?.triggeredVia
+        ?? null,
+      heartbeatMs: currentHeartbeatMs,
+      updatedAt: Date.now(),
+    },
   });
+  adjustServerHeartbeat();
 }
 
 async function loadBoardReportModule() {
@@ -997,6 +1080,7 @@ function spawnTeamMission(effectiveGoal, options = {}) {
     ROLAND_PROJECT_ROOT: activeProjectRoot,
     ROLAND_ROOT: activeProjectRoot,
     ROLAND_SIMPLE_TUI: '1',
+    ROLAND_TRIGGERED_VIA: 'dashboard',
   };
   if (pmModel && pmModel !== 'auto' && VALID_MODEL_IDS.has(pmModel)) env.ROLAND_PM_MODEL = pmModel;
   if (engineerModel && engineerModel !== 'auto' && VALID_MODEL_IDS.has(engineerModel)) {
@@ -2004,6 +2088,7 @@ async function switchActiveProject(targetPath, { force = false, migrateMission =
   activeStateDir = path.join(resolved, '.roland');
   fs.mkdirSync(activeStateDir, { recursive: true });
   rememberProjectPath(resolved);
+  syncProcessEnvToActiveProject();
   setupStateWatcher();
 
   if (migrateMission) {
@@ -2129,6 +2214,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       if (mcpMatch === 'mcp') {
+        syncProcessEnvToActiveProject();
         let body;
         if (method === 'POST') {
           try { body = await readBody(req); } catch (e) { jsonErr(res, e.message); return; }
@@ -2581,6 +2667,7 @@ const server = http.createServer(async (req, res) => {
         stateDir: activeStateDir,
         status: 'active',
         startedAt: Date.now(),
+        triggeredVia: 'dashboard',
       });
 
       let bbAfter = bbBefore;
@@ -2788,6 +2875,32 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ── /api/force-refresh POST ───────────────────────────────────────────────
+  if (url === '/api/force-refresh' && method === 'POST') {
+    try {
+      syncProcessEnvToActiveProject();
+      sanitizeStaleMissionState(activeStateDir, (msg, detail) => logState(msg, detail));
+      await pushCurrentState();
+      const runState = readActiveRunStateForClient(activeStateDir);
+      const supervisor = summarizeSupervisorPayload();
+      logApi('POST', url, 'ok', {
+        missionActive: Boolean(supervisor?.missionActive),
+        runId: runState?.runId ?? null,
+      });
+      jsonOk(res, {
+        ok: true,
+        missionActive: Boolean(supervisor?.missionActive),
+        runState,
+        supervisor,
+        triggeredVia: readMissionMetaFile(activeStateDir)?.triggeredVia ?? runState?.triggeredVia ?? null,
+        refreshedAt: Date.now(),
+      });
+    } catch (e) {
+      jsonErr(res, e.message, 500);
+    }
+    return;
+  }
+
   // ── Static files ─────────────────────────────────────────────────────────
   const relPath  = url === '/' ? '/index.html' : url;
   const filePath = path.join(uiRoot, path.normalize(relPath).replace(/^(\.\.(\/|\\|$))+/, ''));
@@ -2872,4 +2985,5 @@ server.listen(port, host, () => {
     console.log(`  Hermes    : hermes mcp add roland --url ${localBase}/mcp`);
   }
   console.log(`\n  Open the URL above in your browser (Tailscale: use machine IP).\n`);
+  adjustServerHeartbeat();
 });

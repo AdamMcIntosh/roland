@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- ## Assumptions
+<!-- ## MCP Live Sync Improvements
      Hermes (roland chat / Cursor @roland / roland team CLI) is the primary conversational
      interface for planning and triggering loops. This dashboard is monitor + control only.
      Model routing is handled by ModelRouter + config.yaml — no model pickers in main UI.
@@ -1975,6 +1975,41 @@
       color: var(--cyan);
     }
     [data-theme="light"] .hermes-cmd-chip { background: rgba(99,102,241,0.08); }
+
+    /* MCP live-sync banner — shown when an external MCP/Hermes mission is detected */
+    .mcp-live-banner {
+      display: none;
+      margin: 0 0 0.85rem;
+      padding: 0.65rem 0.85rem;
+      border-radius: var(--radius);
+      border: 1px solid rgba(6,182,212,0.35);
+      background: linear-gradient(135deg, rgba(6,182,212,0.12), rgba(99,102,241,0.08));
+    }
+    .mcp-live-banner.visible { display: block; }
+    .mcp-live-banner-inner {
+      display: flex; align-items: flex-start; gap: 0.65rem; flex-wrap: wrap;
+    }
+    .mcp-live-banner-title {
+      font-size: 0.78rem; font-weight: 700; color: var(--cyan);
+      letter-spacing: 0.04em; text-transform: uppercase;
+    }
+    .mcp-live-banner-text { font-size: 0.74rem; color: var(--fg); line-height: 1.45; flex: 1; min-width: 12rem; }
+    .trigger-via-badge {
+      display: inline-flex; align-items: center; gap: 0.25rem;
+      font-size: 0.68rem; font-weight: 600; letter-spacing: 0.03em;
+      padding: 0.15rem 0.45rem; border-radius: 999px;
+      background: rgba(6,182,212,0.15); color: var(--cyan);
+      border: 1px solid rgba(6,182,212,0.28);
+      text-transform: uppercase;
+    }
+    .trigger-via-badge.dashboard { background: rgba(99,102,241,0.12); color: var(--indigo); border-color: rgba(99,102,241,0.25); }
+    .trigger-via-badge.cli { background: rgba(16,185,129,0.12); color: var(--emerald); border-color: rgba(16,185,129,0.25); }
+    .run-trigger-badge {
+      font-size: 0.62rem; font-weight: 600; padding: 0.1rem 0.35rem;
+      border-radius: 999px; background: rgba(6,182,212,0.12); color: var(--cyan);
+      margin-left: 0.35rem; vertical-align: middle;
+    }
+    .btn-force-refresh.syncing { opacity: 0.65; pointer-events: none; }
     .advanced-panel {
       margin-bottom: 0.85rem;
       border-radius: var(--radius);
@@ -2830,6 +2865,7 @@
       </div>
       <div class="header-right">
         <span class="sync-badge" id="sync-badge" aria-live="polite"><span class="sync-dot"></span> Syncing…</span>
+        <button class="btn-icon btn-force-refresh" id="btn-force-refresh" type="button" title="Force refresh live mission state" aria-label="Force refresh">↻ Live</button>
         <button class="btn-icon" id="btn-header-refresh-board" type="button" title="Refresh command board" aria-label="Refresh command board">↻ Board</button>
         <button class="btn-icon" id="btn-theme" aria-label="Toggle theme">🌙</button>
         <span class="last-updated" id="last-updated"></span>
@@ -2869,6 +2905,20 @@
           </div>
         </div>
         <div class="project-context-details" id="project-context-details" hidden></div>
+      </section>
+
+      <!-- MCP / Hermes live mission banner (auto-shown when external run detected) -->
+      <section class="mcp-live-banner" id="mcp-live-banner" aria-live="polite" aria-label="MCP mission detected">
+        <div class="mcp-live-banner-inner">
+          <span aria-hidden="true">📡</span>
+          <div>
+            <div class="mcp-live-banner-title">Live MCP Mission</div>
+            <p class="mcp-live-banner-text" id="mcp-live-banner-text">
+              A mission started via MCP / Hermes is now active. Live sync is polling every 2–3 seconds.
+            </p>
+          </div>
+          <span class="trigger-via-badge" id="mcp-live-trigger-badge">MCP / Hermes</span>
+        </div>
       </section>
 
       <!-- Hermes primary interface -->
@@ -3399,9 +3449,10 @@
 
   const USAGE_POLL_MS      = 30_000;
   const RUN_STATE_POLL_MS  = 5_000;
-  const OVERVIEW_POLL_MS   = 3_500;  // faster while on Overview / active mission
-  const MISSION_BOOST_MS   = 3_000;  // aggressive poll after mission start
-  const MISSION_BOOST_DURATION_MS = 90_000;
+  const OVERVIEW_POLL_MS   = 3_000;  // faster while on Overview / active mission
+  const ACTIVE_MISSION_POLL_MS = 2_000;  // aggressive while loop is running
+  const MISSION_BOOST_MS   = 2_000;  // aggressive poll after mission start
+  const MISSION_BOOST_DURATION_MS = 120_000;
   const MISSION_LAUNCH_GRACE_MS = 120_000;
   const WS_RECONNECT_BASE  = 2_000;
   const WS_RECONNECT_MAX   = 30_000;
@@ -3489,6 +3540,10 @@
   let teamGoalSubmitting = false;
   let supervisorInfo = null;
   let missionMeta = null;
+  let lastTrackedRunId = null;
+  let lastTrackedSupervisorPid = null;
+  let mcpBannerDismissedRunId = null;
+  let forceRefreshBusy = false;
   let projectContext = null;
   let taskGitPayload = null;
   let projectContextExpanded = false;
@@ -3664,6 +3719,88 @@
     return isRunActive(runState) || isMissionLaunching() || isSupervisorMissionActive();
   }
 
+  function getMissionTriggeredVia() {
+    return runState?.triggeredVia
+      || missionMeta?.triggeredVia
+      || supervisorInfo?.missionMeta?.triggeredVia
+      || null;
+  }
+
+  function triggeredViaLabel(via) {
+    if (via === 'mcp') return 'MCP / Hermes';
+    if (via === 'dashboard') return 'Dashboard';
+    if (via === 'cli') return 'CLI';
+    if (via === 'cursor') return 'Cursor @roland';
+    return null;
+  }
+
+  function triggeredViaBadgeHtml(via, extraClass = '') {
+    const label = triggeredViaLabel(via);
+    if (!label) return '';
+    return '<span class="trigger-via-badge ' + escHtml(via) + (extraClass ? ' ' + extraClass : '') + '">' +
+      escHtml(label) + '</span>';
+  }
+
+  function renderMcpLiveBanner() {
+    const banner = document.getElementById('mcp-live-banner');
+    const textEl = document.getElementById('mcp-live-banner-text');
+    const badgeEl = document.getElementById('mcp-live-trigger-badge');
+    if (!banner) return;
+
+    const via = getMissionTriggeredVia();
+    const active = isMissionActive();
+    const runId = runState?.runId || missionMeta?.id || supervisorInfo?.record?.pid || null;
+    const showMcp = active && via === 'mcp' && runId !== mcpBannerDismissedRunId;
+
+    banner.classList.toggle('visible', showMcp);
+    if (!showMcp) return;
+
+    const goal = runState?.goal || missionMeta?.goal || supervisorInfo?.record?.goal || 'Mission in progress';
+    if (textEl) {
+      textEl.textContent = 'Mission detected via MCP / Hermes: “' +
+        goal.slice(0, 72) + (goal.length > 72 ? '…' : '') +
+        '”. Auto-sync is active (2–3s polling + WebSocket).';
+    }
+    if (badgeEl) badgeEl.textContent = triggeredViaLabel(via) || 'MCP / Hermes';
+  }
+
+  /** Detect externally launched missions (MCP, CLI) and boost polling. */
+  function detectExternalMissionStart() {
+    const runId = runState?.runId ?? null;
+    const supPid = supervisorInfo?.record?.pid ?? null;
+    const via = getMissionTriggeredVia();
+    let detected = false;
+
+    if (runId && runId !== lastTrackedRunId) {
+      lastTrackedRunId = runId;
+      detected = true;
+      if (via === 'mcp') {
+        logMission('External MCP mission detected', { runId, goal: runState?.goal?.slice(0, 60) });
+        toast('Live MCP mission detected — syncing…', 'info', { durationMs: 4500 });
+      } else if (via && via !== 'dashboard') {
+        logMission('External mission detected', { runId, via });
+      }
+    }
+
+    if (supPid && supPid !== lastTrackedSupervisorPid && !isRunActive(runState)) {
+      lastTrackedSupervisorPid = supPid;
+      detected = true;
+      logMission('Supervisor detected before run-state', { pid: supPid, via });
+    }
+
+    if (detected || (isMissionActive() && !missionBoostPollTimer)) {
+      startMissionBoostPoll();
+      schedulePollRunState();
+    }
+
+    if (!isMissionActive()) {
+      lastTrackedRunId = null;
+      lastTrackedSupervisorPid = null;
+    }
+
+    renderMcpLiveBanner();
+  }
+
   function metaBelongsToCurrentProject(meta) {
     if (!meta) return false;
     if (meta.status === 'archived' || meta.status === 'completed') return false;
@@ -3734,7 +3871,8 @@
   }
 
   function getPollIntervalMs() {
-    if (activeTab === 'overview' || isMissionActive() || isMissionLaunching()) return OVERVIEW_POLL_MS;
+    if (isMissionActive() || isMissionLaunching()) return ACTIVE_MISSION_POLL_MS;
+    if (activeTab === 'overview') return OVERVIEW_POLL_MS;
     return RUN_STATE_POLL_MS;
   }
 
@@ -3855,6 +3993,9 @@
             if (msg.taskGit !== undefined) taskGitPayload = msg.taskGit;
             if (msg.supervisor !== undefined) applySupervisorPayload(msg.supervisor);
             if (msg.loopHealth !== undefined) LoopEngine.setHealth(msg.loopHealth);
+            if (msg.liveSync?.triggeredVia && !getMissionTriggeredVia()) {
+              if (missionMeta) missionMeta.triggeredVia = msg.liveSync.triggeredVia;
+            }
             // Overlay hitl-state.json values into runState for TUI accuracy
             if (runState && hitlState) {
               if (hitlState.paused)       runState.hitlPaused        = true;
@@ -3872,6 +4013,7 @@
             renderBoardAddGoalSection();
             scheduleMissionGraphRender();
             renderRecentRuns();
+            detectExternalMissionStart();
             if (activeTab === 'actions') renderHitlActionsPanel();
             updateLastUpdated();
           }
@@ -5004,6 +5146,8 @@
       goalEl.title = goal;
 
       const parts = [];
+      const viaLabel = triggeredViaLabel(getMissionTriggeredVia());
+      if (viaLabel) parts.push(triggeredViaBadgeHtml(getMissionTriggeredVia()));
       const statusLabels = {
         planning: 'Planning', running: 'Running', reviewing: 'Reviewing',
         synthesizing: 'Synthesizing', done: 'Done', error: 'Error',
@@ -5263,6 +5407,32 @@
     }
   }
 
+  async function forceRefreshLiveState() {
+    if (forceRefreshBusy) return;
+    forceRefreshBusy = true;
+    const btn = document.getElementById('btn-force-refresh');
+    btn?.classList.add('syncing');
+    setBoardSyncing(true);
+    try {
+      const res = await fetch('/api/force-refresh', { method: 'POST' });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || res.statusText);
+      }
+      await pollRunState();
+      detectExternalMissionStart();
+      updateLastUpdated();
+      toast('Live state refreshed', 'success');
+    } catch (e) {
+      toast('Force refresh failed: ' + e.message, 'error');
+      await pollRunState();
+    } finally {
+      forceRefreshBusy = false;
+      btn?.classList.remove('syncing');
+      setBoardSyncing(false);
+    }
+  }
+
   async function refreshDashboard() {
     await fetchProjectContext();
     await Promise.all([
@@ -5274,6 +5444,7 @@
       fetchProjects(),
       fetchMissionDag(),
     ]);
+    detectExternalMissionStart();
     renderAll();
     if (activeTab === 'history') renderHistory();
     if (activeTab === 'actions') { renderHitlActionsPanel(); renderRecentGoals(); }
@@ -5306,6 +5477,7 @@
   });
   document.getElementById('btn-qa-cleanup')?.addEventListener('click', runBoardCleanup);
   document.getElementById('btn-qa-refresh')?.addEventListener('click', refreshDashboard);
+  document.getElementById('btn-force-refresh')?.addEventListener('click', forceRefreshLiveState);
   document.getElementById('btn-qa-hitl')?.addEventListener('click', copyHitlStatusCmd);
   document.getElementById('project-context-toggle')?.addEventListener('click', () => toggleProjectContextDetails());
   document.getElementById('btn-project-switch')?.addEventListener('click', (e) => {
@@ -5587,6 +5759,7 @@
             '<span class="status-pill planning">⏳ Launching</span>' +
             '<span>Waiting for run-state…</span>' +
             (meta?.startedAt ? '<span>' + escHtml(timeAgo(meta.startedAt)) + ' ago</span>' : '') +
+            (getMissionTriggeredVia() ? triggeredViaBadgeHtml(getMissionTriggeredVia()) : '') +
           '</div>' +
         '</div>' +
         '<div class="pm-banner planning">Background team mission is starting — board will update automatically.</div>';
@@ -5647,6 +5820,7 @@
         '<div class="active-goal">' + escHtml(rs.goal) + '</div>' +
         '<div class="active-meta">' +
           statusPillHtml(rs.status) +
+          (getMissionTriggeredVia() ? triggeredViaBadgeHtml(getMissionTriggeredVia()) : '') +
           '<span>Wave ' + rs.currentWave + '</span>' +
           '<span>' + safeDone + ' / ' + rs.totalTasks + ' tasks</span>' +
           (rs.startedAt ? '<span>' + elapsedSince(rs.startedAt) + ' elapsed</span>' : '') +
@@ -5732,13 +5906,16 @@
       const taskCount = (run.tasks||[]).filter(t => !(t.taskId||t.id||'').startsWith('pm-')).length;
       const blocker   = run.blockersEncountered > 0
         ? '<span class="run-blocker-badge">⚠ ' + run.blockersEncountered + '</span>' : '';
+      const viaBadge = (isActive && getMissionTriggeredVia())
+        ? '<span class="run-trigger-badge">' + escHtml(triggeredViaLabel(getMissionTriggeredVia())) + '</span>'
+        : '';
       const isExp = expandedRuns.has(run.runId);
 
       html +=
         '<div class="run-row' + (isExp?' expanded':'') + '" data-run-id="' + escHtml(run.runId) + '">' +
         '<span class="run-time-badge">' + escHtml(formatDate(run.timestamp) + ' ' + formatTime(run.timestamp)) + '</span>' +
         '<span class="run-status-icon">' + icon + '</span>' +
-        '<span class="run-goal" title="' + escHtml(run.goal) + '">' + escHtml(run.goal) + '</span>' +
+        '<span class="run-goal" title="' + escHtml(run.goal) + '">' + escHtml(run.goal) + viaBadge + '</span>' +
         '<span class="run-meta">' + run.wavesRun + 'w · ' + taskCount + 't · ' + formatTokens(run.totalTokens||0) + ' · ' + formatCost(run.totalCostUsd||0) + ' · ' + formatDuration(run.durationMs||0) + blocker + '</span>' +
         '</div>';
 
@@ -7131,6 +7308,8 @@
     renderRecentRuns();
     if (activeTab === 'actions') renderHitlActionsPanel();
     if (activeTab === 'history') renderHistory();
+    detectExternalMissionStart();
+    renderMcpLiveBanner();
   }
 
   async function pollUsage() {
@@ -7268,6 +7447,7 @@
     renderAll();
     renderBoardAddGoalSection();
     focusMissionGoal();
+    detectExternalMissionStart();
     logDashboard('Initial load complete', {
       missionActive: isMissionActive(),
       lastRun: getLatestRunSnapshot()?.timestamp ?? null,

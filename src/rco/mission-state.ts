@@ -1,4 +1,6 @@
 /**
+ * ## MCP Live Sync Improvements
+ *
  * Mission state isolation — per-project cleanup, archival, and stale-file hygiene.
  *
  * Used by the dashboard server and CLI to prevent mission context bleeding
@@ -18,6 +20,9 @@ const RUN_STALE_MS = 600_000;
 
 export type StateLogger = (msg: string, detail?: Record<string, unknown>) => void;
 
+/** How the mission was launched — surfaced on dashboard live panels. */
+export type MissionTriggeredVia = 'mcp' | 'cli' | 'dashboard' | 'cursor';
+
 export interface MissionMetaRecord {
   id?: string;
   goal?: string;
@@ -31,7 +36,29 @@ export interface MissionMetaRecord {
   projectRoot?: string;
   stateDir?: string;
   updatedAt?: number;
+  /** Launch channel — MCP/Hermes, CLI, dashboard fallback, or Cursor @roland. */
+  triggeredVia?: MissionTriggeredVia;
   [key: string]: unknown;
+}
+
+export type MissionStateChangeListener = (stateDir: string, reason: string) => void;
+
+const missionStateListeners = new Set<MissionStateChangeListener>();
+
+/** Dashboard / HTTP MCP hooks — notified when mission-meta is written. */
+export function onMissionStateChange(listener: MissionStateChangeListener): () => void {
+  missionStateListeners.add(listener);
+  return () => missionStateListeners.delete(listener);
+}
+
+function emitMissionStateChange(stateDir: string, reason: string): void {
+  for (const listener of missionStateListeners) {
+    try {
+      listener(stateDir, reason);
+    } catch {
+      /* listener must not break writers */
+    }
+  }
 }
 
 export interface SupervisorRecord {
@@ -107,6 +134,7 @@ export function readMissionMetaFile(stateDir: string): MissionMetaRecord | null 
 
 export function writeMissionMetaFile(stateDir: string, meta: MissionMetaRecord): void {
   writeJsonFile(path.join(stateDir, MISSION_META_FILE), { ...meta, updatedAt: Date.now() });
+  emitMissionStateChange(stateDir, 'mission-meta-write');
 }
 
 export function readSupervisorRecord(stateDir: string): SupervisorRecord | null {

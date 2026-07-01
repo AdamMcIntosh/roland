@@ -244,4 +244,38 @@ describe('dashboard /api/run-state and WebSocket parity', () => {
       status: 'running',
     });
   });
+
+  it('POST /api/force-refresh returns MCP-triggered mission metadata', async () => {
+    writeRunState(stateDir, {
+      runId: 'mcp-run',
+      status: 'planning',
+      updatedAt: Date.now(),
+      triggeredVia: 'mcp',
+    });
+    writeSupervisor(stateDir, process.pid);
+    fs.writeFileSync(
+      path.join(stateDir, 'mission-meta.json'),
+      JSON.stringify({
+        id: 'meta-mcp',
+        goal: 'MCP integration test mission',
+        status: 'active',
+        startedAt: Date.now(),
+        triggeredVia: 'mcp',
+        pid: process.pid,
+      }),
+    );
+
+    const res = await fetch(`${baseUrl}/api/force-refresh`, { method: 'POST' });
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      ok: boolean;
+      missionActive: boolean;
+      triggeredVia: string;
+      runState: { runId: string; triggeredVia?: string };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.missionActive).toBe(true);
+    expect(body.triggeredVia).toBe('mcp');
+    expect(body.runState?.runId).toBe('mcp-run');
+  });
 });
