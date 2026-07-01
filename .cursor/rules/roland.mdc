@@ -26,17 +26,22 @@ Before acting on new work, internally decide **Direct** or **Team**. Show the de
 
 **When Direct:** proceed immediately. Do **not** call `roland_run_team`.
 
-### Team — spawn full PM mission
+### Team — spawn Pure ClosedLoop mission (Hermes PM + Roland harness)
 
 - Multi-step features or refactors
 - Multiple files / components / services
-- Needs testing, Command Blackboard tracking, synthesis, or structured waves
+- Needs testing, verification gates, reflection, or loop memory
 - Estimated **> 30–45 minutes**
-- Benefits from Sparrow (implement) + Vanguard (test-author → test-executor) + Sentinel review
 
-**When Team:** do **not** start implementing in chat. Respond with:
+**When Team:** do **not** start implementing in chat. Offer a Pure ClosedLoop command with the best generic template:
 
-> This is a good candidate for a full team mission. Shall I start `roland team "<goal>"` now?
+```bash
+roland team "<goal>" --loop-template full-cycle-verified-loop
+```
+
+Templates: `full-cycle-verified-loop` (default) · `feature-implementation-loop` · `refactor-and-modernize-loop` · `research-and-spec-loop`.
+
+> [DEPRECATED] Do not suggest legacy LeadPM / `use_pm_team: true` unless explicitly requested.
 
 Wait for operator confirmation unless they explicitly asked to launch the team.
 

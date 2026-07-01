@@ -1,5 +1,6 @@
 /**
- * Loop PM session persistence — shared by lightweight Plan/Act and legacy PM bridge.
+ * Loop PM session persistence — shared by lightweight Plan/Act and [DEPRECATED] legacy PM bridge.
+ * `executionPath: 'pm_team'` indicates the deprecated LeadPM / team-orchestrator path.
  */
 
 import fs from 'fs';
@@ -8,7 +9,7 @@ import type { TeamPlan, TeamTaskResult } from '../rco/team-orchestrator.js';
 
 export const LOOP_PM_SESSION_FILE = 'loop-pm-session.json';
 
-export type LoopPmExecutionPath = 'pm_team' | 'lightweight';
+export type LoopPmExecutionPath = 'pm_team' | 'lightweight'; // pm_team = [DEPRECATED] legacy PM Team
 
 export interface LoopPmSession {
   iteration: number;

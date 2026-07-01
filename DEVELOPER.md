@@ -66,7 +66,9 @@ config.yaml             ← Model routing tiers, RCO settings, dashboard port
 
 ---
 
-## PM Team Mode
+## PM Team Mode [DEPRECATED]
+
+> **Hermes is the recommended PM layer.** This section documents the legacy in-loop PM Team path (`use_pm_team: true`, LeadPM) kept for backward compatibility.
 
 The execution path for complex goals **without** a loop template. When `--loop-template` is set, missions route to ClosedLoop instead (see Loop Engineering below).
 
@@ -110,7 +112,7 @@ if (hasLoopTemplate(opts.loopTemplate)) {
 
 **ClosedLoop owns:** EvaluationGate (verify), LoopMemory, reflection, exit conditions, SpecialistSpawner, checkpoint/recovery, and PR formatting (`closed-loop-pr.json`).
 
-**PM Team (legacy, opt-in):** Pure ClosedLoop is the default for Plan/Act (`lightweight-plan-act.ts`). Legacy PM Team runs only when `loop_engine.use_pm_team: true`, template `use_pm_team: true`, or `enablePmIntegration: true`. Templates with `pm_plan/pm_act: auto` no longer invoke PM without explicit opt-in.
+**[DEPRECATED] PM Team (legacy, opt-in):** Pure ClosedLoop is the default for Plan/Act (`lightweight-plan-act.ts`). Legacy PM Team runs only when `loop_engine.use_pm_team: true`, template `use_pm_team: true`, or `enablePmIntegration: true`. Hermes handles high-level PM duties in the recommended hybrid setup.
 
 **Model routing:** All loop components resolve models via `ModelRouter.getModel(role)` in `src/models/model-router.ts`. Switch OpenRouter ↔ Ollama by editing `config.yaml` `models` section only (see file comments). Startup prints a routing banner; dashboard Loop panel shows live role + phase routing and PM Integration status.
 

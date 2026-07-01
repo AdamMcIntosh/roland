@@ -23,6 +23,7 @@ describe('classifyExecutionPath', () => {
     expect(decision.cleanedGoal).toBe('Add a comment to src/index.js');
     expect(decision.teamOffer).toMatch(/forcing full team mission/i);
     expect(decision.teamOffer).toContain('Add a comment to src/index.js');
+    expect(decision.teamCommand).toContain('--loop-template');
     expect(decision.teamOffer).toMatch(/no confirmation needed/i);
     expect(decision.summary).toContain('force-team override');
     expect(decision.reasons.some((r) => r.includes('Force-team override'))).toBe(true);
@@ -43,21 +44,24 @@ describe('classifyExecutionPath', () => {
     expect(stripForceTeamTriggers('run as team on the payment module')).toBe('on the payment module');
   });
 
-  it('routes structured logging implementation to team', () => {
+  it('routes structured logging implementation to team with loop template', () => {
     const decision = classifyExecutionPath('Implement structured request logging with pino');
     expect(decision.path).toBe('team');
     expect(decision.estimatedMinutes).toBeGreaterThanOrEqual(45);
     expect(decision.teamOffer).toContain('roland team');
     expect(decision.teamOffer).toContain('Implement structured request logging with pino');
+    expect(decision.teamCommand).toContain('--loop-template feature-implementation-loop');
+    expect(decision.loopTemplate).toBe('feature-implementation-loop');
     expect(decision.reasons.some((r) => r.startsWith('Team:'))).toBe(true);
   });
 
-  it('routes payment service refactor with blackboard to team', () => {
+  it('routes payment service refactor with blackboard to team with refactor template', () => {
     const decision = classifyExecutionPath(
       'Refactor the payment service to use Command Blackboard',
     );
     expect(decision.path).toBe('team');
-    expect(decision.teamOffer).toMatch(/full team mission/i);
+    expect(decision.teamOffer).toMatch(/Pure ClosedLoop mission/i);
+    expect(decision.loopTemplate).toBe('refactor-and-modernize-loop');
     expect(decision.reasons.some((r) => r.includes('refactor'))).toBe(true);
     expect(decision.reasons.some((r) => r.includes('Blackboard'))).toBe(true);
   });
@@ -70,8 +74,10 @@ describe('classifyExecutionPath', () => {
 
   it('exposes framework text for orchestrator prompts', () => {
     expect(EXECUTION_PATH_FRAMEWORK).toContain('Execution Path Triage');
-    expect(EXECUTION_PATH_FRAMEWORK).toContain('roland team');
+    expect(EXECUTION_PATH_FRAMEWORK).toContain('Hermes');
+    expect(EXECUTION_PATH_FRAMEWORK).toContain('full-cycle-verified-loop');
     expect(EXECUTION_PATH_FRAMEWORK).toContain('Force-team override');
     expect(EXECUTION_PATH_FRAMEWORK).toContain('--force-team');
+    expect(EXECUTION_PATH_FRAMEWORK).toContain('[DEPRECATED]');
   });
 });

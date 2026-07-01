@@ -1,9 +1,9 @@
 /**
  * ## Assumptions
- * - TODO: Legacy PM Team — to be removed in final Loop Engineering pivot.
+ * - [DEPRECATED] Legacy PM Team — Hermes is the recommended PM layer.
  * - ClosedLoop owns verify/critique/reflect/exit — this module is Plan + Act only when explicitly opted in.
  * - Pure ClosedLoop uses lightweight-plan-act.ts instead of this bridge.
- * - Production delegates to `runTeam` with `pmSlice` / `loopEmbedded` flags when PM path is chosen.
+ * - Production delegates to `runTeam` with `pmSlice` / `loopEmbedded` flags when legacy PM path is chosen.
  */
 import fs from 'fs';
 import type { Blackboard } from '../rco/blackboard.js';
@@ -22,6 +22,7 @@ import {
   type LoopPmExecutionPath,
   type LoopPmSession,
 } from './loop-pm-session.js';
+import { warnLegacyPmTeam } from './pm-deprecation.js';
 
 export {
   LOOP_PM_SESSION_FILE,
@@ -43,7 +44,7 @@ export interface LoopPmBridgeOptions {
   modelRouter?: ModelRouter;
 }
 
-/** Resolve PM Team mode for a phase from phase config, template defaults, or never. */
+/** [DEPRECATED] Resolve legacy PM Team mode for a phase from phase config, template defaults, or never. */
 export function resolvePmTeamMode(
   phase: Phase,
   phaseConfig: PhaseConfig | undefined,
@@ -55,7 +56,7 @@ export function resolvePmTeamMode(
   return 'never';
 }
 
-/** Decide whether to invoke PM Team for this phase (`auto` requires loop-level PM opt-in). */
+/** [DEPRECATED] Decide whether to invoke legacy PM Team for this phase (`auto` requires loop-level PM opt-in). */
 export function shouldUsePmTeam(
   goal: string,
   mode: PmTeamMode,
@@ -101,8 +102,9 @@ export function shouldUsePmTeam(
 }
 
 /**
- * TODO: Legacy PM Team — bridges ClosedLoop Plan/Act to team-orchestrator when opted in.
- * Prefer pure ClosedLoop (lightweight-plan-act.ts) unless use_pm_team is enabled.
+ * [DEPRECATED] Legacy PM Team bridge — bridges ClosedLoop Plan/Act to team-orchestrator when opted in.
+ * Prefer Hermes + Pure ClosedLoop (lightweight-plan-act.ts) unless use_pm_team is enabled.
+ * @deprecated Use Hermes for PM duties; keep only for backward compatibility.
  */
 export class LoopPmBridge {
   private readonly opts: LoopPmBridgeOptions;
@@ -113,6 +115,7 @@ export class LoopPmBridge {
     this.opts = opts;
     this.router = opts.modelRouter ?? ModelRouter.fromConfig();
     this.pmOptIn = true; // bridge only constructed when loop-level PM opt-in is active
+    warnLegacyPmTeam('LoopPmBridge constructed');
   }
 
   private lightweightCtx() {
@@ -144,6 +147,7 @@ export class LoopPmBridge {
     );
 
     if (usePm) {
+      warnLegacyPmTeam('Plan phase', reason);
       return this.runPmPlanning(iteration, reason);
     }
     return runLightweightPlan(iteration, this.lightweightCtx());
@@ -185,6 +189,7 @@ export class LoopPmBridge {
     });
 
     if (usePm) {
+      warnLegacyPmTeam('Act phase', reason);
       return this.runPmAct(iteration, reason, session ?? undefined);
     }
     return runLightweightAct(iteration, this.lightweightCtx());

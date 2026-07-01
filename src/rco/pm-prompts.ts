@@ -1,7 +1,10 @@
 /**
- * Lead PM prompts for team-mode orchestration.
+ * ## Assumptions
+ * - [DEPRECATED] Legacy Lead PM prompts for team-mode orchestration (`use_pm_team: true`).
+ * - Hermes is the recommended PM / strategist — plan missions via chat, not these prompts.
+ * - Roland ClosedLoop uses lightweight-plan-act.ts by default; these prompts run only on legacy PM path.
  *
- * The Lead PM runs on grok-4.3 (or ROLAND_PM_MODEL override) and acts as Engineering Manager.
+ * Lead PM prompts for [DEPRECATED] team-mode orchestration.
  * It never writes code — it decomposes goals, dispatches tasks, reviews
  * outputs, and synthesizes results. Three prompts cover the full PM loop:
  *

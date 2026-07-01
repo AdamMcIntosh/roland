@@ -9,6 +9,7 @@ import {
   resolvePmIntegrationStatus,
   isLoopPmTeamEnabled,
   shouldUsePmTeam,
+  formatPmIntegrationLabel,
 } from '../../src/loop-engine/index.js';
 import { clearLoopEngineConfigCache } from '../../src/loop-engine/loop-config.js';
 import type { LoopTemplate } from '../../src/loop-engine/loop-phases.js';
@@ -71,5 +72,20 @@ describe('loop-pm-policy', () => {
     expect(
       resolvePmIntegrationStatus(minimalTemplate, { enablePmIntegration: true }).enabled,
     ).toBe(true);
+  });
+
+  it('formatPmIntegrationLabel reflects Hermes hybrid model', () => {
+    expect(formatPmIntegrationLabel({ enabled: false, reason: '', source: 'disabled' })).toContain(
+      'Hermes PM',
+    );
+    expect(formatPmIntegrationLabel({ enabled: true, reason: '', source: 'opt-in' })).toContain(
+      '[DEPRECATED]',
+    );
+  });
+
+  it('opt-in reason includes [DEPRECATED] tag', () => {
+    const status = resolvePmIntegrationStatus(optInTemplate);
+    expect(status.reason).toContain('[DEPRECATED]');
+    expect(status.reason).toContain('use_pm_team');
   });
 });

@@ -1,14 +1,17 @@
 /**
  * ## Assumptions
- * - Pure ClosedLoop is the default — PM Team is opt-in only.
+ * - Hermes is the primary PM / strategist — plan missions via `roland chat`, Cursor `@roland`, or `roland team`.
+ * - Roland ClosedLoop is the loop execution engine (PACVRE harness); Pure ClosedLoop is the default.
+ * - [DEPRECATED] Legacy PM Team (LeadPM, `use_pm_team: true`, `pm_plan`/`pm_act`) is advanced/legacy opt-in only.
  * - Global: `loop_engine.use_pm_team` in config.yaml (default false).
  * - Per-template: `use_pm_team: true` or `pm_plan/pm_act: always`.
- * - `pm_plan/pm_act: auto` invokes PM only when global or template opt-in is true.
+ * - `pm_plan/pm_act: auto` invokes legacy PM only when global or template opt-in is true.
  * - `enablePmIntegration` on ClosedLoopOptions overrides both ways.
  */
 
 import type { LoopTemplate } from './loop-phases.js';
 import { loadLoopEngineConfig } from './loop-config.js';
+import { warnLegacyPmTeam } from './pm-deprecation.js';
 
 export interface PmIntegrationStatus {
   enabled: boolean;
@@ -21,7 +24,10 @@ export interface PmIntegrationResolveOptions {
   enablePmIntegration?: boolean;
 }
 
-/** Resolve whether legacy PM Team is wired into this loop mission. */
+/**
+ * Resolve whether [DEPRECATED] legacy PM Team is wired into this loop mission.
+ * @deprecated Prefer Hermes + Pure ClosedLoop. Legacy path kept for backward compatibility.
+ */
 export function resolvePmIntegrationStatus(
   template: LoopTemplate,
   opts: PmIntegrationResolveOptions = {},
@@ -34,9 +40,10 @@ export function resolvePmIntegrationStatus(
     };
   }
   if (opts.enablePmIntegration === true) {
+    warnLegacyPmTeam('enablePmIntegration=true');
     return {
       enabled: true,
-      reason: 'enablePmIntegration=true — legacy PM Team explicitly enabled',
+      reason: '[DEPRECATED] enablePmIntegration=true — legacy PM Team explicitly enabled',
       source: 'override-on',
     };
   }
@@ -47,9 +54,10 @@ export function resolvePmIntegrationStatus(
     template.phases.some((p) => p.pmTeam === 'always');
 
   if (hasAlways) {
+    warnLegacyPmTeam('template pm_plan/pm_act/phase pm_team: always');
     return {
       enabled: true,
-      reason: 'template pm_plan/pm_act/phase pm_team: always',
+      reason: '[DEPRECATED] template pm_plan/pm_act/phase pm_team: always',
       source: 'always',
     };
   }
@@ -79,11 +87,13 @@ export function resolvePmIntegrationStatus(
     };
   }
 
+  const reason = templateOptIn
+    ? 'template use_pm_team: true'
+    : 'loop_engine.use_pm_team: true';
+  warnLegacyPmTeam(reason);
   return {
     enabled: true,
-    reason: templateOptIn
-      ? 'template use_pm_team: true'
-      : 'loop_engine.use_pm_team: true',
+    reason: `[DEPRECATED] ${reason}`,
     source: 'opt-in',
   };
 }
@@ -95,9 +105,11 @@ export function isLoopPmTeamEnabled(
   return resolvePmIntegrationStatus(template, opts).enabled;
 }
 
-/** Dashboard / health label — Pure ClosedLoop vs PM-Enhanced. */
+/** Dashboard / health label — Hermes + Pure ClosedLoop vs [DEPRECATED] legacy PM Team. */
 export function formatPmIntegrationLabel(status: PmIntegrationStatus): string {
-  return status.enabled ? 'PM-Enhanced (Legacy)' : 'Pure ClosedLoop';
+  return status.enabled
+    ? 'PM-Enhanced [DEPRECATED] — use Hermes + Pure ClosedLoop'
+    : 'Pure ClosedLoop (Hermes PM + Roland Loop Engine)';
 }
 
 /** Structured log lines for loop mission startup (used when ModelRouter summary is skipped). */
@@ -107,27 +119,29 @@ export function logPmIntegrationMode(status: PmIntegrationStatus, templateName: 
   console.error(`[Loop]   template=${templateName} reason=${status.reason}`);
   if (status.enabled) {
     console.error(
-      '[Loop] ⚠ Legacy PM Team will delegate Plan/Act to team-orchestrator (pmSlice). ' +
-        'Prefer pure ClosedLoop unless multi-agent waves are required.',
+      '[Loop] [DEPRECATED] Legacy PM Team will delegate Plan/Act to team-orchestrator (pmSlice). ' +
+        'Hermes is now the recommended PM layer — prefer Pure ClosedLoop (use_pm_team: false).',
     );
   } else {
-    console.error('[Loop] Plan/Act use lightweight handlers — verify/critique/reflect in ClosedLoop harness.');
+    console.error(
+      '[Loop] Hermes handles mission PM · Roland runs PACVRE loop (lightweight Plan/Act handlers).',
+    );
   }
 }
 
 /**
- * ## Final Decoupling + Model Router Integration Complete
+ * ## Old PM Persona Deprecated — Hermes is Primary PM
  *
  * ```yaml
- * # Pure ClosedLoop (default)
+ * # Recommended: Hermes + Pure ClosedLoop (default)
  * loop_engine:
  *   use_pm_team: false
  *
- * # Enable PM for templates with pm_plan/pm_act: auto
+ * # [DEPRECATED] Legacy PM Team opt-in — advanced/legacy only
  * loop_engine:
  *   use_pm_team: true
  *
- * # Per-template opt-in (feature-implementation-loop.yaml)
+ * # Per-template legacy opt-in (feature-implementation-loop.yaml)
  * use_pm_team: true
  * pm_plan: auto
  * pm_act: auto

@@ -249,7 +249,7 @@ function buildClosedLoopSynthesis(goal: string, result: ClosedLoopResult, stateD
   const pmSession = readLoopPmSession(stateDir);
   if (pmSession) {
     lines.push(
-      `- PM Team path: ${pmSession.executionPath} (${pmSession.routingReason})`,
+      `- [DEPRECATED] PM Team path: ${pmSession.executionPath} (${pmSession.routingReason})`,
       `- PM waves in Act: ${pmSession.wavesRun}`,
       `- PM blockers: ${pmSession.blockersEncountered}`,
     );
@@ -268,7 +268,8 @@ function buildClosedLoopSynthesis(goal: string, result: ClosedLoopResult, stateD
 }
 
 /**
- * ## Final Decoupling + Model Router Integration Complete
+ * ## Old PM Persona Deprecated — Hermes is Primary PM
  *
- * Pure ClosedLoop is default. Legacy PM Team opt-in: loop_engine.use_pm_team or template use_pm_team.
+ * Pure ClosedLoop (Hermes PM + Roland Loop Engine) is default.
+ * [DEPRECATED] Legacy PM Team opt-in: loop_engine.use_pm_team or template use_pm_team.
  */

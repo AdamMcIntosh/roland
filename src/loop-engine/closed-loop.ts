@@ -1,5 +1,7 @@
 /**
  * ## Assumptions
+ * - Hermes is the primary PM / strategist; Roland ClosedLoop is the loop execution engine.
+ * - [DEPRECATED] Legacy PM Team opt-in via enablePmIntegration, loop_engine.use_pm_team, or template use_pm_team.
  * - ClosedLoop is the production entry point; LoopEngine remains the phase execution core.
  * - EvaluationGate replaces direct TestExecutor calls in the verify phase.
  * - SpecialistSpawner fires on every phase transition via LoopHooks.
@@ -75,9 +77,9 @@ export interface ClosedLoopOptions {
   manualReviewApproved?: boolean;
   minConfidence?: number;
   hooks?: LoopHooks;
-  /** Explicit opt-in for legacy PM Team (overrides config/template). When false, pure ClosedLoop only. */
+  /** [DEPRECATED] Explicit opt-in for legacy PM Team (overrides config/template). When false, pure ClosedLoop only. */
   enablePmIntegration?: boolean;
-  /** Forwarded to embedded PM Team runs (HITL, wave callbacks). */
+  /** Forwarded to embedded [DEPRECATED] legacy PM Team runs (HITL, wave callbacks). */
   teamOpts?: Partial<TeamOrchestratorOptions>;
 }
 
@@ -439,14 +441,14 @@ export function createClosedLoop(opts: ClosedLoopOptions): ClosedLoop {
 }
 
 /**
- * ## Final Decoupling + Model Router Integration Complete
+ * ## Old PM Persona Deprecated — Hermes is Primary PM
  *
- * Default: pure ClosedLoop Plan/Act via lightweight-plan-act.ts.
- * Legacy PM Team: opt-in via loop_engine.use_pm_team, template use_pm_team, or enablePmIntegration.
+ * Default: Hermes + Pure ClosedLoop Plan/Act via lightweight-plan-act.ts.
+ * [DEPRECATED] Legacy PM Team: opt-in via loop_engine.use_pm_team, template use_pm_team, or enablePmIntegration.
  *
  * ```yaml
  * loop_engine:
- *   use_pm_team: false   # default — pure ClosedLoop
+ *   use_pm_team: false   # default — Hermes PM + Pure ClosedLoop
  * models:
  *   pm: { provider: openrouter, model: grok-4.3 }
  *   coding: { provider: ollama, model: qwen3.5-coder:14b }

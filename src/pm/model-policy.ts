@@ -1,8 +1,8 @@
 /**
  * ## Assumptions
- * - Legacy PM Team lane routing bridges to Loop Engineering ModelRouter when no explicit policy is passed.
+ * - [DEPRECATED] Legacy PM Team lane routing bridges to Loop Engineering ModelRouter when no explicit policy is passed.
+ * - Hermes is the recommended PM layer; this policy serves LeadPM / use_pm_team backward compatibility only.
  * - DEFAULT_MODEL_POLICY uses Cursor SDK ids derived from config.yaml `models` section.
- * - TODO: Legacy PM Team — scheduled for deprecation; prefer ClosedLoop + ModelRouter directly.
  */
 
 import { getModelRouter, type ModelRouter } from '../models/model-router.js';
@@ -23,7 +23,7 @@ export interface ModelPolicy {
   standard: string;
 }
 
-/** Build a legacy PM Team policy from Loop Engineering ModelRouter. */
+/** [DEPRECATED] Build a legacy PM Team policy from Loop Engineering ModelRouter. */
 export function modelPolicyFromRouter(router?: ModelRouter): ModelPolicy {
   const r = router ?? getModelRouter();
   return {

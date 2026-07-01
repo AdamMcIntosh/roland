@@ -112,6 +112,14 @@ export {
 export type { PmIntegrationStatus } from './loop-pm-policy.js';
 
 export {
+  DEPRECATED_LEGACY_PM_TAG,
+  HERMES_PM_RECOMMENDATION,
+  LEGACY_PM_TEAM_WARNING,
+  warnLegacyPmTeam,
+  warnGlobalUsePmTeamIfNeeded,
+} from './pm-deprecation.js';
+
+export {
   EvaluationGate,
   evaluationResultToLoopState,
 } from './evaluation-gate.js';

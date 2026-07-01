@@ -104,7 +104,7 @@ export interface ExitConditionConfig {
   evaluate?: (ctx: import('./exit-conditions.js').ExitEvaluationContext) => boolean;
 }
 
-/** PM Team Engine routing for Plan/Act phases inside ClosedLoop. */
+/** [DEPRECATED] Legacy PM Team Engine routing for Plan/Act phases inside ClosedLoop. */
 export type PmTeamMode = 'auto' | 'always' | 'never';
 
 /** Optional gating for YAML-defined specialist spawns. */
@@ -155,7 +155,7 @@ export interface PhaseConfig {
   after?: BetweenIterationsHookConfig;
   /** Phase-scoped between-iteration hook (alias for after on long-running phases). */
   betweenIterations?: BetweenIterationsHookConfig;
-  /** Override template-level PM Team routing for this phase. */
+  /** [DEPRECATED] Override template-level legacy PM Team routing for this phase. */
   pmTeam?: PmTeamMode;
   /** YAML-defined specialist spawns — overrides PHASE_SPECIALIST_DEFAULTS when present. */
   specialistSpawns?: SpecialistSpawnDefinition[];
@@ -193,11 +193,11 @@ export interface LoopTemplate {
   exitConditions?: ExitConditionConfig[];
   /** Minimum confidence for EvaluationGate acceptance override. */
   minConfidence?: number;
-  /** PM Team routing for Plan phase (default: never for minimal templates). */
+  /** [DEPRECATED] Legacy PM Team routing for Plan phase (default: never for minimal templates). */
   pmPlan?: PmTeamMode;
-  /** PM Team routing for Act phase (default: never for minimal templates). */
+  /** [DEPRECATED] Legacy PM Team routing for Act phase (default: never for minimal templates). */
   pmAct?: PmTeamMode;
-  /** Explicit opt-in for legacy PM Team on this template (requires pm_plan/pm_act for auto routing). */
+  /** [DEPRECATED] Per-template legacy PM Team opt-in — advanced only; prefer Hermes + Pure ClosedLoop. */
   usePmTeam?: boolean;
 }
 

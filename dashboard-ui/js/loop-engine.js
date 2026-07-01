@@ -131,7 +131,9 @@
     var rows = items.map(function (t) {
       var isDefault = t.name === catalog.defaultTemplate;
       var isSelected = t.name === selected;
-      var mode = t.executionModes.usePmTeam ? 'PM-Enhanced opt-in' : 'Pure ClosedLoop';
+      var mode = t.executionModes.usePmTeam
+        ? 'PM-Enhanced [DEPRECATED]'
+        : 'Pure ClosedLoop (Hermes PM)';
       var spawnNote = t.spawnSummary
         ? '<div class="loop-template-spawns" title="YAML specialist_spawns">Spawns: ' + esc(t.spawnSummary) + '</div>'
         : '';
@@ -527,11 +529,11 @@
     if (!pm) return '';
     var enabled = pm.enabled || pm.configured;
     var cls = enabled ? 'loop-pm-enabled' : 'loop-pm-disabled';
-    var label = pm.label || (enabled ? 'PM-Enhanced (Legacy)' : 'Pure ClosedLoop');
+    var label = pm.label || (enabled ? 'PM-Enhanced [DEPRECATED]' : 'Pure ClosedLoop (Hermes PM)');
     var badgeCls = enabled ? 'loop-pm-badge-enhanced' : 'loop-pm-badge-pure';
     var pathLabel = pm.executionPath === 'pm_team'
-      ? 'Plan/Act → legacy PM Team waves'
-      : 'Plan/Act → lightweight ClosedLoop handlers';
+      ? '[DEPRECATED] Plan/Act → legacy PM Team waves — use Hermes + Pure ClosedLoop'
+      : 'Plan/Act → lightweight ClosedLoop (Hermes PM + Roland Loop Engine)';
     return '<div class="loop-pm-panel ' + cls + '">' +
       '<h5>Execution Mode</h5>' +
       '<div class="loop-pm-status">' +

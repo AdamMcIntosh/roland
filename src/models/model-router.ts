@@ -842,8 +842,8 @@ export class ModelRouter {
     hitlGitCommitEnabled?: boolean;
   }): string[] {
     const mode = ctx.pmEnabled
-      ? 'PM-Enhanced (legacy PM Team opt-in)'
-      : 'Pure ClosedLoop (default)';
+      ? 'PM-Enhanced [DEPRECATED] — Hermes is recommended PM'
+      : 'Pure ClosedLoop — Hermes PM + Roland Loop Engine';
     const canonical =
       ctx.canonicalTemplateId && ctx.canonicalTemplateId !== ctx.templateId
         ? `${ctx.templateId} → ${ctx.canonicalTemplateId}`
@@ -893,10 +893,11 @@ export class ModelRouter {
     }
     if (ctx.pmEnabled) {
       lines.push(
-        '[Loop]   ⚠ Legacy PM Team delegates Plan/Act to team-orchestrator — prefer Pure ClosedLoop',
+        '[Loop]   [DEPRECATED] Legacy PM Team delegates Plan/Act to team-orchestrator — ' +
+          'Hermes is now the recommended PM layer; prefer Pure ClosedLoop (use_pm_team: false)',
       );
     } else {
-      lines.push('[Loop]   Plan/Act: lightweight handlers · Verify/Critique/Reflect in harness');
+      lines.push('[Loop]   Hermes PM · Roland PACVRE loop (lightweight Plan/Act · verify/critique/reflect in harness)');
     }
     return lines;
   }

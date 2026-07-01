@@ -1,5 +1,11 @@
 /**
- * LeadPM — the single facade the MCP server holds for the PM control loop.
+ * ## Assumptions
+ * - [DEPRECATED] LeadPM — legacy in-process PM control loop for MCP board tools and team recipes.
+ * - Hermes (`roland chat`, Cursor `@roland`) is now the recommended PM / strategist layer.
+ * - Roland ClosedLoop handles loop execution; Pure ClosedLoop is the default Plan/Act path.
+ * - This facade remains for backward compatibility (`use_pm_team: true`, `roland_run_team`, board tools).
+ *
+ * LeadPM — the single facade the MCP server holds for the [DEPRECATED] legacy PM control loop.
  *
  * Composes the Phase 1 substrate (Blackboard + MessageBus via CoordinationManager)
  * with the Phase 2 TaskBoard + Roster. It builds the dispatch packets the host
@@ -50,6 +56,9 @@ export interface LeadPMOptions {
   laneOverrides?: Record<string, Lane>;
 }
 
+/**
+ * @deprecated Legacy LeadPM — Hermes is now the recommended PM layer. Kept for backward compatibility.
+ */
 export class LeadPM {
   private readonly board: Blackboard;
   private readonly bus: MessageBus;

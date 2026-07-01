@@ -6,21 +6,27 @@ The design follows [loops.elorm.xyz](https://loops.elorm.xyz) patterns: self-pac
 
 ---
 
-## Hybrid architecture: Hermes + Roland Dashboard
+## Hybrid architecture: Hermes + Roland
 
-Roland uses a **two-surface** model — one interface for conversation, one for observability:
+Roland uses a **two-layer** hybrid model:
 
-| Surface | Role | How to access |
-|---------|------|---------------|
-| **Hermes** | Primary conversational interface — plan missions, trigger loops, triage work, PM chat | `roland chat` · Cursor `@roland` · `roland team "…"` |
-| **Roland Dashboard** | Dedicated monitor & control — live PACVRE progress, HITL git-commit approvals, pause/resume, run history, read-only template catalog | `npm run serve-dashboard` → http://127.0.0.1:8081 |
+| Layer | Role | How to access |
+|-------|------|---------------|
+| **Hermes** | **Primary PM / strategist** — plan missions, triage work, trigger loops, conversational PM | `roland chat` · Cursor `@roland` · `roland team "…"` |
+| **Roland** | **Loop execution engine** — PACVRE closed-loop harness, verification gates, specialist spawns, HITL | `--loop-template <name>` on team runs |
+| **Roland Dashboard** | Monitor & control — live PACVRE progress, HITL git-commit approvals, pause/resume, run history | `npm run serve-dashboard` → http://127.0.0.1:8081 |
 
-**Hermes** handles all planning and loop triggering. Models are routed automatically via ModelRouter and `config.yaml` — you do not pick models in the dashboard.
+**Hermes** handles all high-level PM duties and loop triggering. **Roland** runs the structured iteration harness. Models are routed automatically via ModelRouter and `config.yaml` — you do not pick models in the dashboard.
 
-**The dashboard** is purpose-built for watching active loops and operator controls (HITL, pause/resume, git-commit approval). It does not replace Hermes for general chat or mission planning.
+**The dashboard** is purpose-built for watching active loops and operator controls (HITL, pause/resume, git-commit approval). It does not replace Hermes for mission planning or PM chat.
+
+> [DEPRECATED] Legacy in-loop **PM Team** (`use_pm_team: true`, LeadPM, `pm_plan`/`pm_act`) remains for backward compatibility as an advanced opt-in only. Prefer **Hermes + Pure ClosedLoop** (default).
 
 ```
-  Operator ──► Hermes (chat / CLI / Cursor) ──► roland team + loop template
+  Operator ──► Hermes (PM / strategist) ──► roland team + loop template
+                    │
+                    ▼
+           Roland ClosedLoop (PACVRE execution)
                     │
                     ▼
            Roland Dashboard (monitor + control)
@@ -69,14 +75,16 @@ PLAN → ACT → VERIFY → CRITIQUE → RETRY? → ESCALATE? → OBSERVE → RE
 
 | Phase | Agent | Purpose |
 |-------|-------|---------|
-| **plan** | lead-pm | Scope work for this iteration |
+| **plan** | lightweight planner / Hermes PM scope | Scope work for this iteration (Pure ClosedLoop default) |
 | **act** | executor (Sparrow) | Implement changes |
 | **verify** | test-executor (Vanguard) | Run **EvaluationGate** checks |
 | **critique** | critic | Analyze verify output; decide proceed / retry / escalate |
 | **retry** | — | Optional focused retry when critique requests it |
-| **escalate** | lead-pm | Optional HITL when retry budget exhausted |
+| **escalate** | operator / Hermes | Optional HITL when retry budget exhausted |
 | **observe** | researcher | Record state and metrics |
 | **reflect** | researcher / critic | Append learnings to loop memory |
+
+> [DEPRECATED] When `use_pm_team: true` is set, Plan/Act may delegate to legacy LeadPM waves instead of lightweight handlers.
 
 Between iterations, the template's `between_iterations` command runs (e.g. `npm test`). Results are stored in loop memory and feed **exit conditions**.
 
@@ -90,14 +98,14 @@ All templates live in `recipes/loops/`. Templates are **generic-first** — proj
 
 | Template | Best for | Max iter | Verification | PM mode |
 |----------|----------|----------|--------------|---------|
-| `standard-code-loop` | Default software loop | 5 | unit, lint, typecheck | Pure ClosedLoop |
-| `feature-implementation-loop` | Feature delivery | 8 | unit, integration, smoke | PM-Enhanced opt-in |
-| `refactor-and-modernize-loop` | Refactor / de-sloppify | 4 | lint, unit, typecheck | Pure ClosedLoop |
-| `research-and-spec-loop` | Research → spec | 3 | critic validation | Pure ClosedLoop |
-| `mcp-extension-loop` | MCP / server extensions | 6 | unit, smoke, integration | Pure ClosedLoop |
-| `full-cycle-verified-loop` | Production missions | 10 | lint, unit, typecheck | Pure ClosedLoop |
-| `research-loop` | Lightweight investigation | 3 | critic validation | Pure ClosedLoop |
-| `minimal-3-phase` | E2E tests | 1 | unit | Pure ClosedLoop |
+| `standard-code-loop` | Default software loop | 5 | unit, lint, typecheck | Pure ClosedLoop (Hermes PM) |
+| `feature-implementation-loop` | Feature delivery | 8 | unit, integration, smoke | [DEPRECATED] PM-Enhanced opt-in |
+| `refactor-and-modernize-loop` | Refactor / de-sloppify | 4 | lint, unit, typecheck | Pure ClosedLoop (Hermes PM) |
+| `research-and-spec-loop` | Research → spec | 3 | critic validation | Pure ClosedLoop (Hermes PM) |
+| `mcp-extension-loop` | MCP / server extensions | 6 | unit, smoke, integration | Pure ClosedLoop (Hermes PM) |
+| `full-cycle-verified-loop` | Production missions | 10 | lint, unit, typecheck | Pure ClosedLoop (Hermes PM) |
+| `research-loop` | Lightweight investigation | 3 | critic validation | Pure ClosedLoop (Hermes PM) |
+| `minimal-3-phase` | E2E tests | 1 | unit | Pure ClosedLoop (Hermes PM) |
 
 ### Deprecated aliases (backward compatible)
 
@@ -116,7 +124,7 @@ In-flight runs using deprecated names continue to work — YAML entries remain l
 loop_engine:
   default_template: standard-code-loop
   between_iterations: npm run test:run
-  use_pm_team: false   # Pure ClosedLoop default
+  use_pm_team: false   # Pure ClosedLoop default (Hermes PM + Roland Loop Engine)
   verification:
     strategies:
       - type: unit
@@ -140,7 +148,7 @@ roland team "add triage tool schema" --loop-template mcp-extension-loop
 ### When to use which
 
 - **full-cycle-verified-loop** — production missions with reflection, exit conditions, checkpoint recovery, PR output.
-- **feature-implementation-loop** — user-facing features; set `use_pm_team: true` for PM-Enhanced Plan/Act.
+- **feature-implementation-loop** — user-facing features; [DEPRECATED] set `use_pm_team: true` only if legacy PM waves are required (prefer Hermes + Pure ClosedLoop).
 - **refactor-and-modernize-loop** — structural cleanup without behavior change.
 - **research-and-spec-loop** — investigation that produces an actionable spec.
 - **mcp-extension-loop** — new MCP tools, server handlers, API surfaces.
@@ -442,7 +450,7 @@ When a loop is active, the **Closed-Loop Harness** panel shows real-time activit
 - Active verification strategies (pending → running → pass/fail)
 - Running between-iteration hooks (including git-commit dry-run preview)
 - Pending git-commit HITL approval (confirm / reject / edit message)
-- Dispatch method (Cursor SDK vs direct) and execution mode (Pure ClosedLoop vs PM-Enhanced)
+- Dispatch method (Cursor SDK vs direct) and execution mode (Pure ClosedLoop vs [DEPRECATED] PM-Enhanced)
 - Specialist spawn activity pulses and rolling history
 
 State flows: `loop-state.json` → `run-state.json` (`liveActivity`) → `/api/loop-health` → dashboard.

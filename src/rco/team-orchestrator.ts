@@ -1,14 +1,14 @@
 /**
  * ## Assumptions
- * - Loop-template missions delegate to ClosedLoop via loop-orchestrator.ts (Loop Engineering pivot).
- * - Legacy PM team mode (plan → waves → synthesis) serves non-loop missions only.
+ * - Hermes is the primary PM / strategist; Roland ClosedLoop owns loop-template missions.
+ * - [DEPRECATED] Legacy PM team mode (plan → waves → synthesis) serves non-loop missions and `use_pm_team: true` only.
  * - LoopEngineCoordinator is deprecated; ClosedLoop owns loop lifecycle for template missions.
  *
- * RCO Team Orchestrator — PM-style parallel agent execution with review loop.
+ * RCO Team Orchestrator — [DEPRECATED] PM-style parallel agent execution with review loop.
  *
- * Execution flow (legacy PM path only):
+ * Execution flow ([DEPRECATED] legacy PM path only):
  *
- *   Phase 1 — Lead PM planning
+ *   Phase 1 — [DEPRECATED] Lead PM planning
  *     The Lead PM (Grok 4.3) reads the goal + Blackboard + roster and
  *     returns a structured task plan.
  *

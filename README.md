@@ -16,16 +16,17 @@ Roland is a multi-agent platform for **reliable, iterative software missions**:
 
 | Layer | Role |
 |-------|------|
-| **Hermes** | Primary conversational interface — plan missions, trigger loops, triage work (`roland chat`, Cursor `@roland`, `roland team`) |
-| **Closed-Loop Harness** | Structured iterations with evaluation gates, reflection, exit conditions, and checkpoint recovery ([guide](docs/guides/closed-loop-harness.md)) |
-| **PM Team Engine** | Lead PM plans parallel waves, dispatches UNSC callsigns, synthesizes results |
+| **Hermes** | Primary PM / strategist — plan missions, trigger loops, triage work (`roland chat`, Cursor `@roland`, `roland team`) |
+| **Roland Closed-Loop Harness** | Specialized loop execution engine — PACVRE iterations, evaluation gates, reflection, exit conditions ([guide](docs/guides/closed-loop-harness.md)) |
 | **Global CLI + MCP** | `roland team`, interactive chat, Cursor MCP tools |
 | **Command Center** | Web dashboard — **monitor & control only**: live progress, HITL, loop health, GitHub clone |
+
+> [DEPRECATED] The in-loop **PM Team Engine** (LeadPM, `use_pm_team: true`) remains as an advanced/legacy opt-in for backward compatibility. **Hermes** handles high-level PM duties in the recommended hybrid setup.
 
 Inspired by [loops.elorm.xyz](https://loops.elorm.xyz) patterns: self-paced iterations, between-iteration checks, explicit exit conditions, and reflection memory.
 
 ```
-  Operator ──► Hermes (chat / CLI / Cursor) ──► ClosedLoop / Lead PM ──► PLAN → ACT → VERIFY → CRITIQUE → REFLECT
+  Operator ──► Hermes (PM / strategist) ──► roland team + loop template ──► Roland ClosedLoop (PACVRE)
                     │                                    │
                     ▼                                    ▼
            Roland Dashboard (monitor)          EvaluationGate · LoopMemory

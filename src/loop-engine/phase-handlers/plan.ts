@@ -1,7 +1,7 @@
 /**
  * ## Assumptions
  * - Pure ClosedLoop is the default Plan path (lightweight-plan-act.ts).
- * - LoopPmBridge is only injected when legacy PM Team is explicitly opted in.
+ * - [DEPRECATED] LoopPmBridge is only injected when legacy PM Team is explicitly opted in (`use_pm_team: true`).
  */
 
 import type { LoopPmBridge } from '../pm-integration.js';
@@ -11,7 +11,7 @@ import type { PhaseHandler, PhaseHandlerContext, PhaseResult } from './types.js'
 import { Phase } from '../loop-phases.js';
 
 export interface PlanPhaseHandlerOptions {
-  /** TODO: Legacy PM Team — only set when use_pm_team opt-in is active. */
+  /** [DEPRECATED] Legacy PM Team — only set when use_pm_team opt-in is active. */
   pmBridge?: LoopPmBridge;
   lightweight?: LightweightPlanActContext;
 }

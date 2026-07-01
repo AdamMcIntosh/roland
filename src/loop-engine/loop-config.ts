@@ -17,6 +17,7 @@ import {
 } from './self-improvement/escalation.js';
 import type { LoopTemplate } from './loop-phases.js';
 import { resolveBetweenIterationsCommand } from './loop-template-resolution.js';
+import { warnGlobalUsePmTeamIfNeeded } from './pm-deprecation.js';
 
 const VerificationStrategySchema = z.object({
   type: z.string().refine(isVerificationStrategyType, { message: 'Invalid verification strategy type' }),
@@ -116,7 +117,7 @@ export type LoopEngineConfig = z.infer<typeof LoopEngineConfigSchema> & {
   };
   /** Default wall-clock timeout for full loop runs (ms). */
   timeoutMs?: number;
-  /** When true, templates with pm_plan/pm_act: auto may invoke legacy PM Team (default false). */
+  /** [DEPRECATED] When true, templates with pm_plan/pm_act: auto may invoke legacy PM Team (default false). */
   usePmTeam?: boolean;
   /** Default model dispatch backend for Loop Engineering (default cursor_sdk). */
   defaultDispatch?: 'cursor_sdk' | 'direct';
@@ -289,6 +290,7 @@ export function loadLoopEngineConfig(): LoopEngineConfig {
       defaultDispatch: parsed.data.default_dispatch ?? DEFAULT_CONFIG.defaultDispatch,
       betweenIterations: parsed.data.between_iterations,
     };
+    warnGlobalUsePmTeamIfNeeded(cached.usePmTeam === true);
     return cached;
   } catch {
     cached = DEFAULT_CONFIG;

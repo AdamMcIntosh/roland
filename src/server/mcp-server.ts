@@ -645,7 +645,7 @@ export class McpServer {
   private registerTriage(): void {
     this.registerTool(
       'triage',
-      'Auto-pilot: analyze any user message and recommend agent persona, recipe workflow, and execution path (direct in chat vs team mission). Call FIRST on new coding requests. Returns execution_path.path ("direct" | "team"), execution_path.summary (show to operator), execution_path.team_offer (when team), execution_path.forced (true when force-team override), execution_path.cleaned_goal (goal with triggers stripped), plus agent and complexity routing. Power-user override: append --force-team or phrases like "force team", "full team", "run as team", "spawn team" to bypass scoring and force Team path.',
+      'Auto-pilot: analyze any user message and recommend agent persona, recipe workflow, and execution path (direct in chat vs Pure ClosedLoop team mission). Call FIRST on new coding requests. Returns execution_path.path ("direct" | "team"), execution_path.summary, execution_path.team_offer, execution_path.team_command (roland team + --loop-template), execution_path.loop_template, execution_path.loop_template_reason, execution_path.forced, execution_path.cleaned_goal, plus agent and complexity routing. Hermes = primary PM; Roland = ClosedLoop engine; Pure ClosedLoop default (use_pm_team: false). Power-user override: --force-team or "force team", "full team", "run as team", "spawn team".',
       async (args: Record<string, unknown>) => {
         const message = args.message as string;
         if (!message) {
@@ -716,6 +716,9 @@ export class McpServer {
             reasons: executionPath.reasons,
             estimated_minutes: executionPath.estimatedMinutes,
             team_offer: executionPath.teamOffer,
+            team_command: executionPath.teamCommand ?? null,
+            loop_template: executionPath.loopTemplate ?? null,
+            loop_template_reason: executionPath.loopTemplateReason ?? null,
             forced: executionPath.forced ?? false,
             cleaned_goal: executionPath.cleanedGoal ?? null,
           },
@@ -865,7 +868,10 @@ export class McpServer {
         }
 
         recommendation.instructions = executionPath.path === 'team'
-          ? `${executionPath.summary} Do NOT implement in chat. ${executionPath.teamOffer ?? 'Offer roland team and wait for confirmation.'}`
+          ? `${executionPath.summary} Do NOT implement in chat. ${executionPath.teamOffer ?? 'Offer roland team with --loop-template and wait for confirmation.'}` +
+            (executionPath.loopTemplate
+              ? ` Pure ClosedLoop template: ${executionPath.loopTemplate}.`
+              : '')
           : suggestRecipe
           ? `Adopt the "${agentName}" persona. A multi-agent recipe "${topRecipe.name}" is recommended — offer to run it, or proceed as the recommended agent if the user prefers a single pass. ${executionPath.summary}`
           : isComplexExecution
@@ -3398,13 +3404,25 @@ export class McpServer {
         const greeting = `# 👋 Roland is ready
 
 ${blockerWarning}
+## Hybrid architecture
+
+| Layer | Role |
+|-------|------|
+| **Hermes** | Primary PM / strategist — plan missions, triage work, trigger loops |
+| **Roland** | Loop execution engine — PACVRE closed-loop harness, specialist spawns, verification gates |
+
+Use **Hermes** (roland chat, Cursor @roland, or \`roland team "…"\`) for planning. The dashboard monitors active loops.
+
 ## What I can do
 
 | Mode | Use when | How |
 |------|----------|-----|
 | **Direct in chat** | Single-file edits · Q&A · Quick fixes · < 30 min | I edit files here in Cursor |
-| **PM Team run** | Features · Refactors · Tests · Multi-file · > 30 min | \`roland_run_team({ goal })\` after you confirm |
+| **Team run (Hermes PM)** | Features · Refactors · Tests · Multi-file · > 30 min | \`roland_run_team({ goal })\` after you confirm |
+| **Closed-loop mission** | Iterative PACVRE with verification gates | \`roland team "goal" --loop-template full-cycle-verified-loop\` |
 | **Background mode** | Long-running goals while you keep working | \`roland team "goal" --background\` in terminal |
+
+> [DEPRECATED] Legacy in-loop PM Team (\`use_pm_team: true\`) remains for backward compatibility — Hermes is the recommended PM layer.
 
 Every request is triaged to **Direct** or **Team** — I show the path and reasoning before acting.
 
@@ -3504,7 +3522,7 @@ What would you like to work on?`;
             'Run `roland bg-status` in your terminal to check background job health',
             `Logs: ${logFile}`,
           ],
-          tip: 'The Lead PM is decomposing your goal now. Wave 1 kicks off in ~30 s — call pm_standup() to see the plan and any early blockers.',
+          tip: '[DEPRECATED] Legacy Lead PM is decomposing your goal. Prefer Hermes for PM — call pm_standup() to see the plan and any early blockers.',
         };
       },
       {
