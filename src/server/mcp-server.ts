@@ -89,6 +89,8 @@ export const MCP_AUTO_APPROVE_TOOLS = [
   'health_check',
   'roland_hello',
   'board_status',
+  'hitl_status',
+  'poll_hitl_events',
   'pm_standup',
   'triage',
   'list_team',
@@ -3131,6 +3133,73 @@ export class McpServer {
           ...McpServer.PROJECT_CONTEXT_SCHEMA,
           goal: { type: 'string', description: 'Optional goal hint for smart command-board recall' },
           format: { type: 'string', enum: ['markdown', 'json', 'verbose'], description: 'Output shape (default: markdown concise summary)' },
+        },
+        required: [],
+      }
+    );
+
+    // hitl_status — HITL escalations, blockers, verification gates (Hermes / Master Chief)
+    this.registerTool(
+      'hitl_status',
+      'Human-in-the-loop status for Hermes (Master Chief): mission blockers, git-commit approval, verification failures, loop escalation, pause/abort. Returns structured report + Master Chief summary line. Use when monitoring Roland team missions or after poll_hitl_events returns new events.',
+      async (args: Record<string, unknown>) => {
+        const ctx = this.resolveToolProjectContext(args);
+        const {
+          buildHitlStatusReport,
+          formatHitlStatusMarkdown,
+          formatHermesHitlSummary,
+        } = await import('../rco/hitl-hermes.js');
+        const report = buildHitlStatusReport(ctx.stateDir);
+        const summary = formatHermesHitlSummary(report);
+        if (args.format === 'json') {
+          return { ...report, summary, project_root: ctx.projectRoot, state_dir: ctx.stateDir };
+        }
+        return {
+          markdown: formatHitlStatusMarkdown(report),
+          summary,
+          report,
+          project_root: ctx.projectRoot,
+          state_dir: ctx.stateDir,
+        };
+      },
+      {
+        type: 'object',
+        properties: {
+          ...McpServer.PROJECT_CONTEXT_SCHEMA,
+          format: { type: 'string', enum: ['markdown', 'json'], description: 'Output shape (default: markdown)' },
+        },
+        required: [],
+      }
+    );
+
+    // poll_hitl_events — push-style event poll for Hermes (since timestamp)
+    this.registerTool(
+      'poll_hitl_events',
+      'Poll new HITL escalation events since a timestamp (epoch ms). Events append to .roland/hermes-hitl-events.jsonl when Roland hits HITL walls. Hermes should poll during active missions and call hitl_status when events arrive.',
+      async (args: Record<string, unknown>) => {
+        const ctx = this.resolveToolProjectContext(args);
+        const { pollHermesHitlEvents, buildHitlStatusReport, formatHermesHitlSummary } =
+          await import('../rco/hitl-hermes.js');
+        const since = typeof args.since === 'number' ? args.since : 0;
+        const limit = typeof args.limit === 'number' ? args.limit : 50;
+        const events = pollHermesHitlEvents(ctx.stateDir, since, limit);
+        const report = buildHitlStatusReport(ctx.stateDir);
+        return {
+          events,
+          count: events.length,
+          latestTimestamp: events.length > 0 ? events[events.length - 1]!.timestamp : since,
+          waitingOnHitl: report.waitingOnHitl,
+          summary: formatHermesHitlSummary(report),
+          project_root: ctx.projectRoot,
+          state_dir: ctx.stateDir,
+        };
+      },
+      {
+        type: 'object',
+        properties: {
+          ...McpServer.PROJECT_CONTEXT_SCHEMA,
+          since: { type: 'number', description: 'Epoch ms — return events newer than this (default 0 = all recent)' },
+          limit: { type: 'number', description: 'Max events to return (default 50)' },
         },
         required: [],
       }

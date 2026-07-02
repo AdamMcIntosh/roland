@@ -9,6 +9,7 @@
 import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
+import { emitHermesHitlEvent } from '../rco/hitl-hermes.js';
 
 export const GIT_COMMIT_APPROVAL_FILE = 'git-commit-approval.json';
 export const GIT_COMMIT_APPROVAL_POLL_MS = 2_000;
@@ -88,6 +89,27 @@ export class GitCommitApprovalQueue {
       iteration: request.iteration,
       timeoutMs: partial.timeoutMs,
     });
+    try {
+      const stateDir = path.dirname(this.filePath);
+      emitHermesHitlEvent(stateDir, {
+        kind: 'git-commit-approval',
+        blockerDescription: request.message.slice(0, 200),
+        currentGate: 'git-commit',
+        suggestedActions: [
+          `roland approve-commit ${request.id}`,
+          `roland reject-commit ${request.id}`,
+          'roland hitl-status',
+        ],
+        detail: {
+          id: request.id,
+          iteration: request.iteration,
+          hookLabel: request.hookLabel,
+          timeoutAt: request.timeoutAt,
+        },
+      });
+    } catch {
+      /* Hermes propagation must not block approval queue */
+    }
     return request;
   }
 

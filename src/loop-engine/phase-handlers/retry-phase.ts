@@ -90,6 +90,24 @@ export class RetryPhaseHandler implements PhaseHandler {
         relatedIds: [],
       });
       ctx.commandBoard?.appendBullet('Open Intel', `[RETRY][ESCALATE] ${summary}`);
+      if (ctx.stateDir) {
+        const { emitHermesHitlEvent } = await import('../../rco/hitl-hermes.js');
+        emitHermesHitlEvent(ctx.stateDir, {
+          kind: 'loop-escalation',
+          blockerDescription: summary,
+          currentGate: 'escalation',
+          suggestedActions: [
+            'roland resume',
+            'roland replan',
+            'roland hitl-status',
+          ],
+          detail: {
+            iteration: ctx.iteration,
+            retryCount: ctx.state.retryCount,
+            maxRetries,
+          },
+        });
+      }
       return { success: false, summary, shouldEscalate: true };
     }
 

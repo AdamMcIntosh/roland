@@ -29,6 +29,7 @@
  *   GET  /api/github/repos           → list authenticated user repos (short TTL cache)
  *   POST /api/github/clone           → clone repo, init .roland/, npm install, switch context
  *   GET  /api/board-status         → UNSC concise summary (blackboard + command board)
+ *   GET  /api/hitl-status          → HITL escalations / blockers (Hermes propagation)
  *   GET  /api/git-commit-approval     → pending git-commit HITL approval
  *   POST /api/git-commit-approval/approve → approve (optional edited message)
  *   POST /api/git-commit-approval/reject  → reject commit
@@ -77,6 +78,7 @@ import {
   buildSupervisorStartDiagnostics,
   onMissionStateChange,
 } from '../dist/rco/mission-state.js';
+import { onHitlHermesEvent } from '../dist/rco/hitl-hermes.js';
 import { isComplexGoalForDag } from '../dist/rco/mission-dag.js';
 import {
   classifyGitError,
@@ -704,6 +706,17 @@ onMissionStateChange((stateDir, reason) => {
   void pushCurrentState();
 });
 
+onHitlHermesEvent((stateDir, event) => {
+  const resolved = path.resolve(stateDir);
+  if (resolved !== path.resolve(activeStateDir)) return;
+  logState('HITL Hermes event — pushing live update', {
+    kind: event.kind,
+    gate: event.currentGate,
+    id: event.id,
+  });
+  void pushCurrentState();
+});
+
 async function pushCurrentState() {
   sanitizeStaleMissionState(activeStateDir, (msg, detail) => logState(msg, detail));
   const runState  = readActiveRunStateForClient(activeStateDir);
@@ -714,11 +727,13 @@ async function pushCurrentState() {
   const taskGit = readTaskGitPayload();
   const supervisor = summarizeSupervisorPayload();
   const loopHealth = await readLoopHealthPayload();
+  const hitlStatus = await readHitlStatusPayload();
   lastStateFingerprint = computeStateFingerprint(runState, hitlState, supervisor);
   broadcast({
     type: 'state-update',
     runState,
     hitlState,
+    hitlStatus,
     boardStatus,
     missionDag,
     projectContext,
@@ -744,6 +759,28 @@ async function loadBoardReportModule() {
   } catch {
     return null;
   }
+}
+
+async function loadHitlHermesModule() {
+  const modPath = path.join(__dirname, '..', 'dist', 'rco', 'hitl-hermes.js');
+  try {
+    return await import(pathToFileURL(modPath).href);
+  } catch {
+    return null;
+  }
+}
+
+async function readHitlStatusPayload() {
+  const mod = await loadHitlHermesModule();
+  if (!mod) return null;
+  const report = mod.buildHitlStatusReport(activeStateDir);
+  return {
+    report,
+    summary: mod.formatHermesHitlSummary(report),
+    waitingOnHitl: report.waitingOnHitl,
+    markdown: mod.formatHitlStatusMarkdown(report),
+    updatedAt: Date.now(),
+  };
 }
 
 async function loadLoopHealthModule() {
@@ -2375,6 +2412,23 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ── /api/hitl-status GET — structured HITL report for Hermes / dashboard ─
+  if (url === '/api/hitl-status' && method === 'GET') {
+    try {
+      const payload = await readHitlStatusPayload();
+      if (payload) {
+        logApi('GET', url, 'ok', { waitingOnHitl: payload.waitingOnHitl, gate: payload.report?.currentGate ?? null });
+        jsonOk(res, payload);
+        return;
+      }
+      jsonOk(res, { fallback: true, markdown: '(Run npm run build for full hitl-status API)' });
+    } catch (e) {
+      logApi('GET', url, `error: ${e.message}`);
+      jsonErr(res, e.message, 500);
+    }
+    return;
+  }
+
   // ── /api/blackboard GET ──────────────────────────────────────────────────
   if (url === '/api/blackboard' && method === 'GET') {
     const entries = readBlackboardEntries();
@@ -3035,7 +3089,7 @@ server.listen(port, host, () => {
   console.log(`  Project   : ${activeProjectRoot}`);
   console.log(`  APIs      : ${localBase}/api/usage  ${localBase}/api/run-state`);
   console.log(`              ${localBase}/api/memory  ${localBase}/api/hitl/:cmd`);
-  console.log(`              ${localBase}/api/board-status  ${localBase}/api/mission-dag`);
+  console.log(`              ${localBase}/api/board-status  ${localBase}/api/hitl-status`);
   console.log(`              ${localBase}/api/project-context  ${localBase}/api/task-git`);
   console.log(`              ${localBase}/api/team-goal`);
   console.log(`              ${localBase}/api/blockers/:id/ignore`);

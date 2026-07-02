@@ -22,6 +22,7 @@
 import fs from 'fs';
 import path from 'path';
 import { isSupervisorAlive, isRunStateActive } from './mission-state.js';
+import { emitHermesHitlEvent } from './hitl-hermes.js';
 
 export const HITL_COMMAND_FILE = 'hitl.json';
 export const HITL_STATE_FILE   = 'hitl-state.json';
@@ -65,6 +66,7 @@ export class HitlQueue {
     queue.push({ ...cmd, timestamp: Date.now() });
     this.writeQueue(queue);
     this._updateObserverState(cmd.cmd);
+    this._emitHermesCommand(cmd);
   }
 
   // ── Orchestrator side (read) ─────────────────────────────────────────────
@@ -108,6 +110,17 @@ export class HitlQueue {
     };
     fs.mkdirSync(path.dirname(this.stateFile), { recursive: true });
     fs.writeFileSync(this.stateFile, JSON.stringify(state, null, 2), 'utf-8');
+    if (paused) {
+      try {
+        const stateDir = path.dirname(this.stateFile);
+        emitHermesHitlEvent(stateDir, {
+          kind: 'hitl-pause',
+          blockerDescription: 'Run paused by operator — awaiting resume',
+          currentGate: 'pause',
+          suggestedActions: ['roland resume', 'roland inject "<directive>"', 'roland abort'],
+        });
+      } catch { /* non-fatal */ }
+    }
   }
 
   /** Block until resumed, returns true if run should be aborted. */
@@ -160,6 +173,20 @@ export class HitlQueue {
   private writeQueue(queue: HitlCommand[]): void {
     fs.mkdirSync(path.dirname(this.cmdFile), { recursive: true });
     fs.writeFileSync(this.cmdFile, JSON.stringify(queue, null, 2), 'utf-8');
+  }
+
+  private _emitHermesCommand(cmd: Omit<HitlCommand, 'timestamp'>): void {
+    try {
+      const stateDir = path.dirname(this.cmdFile);
+      if (cmd.cmd === 'abort') {
+        emitHermesHitlEvent(stateDir, {
+          kind: 'hitl-abort-pending',
+          blockerDescription: 'Abort queued — run will stop after current wave',
+          currentGate: 'abort',
+          suggestedActions: ['roland resume  # if paused', 'roland bg-stop  # immediate stop'],
+        });
+      }
+    } catch { /* non-fatal */ }
   }
 
   /**

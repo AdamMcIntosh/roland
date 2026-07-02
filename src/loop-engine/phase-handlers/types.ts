@@ -23,6 +23,8 @@ export interface PhaseResult {
 
 export interface PhaseHandlerContext {
   goal: string;
+  /** Roland state dir — used for HITL → Hermes event propagation. */
+  stateDir?: string;
   state: LoopState;
   blackboard: Blackboard;
   commandBoard?: CommandBlackboard;

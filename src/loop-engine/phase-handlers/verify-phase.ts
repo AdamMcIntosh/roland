@@ -135,6 +135,30 @@ export class VerifyPhaseHandler implements PhaseHandler {
       `[EVAL-GATE] ${evaluation.summary} (confidence=${evaluation.confidence}) — ${detailLines}`,
     );
 
+    if (ctx.stateDir && !evaluation.accepted) {
+      const { emitHermesHitlEvent } = await import('../../rco/hitl-hermes.js');
+      emitHermesHitlEvent(ctx.stateDir, {
+        kind: evaluation.confidence === 0 ? 'verification-gate' : 'verification-failure',
+        blockerDescription: evaluation.summary,
+        currentGate: 'verification',
+        suggestedActions: [
+          'roland hitl-status',
+          'roland board-status --concise',
+          'roland inject "<fix guidance>"',
+        ],
+        detail: {
+          confidence: evaluation.confidence,
+          accepted: evaluation.accepted,
+          iteration: ctx.iteration,
+          gates: evaluation.gates?.map((g) => ({
+            name: g.name,
+            pass: g.pass,
+            confidence: g.confidence,
+          })),
+        },
+      });
+    }
+
     return {
       success: evaluation.accepted,
       summary: evaluation.summary,

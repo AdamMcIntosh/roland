@@ -668,6 +668,7 @@ export class LoopEngine {
     try {
       result = await handler.execute({
         goal: this.goal,
+        stateDir: this.stateDir,
         state: this.store.get(),
         blackboard: this.blackboard,
         commandBoard: this.commandBoard,

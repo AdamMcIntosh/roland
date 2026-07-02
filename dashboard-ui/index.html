@@ -1976,6 +1976,39 @@
     }
     [data-theme="light"] .hermes-cmd-chip { background: rgba(99,102,241,0.08); }
 
+    /* HITL blocked — mission waiting on operator (Hermes propagation) */
+    .hitl-blocked-banner {
+      margin: 0.55rem 0 0.65rem;
+      padding: 0.65rem 0.85rem;
+      border-radius: var(--radius);
+      border: 1px solid rgba(245,158,11,0.45);
+      background: rgba(245,158,11,0.12);
+      color: #fcd34d;
+      font-size: 0.76rem;
+      line-height: 1.45;
+    }
+    .hitl-blocked-banner strong { color: #fde68a; }
+    .hitl-blocked-banner .hitl-gate {
+      display: inline-block;
+      margin-left: 0.35rem;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      background: rgba(0,0,0,0.25);
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .hitl-blocked-banner .hitl-actions {
+      margin-top: 0.35rem;
+      font-family: ui-monospace, monospace;
+      font-size: 0.68rem;
+      color: var(--cyan);
+    }
+    [data-theme="light"] .hitl-blocked-banner {
+      background: rgba(245,158,11,0.1);
+      color: #92400e;
+    }
+
     /* MCP live-sync banner — shown when an external MCP/Hermes mission is detected */
     .mcp-live-banner {
       display: none;
@@ -3517,6 +3550,7 @@
   let usageData    = [];
   let runState     = null;
   let hitlState    = null;
+  let hitlStatus   = null;
   let boardStatus  = null;
   let missionDagPayload = null;
   let selectedMissionNodeId = null;
@@ -3987,6 +4021,7 @@
             });
             if (msg.runState  !== undefined) runState  = msg.runState;
             if (msg.hitlState !== undefined) hitlState = msg.hitlState;
+            if (msg.hitlStatus !== undefined) hitlStatus = msg.hitlStatus;
             if (msg.boardStatus !== undefined) boardStatus = msg.boardStatus;
             if (msg.missionDag !== undefined) missionDagPayload = msg.missionDag;
             if (msg.projectContext !== undefined) applyProjectContextPayload(msg.projectContext);
@@ -4055,6 +4090,10 @@
       // Also fetch hitl state for fresh overlay
       const hr = await fetch('/api/hitl-state');
       hitlState = await hr.json();
+      try {
+        const hs = await fetch('/api/hitl-status');
+        hitlStatus = hs.ok ? await hs.json() : null;
+      } catch { hitlStatus = null; }
       if (runState && hitlState) {
         if (hitlState.paused)       runState.hitlPaused       = true;
         else                        delete runState.hitlPaused;
@@ -5724,6 +5763,21 @@
     return html;
   }
 
+  /** HITL blocked strip — surfaces Hermes propagation summary on live panel. */
+  function renderHitlBlockedBanner() {
+    const report = hitlStatus?.report;
+    if (!report?.waitingOnHitl && !hitlStatus?.waitingOnHitl) return '';
+    const summary = hitlStatus?.summary || 'Mission blocked — awaiting operator input';
+    const gate = report?.currentGate || 'HITL';
+    const detail = (report?.blockerDescription || report?.hitlReason || '').slice(0, 140);
+    const actions = (report?.suggestedActions || []).slice(0, 2).join(' · ');
+    return '<div class="hitl-blocked-banner" role="status">' +
+      '🎮 <strong>Waiting on HITL</strong><span class="hitl-gate">' + escHtml(gate) + '</span>' +
+      '<div>' + escHtml(summary) + (detail ? ' — ' + escHtml(detail) : '') + '</div>' +
+      (actions ? '<div class="hitl-actions">' + escHtml(actions) + '</div>' : '') +
+      '</div>';
+  }
+
   /** Compact blocker strip for Live Status — links to Command Board actions. */
   function renderActiveBlockersBanner() {
     const blockers = boardStatus?.report?.blockers || boardStatus?.fallback?.blockers || [];
@@ -5831,6 +5885,7 @@
         '<div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%"></div></div>' +
       '</div>' +
       bannerHtml +
+      renderHitlBlockedBanner() +
       renderActiveBlockersBanner() +
       (function () {
         var hasLoop = rs.loopTemplateId || (LoopEngine.getHealth() && LoopEngine.getHealth().loop && LoopEngine.getHealth().loop.active);
