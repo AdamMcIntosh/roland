@@ -1,9 +1,11 @@
 /**
- * ## CLI-First + Hermes Monitoring Shift
+ * ## CLI-First Simplification
  *
  * Shared CLI printers for mission monitoring — single source of truth used by
- * `roland hitl-status`, `roland mission-summary`, `roland hitl-events`, and
- * optionally MCP/dashboard fallbacks. Hermes polls via MCP; operators use CLI.
+ * `roland status`, `roland live`, `roland hitl-status`, `roland mission-summary`,
+ * `roland hitl-events`, and MCP parity tools. Hermes polls via MCP; operators use CLI.
+ *
+ * ## Dashboard Demoted — CLI + Hermes Primary Complete
  */
 
 import {
@@ -16,7 +18,11 @@ import {
   readMissionCompletionReport,
   buildMissionCompletionReport,
 } from './hitl-hermes.js';
+import { buildBoardStatusReport, formatConciseUnscSummary } from './board-report.js';
 import { printGitCommitApprovalStatus } from './git-commit-approval-cli.js';
+import { readRunState } from './run-state.js';
+import { readActiveMissionMeta, readSupervisorRecord } from './mission-state.js';
+import { isProcessRunning } from './supervisor.js';
 
 const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
 const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
@@ -28,6 +34,203 @@ const r = (s: string) => `\x1b[31m${s}\x1b[0m`;
 export interface StatusCliOpts {
   json?: boolean;
   goal?: string;
+  concise?: boolean;
+}
+
+export interface LiveMonitorOpts extends StatusCliOpts {
+  intervalSec?: number;
+  once?: boolean;
+}
+
+const VIA_LABELS: Record<string, string> = {
+  mcp: 'MCP (Hermes/Cursor)',
+  cli: 'CLI',
+  cursor: 'Cursor @roland',
+  dashboard: 'Dashboard (legacy)',
+};
+
+function collectSuggestedActions(
+  stateDir: string,
+  hitl: ReturnType<typeof buildHitlStatusReport>,
+  runActive: boolean,
+): string[] {
+  const actions = [...hitl.suggestedActions];
+  if (runActive) {
+    if (!actions.some((a) => a.startsWith('roland live'))) {
+      actions.unshift('roland live');
+    }
+    if (!actions.some((a) => a.startsWith('roland hitl-status'))) {
+      actions.push('roland hitl-status');
+    }
+  } else if (!actions.some((a) => a.startsWith('roland mission-summary'))) {
+    actions.push('roland mission-summary');
+  }
+  if (!actions.some((a) => a.startsWith('roland board-status'))) {
+    actions.push('roland board-status --concise');
+  }
+  const sup = readSupervisorRecord(stateDir);
+  if (sup && isProcessRunning(sup.pid) && !actions.some((a) => a.startsWith('roland bg-logs'))) {
+    actions.push('roland bg-logs --follow');
+  }
+  return [...new Set(actions)].slice(0, 6);
+}
+
+/** One-shot unified mission snapshot — primary `roland status` output. */
+export function printUnifiedStatus(stateDir = '.roland', opts: StatusCliOpts = {}): void {
+  const board = buildBoardStatusReport(stateDir, opts.goal);
+  const hitl = buildHitlStatusReport(stateDir);
+  const runState = readRunState(stateDir);
+  const meta = readActiveMissionMeta(stateDir);
+  const sup = readSupervisorRecord(stateDir);
+  const bgAlive = sup ? isProcessRunning(sup.pid) : false;
+  const triggeredVia = runState?.triggeredVia ?? meta?.triggeredVia;
+  const suggestedActions = collectSuggestedActions(stateDir, hitl, board.runActive);
+
+  const payload = {
+    runActive: board.runActive,
+    goal: board.goal,
+    triggeredVia: triggeredVia ?? null,
+    background: sup
+      ? { pid: sup.pid, alive: bgAlive, logFile: sup.logFile, goal: sup.goal }
+      : null,
+    board: {
+      blockers: board.counts.blockers,
+      tasks: board.counts.tasks,
+      done: board.counts.done,
+      roster: board.roster,
+    },
+    hitl: {
+      waitingOnHitl: hitl.waitingOnHitl,
+      summary: formatHermesHitlSummary(hitl),
+      currentGate: hitl.currentGate,
+      paused: hitl.hitl.paused,
+    },
+    loop: hitl.loop ?? null,
+    missionCompletion: hitl.missionCompletion ?? null,
+    suggestedActions,
+    concise: formatConciseUnscSummary(board),
+  };
+
+  if (opts.json) {
+    console.log(JSON.stringify(payload, null, 2));
+    return;
+  }
+
+  const cols = Math.min(((process.stderr as NodeJS.WriteStream & { columns?: number }).columns ?? 80), 88);
+  const hr = dim('─'.repeat(cols - 4));
+  const w = (s = '') => console.error(s);
+
+  w();
+  w(`  ${bold('Roland Status')}  ${dim('(CLI · Hermes primary · dashboard optional)')}`);
+  w(`  ${hr}`);
+  w();
+
+  const runWord = board.runActive ? g('ACTIVE') : dim('idle');
+  w(`  ${dim('Run')}           ${runWord}${board.goal ? dim(` — "${board.goal.slice(0, 60)}"`) : ''}`);
+  if (triggeredVia) {
+    w(`  ${dim('Launched via')}  ${cy(VIA_LABELS[triggeredVia] ?? triggeredVia)}`);
+  }
+  if (sup) {
+    const bgWord = bgAlive ? g(`background PID ${sup.pid}`) : r(`stale PID ${sup.pid}`);
+    w(`  ${dim('Supervisor')}    ${bgWord}`);
+  }
+  if (runState?.status) {
+    const wave = runState.currentWave != null ? ` · wave ${runState.currentWave}` : '';
+    const tasks =
+      runState.completedTasks != null && runState.totalTasks != null
+        ? ` · tasks ${runState.completedTasks}/${runState.totalTasks}`
+        : '';
+    w(`  ${dim('Phase')}         ${y(String(runState.status))}${wave}${tasks}`);
+  }
+
+  w();
+  w(`  ${bold('HITL')}  ${hitl.waitingOnHitl ? r('⚠') : g('●')} ${formatHermesHitlSummary(hitl)}`);
+  if (hitl.currentGate) w(`  ${dim('Gate')}          ${y(hitl.currentGate)}`);
+  if (hitl.loop) {
+    const lp = hitl.loop;
+    w(
+      `  ${dim('Loop')}          ${dim(`${lp.status} · ${lp.phase ?? '—'} · iter ${lp.iteration}`)}`,
+    );
+  }
+
+  w();
+  w(`  ${bold('Board')}  ${board.counts.blockers} blocker${board.counts.blockers === 1 ? '' : 's'} · ${board.counts.done} done · ${board.counts.tasks} tasks`);
+  if (board.blockers.length > 0) {
+    for (const b of board.blockers.slice(0, 3)) {
+      w(`    ${r('•')} ${b.title.slice(0, 70)}${b.assignee ? dim(` → ${b.assignee}`) : ''}`);
+    }
+  }
+
+  if (hitl.missionCompletion && !board.runActive) {
+    w();
+    w(`  ${bold('Last mission')}  ${hitl.missionCompletion.summary}`);
+  }
+
+  w();
+  w(`  ${bold('Suggested actions')}`);
+  for (const cmd of suggestedActions.slice(0, 5)) {
+    w(`    ${cy(cmd)}`);
+  }
+  w();
+  w(`  ${dim('Live monitor:')} ${cy('roland live')}  ${dim('· TUI:')} ${cy('roland status --tui')}`);
+  w();
+
+  printGitCommitApprovalStatus(stateDir);
+
+  if (!opts.concise) {
+    console.log(formatConciseUnscSummary(board));
+  }
+}
+
+/** Continuous live monitor — refreshes unified status on an interval. */
+export async function runLiveMonitor(stateDir = '.roland', opts: LiveMonitorOpts = {}): Promise<void> {
+  if (opts.json) {
+    printUnifiedStatus(stateDir, opts);
+    return;
+  }
+
+  const intervalMs = Math.max(2, opts.intervalSec ?? 5) * 1000;
+  const isTty = (process.stderr as NodeJS.WriteStream).isTTY;
+  let lastEventTs = 0;
+
+  const tick = () => {
+    if (isTty) process.stderr.write('\x1b[2J\x1b[H');
+    printUnifiedStatus(stateDir, { ...opts, concise: true });
+
+    const events = pollHermesHitlEvents(stateDir, lastEventTs, 20);
+    if (events.length > 0) {
+      lastEventTs = events[events.length - 1]!.timestamp;
+      console.error(`\n  ${bold('Recent events')}  ${dim(`(${events.length} new)`)}\n`);
+      for (const ev of events.slice(-5)) {
+        const ts = new Date(ev.timestamp).toISOString().slice(11, 19);
+        console.error(`    ${dim(ts)} ${y(ev.kind)}${ev.currentGate ? dim(` [${ev.currentGate}]`) : ''}`);
+        if (ev.blockerDescription) {
+          console.error(`      ${ev.blockerDescription.slice(0, 100)}`);
+        }
+      }
+      console.error('');
+    }
+
+    if (isTty) {
+      console.error(
+        dim(`  Refreshing every ${intervalMs / 1000}s · Ctrl+C to stop · roland hitl-events --since ${lastEventTs}`),
+      );
+    }
+  };
+
+  tick();
+  if (opts.once) return;
+
+  await new Promise<void>((resolve) => {
+    const timer = setInterval(tick, intervalMs);
+    const onSignal = () => {
+      clearInterval(timer);
+      console.error('');
+      resolve();
+    };
+    process.on('SIGINT', onSignal);
+    process.on('SIGTERM', onSignal);
+  });
 }
 
 /** Print HITL status — delegates to buildHitlStatusReport (MCP parity). */

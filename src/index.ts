@@ -5,9 +5,15 @@
  * Primary commands:
  *   roland "goal"       Run a PM team on a goal (shortcut for `roland team`)
  *   roland team         PM-first parallel agent execution with live TUI
+ *   roland status       Unified mission snapshot (board + HITL + supervisor)
+ *   roland live         Continuous live monitor (refreshes every 5s)
  *   roland watch        Monitor git commits / file changes; auto-run on change
  *   roland pr [number]  Review (and optionally fix) a GitHub PR via `gh`
- *   roland status       Live TUI observer for a running job
+ *
+ * Monitoring (CLI primary — Hermes uses MCP parity):
+ *   roland board-status   UNSC summary
+ *   roland hitl-status    HITL gates and blockers
+ *   roland mission-summary  Last terminal mission outcome
  *
  * Utility commands:
  *   roland serve        Start stdio MCP (Cursor) or HTTP MCP with --mcp
@@ -285,7 +291,9 @@ function printHelp(): void {
   ln(`    ${cy('roland')} ${b('team')} "goal"               Run Pure ClosedLoop mission (CLI primary)`);
   ln(`    ${cy('roland')} ${b('watch')}                      Watch git commits, auto-run on change`);
   ln(`    ${cy('roland')} ${b('pr')} [number]               Review (and optionally fix) a GitHub PR`);
-  ln(`    ${cy('roland')} ${b('status')}                     Live TUI for a running job ${d('(optional — prefer hitl-status)')}`);
+  ln(`    ${cy('roland')} ${b('status')} [--json]              Unified snapshot ${d('(board + HITL + supervisor)')}`);
+  ln(`    ${cy('roland')} ${b('live')} [--interval N]          Live monitor ${d('(refreshes every 5s)')}`);
+  ln(`    ${cy('roland')} ${b('status --tui')}                 Legacy live TUI dashboard`);
   ln(`    ${cy('roland')} ${b('board-status')}              UNSC summary (add --concise for chat-friendly)`);
   ln(`    ${cy('roland')} ${b('hitl-status')} [--json]       HITL gates, blockers, mission outcome`);
   ln(`    ${cy('roland')} ${b('mission-summary')} [--json]   Latest terminal mission report (Hermes)`);
@@ -367,6 +375,10 @@ function printHelp(): void {
   ln(`    ${d('# Review a PR and push fixes')}`);
   ln(`    roland pr 42 --fix --notify`);
   ln();
+  ln(`    ${d('# Monitor an active background mission')}`);
+  ln(`    roland live`);
+  ln(`    roland hitl-status --json`);
+  ln();
   ln(`    ${d('# Approve a loop git-commit from terminal (HITL)')}`);
   ln(`    roland approve-commit --message "feat: ship iteration 2"`);
   ln(`    roland reject-commit --reason "needs more tests"`);
@@ -377,7 +389,7 @@ function printHelp(): void {
 
 const KNOWN_CMDS = new Set([
   'serve', 'mcp', 'mcp-config', 'doctor', 'pm-log',
-  'team', 'run', 'goal', 'start', 'status', 'watch', 'pr', 'chat',
+  'team', 'run', 'goal', 'start', 'status', 'live', 'watch', 'pr', 'chat',
   // HITL controls
   'pause', 'resume', 'unblock', 'inject', 'replan', 'abort', 'hitl-status',
   'hitl-events', 'mission-summary',
@@ -480,14 +492,39 @@ async function main(): Promise<void> {
       }
       case 'status': {
         const stateDir    = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
-        const simpleFlag  = rest.includes('--simple-tui') || rest.includes('--no-fancy');
-        const { isSimpleTui, SimpleTuiRenderer } = await import('./dashboard/simple-tui.js');
-        if (simpleFlag || isSimpleTui()) {
-          await SimpleTuiRenderer.watch(stateDir);
-        } else {
-          const { TuiRenderer } = await import('./dashboard/tui.js');
-          await TuiRenderer.watch(stateDir);
+        const jsonMode    = rest.includes('--json');
+        const concise     = rest.includes('--concise') || rest.includes('-c');
+        const tuiMode     = rest.includes('--tui') || rest.includes('--watch-tui');
+        const goalArgIdx  = rest.indexOf('--goal');
+        const goal        = goalArgIdx >= 0 ? rest[goalArgIdx + 1] : undefined;
+
+        if (tuiMode) {
+          const simpleFlag = rest.includes('--simple-tui') || rest.includes('--no-fancy');
+          const { isSimpleTui, SimpleTuiRenderer } = await import('./dashboard/simple-tui.js');
+          if (simpleFlag || isSimpleTui()) {
+            await SimpleTuiRenderer.watch(stateDir);
+          } else {
+            const { TuiRenderer } = await import('./dashboard/tui.js');
+            await TuiRenderer.watch(stateDir);
+          }
+          break;
         }
+
+        const { printUnifiedStatus } = await import('./rco/status-cli.js');
+        printUnifiedStatus(stateDir, { json: jsonMode, goal, concise });
+        break;
+      }
+      case 'live': {
+        const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const jsonMode = rest.includes('--json');
+        const once     = rest.includes('--once');
+        const concise  = rest.includes('--concise') || rest.includes('-c');
+        const intervalIdx = rest.indexOf('--interval');
+        const intervalSec = intervalIdx >= 0 ? Number(rest[intervalIdx + 1]) || 5 : 5;
+        const goalArgIdx = rest.indexOf('--goal');
+        const goal = goalArgIdx >= 0 ? rest[goalArgIdx + 1] : undefined;
+        const { runLiveMonitor } = await import('./rco/status-cli.js');
+        await runLiveMonitor(stateDir, { json: jsonMode, goal, concise, intervalSec, once });
         break;
       }
       case 'board-status': {

@@ -1,10 +1,10 @@
 /**
- * ## CLI-First + Hermes Monitoring Shift
+ * ## CLI-First Simplification
  *
  * UNSC board status — human-readable summary of blackboard + command blackboard.
  * Primary CLI: `roland board-status [--concise|--json]`. MCP: `board_status`.
  *
- * ## Dashboard De-emphasized — CLI + Hermes Hybrid Complete
+ * ## Dashboard Demoted — CLI + Hermes Primary Complete
  */
 
 import fs from 'fs';
@@ -321,13 +321,52 @@ export function printBoardStatus(
     console.log(JSON.stringify({ ...report, concise: formatConciseUnscSummary(report) }, null, 2));
     return;
   }
-  const mode = opts.concise ? 'concise' : 'verbose';
-  let output = formatBoardStatusReport(report, { mode });
+
+  const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
+  const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
+  const cy = (s: string) => `\x1b[36m${s}\x1b[0m`;
+  const g = (s: string) => `\x1b[32m${s}\x1b[0m`;
+  const r = (s: string) => `\x1b[31m${s}\x1b[0m`;
+  const y = (s: string) => `\x1b[33m${s}\x1b[0m`;
+
   if (opts.concise) {
     const hitl = buildHitlStatusReport(stateDir);
-    if (hitl.waitingOnHitl || hitl.missionCompletion) {
-      output += `\n\n**HITL:** ${formatHermesHitlSummary(hitl)}`;
+    const actions: string[] = [];
+    if (report.runActive) actions.push('roland live', 'roland hitl-status');
+    if (report.blockers.length > 0) actions.push('roland unblock <task-id> "guidance"');
+    actions.push('roland status', 'roland board-status');
+
+    process.stderr.write('\n');
+    process.stderr.write(`  ${bold('UNSC Board Status')}  ${dim('(CLI primary · Hermes/MCP parity)')}\n`);
+    process.stderr.write('\n');
+    if (report.goal) {
+      process.stderr.write(`  ${dim('Mission')}  ${report.goal.slice(0, 100)}\n`);
     }
+    const runWord = report.runActive ? g('ACTIVE') : dim('idle');
+    process.stderr.write(
+      `  ${dim('Run')}     ${runWord} · ${report.counts.blockers} blocker${report.counts.blockers === 1 ? '' : 's'} · ${report.counts.done} done\n`,
+    );
+    process.stderr.write(`  ${dim('Roster')}  ${formatRosterLine(report.roster)}\n`);
+    if (report.blockers.length > 0) {
+      process.stderr.write('\n');
+      process.stderr.write(`  ${r('Blockers — resolve first')}\n`);
+      for (const b of report.blockers.slice(0, 4)) {
+        process.stderr.write(`    ${r('•')} ${b.title.slice(0, 80)}\n`);
+      }
+    }
+    if (hitl.waitingOnHitl || hitl.missionCompletion) {
+      process.stderr.write(`\n  ${bold('HITL')}  ${formatHermesHitlSummary(hitl)}\n`);
+    }
+    process.stderr.write('\n');
+    process.stderr.write(`  ${bold('Suggested actions')}\n`);
+    for (const cmd of [...new Set(actions)].slice(0, 5)) {
+      process.stderr.write(`    ${cy(cmd)}\n`);
+    }
+    process.stderr.write('\n');
+    console.error(formatConciseUnscSummary(report));
+    return;
   }
-  console.error(output);
+
+  const mode = 'verbose';
+  console.error(formatBoardStatusReport(report, { mode }));
 }

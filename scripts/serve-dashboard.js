@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /**
- * ## CLI-First + Hermes Monitoring Shift
+ * ## CLI-First Simplification
  *
- * Roland Dashboard Server — **optional** HTTP adjunct for live loop/HITL monitoring.
- * Primary monitoring: CLI (`roland hitl-status`, `board-status`, `mission-summary`)
+ * Roland Dashboard Server — **optional / deprecated** HTTP adjunct for live loop/HITL monitoring.
+ * Primary monitoring: CLI (`roland status`, `roland live`, `hitl-status`, `board-status`, `mission-summary`)
  * and MCP (`hitl_status`, `poll_hitl_events`, `mission_summary`, `board_status`).
+ * Hermes (Master Chief) is the primary conversational interface — not this dashboard.
  *
- * ## Dashboard De-emphasized — CLI + Hermes Hybrid Complete
+ * ## Dashboard Demoted — CLI + Hermes Primary Complete
  *
  * HTTP + WebSocket server for optional Roland command center.
  *
@@ -3115,8 +3116,10 @@ server.listen(port, host, () => {
   const localBase = `http://127.0.0.1:${port}`;
   const bindBase  = host === '0.0.0.0' ? localBase : `http://${host}:${port}`;
   logDashboard('Roland Dashboard 2.0 listening', { port, host, stateDir: activeStateDir, project: activeProjectRoot });
-  console.log(`\n  🎛  Roland Dashboard 2.0`);
+  console.log(`\n  🎛  Roland Dashboard (optional adjunct — CLI + Hermes primary)`);
   console.log(`  ─────────────────────────────────────────`);
+  console.log(`  ⚠  Deprecated for planning/chat. Use Hermes + CLI for monitoring:`);
+  console.log(`     roland status · roland live · roland hitl-status · roland board-status`);
   console.log(`  UI        : ${bindBase}`);
   console.log(`  Local     : ${localBase}`);
   if (host === '0.0.0.0') {
@@ -3140,7 +3143,8 @@ server.listen(port, host, () => {
     console.log(`  MCP       : ${localBase}/mcp  (health: ${localBase}/mcp/health)`);
     console.log(`  Hermes    : hermes mcp add roland --url ${localBase}/mcp`);
   }
-  console.log(`\n  Open the URL above in your browser (Tailscale: use machine IP).\n`);
+  console.log(`\n  Open the URL above only for optional loop/HITL monitoring.`);
+  console.log(`  Primary: roland status · roland live · Hermes (roland chat)\n`);
   adjustServerHeartbeat();
 });
 

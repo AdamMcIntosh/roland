@@ -7,7 +7,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { printHitlStatus, printMissionSummary, printHitlEvents } from '../../src/rco/status-cli.js';
+import { printHitlStatus, printMissionSummary, printHitlEvents, printUnifiedStatus } from '../../src/rco/status-cli.js';
 import { emitHermesHitlEvent, emitHermesMissionComplete, buildMissionCompletionReport } from '../../src/rco/hitl-hermes.js';
 import { HitlQueue } from '../../src/rco/hitl.js';
 
@@ -85,5 +85,37 @@ describe('status-cli', () => {
 
     const stderr = stderrSpy.mock.calls.map((c) => String(c[0])).join('\n');
     expect(stderr).toContain('blocker');
+  });
+
+  it('printUnifiedStatus outputs combined snapshot with suggested actions', () => {
+    fs.writeFileSync(
+      path.join(stateDir, 'run-state.json'),
+      JSON.stringify({
+        runId: 'r1',
+        goal: 'Ship CLI status',
+        status: 'running',
+        triggeredVia: 'mcp',
+        updatedAt: Date.now(),
+      }),
+    );
+    fs.writeFileSync(
+      path.join(stateDir, 'mission-meta.json'),
+      JSON.stringify({ goal: 'Ship CLI status', status: 'active', triggeredVia: 'mcp' }),
+    );
+
+    printUnifiedStatus(stateDir);
+
+    const stderr = stderrSpy.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(stderr).toContain('Roland Status');
+    expect(stderr).toContain('MCP (Hermes/Cursor)');
+    expect(stderr).toContain('roland live');
+    expect(stderr).toContain('Suggested actions');
+  });
+
+  it('printUnifiedStatus --json writes structured payload', () => {
+    printUnifiedStatus(stateDir, { json: true });
+    const payload = JSON.parse(String(stdoutSpy.mock.calls[0]![0]));
+    expect(payload).toHaveProperty('suggestedActions');
+    expect(payload).toHaveProperty('hitl');
   });
 });

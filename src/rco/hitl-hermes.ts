@@ -1,20 +1,11 @@
 /**
- * ## CLI-First + Hermes Monitoring Shift
+ * ## CLI-First Simplification
  *
  * Single source of truth for mission status bubbling to Hermes (Master Chief).
- * CLI: `roland hitl-status`, `roland mission-summary`, `roland hitl-events`.
+ * CLI: `roland status`, `roland live`, `roland hitl-status`, `roland mission-summary`, `roland hitl-events`.
  * MCP: `hitl_status`, `poll_hitl_events`, `mission_summary`, `board_status`.
  *
- * ## HITL → Hermes Propagation
- *
- * Surfaces Human-in-the-Loop escalations, blockers, verification failures, and
- * terminal mission outcomes via structured events and queryable status reports.
- *
- * Events append to `.roland/hermes-hitl-events.jsonl` for push/poll by MCP clients.
- * Latest completion snapshot: `.roland/hermes-mission-completion.json`.
- * Dashboard (optional) and MCP HTTP subscribe via `onHitlHermesEvent` for live updates.
- *
- * ## Dashboard De-emphasized — CLI + Hermes Hybrid Complete
+ * ## Dashboard Demoted — CLI + Hermes Primary Complete
  */
 
 import fs from 'fs';
