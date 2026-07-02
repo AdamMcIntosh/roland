@@ -9,10 +9,16 @@ import path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   buildHitlStatusReport,
+  buildMissionCompletionReport,
+  emitHermesMissionComplete,
   emitHermesHitlEvent,
   formatHermesHitlSummary,
+  formatHermesMissionCompleteSummary,
+  notifyHermesMissionCompleteFromTeamResult,
   pollHermesHitlEvents,
+  readMissionCompletionReport,
   HERMES_HITL_EVENTS_FILE,
+  HERMES_MISSION_COMPLETION_FILE,
 } from '../../src/rco/hitl-hermes.js';
 import { HitlQueue } from '../../src/rco/hitl.js';
 import { GitCommitApprovalQueue } from '../../src/loop-engine/git-commit-approval.js';
@@ -121,5 +127,78 @@ describe('hitl-hermes', () => {
     const active = buildHitlStatusReport(stateDir);
     const summary = formatHermesHitlSummary(active);
     expect(summary).toMatch(/Mission blocked|git-commit/i);
+  });
+
+  it('emitHermesMissionComplete writes snapshot and mission-complete event', () => {
+    const report = buildMissionCompletionReport(stateDir, {
+      goal: 'Add dark mode toggle',
+      finalStatus: 'completed',
+      successRate: 100,
+      deliverables: ['PR draft: feat: dark mode'],
+      blockers: [],
+      blockersEncountered: 0,
+      wavesRun: 1,
+    });
+    const emitted = emitHermesMissionComplete(stateDir, report);
+
+    expect(emitted.summary).toMatch(/Mission complete/i);
+    expect(fs.existsSync(path.join(stateDir, HERMES_MISSION_COMPLETION_FILE))).toBe(true);
+
+    const stored = readMissionCompletionReport(stateDir);
+    expect(stored?.goal).toBe('Add dark mode toggle');
+    expect(stored?.finalStatus).toBe('completed');
+
+    const events = pollHermesHitlEvents(stateDir, 0);
+    expect(events.some((e) => e.kind === 'mission-complete')).toBe(true);
+  });
+
+  it('notifyHermesMissionCompleteFromTeamResult dedupes by runId', () => {
+    fs.writeFileSync(
+      path.join(stateDir, 'run-state.json'),
+      JSON.stringify({
+        runId: 'run-dedupe',
+        goal: 'Ship feature',
+        status: 'done',
+        startedAt: Date.now() - 5000,
+        updatedAt: Date.now(),
+        currentWave: 1,
+        totalTasks: 1,
+        completedTasks: 1,
+        tasks: [],
+        activeTaskIds: [],
+      }),
+    );
+    fs.writeFileSync(
+      path.join(stateDir, 'loop-state.json'),
+      JSON.stringify({
+        templateId: 'full-cycle-verified-loop',
+        goal: 'Ship feature',
+        status: 'completed',
+        iteration: 1,
+        retryCount: 0,
+        startedAt: Date.now() - 5000,
+        phaseHistory: [],
+      }),
+    );
+
+    const first = notifyHermesMissionCompleteFromTeamResult(stateDir, {
+      goal: 'Ship feature',
+      synthesis: '## Next Steps\n\n1. Review the diff',
+      wavesRun: 1,
+      blockersEncountered: 0,
+    });
+    const second = notifyHermesMissionCompleteFromTeamResult(stateDir, {
+      goal: 'Ship feature',
+      synthesis: '## Next Steps\n\n1. Review the diff',
+      wavesRun: 1,
+      blockersEncountered: 0,
+    });
+
+    expect(second.id).toBe(first.id);
+    expect(formatHermesMissionCompleteSummary(first)).toMatch(/Mission complete/i);
+
+    const status = buildHitlStatusReport(stateDir);
+    expect(status.missionCompletion?.goal).toBe('Ship feature');
+    expect(formatHermesHitlSummary(status)).toMatch(/Mission complete/i);
   });
 });

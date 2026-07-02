@@ -91,6 +91,8 @@ export const MCP_AUTO_APPROVE_TOOLS = [
   'board_status',
   'hitl_status',
   'poll_hitl_events',
+  'mission_summary',
+  'report_completion',
   'pm_standup',
   'triage',
   'list_team',
@@ -3175,7 +3177,7 @@ export class McpServer {
     // poll_hitl_events — push-style event poll for Hermes (since timestamp)
     this.registerTool(
       'poll_hitl_events',
-      'Poll new HITL escalation events since a timestamp (epoch ms). Events append to .roland/hermes-hitl-events.jsonl when Roland hits HITL walls. Hermes should poll during active missions and call hitl_status when events arrive.',
+      'Poll new HITL and mission-complete events since a timestamp (epoch ms). Events append to .roland/hermes-hitl-events.jsonl when Roland hits HITL walls or reaches a terminal mission state. Hermes should poll during active missions; on mission-complete events call mission_summary and report to the operator.',
       async (args: Record<string, unknown>) => {
         const ctx = this.resolveToolProjectContext(args);
         const { pollHermesHitlEvents, buildHitlStatusReport, formatHermesHitlSummary } =
@@ -3203,6 +3205,66 @@ export class McpServer {
         },
         required: [],
       }
+    );
+
+    const missionSummaryHandler = async (args: Record<string, unknown>) => {
+      const ctx = this.resolveToolProjectContext(args);
+      const {
+        readMissionCompletionReport,
+        buildMissionCompletionReport,
+        formatMissionCompleteMarkdown,
+        formatHermesMissionCompleteSummary,
+      } = await import('../rco/hitl-hermes.js');
+      let report = readMissionCompletionReport(ctx.stateDir);
+      if (!report && typeof args.goal === 'string') {
+        report = buildMissionCompletionReport(ctx.stateDir, { goal: args.goal });
+      }
+      if (!report) {
+        return {
+          found: false,
+          summary: 'No mission completion recorded yet.',
+          project_root: ctx.projectRoot,
+          state_dir: ctx.stateDir,
+        };
+      }
+      const summary = formatHermesMissionCompleteSummary(report);
+      if (args.format === 'json') {
+        return { found: true, ...report, summary, project_root: ctx.projectRoot, state_dir: ctx.stateDir };
+      }
+      return {
+        found: true,
+        markdown: formatMissionCompleteMarkdown(report),
+        summary,
+        report,
+        project_root: ctx.projectRoot,
+        state_dir: ctx.stateDir,
+      };
+    };
+
+    const missionSummarySchema = {
+      type: 'object' as const,
+      properties: {
+        ...McpServer.PROJECT_CONTEXT_SCHEMA,
+        goal: { type: 'string', description: 'Optional goal hint when no completion snapshot exists yet' },
+        format: { type: 'string', enum: ['markdown', 'json'], description: 'Output shape (default: markdown)' },
+      },
+      required: [] as string[],
+    };
+
+    // mission_summary — latest terminal mission outcome for Hermes (Master Chief)
+    this.registerTool(
+      'mission_summary',
+      'Latest Roland mission completion report for Hermes: goal, final status, success rate, deliverables, blockers, next action. Auto-written when roland team / ClosedLoop reaches a terminal state. Poll via poll_hitl_events (mission-complete kind) or call after mission finishes.',
+      missionSummaryHandler,
+      missionSummarySchema,
+    );
+
+    // report_completion — alias for mission_summary (Hermes hybrid loop compatibility)
+    this.registerTool(
+      'report_completion',
+      'Alias for mission_summary — returns the latest auto-reported mission completion snapshot for Hermes.',
+      missionSummaryHandler,
+      missionSummarySchema,
     );
 
     // get_team_context — THE HEARTBEAT (structured; pass format:"markdown" for a rendered standup)

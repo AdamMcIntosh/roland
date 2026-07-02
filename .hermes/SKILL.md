@@ -25,17 +25,35 @@ hermes mcp add roland --url http://127.0.0.1:8081/mcp
 
 Poll during any active `roland team` run:
 
-1. **`poll_hitl_events`** — new HITL escalations since last poll (`since`: epoch ms)
-2. **`hitl_status`** — current blocker, gate, suggested actions
-3. **`board_status`** — UNSC summary (blockers first)
+1. **`poll_hitl_events`** — new HITL escalations and **mission-complete** events since last poll (`since`: epoch ms)
+2. **`hitl_status`** — current blocker, gate, suggested actions (includes last mission outcome when idle)
+3. **`mission_summary`** / **`report_completion`** — structured terminal report (goal, status, success rate, deliverables, blockers, next action)
+4. **`board_status`** — UNSC summary (blockers first)
 
 Example monitoring loop:
 
 ```
 poll_hitl_events({ since: <lastTimestamp> })
+→ if any event.kind === "mission-complete": mission_summary() → report summary to operator
 → if count > 0 or waitingOnHitl: hitl_status()
 → board_status({ format: "json" })
 ```
+
+## Mission completion reporting
+
+When Roland reaches a terminal state (**completed**, **failed**, **escalated**, **blocked**, **aborted**), a structured snapshot is written automatically to `.roland/hermes-mission-completion.json` and a **`mission-complete`** event is appended to `hermes-hitl-events.jsonl`.
+
+**Your job:** when you see a `mission-complete` event (or `mission_summary.found === true` after a run), **report the outcome clearly to the operator** using the `summary` one-liner:
+
+> Mission complete — dark mode toggle implemented and verified (100% phase success)
+
+### Completion response protocol
+
+1. **Headline** — Use `mission_summary.summary` (or `poll_hitl_events` event `blockerDescription` for mission-complete).
+2. **Status** — State `finalStatus`, `successRate`, and key deliverables.
+3. **Blockers** — If any, list them and suggest unblock commands.
+4. **Next step** — Offer `nextRecommendedAction` and 1–2 commands from `suggestedActions`.
+5. **Do not poll heavily** — Prefer `poll_hitl_events` push-style polling every 30–60s during active runs; call `mission_summary` once when complete.
 
 ## HITL escalation handling
 
@@ -51,6 +69,7 @@ When Roland hits a HITL wall, **report clearly to the operator** using the `summ
 | `verification-failure` | Verify failed, may retry | Monitor; escalate if repeated |
 | `git-commit-approval` | Loop waiting on commit approval | `roland approve-commit` or `reject-commit` |
 | `loop-escalation` | Retry budget exhausted | `roland resume`, `replan`, or operator guidance |
+| `mission-complete` | Terminal mission outcome | `mission_summary()` → report to operator |
 | `blocker` | Agent raised BLOCKER | `roland unblock <task-id> "<guidance>"` |
 | `hitl-pause` | Operator or system paused run | `roland resume` |
 | `hitl-abort-pending` | Abort queued | Confirm with operator |
@@ -95,11 +114,18 @@ When the user approves ("go", "run it", "execute"), run the exact command via sh
 | `triage` | Classify new work (Direct vs Team) |
 | `roland_run_team` | Launch background team mission from Cursor |
 | `hitl_status` | Current HITL blockers and suggested actions |
-| `poll_hitl_events` | Push-style poll for new HITL events |
+| `poll_hitl_events` | Push-style poll for HITL + mission-complete events |
+| `mission_summary` | Latest terminal mission report (auto-written on completion) |
+| `report_completion` | Alias for `mission_summary` |
 | `board_status` | UNSC battlespace summary |
 | `pm_standup` | Blockers-first standup |
 
 ## Dashboard
 
 - **HITL banner** — live panel shows "Waiting on HITL" when blocked
-- **API** — `GET /api/hitl-status` mirrors MCP `hitl_status`
+- **Mission outcome banner** — shows last `mission_summary` when idle (same snapshot as MCP)
+- **API** — `GET /api/hitl-status` mirrors MCP `hitl_status`; `GET /api/mission-summary` mirrors `mission_summary`
+
+## Roland Completion Now Surfaces to Hermes
+
+Roland auto-writes completion snapshots and pushes `mission-complete` events. Master Chief should poll `poll_hitl_events`, call `mission_summary` at terminal state, and report the `summary` line to the operator — closing the hybrid feedback loop without heavy polling.

@@ -2009,6 +2009,34 @@
       color: #92400e;
     }
 
+    /* Mission complete — Hermes terminal outcome (same snapshot as mission_summary MCP) */
+    .mission-complete-banner {
+      margin: 0.55rem 0 0.65rem;
+      padding: 0.65rem 0.85rem;
+      border-radius: var(--radius);
+      border: 1px solid rgba(34,197,94,0.4);
+      background: rgba(34,197,94,0.12);
+      color: #86efac;
+      font-size: 0.76rem;
+      line-height: 1.45;
+    }
+    .mission-complete-banner.escalated,
+    .mission-complete-banner.blocked,
+    .mission-complete-banner.failed {
+      border-color: rgba(245,158,11,0.45);
+      background: rgba(245,158,11,0.12);
+      color: #fcd34d;
+    }
+    .mission-complete-banner.failed {
+      border-color: rgba(239,68,68,0.45);
+      background: rgba(239,68,68,0.12);
+      color: #fca5a5;
+    }
+    .mission-complete-banner strong { color: #bbf7d0; }
+    .mission-complete-banner.escalated strong,
+    .mission-complete-banner.blocked strong { color: #fde68a; }
+    .mission-complete-banner.failed strong { color: #fecaca; }
+
     /* MCP live-sync banner — shown when an external MCP/Hermes mission is detected */
     .mcp-live-banner {
       display: none;
@@ -3551,6 +3579,7 @@
   let runState     = null;
   let hitlState    = null;
   let hitlStatus   = null;
+  let missionSummary = null;
   let boardStatus  = null;
   let missionDagPayload = null;
   let selectedMissionNodeId = null;
@@ -4022,6 +4051,7 @@
             if (msg.runState  !== undefined) runState  = msg.runState;
             if (msg.hitlState !== undefined) hitlState = msg.hitlState;
             if (msg.hitlStatus !== undefined) hitlStatus = msg.hitlStatus;
+            if (msg.missionSummary !== undefined) missionSummary = msg.missionSummary;
             if (msg.boardStatus !== undefined) boardStatus = msg.boardStatus;
             if (msg.missionDag !== undefined) missionDagPayload = msg.missionDag;
             if (msg.projectContext !== undefined) applyProjectContextPayload(msg.projectContext);
@@ -4094,6 +4124,10 @@
         const hs = await fetch('/api/hitl-status');
         hitlStatus = hs.ok ? await hs.json() : null;
       } catch { hitlStatus = null; }
+      try {
+        const ms = await fetch('/api/mission-summary');
+        missionSummary = ms.ok ? await ms.json() : null;
+      } catch { missionSummary = null; }
       if (runState && hitlState) {
         if (hitlState.paused)       runState.hitlPaused       = true;
         else                        delete runState.hitlPaused;
@@ -5763,6 +5797,22 @@
     return html;
   }
 
+  /** Mission complete strip — Hermes terminal outcome on live panel. */
+  function renderMissionCompleteBanner() {
+    if (isRunActive(runState)) return '';
+    const report = missionSummary?.report;
+    if (!missionSummary?.found || !report) return '';
+    const summary = missionSummary.summary || report.summary || 'Mission complete';
+    const statusCls = report.finalStatus === 'completed' ? '' : report.finalStatus || '';
+    const deliverables = (report.deliverables || []).slice(0, 2).join(' · ');
+    const next = (report.nextRecommendedAction || '').slice(0, 120);
+    return '<div class="mission-complete-banner ' + escHtml(statusCls) + '" role="status">' +
+      '🎖 <strong>Mission outcome</strong> — ' + escHtml(summary) +
+      (deliverables ? '<div style="margin-top:.3rem;opacity:.9">' + escHtml(deliverables) + '</div>' : '') +
+      (next ? '<div style="margin-top:.25rem;font-size:.7rem;opacity:.85">Next: ' + escHtml(next) + '</div>' : '') +
+      '</div>';
+  }
+
   /** HITL blocked strip — surfaces Hermes propagation summary on live panel. */
   function renderHitlBlockedBanner() {
     const report = hitlStatus?.report;
@@ -5829,6 +5879,7 @@
           ((latest.label || latest.goal).length > 55 ? '…' : '') + '</div>'
         : '';
       el.innerHTML = '<div class="idle-state"><span style="font-size:1rem">○</span><div><div>No active run</div>' + lastLine + '</div></div>' +
+        renderMissionCompleteBanner() +
         LoopEngine.renderTemplateCatalog();
       return;
     }

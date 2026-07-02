@@ -679,7 +679,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   const restoreStderr = quiet ? createShellExecStderrFilter() : undefined;
   const restoreLog = quiet ? muteConsoleError() : undefined;
   try {
-    return await runTeamInner({
+    const result = await runTeamInner({
       goal, stateDir, agentsDir: agentsDirOverride,
       onPlanReady, onWaveStart, onTaskStart, onTaskComplete, onWaveComplete,
       onWaveReview, onTasksSpawned, onSynthesizing,
@@ -697,6 +697,25 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
       loopEmbedded,
       loopIteration,
     });
+    if (!opts.loopEmbedded) {
+      try {
+        const { notifyHermesMissionCompleteFromTeamResult } = await import('./hitl-hermes.js');
+        notifyHermesMissionCompleteFromTeamResult(stateDir, result);
+      } catch {
+        /* Hermes notification must not break mission return */
+      }
+    }
+    return result;
+  } catch (err) {
+    if (!opts.loopEmbedded) {
+      try {
+        const { notifyHermesMissionFailed } = await import('./hitl-hermes.js');
+        notifyHermesMissionFailed(stateDir, goal, err);
+      } catch {
+        /* non-fatal */
+      }
+    }
+    throw err;
   } finally {
     restoreStderr?.();
     restoreLog?.();

@@ -30,6 +30,7 @@
  *   POST /api/github/clone           → clone repo, init .roland/, npm install, switch context
  *   GET  /api/board-status         → UNSC concise summary (blackboard + command board)
  *   GET  /api/hitl-status          → HITL escalations / blockers (Hermes propagation)
+ *   GET  /api/mission-summary      → latest mission completion (Hermes / dashboard parity)
  *   GET  /api/git-commit-approval     → pending git-commit HITL approval
  *   POST /api/git-commit-approval/approve → approve (optional edited message)
  *   POST /api/git-commit-approval/reject  → reject commit
@@ -728,12 +729,14 @@ async function pushCurrentState() {
   const supervisor = summarizeSupervisorPayload();
   const loopHealth = await readLoopHealthPayload();
   const hitlStatus = await readHitlStatusPayload();
+  const missionSummary = await readMissionSummaryPayload();
   lastStateFingerprint = computeStateFingerprint(runState, hitlState, supervisor);
   broadcast({
     type: 'state-update',
     runState,
     hitlState,
     hitlStatus,
+    missionSummary,
     boardStatus,
     missionDag,
     projectContext,
@@ -779,6 +782,20 @@ async function readHitlStatusPayload() {
     summary: mod.formatHermesHitlSummary(report),
     waitingOnHitl: report.waitingOnHitl,
     markdown: mod.formatHitlStatusMarkdown(report),
+    updatedAt: Date.now(),
+  };
+}
+
+async function readMissionSummaryPayload() {
+  const mod = await loadHitlHermesModule();
+  if (!mod) return null;
+  const report = mod.readMissionCompletionReport(activeStateDir);
+  if (!report) return { found: false, updatedAt: Date.now() };
+  return {
+    found: true,
+    report,
+    summary: mod.formatHermesMissionCompleteSummary(report),
+    markdown: mod.formatMissionCompleteMarkdown(report),
     updatedAt: Date.now(),
   };
 }
@@ -2429,6 +2446,23 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ── /api/mission-summary GET — terminal mission outcome (Hermes parity) ───
+  if (url === '/api/mission-summary' && method === 'GET') {
+    try {
+      const payload = await readMissionSummaryPayload();
+      if (payload) {
+        logApi('GET', url, 'ok', { found: payload.found, status: payload.report?.finalStatus ?? null });
+        jsonOk(res, payload);
+        return;
+      }
+      jsonOk(res, { fallback: true, found: false, markdown: '(Run npm run build for mission-summary API)' });
+    } catch (e) {
+      logApi('GET', url, `error: ${e.message}`);
+      jsonErr(res, e.message, 500);
+    }
+    return;
+  }
+
   // ── /api/blackboard GET ──────────────────────────────────────────────────
   if (url === '/api/blackboard' && method === 'GET') {
     const entries = readBlackboardEntries();
@@ -3089,7 +3123,7 @@ server.listen(port, host, () => {
   console.log(`  Project   : ${activeProjectRoot}`);
   console.log(`  APIs      : ${localBase}/api/usage  ${localBase}/api/run-state`);
   console.log(`              ${localBase}/api/memory  ${localBase}/api/hitl/:cmd`);
-  console.log(`              ${localBase}/api/board-status  ${localBase}/api/hitl-status`);
+  console.log(`              ${localBase}/api/board-status  ${localBase}/api/hitl-status  ${localBase}/api/mission-summary`);
   console.log(`              ${localBase}/api/project-context  ${localBase}/api/task-git`);
   console.log(`              ${localBase}/api/team-goal`);
   console.log(`              ${localBase}/api/blockers/:id/ignore`);
