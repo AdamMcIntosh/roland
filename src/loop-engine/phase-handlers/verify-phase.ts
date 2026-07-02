@@ -1,3 +1,9 @@
+/**
+ * ## Evaluation Gate & Blocker Fix
+ *
+ * Verify phase — runs EvaluationGate and surfaces structured results to loop state.
+ */
+
 import type { PhaseHandler, PhaseHandlerContext, PhaseResult } from './types.js';
 import { Phase } from '../loop-phases.js';
 import { loadLoopEngineConfig } from '../loop-config.js';
@@ -137,26 +143,48 @@ export class VerifyPhaseHandler implements PhaseHandler {
 
     if (ctx.stateDir && !evaluation.accepted) {
       const { emitHermesHitlEvent } = await import('../../rco/hitl-hermes.js');
-      emitHermesHitlEvent(ctx.stateDir, {
-        kind: evaluation.confidence === 0 ? 'verification-gate' : 'verification-failure',
-        blockerDescription: evaluation.summary,
-        currentGate: 'verification',
-        suggestedActions: [
-          'roland hitl-status',
-          'roland board-status --concise',
-          'roland inject "<fix guidance>"',
-        ],
-        detail: {
-          confidence: evaluation.confidence,
-          accepted: evaluation.accepted,
-          iteration: ctx.iteration,
-          gates: evaluation.gates?.map((g) => ({
-            name: g.name,
-            pass: g.pass,
-            confidence: g.confidence,
-          })),
-        },
-      });
+      const failedGates = evaluation.gates?.filter((g) => g.required && !g.skipped && !g.pass) ?? [];
+      const noTestSoftSkip = evaluation.gates?.some(
+        (g) => g.skipped && g.skipReason?.includes('no test'),
+      );
+      const suggestedActions = noTestSoftSkip
+        ? [
+            'roland board-status --concise',
+            'Add npm test script when ready: npm pkg set scripts.test="vitest run"',
+          ]
+        : failedGates.some((g) => g.type === 'unit')
+          ? [
+              'roland hitl-status',
+              'roland board-status --concise',
+              'Fix failing tests or run: npm test',
+              'roland inject "<fix guidance>"',
+            ]
+          : [
+              'roland hitl-status',
+              'roland board-status --concise',
+              'roland inject "<fix guidance>"',
+            ];
+
+      if (!noTestSoftSkip) {
+        emitHermesHitlEvent(ctx.stateDir, {
+          kind: evaluation.confidence === 0 ? 'verification-gate' : 'verification-failure',
+          blockerDescription: evaluation.summary,
+          currentGate: 'verification',
+          suggestedActions,
+          detail: {
+            confidence: evaluation.confidence,
+            accepted: evaluation.accepted,
+            iteration: ctx.iteration,
+            gates: evaluation.gates?.map((g) => ({
+              name: g.name,
+              pass: g.pass,
+              confidence: g.confidence,
+              skipped: g.skipped,
+              skipReason: g.skipReason,
+            })),
+          },
+        });
+      }
     }
 
     return {

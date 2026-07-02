@@ -74,19 +74,6 @@ export async function runClosedLoopMission(opts: ClosedLoopMissionOptions): Prom
     }
   }
 
-  const { cleanupBoardsForNewMission, formatCleanupReport } = await import('./board-cleanup.js');
-  const cleanupResult = cleanupBoardsForNewMission(stateDir, goal);
-  if (
-    cleanupResult.blackboardArchived > 0 ||
-    cleanupResult.commandBoard.activeTasksRemoved.length > 0 ||
-    cleanupResult.commandBoard.objectivesArchived.length > 0
-  ) {
-    console.error('[Loop] Board hygiene — prior mission state archived:');
-    for (const line of formatCleanupReport(cleanupResult).split('\n').slice(1)) {
-      if (line.trim()) console.error(`[Loop]   ${line}`);
-    }
-  }
-
   commandBoard.appendBullet('Mission Objectives', `[P2 active] ${goal}`);
   commandBoard.appendBullet(
     'Mission Objectives',

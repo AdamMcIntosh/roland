@@ -41,7 +41,7 @@ import { spawnBackground } from '../rco/supervisor.js';
 import { randomUUID } from 'crypto';
 import {
   writeMissionMetaFile,
-  cleanupPreviousRuns,
+  prepareMissionStart,
   sanitizeStaleMissionState,
   type MissionTriggeredVia,
 } from '../rco/mission-state.js';
@@ -3749,7 +3749,7 @@ What would you like to work on?`;
         process.env['ROLAND_TRIGGERED_VIA'] = 'mcp';
 
         sanitizeStaleMissionState(resolvedStateDir);
-        cleanupPreviousRuns(resolvedStateDir, goal.trim());
+        prepareMissionStart(resolvedStateDir, goal.trim());
 
         const { pid, logFile } = await spawnBackground(
           goal.trim(),

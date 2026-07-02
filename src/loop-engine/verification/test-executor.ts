@@ -1,10 +1,16 @@
 /**
- * Test executor — runs verification strategies via shell commands.
+ * ## Evaluation Gate & Blocker Fix
  *
- * Integrates with npm test / project scripts. Injectable exec for unit tests.
+ * Test executor — runs verification strategies via shell commands.
+ * Soft-skips unit/smoke when minimal projects lack npm test scripts.
  */
 
 import { spawnHidden } from '../../utils/spawn-silent.js';
+import {
+  lacksNpmTestScript,
+  isNoTestSpecifiedOutput,
+  shouldSoftSkipMissingTests,
+} from './minimal-project.js';
 import type {
   StrategyResult,
   VerificationFailure,
@@ -183,6 +189,24 @@ export class TestExecutor {
       };
     }
 
+    if (
+      shouldSoftSkipMissingTests(strategy.type) &&
+      lacksNpmTestScript(this.cwd)
+    ) {
+      const reason = 'minimal project — no npm test script (non-blocking warning)';
+      logVerify(`${strategy.type} skipped — ${reason}`, { cwd: this.cwd });
+      return {
+        type: strategy.type,
+        pass: true,
+        command: strategy.command,
+        durationMs: Date.now() - started,
+        exitCode: 0,
+        failures: [],
+        skipped: true,
+        skipReason: reason,
+      };
+    }
+
     try {
       const { exitCode, stdout, stderr, timedOut } = await this.runner(strategy.command, {
         cwd: this.cwd,
@@ -190,7 +214,28 @@ export class TestExecutor {
       });
       const durationMs = Date.now() - started;
       const combined = outputTail(stdout, stderr);
-      const pass = !timedOut && exitCode === 0;
+      let pass = !timedOut && exitCode === 0;
+
+      if (
+        !pass &&
+        !timedOut &&
+        shouldSoftSkipMissingTests(strategy.type) &&
+        isNoTestSpecifiedOutput(stdout, stderr)
+      ) {
+        const reason = 'npm test — no test specified (non-blocking for minimal project)';
+        logVerify(`${strategy.type} soft-pass — ${reason}`);
+        return {
+          type: strategy.type,
+          pass: true,
+          command: strategy.command,
+          durationMs,
+          exitCode,
+          failures: [],
+          outputTail: combined,
+          skipped: true,
+          skipReason: reason,
+        };
+      }
 
       if (strategy.optional && !pass) {
         return {

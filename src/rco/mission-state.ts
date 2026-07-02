@@ -1,4 +1,6 @@
 /**
+ * ## Evaluation Gate & Blocker Fix
+ *
  * ## MCP Project Context Fix
  *
  * Mission state isolation — per-project cleanup, archival, and stale-file hygiene.
@@ -9,6 +11,9 @@
 
 import fs from 'fs';
 import path from 'path';
+import { LOOP_CHECKPOINT_FILE } from '../loop-engine/loop-checkpoint.js';
+import { LOOP_STATE_FILE } from '../loop-engine/loop-state.js';
+import { cleanupBoardsForNewMission } from './board-cleanup.js';
 
 export const MISSION_META_FILE = 'mission-meta.json';
 export const SUPERVISOR_PID_FILE = 'supervisor.pid';
@@ -91,6 +96,55 @@ export interface CleanupPreviousRunsResult {
   sanitized: SanitizeResult;
   metaArchived: boolean;
   boardCleanup?: unknown;
+  loopArtifactsReset?: boolean;
+}
+
+/** Remove loop checkpoint + loop-state so a new mission does not inherit prior gate failures. */
+export function resetLoopArtifactsForNewMission(
+  stateDir: string,
+  log: StateLogger = noopLog,
+): boolean {
+  let reset = false;
+  for (const name of [LOOP_STATE_FILE, LOOP_CHECKPOINT_FILE]) {
+    const filePath = path.join(stateDir, name);
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.rmSync(filePath, { force: true });
+        reset = true;
+        log('Reset loop artifact for new mission', { stateDir, file: name });
+      }
+    } catch {
+      /* non-fatal */
+    }
+  }
+  return reset;
+}
+
+/**
+ * Full mission-start hygiene — sanitize stale PIDs, archive prior meta,
+ * reset loop artifacts, and optionally clean command boards.
+ */
+export function prepareMissionStart(
+  stateDir: string,
+  goal: string,
+  options: {
+    dryRun?: boolean;
+    skipBoardCleanup?: boolean;
+  } = {},
+  log: StateLogger = noopLog,
+): CleanupPreviousRunsResult {
+  return cleanupPreviousRuns(
+    stateDir,
+    goal,
+    {
+      dryRun: options.dryRun,
+      resetLoopArtifacts: !options.dryRun,
+      runBoardCleanup: options.skipBoardCleanup
+        ? undefined
+        : (dir, missionGoal) => cleanupBoardsForNewMission(dir, missionGoal),
+    },
+    log,
+  );
 }
 
 function noopLog(): void { /* */ }
@@ -314,6 +368,7 @@ export function cleanupPreviousRuns(
   goal: string,
   options: {
     dryRun?: boolean;
+    resetLoopArtifacts?: boolean;
     runBoardCleanup?: (stateDir: string, missionGoal: string) => unknown;
   } = {},
   log: StateLogger = noopLog,
@@ -337,13 +392,18 @@ export function cleanupPreviousRuns(
     }
   }
 
+  let loopArtifactsReset = false;
+  if (!options.dryRun && options.resetLoopArtifacts !== false) {
+    loopArtifactsReset = resetLoopArtifactsForNewMission(stateDir, log);
+  }
+
   let boardCleanup: unknown;
   if (!options.dryRun && options.runBoardCleanup) {
     boardCleanup = options.runBoardCleanup(stateDir, goal);
     log('Board cleanup completed for new mission', { stateDir });
   }
 
-  return { sanitized, metaArchived, boardCleanup };
+  return { sanitized, metaArchived, boardCleanup, loopArtifactsReset };
 }
 
 // ── Client-facing active run-state (HTTP + WebSocket parity) ─────────────────

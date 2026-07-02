@@ -29,7 +29,8 @@ import {
   resolveMcpProjectContext,
 } from '../utils/mcp-project-context.js';
 import {
-  cleanupPreviousRuns,
+  prepareMissionStart,
+  resetLoopArtifactsForNewMission,
   sanitizeStaleMissionState,
 } from './mission-state.js';
 
@@ -147,6 +148,9 @@ function cleanState(stateDir: string): void {
   for (const name of targets) {
     const p = path.join(stateDir, name);
     if (fs.existsSync(p)) { fs.rmSync(p); removed.push(name); }
+  }
+  if (resetLoopArtifactsForNewMission(stateDir)) {
+    removed.push('loop-state.json', 'loop-checkpoint.json');
   }
   if (removed.length > 0) {
     err(`  ${c.yellow('🧹')} Cleaned stale state: ${removed.join(', ')} ${c.dim('(memory.md preserved)')}`);
@@ -324,21 +328,17 @@ export async function runTeamCli(argv: string[]): Promise<void> {
       process.env['ROLAND_TRIGGERED_VIA'] = 'cli';
     }
     sanitizeStaleMissionState(stateDir);
-    cleanupPreviousRuns(stateDir, goal);
+    prepareMissionStart(stateDir, goal);
     await spawnBackground(goal, argv, stateDir, { projectRoot: ctx.projectRoot });
     return; // parent exits immediately
   }
 
-  if (process.env['ROLAND_TRIGGERED_VIA'] === 'mcp' && !clean) {
-    sanitizeStaleMissionState(stateDir);
-    cleanupPreviousRuns(stateDir, goal);
-  }
+  if (clean) cleanState(stateDir);
 
   // ── Web mode — streaming terminal-style output for browser / chat UI ────────
   if (web) {
     const out = (line: string) => process.stdout.write(line + '\n');
     const hitlQueue = new HitlQueue(stateDir);
-    if (clean) cleanState(stateDir);
     const runState = new RunStateWriter(stateDir, goal);
 
     // Silence internal stderr noise — clients receive only our curated stdout
@@ -516,8 +516,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
   // ── HITL queue ─────────────────────────────────────────────────────────────
   const hitlQueue = new HitlQueue(stateDir);
 
-  // ── Clean stale state if requested ──────────────────────────────────────────
-  if (clean) cleanState(stateDir);
+  // ── Clean stale state if requested (--clean wipes blackboard + loop artifacts) ─
 
   // ── Quiet mode — no UI, but still write run-state.json for external monitors ─
   if (quiet) {

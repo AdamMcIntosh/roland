@@ -729,11 +729,6 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
 }
 
 async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> {
-  // Loop Engineering pivot — ClosedLoop is the single source of truth for loop-template missions.
-  if (hasLoopTemplate(opts.loopTemplate)) {
-    return runClosedLoopMission(opts);
-  }
-
   const {
     goal, stateDir = '.roland', agentsDir: agentsDirOverride,
     onPlanReady, onWaveStart, onTaskStart, onTaskComplete, onWaveComplete,
@@ -747,7 +742,40 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
     existingPlan,
     loopEmbedded = false,
     loopIteration,
+    loopTemplate,
   } = opts;
+
+  if (!loopEmbedded) {
+    const { prepareMissionStart } = await import('./mission-state.js');
+    const { formatCleanupReport } = await import('./board-cleanup.js');
+    const cleanupResult = prepareMissionStart(stateDir, goal);
+    const boardResult = cleanupResult.boardCleanup as import('./board-cleanup.js').BoardCleanupResult | undefined;
+    if (
+      cleanupResult.metaArchived ||
+      cleanupResult.loopArtifactsReset ||
+      (boardResult && (
+        boardResult.blackboardArchived > 0 ||
+        boardResult.commandBoard.activeTasksRemoved.length > 0 ||
+        boardResult.commandBoard.objectivesArchived.length > 0
+      ))
+    ) {
+      const label = hasLoopTemplate(loopTemplate) ? '[Loop]' : '[Team]';
+      console.error(`${label} Mission start hygiene — prior state archived`);
+      if (boardResult) {
+        for (const line of formatCleanupReport(boardResult).split('\n').slice(1, 4)) {
+          if (line.trim()) console.error(`${label}   ${line}`);
+        }
+      }
+      if (cleanupResult.loopArtifactsReset) {
+        console.error(`${label}   loop-state + checkpoint reset for fresh mission`);
+      }
+    }
+  }
+
+  // Loop Engineering pivot — ClosedLoop is the single source of truth for loop-template missions.
+  if (hasLoopTemplate(loopTemplate)) {
+    return runClosedLoopMission(opts);
+  }
 
   const loopEmbedLabel = loopEmbedded
     ? `[Loop][PM Team]${loopIteration != null ? ` iter=${loopIteration}` : ''}`
@@ -762,21 +790,6 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
   console.error(`${loopEmbedLabel} Initializing coordination layer...`);
   const blackboard = new Blackboard(stateDir);
   const commandBoard = new CommandBlackboard(stateDir);
-
-  if (!loopEmbedded) {
-    const { cleanupBoardsForNewMission, formatCleanupReport } = await import('./board-cleanup.js');
-    const cleanupResult = cleanupBoardsForNewMission(stateDir, goal);
-    if (
-      cleanupResult.blackboardArchived > 0 ||
-      cleanupResult.commandBoard.activeTasksRemoved.length > 0 ||
-      cleanupResult.commandBoard.objectivesArchived.length > 0
-    ) {
-      console.error(`${loopEmbedLabel} Board hygiene — prior mission state archived:`);
-      for (const line of formatCleanupReport(cleanupResult).split('\n').slice(1)) {
-        if (line.trim()) console.error(`${loopEmbedLabel}   ${line}`);
-      }
-    }
-  }
 
   const bus = new MessageBus(stateDir);
   const memory = new ProjectMemory(stateDir);

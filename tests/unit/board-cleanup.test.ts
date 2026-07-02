@@ -143,10 +143,24 @@ describe('board-cleanup', () => {
     expect(result.commandBoard.activeTasksRemoved.length).toBeGreaterThan(0);
   });
 
-  it('smartSnapshot excludes stale done tasks', () => {
-    const board = new CommandBlackboard(tmpDir);
-    const snap = board.smartSnapshot('Add pino logging middleware woody Express');
-    expect(snap).not.toContain('[done] task-9');
-    expect(snap).not.toContain('BLOCKER cleared');
+  it('archives stale open blockers unrelated to new goal', () => {
+    const bb = new Blackboard(tmpDir);
+    bb.post({
+      type: 'blocker',
+      title: 'Legacy Stripe webhook failure',
+      content: 'Stripe integration blocked on API keys',
+      status: 'blocked',
+      author: 'pm',
+      priority: 'high',
+      tags: [],
+      relatedIds: [],
+    });
+
+    const { archived, titles } = cleanupMachineBlackboard(bb, {
+      goal: 'Add pino logging middleware to woody Express server',
+    });
+
+    expect(archived).toBe(1);
+    expect(titles[0]).toContain('Stripe');
   });
 });

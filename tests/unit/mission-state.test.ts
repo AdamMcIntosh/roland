@@ -7,9 +7,11 @@ import {
   buildSupervisorStartDiagnostics,
   cleanupPreviousRuns,
   isolateProjectMissionState,
+  prepareMissionStart,
   readActiveMissionMeta,
   readActiveRunStateForClient,
   readMissionMetaFile,
+  resetLoopArtifactsForNewMission,
   sanitizeStaleMissionState,
   waitForSupervisorReady,
   SUPERVISOR_PID_FILE,
@@ -118,6 +120,30 @@ describe('mission-state', () => {
     expect(result.metaArchived).toBe(true);
     expect(boardCalls).toHaveLength(1);
     expect(archiveMissionMeta(stateDir, 'again')).toBe(false);
+  });
+
+  it('resetLoopArtifactsForNewMission clears loop-state and checkpoint', () => {
+    const stateDir = makeStateDir();
+    fs.writeFileSync(path.join(stateDir, 'loop-state.json'), JSON.stringify({ status: 'running' }));
+    fs.writeFileSync(path.join(stateDir, 'loop-checkpoint.json'), JSON.stringify({ phase: 'verify' }));
+
+    expect(resetLoopArtifactsForNewMission(stateDir)).toBe(true);
+    expect(fs.existsSync(path.join(stateDir, 'loop-state.json'))).toBe(false);
+    expect(fs.existsSync(path.join(stateDir, 'loop-checkpoint.json'))).toBe(false);
+  });
+
+  it('prepareMissionStart resets loop artifacts and archives meta', () => {
+    const stateDir = makeStateDir();
+    fs.writeFileSync(
+      path.join(stateDir, MISSION_META_FILE),
+      JSON.stringify({ goal: 'Prior', status: 'active', startedAt: Date.now() }),
+    );
+    fs.writeFileSync(path.join(stateDir, 'loop-state.json'), JSON.stringify({ status: 'escalated' }));
+
+    const result = prepareMissionStart(stateDir, 'New hybrid project');
+    expect(result.metaArchived).toBe(true);
+    expect(result.loopArtifactsReset).toBe(true);
+    expect(fs.existsSync(path.join(stateDir, 'loop-state.json'))).toBe(false);
   });
 
   it('readActiveRunStateForClient returns null for stale run-state without supervisor', () => {

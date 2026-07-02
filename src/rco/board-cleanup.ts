@@ -1,4 +1,6 @@
 /**
+ * ## Evaluation Gate & Blocker Fix
+ *
  * Board cleanup — archive stale mission state before a new run.
  *
  * Cleans both machine-readable `.roland/blackboard.json` and human-readable
@@ -50,6 +52,14 @@ function shouldArchiveBlackboardEntry(entry: BlackboardEntry, goalTokens: Set<st
 
   if (entry.type === 'blocker' && entry.status === 'done') return true;
 
+  if (entry.type === 'blocker' && ['pending', 'in_progress', 'blocked'].includes(entry.status)) {
+    return !isGoalRelevant(`${entry.title} ${entry.content}`, goalTokens);
+  }
+
+  if (entry.type === 'task' && entry.status === 'blocked') {
+    return !isGoalRelevant(`${entry.title} ${entry.content}`, goalTokens);
+  }
+
   return false;
 }
 
@@ -64,6 +74,10 @@ function shouldRemoveActiveTaskBullet(bullet: string, goalTokens: Set<string>): 
   }
 
   if (/\[blocked\]/i.test(b) && /\bcleared\b/i.test(b)) return true;
+
+  if (/\[blocked\]/i.test(b) && !isGoalRelevant(b, goalTokens)) return true;
+
+  if (/\[legacy blocker\]/i.test(b)) return true;
 
   return false;
 }

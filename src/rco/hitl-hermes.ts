@@ -11,6 +11,7 @@
 import fs from 'fs';
 import path from 'path';
 import { Blackboard } from './blackboard.js';
+import { isGoalRelevant, tokenize } from './command-blackboard.js';
 import { readMissionMetaFile } from './mission-state.js';
 import { HitlQueue, isRunActive, readRunGoal } from './hitl.js';
 import { readRunState } from './run-state.js';
@@ -178,10 +179,16 @@ function readMissionContext(stateDir: string): { missionId?: string; goal?: stri
 
 function readOpenBlockers(stateDir: string): Array<{ id: string; title: string; content: string }> {
   try {
+    const ctx = readMissionContext(stateDir);
+    const goalTokens = tokenize(ctx.goal ?? '');
     const bb = new Blackboard(stateDir);
     return bb
       .read()
       .filter((e) => e.status !== 'archived' && (e.type === 'blocker' || e.status === 'blocked'))
+      .filter((e) => {
+        if (!goalTokens.size) return true;
+        return isGoalRelevant(`${e.title} ${e.content}`, goalTokens);
+      })
       .slice(0, 8)
       .map((e) => ({
         id: e.id,
@@ -597,22 +604,29 @@ export function buildHitlStatusReport(stateDir: string): HitlStatusReport {
     currentGate = 'blocker';
     hitlReason = blockers[0]!.title;
     blockerDescription = blockers[0]!.content.slice(0, 200) || blockers[0]!.title;
-    suggestedActions.push('roland unblock <task-id> "<guidance>"');
+    suggestedActions.push(`roland unblock ${blockers[0]!.id} "<guidance>"`);
+    suggestedActions.push('roland board-cleanup');
     suggestedActions.push('roland board-status --concise');
   }
 
-  if (
+  const verifyStuckEscalated =
     loopState?.lastVerification &&
-    !loopState.lastVerification.pass &&
+    !loopState.lastVerification.accepted &&
     loopState.status === 'running' &&
-    (loopState.lastVerification.confidence ?? 1) === 0
-  ) {
+    (loopState.lastVerification.confidence ?? 1) === 0 &&
+    (loopState.currentPhase === 'escalate' || loopState.currentPhase === 'observe');
+
+  if (verifyStuckEscalated && !waitingOnHitl) {
     waitingOnHitl = true;
     currentGate = currentGate ?? 'verification';
     hitlReason = hitlReason ?? `Verification gate failed — confidence=0`;
-    blockerDescription = blockerDescription ?? loopState.lastVerification.summary;
+    blockerDescription = blockerDescription ?? loopState!.lastVerification!.summary;
     suggestedActions.push('roland hitl-status');
     suggestedActions.push('roland board-status --concise');
+    suggestedActions.push('roland inject "<fix verification or add npm test script>"');
+    if (loopState!.lastVerification!.summary?.includes('no test')) {
+      suggestedActions.push('Add a minimal test script: npm pkg set scripts.test="echo \\"no tests yet\\""');
+    }
   }
 
   if (suggestedActions.length === 0) {

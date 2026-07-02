@@ -21,6 +21,7 @@ import {
   HERMES_MISSION_COMPLETION_FILE,
 } from '../../src/rco/hitl-hermes.js';
 import { HitlQueue } from '../../src/rco/hitl.js';
+import { Blackboard } from '../../src/rco/blackboard.js';
 import { GitCommitApprovalQueue } from '../../src/loop-engine/git-commit-approval.js';
 
 describe('hitl-hermes', () => {
@@ -150,6 +151,36 @@ describe('hitl-hermes', () => {
 
     const events = pollHermesHitlEvents(stateDir, 0);
     expect(events.some((e) => e.kind === 'mission-complete')).toBe(true);
+  });
+
+  it('buildHitlStatusReport ignores legacy blockers unrelated to current goal', () => {
+    const bb = new Blackboard(stateDir);
+    bb.post({
+      type: 'blocker',
+      title: 'Old payment gateway failure',
+      content: 'Stripe webhook integration blocked',
+      status: 'blocked',
+      author: 'pm',
+      priority: 'high',
+      tags: [],
+      relatedIds: [],
+    });
+    fs.writeFileSync(
+      path.join(stateDir, 'mission-meta.json'),
+      JSON.stringify({ goal: 'Add dark mode toggle', status: 'active', startedAt: Date.now() }),
+    );
+    fs.writeFileSync(
+      path.join(stateDir, 'run-state.json'),
+      JSON.stringify({ runId: 'r1', goal: 'Add dark mode toggle', status: 'running', updatedAt: Date.now() }),
+    );
+    fs.writeFileSync(
+      path.join(stateDir, 'supervisor.pid'),
+      JSON.stringify({ pid: process.pid, startedAt: Date.now() }),
+    );
+
+    const report = buildHitlStatusReport(stateDir);
+    expect(report.waitingOnHitl).toBe(false);
+    expect(report.blockers.length).toBe(0);
   });
 
   it('notifyHermesMissionCompleteFromTeamResult dedupes by runId', () => {

@@ -1,4 +1,6 @@
 /**
+ * ## Evaluation Gate & Blocker Fix
+ *
  * ## Assumptions
  * - Automated verifiers (unit/lint/typecheck) run via TestExecutor shell commands.
  * - Custom criteria are synchronous or async functions supplied by callers/tests.
