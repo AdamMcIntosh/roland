@@ -1,5 +1,10 @@
 /**
+ * ## CLI-First + Hermes Monitoring Shift
+ *
  * UNSC board status — human-readable summary of blackboard + command blackboard.
+ * Primary CLI: `roland board-status [--concise|--json]`. MCP: `board_status`.
+ *
+ * ## Dashboard De-emphasized — CLI + Hermes Hybrid Complete
  */
 
 import fs from 'fs';
@@ -12,6 +17,7 @@ import {
   type Callsign,
 } from './command-blackboard.js';
 import { readRunGoal, isRunActive } from './hitl.js';
+import { buildHitlStatusReport, formatHermesHitlSummary } from './hitl-hermes.js';
 import { MISSION_DAG_FILE, type MissionDagSnapshot } from './mission-dag.js';
 
 export interface BoardStatusCounts {
@@ -316,5 +322,12 @@ export function printBoardStatus(
     return;
   }
   const mode = opts.concise ? 'concise' : 'verbose';
-  console.error(formatBoardStatusReport(report, { mode }));
+  let output = formatBoardStatusReport(report, { mode });
+  if (opts.concise) {
+    const hitl = buildHitlStatusReport(stateDir);
+    if (hitl.waitingOnHitl || hitl.missionCompletion) {
+      output += `\n\n**HITL:** ${formatHermesHitlSummary(hitl)}`;
+    }
+  }
+  console.error(output);
 }

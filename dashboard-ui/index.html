@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<!-- ## MCP Live Sync Improvements
-     Hermes (roland chat / Cursor @roland / roland team CLI) is the primary conversational
-     interface for planning and triggering loops. This dashboard is monitor + control only.
+<!-- ## CLI-First + Hermes Monitoring Shift
+     CLI + MCP are the primary monitoring backbone (roland hitl-status, board-status, mission-summary).
+     Hermes (roland chat / Cursor @roland / roland team CLI) owns planning and mission launch.
+     This dashboard is OPTIONAL — monitor + control only when CLI/MCP is inconvenient.
      Model routing is handled by ModelRouter + config.yaml — no model pickers in main UI.
--->
+     ## Dashboard De-emphasized — CLI + Hermes Hybrid Complete -->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -2096,6 +2097,25 @@
     .advanced-panel .mission-box { border: none; margin: 0; background: transparent; }
     .board-add-goal-section { display: none !important; }
 
+    /* CLI-first: hide secondary analytics / history surfaces */
+    .dashboard-secondary { display: none !important; }
+    .tab-btn[data-tab="history"],
+    .tab-btn[data-tab="memory"] { display: none !important; }
+    #tab-history,
+    #tab-memory { display: none !important; }
+    .cli-primary-notice {
+      margin-bottom: 0.75rem;
+      padding: 0.55rem 0.85rem;
+      background: rgba(16,185,129,0.08);
+      border: 1px solid rgba(16,185,129,0.25);
+      border-radius: var(--radius);
+      font-size: 0.72rem;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .cli-primary-notice strong { color: var(--emerald); }
+    .cli-primary-notice code { font-size: 0.68rem; }
+
     /* New Mission form (advanced panel only) */
     .mission-box {
       background: linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(16,185,129,0.06) 100%);
@@ -2968,6 +2988,13 @@
         <div class="project-context-details" id="project-context-details" hidden></div>
       </section>
 
+      <!-- CLI-first notice (dashboard is optional adjunct) -->
+      <div class="cli-primary-notice" role="note">
+        <strong>CLI + Hermes primary</strong> — Monitor with
+        <code>roland hitl-status</code> · <code>roland board-status --concise</code> ·
+        <code>roland mission-summary</code>. This dashboard is optional live observability.
+      </div>
+
       <!-- MCP / Hermes live mission banner (auto-shown when external run detected) -->
       <section class="mcp-live-banner" id="mcp-live-banner" aria-live="polite" aria-label="MCP mission detected">
         <div class="mcp-live-banner-inner">
@@ -2982,14 +3009,16 @@
         </div>
       </section>
 
-      <!-- Hermes primary interface -->
+      <!-- Hermes primary interface (collapsed — CLI is primary) -->
+      <details class="advanced-panel dashboard-secondary" id="hermes-banner-panel">
+      <summary class="advanced-panel-summary">ℹ️ About Hermes vs dashboard</summary>
       <section class="hermes-banner" id="hermes-banner" aria-label="About Hermes and this dashboard">
         <div class="hermes-banner-inner">
           <div class="hermes-banner-icon" aria-hidden="true">💬</div>
           <div class="hermes-banner-content">
             <h2 class="hermes-banner-title">Hermes — Primary Interface</h2>
             <p>Plan missions, trigger loops, and converse with Roland through <strong>Hermes</strong> — the conversational layer (<code>roland chat</code>, Cursor <code>@roland</code>, or <code>roland team "…"</code>). Models are routed automatically via ModelRouter and <code>config.yaml</code>.</p>
-            <p><strong>This dashboard</strong> is your dedicated monitor &amp; control surface: live PACVRE progress, specialist spawns, verification gates, HITL git-commit approvals, pause/resume, and run history.</p>
+            <p><strong>This dashboard</strong> is an <em>optional</em> monitor &amp; control surface: live PACVRE progress, HITL git-commit approvals, pause/resume. Prefer CLI commands above.</p>
             <div class="hermes-banner-commands" aria-label="Hermes launch commands">
               <span class="hermes-cmd-chip">roland chat</span>
               <span class="hermes-cmd-chip">roland team "goal" --loop-template full-cycle-verified-loop</span>
@@ -2998,11 +3027,13 @@
           </div>
         </div>
       </section>
+      </details>
 
       <!-- Quick actions -->
       <div class="quick-actions u-stack-row u-touch-row">
         <button class="btn-secondary" id="btn-qa-board" type="button">🎖 Board Status</button>
         <button class="btn-secondary" id="btn-qa-hitl" type="button" title="Copy roland hitl-status">🎮 HITL Status</button>
+        <button class="btn-secondary" id="btn-qa-mission" type="button" title="Copy roland mission-summary">🎖 Mission Summary</button>
         <button class="btn-secondary" id="btn-qa-cleanup" type="button">🧹 Cleanup</button>
         <button class="btn-secondary" id="btn-qa-refresh" type="button">↻ Refresh</button>
       </div>
@@ -3027,8 +3058,8 @@
         <div class="ops-last" id="ops-last"></div>
       </section>
 
-      <!-- Advanced: dashboard mission launch (Hermes is preferred) -->
-      <details class="advanced-panel" id="advanced-mission-panel">
+      <!-- Advanced: dashboard mission launch (Hermes/CLI preferred) -->
+      <details class="advanced-panel dashboard-secondary" id="advanced-mission-panel">
         <summary class="advanced-panel-summary">⚙️ Advanced — Launch mission from dashboard</summary>
         <p class="advanced-panel-note">Prefer Hermes for planning and triggering loops. Use this fallback only when CLI/Cursor chat is unavailable (e.g. phone-only Tailscale access).</p>
       <section class="section mission-box" id="mission-section">
@@ -3094,8 +3125,8 @@
       </section>
       </details>
 
-      <!-- Period filter -->
-      <div class="period-row">
+      <!-- Period filter (secondary analytics) -->
+      <div class="period-row dashboard-secondary">
         <div class="period-pills">
           <button class="period-pill active" data-period="today">Today</button>
           <button class="period-pill" data-period="week">Week</button>
@@ -3105,8 +3136,8 @@
         <span style="font-size:.7rem;color:var(--muted)" id="period-sub"></span>
       </div>
 
-      <!-- Cards -->
-      <section class="section">
+      <!-- Cards (secondary analytics) -->
+      <section class="section dashboard-secondary">
         <div class="cards">
           <div class="card">
             <div class="card-value" id="card-runs">—</div>
@@ -3191,16 +3222,16 @@
         </div>
       </section>
 
-      <!-- Recent Runs -->
-      <section class="section">
+      <!-- Recent Runs (secondary) -->
+      <section class="section dashboard-secondary">
         <div class="section-box">
           <div class="section-header"><h2>Recent Runs</h2></div>
           <div id="recent-runs"><div class="empty">Loading…</div></div>
         </div>
       </section>
 
-      <!-- Charts -->
-      <div class="charts-row">
+      <!-- Charts (secondary analytics) -->
+      <div class="charts-row dashboard-secondary">
         <div class="chart-box">
           <h2>Tokens &amp; Cost Over Time</h2>
           <div class="chart-wrap"><canvas id="tokensChart"></canvas></div>
@@ -3211,8 +3242,8 @@
         </div>
       </div>
 
-      <!-- Agent Table -->
-      <section class="section">
+      <!-- Agent Table (secondary analytics) -->
+      <section class="section dashboard-secondary">
         <div class="section-box">
           <div class="section-header section-header-flex">
             <h2>Agent &amp; Model Breakdown</h2>
@@ -5552,6 +5583,7 @@
   document.getElementById('btn-qa-refresh')?.addEventListener('click', refreshDashboard);
   document.getElementById('btn-force-refresh')?.addEventListener('click', forceRefreshLiveState);
   document.getElementById('btn-qa-hitl')?.addEventListener('click', copyHitlStatusCmd);
+  document.getElementById('btn-qa-mission')?.addEventListener('click', copyMissionSummaryCmd);
   document.getElementById('project-context-toggle')?.addEventListener('click', () => toggleProjectContextDetails());
   document.getElementById('btn-project-switch')?.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -7378,6 +7410,13 @@
     navigator.clipboard.writeText(cmd)
       .then(() => toast('Copied: ' + cmd, 'success'))
       .catch(() => toast('Copy failed — run: roland hitl-status', 'error'));
+  }
+
+  function copyMissionSummaryCmd() {
+    const cmd = 'roland mission-summary';
+    navigator.clipboard.writeText(cmd)
+      .then(() => toast('Copied: ' + cmd, 'success'))
+      .catch(() => toast('Copy failed — run: roland mission-summary', 'error'));
   }
 
   // Legacy run command builder (deprecated — kept for any stale DOM references)

@@ -3090,11 +3090,19 @@ export class McpServer {
         try {
           const ctx = this.resolveToolProjectContext(args);
           const { buildBoardStatusReport, formatConciseUnscSummary } = await import('../rco/board-report.js');
+          const { buildHitlStatusReport, formatHermesHitlSummary } = await import('../rco/hitl-hermes.js');
           const unsc = formatConciseUnscSummary(buildBoardStatusReport(ctx.stateDir));
+          const hitlReport = buildHitlStatusReport(ctx.stateDir);
+          const hitlSummary = formatHermesHitlSummary(hitlReport);
+          const hitlSection = hitlReport.waitingOnHitl
+            ? `\n\n---\n\n### 🎮 HITL — action required\n\n${hitlSummary}\n\nSuggested: \`${hitlReport.suggestedActions[0] ?? 'roland hitl-status'}\``
+            : `\n\n---\n\n**HITL:** ${hitlSummary}`;
           return {
             ...standup,
-            markdown: `${standup.markdown}\n\n---\n\n${unsc}`,
+            markdown: `${standup.markdown}\n\n---\n\n${unsc}${hitlSection}`,
             unscSummary: unsc,
+            hitlSummary,
+            waitingOnHitl: hitlReport.waitingOnHitl,
             project_root: ctx.projectRoot,
             state_dir: ctx.stateDir,
           };

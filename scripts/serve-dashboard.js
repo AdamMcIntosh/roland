@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 /**
- * ## MCP Project Context Fix
+ * ## CLI-First + Hermes Monitoring Shift
  *
- * Roland Dashboard Server — Dashboard 2.0
+ * Roland Dashboard Server — **optional** HTTP adjunct for live loop/HITL monitoring.
+ * Primary monitoring: CLI (`roland hitl-status`, `board-status`, `mission-summary`)
+ * and MCP (`hitl_status`, `poll_hitl_events`, `mission_summary`, `board_status`).
  *
- * HTTP + WebSocket server for the Roland command center.
+ * ## Dashboard De-emphasized — CLI + Hermes Hybrid Complete
+ *
+ * HTTP + WebSocket server for optional Roland command center.
  *
  * Endpoints:
  *   GET  /                         → dashboard-ui/index.html (+ static assets)

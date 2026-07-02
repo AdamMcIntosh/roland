@@ -282,11 +282,14 @@ function printHelp(): void {
   ln();
   ln('  ' + b('DIRECT COMMANDS'));
   ln(`    ${cy('roland')} ${b('"goal"')}                      Run a PM team on a goal ${d('(shortcut)')}`);
-  ln(`    ${cy('roland')} ${b('team')} "goal"               Run a PM team with live dashboard`);
+  ln(`    ${cy('roland')} ${b('team')} "goal"               Run Pure ClosedLoop mission (CLI primary)`);
   ln(`    ${cy('roland')} ${b('watch')}                      Watch git commits, auto-run on change`);
   ln(`    ${cy('roland')} ${b('pr')} [number]               Review (and optionally fix) a GitHub PR`);
-  ln(`    ${cy('roland')} ${b('status')}                     Live dashboard for a running job`);
+  ln(`    ${cy('roland')} ${b('status')}                     Live TUI for a running job ${d('(optional — prefer hitl-status)')}`);
   ln(`    ${cy('roland')} ${b('board-status')}              UNSC summary (add --concise for chat-friendly)`);
+  ln(`    ${cy('roland')} ${b('hitl-status')} [--json]       HITL gates, blockers, mission outcome`);
+  ln(`    ${cy('roland')} ${b('mission-summary')} [--json]   Latest terminal mission report (Hermes)`);
+  ln(`    ${cy('roland')} ${b('hitl-events')} [--since N]   Poll HITL events since epoch ms`);
   ln(`    ${cy('roland')} ${b('board-cleanup')}             Archive stale tasks from prior missions`);
   ln(`    ${cy('roland')} ${b('pr-cleanup')} [--apply]       Clean legacy PR titles/bodies (--current, --body)`);
   ln(`    ${cy('roland')} ${b('orchestrate')} "goal"       SDK supervisor + UNSC sub-agents`);
@@ -329,7 +332,9 @@ function printHelp(): void {
   ln(`    ${cy('roland')} ${b('inject')} "directive"         Post a directive to the Lead PM`);
   ln(`    ${cy('roland')} ${b('replan')}                     Ask PM to re-evaluate the plan`);
   ln(`    ${cy('roland')} ${b('abort')}                      Stop the run after current wave`);
-  ln(`    ${cy('roland')} ${b('hitl-status')}                Show HITL queue state and pause status`);
+  ln(`    ${cy('roland')} ${b('hitl-status')} [--json]      HITL queue, gates, suggested actions`);
+  ln(`    ${cy('roland')} ${b('mission-summary')} [--json]  Last mission outcome (Hermes parity)`);
+  ln(`    ${cy('roland')} ${b('hitl-events')} [--since N]   Poll hermes-hitl-events.jsonl`);
   ln(`    ${cy('roland')} ${b('approve-commit')} [id]        Approve pending git-commit (loop HITL)`);
   ln(`    ${cy('roland')} ${b('reject-commit')} [id]         Reject pending git-commit (loop HITL)`);
   ln();
@@ -375,6 +380,7 @@ const KNOWN_CMDS = new Set([
   'team', 'run', 'goal', 'start', 'status', 'watch', 'pr', 'chat',
   // HITL controls
   'pause', 'resume', 'unblock', 'inject', 'replan', 'abort', 'hitl-status',
+  'hitl-events', 'mission-summary',
   'approve-commit', 'reject-commit',
   'board-status', 'board-cleanup', 'pr-cleanup', 'orchestrate',
   // Background supervisor
@@ -656,56 +662,31 @@ async function main(): Promise<void> {
       }
       case 'hitl-status': {
         const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
-        const { isRunActive, readRunGoal, HitlQueue } = await import('./rco/hitl.js');
-        const active = isRunActive(stateDir);
-        const goal   = readRunGoal(stateDir);
-        const q = new HitlQueue(stateDir);
-        const hitlState = q.readState();
-        const queueLen  = hitlState.pendingCount ?? 0;
-
-        const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
-        const dim  = (s: string) => `\x1b[2m${s}\x1b[0m`;
-        const cy   = (s: string) => `\x1b[36m${s}\x1b[0m`;
-        const y    = (s: string) => `\x1b[33m${s}\x1b[0m`;
-        const g    = (s: string) => `\x1b[32m${s}\x1b[0m`;
-
-        console.error('');
-        console.error(`  ${bold('HITL Status')}  ${dim('(Human-in-the-Loop Controls)')}`);
-        console.error('');
-        console.error(`  Run active:    ${active ? g('yes') : dim('no')}${goal ? dim(` — "${goal.slice(0, 60)}"`) : ''}`);
-        console.error(`  Paused:        ${hitlState.paused ? y('yes ⏸') : dim('no')}`);
-        console.error(`  Abort pending: ${hitlState.abortPending ? y('yes ⚠️') : dim('no')}`);
-        console.error(`  Queue length:  ${queueLen > 0 ? y(String(queueLen)) : dim('0')}`);
-        {
-          const { readLoopState } = await import('./loop-engine/loop-state.js');
-          const loopState = readLoopState(stateDir);
-          if (loopState) {
-            const spawns = loopState.spawnActivityHistory?.length ?? 0;
-            const phase = loopState.currentPhase ?? '—';
-            const tpl = loopState.templateId ?? '—';
-            console.error(`  Loop:          ${dim(`${tpl} · phase=${phase} · iter=${loopState.iteration}`)}`);
-            if (spawns > 0) {
-              console.error(`  Spawn pulses:  ${String(spawns)} recorded`);
-            }
-            const la = loopState.liveActivity;
-            if (la?.kind === 'approval' || la?.activeHook?.requireApproval) {
-              console.error(`  Loop activity: ${y(`${la.label}${la.detail ? ` — ${la.detail}` : ''}`)}`);
-            }
-          }
-        }
-        console.error('');
-        if (active && !hitlState.paused) {
-          console.error(`  ${cy('roland pause')}             Pause before next wave`);
-          console.error(`  ${cy('roland abort')}             Stop after current wave`);
-          console.error(`  ${cy('roland inject "..."')}      Send directive to Lead PM`);
-        } else if (hitlState.paused) {
-          console.error(`  ${cy('roland resume')}            Resume the paused run`);
-        }
-        {
-          const { printGitCommitApprovalStatus } = await import('./rco/git-commit-approval-cli.js');
-          printGitCommitApprovalStatus(stateDir);
-        }
-        console.error('');
+        const jsonMode = rest.includes('--json');
+        const goalArgIdx = rest.indexOf('--goal');
+        const goal = goalArgIdx >= 0 ? rest[goalArgIdx + 1] : undefined;
+        const { printHitlStatus } = await import('./rco/status-cli.js');
+        printHitlStatus(stateDir, { json: jsonMode, goal });
+        break;
+      }
+      case 'mission-summary': {
+        const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const jsonMode = rest.includes('--json');
+        const goalArgIdx = rest.indexOf('--goal');
+        const goal = goalArgIdx >= 0 ? rest[goalArgIdx + 1] : undefined;
+        const { printMissionSummary } = await import('./rco/status-cli.js');
+        printMissionSummary(stateDir, { json: jsonMode, goal });
+        break;
+      }
+      case 'hitl-events': {
+        const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+        const jsonMode = rest.includes('--json');
+        const sinceIdx = rest.indexOf('--since');
+        const since = sinceIdx >= 0 ? Number(rest[sinceIdx + 1]) || 0 : 0;
+        const limitIdx = rest.indexOf('--limit');
+        const limit = limitIdx >= 0 ? Number(rest[limitIdx + 1]) || 50 : 50;
+        const { printHitlEvents } = await import('./rco/status-cli.js');
+        printHitlEvents(stateDir, { since, limit, json: jsonMode });
         break;
       }
       case 'approve-commit': {

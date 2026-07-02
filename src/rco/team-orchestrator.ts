@@ -1,8 +1,13 @@
 /**
- * ## Assumptions
+ * ## CLI-First + Hermes Monitoring Shift
+ *
+ * Assumptions:
  * - Hermes is the primary PM / strategist; Roland ClosedLoop owns loop-template missions.
- * - [DEPRECATED] Legacy PM team mode (plan → waves → synthesis) serves non-loop missions and `use_pm_team: true` only.
- * - LoopEngineCoordinator is deprecated; ClosedLoop owns loop lifecycle for template missions.
+ * - CLI + MCP (`hitl_status`, `poll_hitl_events`, `mission_summary`) are the monitoring backbone.
+ * - Dashboard is optional adjunct — not required for mission visibility.
+ * - [DEPRECATED] Legacy PM team mode (plan → waves → synthesis) serves non-loop missions only.
+ *
+ * ## Dashboard De-emphasized — CLI + Hermes Hybrid Complete
  *
  * RCO Team Orchestrator — [DEPRECATED] PM-style parallel agent execution with review loop.
  *
@@ -87,6 +92,7 @@ import { loadProjectKnowledge, appendDecisions } from './project-knowledge.js';
 import { buildTaskUsage, buildRunUsage, saveRunUsage } from './usage-tracker.js';
 import type { TaskUsageRecord } from './usage-tracker.js';
 import { HitlQueue } from './hitl.js';
+import { emitHermesHitlEvent } from './hitl-hermes.js';
 import {
   loadUnscAgents,
   toSdkAgentDefinitions,
@@ -1038,6 +1044,22 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
           tags: ['blocker', task.id],
           relatedIds: [],
         });
+        try {
+          emitHermesHitlEvent(stateDir, {
+            kind: 'blocker',
+            blockerDescription: blocker.description.slice(0, 200),
+            currentGate: 'blocker',
+            goal,
+            suggestedActions: [
+              `roland unblock ${task.id} "<guidance>"`,
+              'roland hitl-status',
+              'roland board-status --concise',
+            ],
+            detail: { taskId: task.id, agent: task.agent, waveNumber: currentWaveNumber },
+          });
+        } catch {
+          /* Hermes event must not break wave execution */
+        }
         // Fire blocker notification callback (wired to Notifier in team-cli.ts)
         onBlockerDetected?.(task.id, task.agent, blocker.description, currentWaveNumber);
       }
@@ -1387,6 +1409,18 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
         const note = `Operator escalation: ${totalBlockers} blockers this run. Review scope, environment, or provide HITL directive via /inject.`;
         commandBoard.appendBullet('Open Intel', `[ESCALATION] ${note}`);
         console.error(`[Team] ⚠️  ${note}`);
+        try {
+          emitHermesHitlEvent(stateDir, {
+            kind: 'loop-escalation',
+            blockerDescription: note,
+            currentGate: 'escalation',
+            goal,
+            suggestedActions: ['roland resume', 'roland replan', 'roland inject "ESCALATE: <operator guidance>"'],
+            detail: { totalBlockers, waveNumber },
+          });
+        } catch {
+          /* non-fatal */
+        }
         if (hitlQueue && !hitlQueue.isPaused()) {
           hitlQueue.setPaused(true);
           onHitlPause?.(true);
