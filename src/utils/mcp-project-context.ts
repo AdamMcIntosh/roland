@@ -94,3 +94,22 @@ export function chdirToProject(ctx: McpProjectContext): void {
     /* spawn cwd is the fallback */
   }
 }
+
+/*
+ * ## MCP Project Context + Dashboard Sync Fixed
+ *
+ * Resolution order: explicit `project_root` / `cwd` arg → ROLAND_PROJECT_ROOT env
+ * → derive from `state_dir` → cwd walk (CLI backward compat).
+ *
+ * MCP stdio (Cursor): pass `project_root` per tool call or set ROLAND_PROJECT_ROOT
+ * in ~/.cursor/mcp.json env for the workspace.
+ *
+ * MCP HTTP (Hermes / dashboard): pass `project_root` on tools/call; the dashboard
+ * aligns its active project before handling the request when no mission is running.
+ *
+ * Background workers: supervisor sets ROLAND_* env + chdir; team-cli resolves
+ * state dir from --state-dir / env before blackboard cleanup.
+ *
+ * Isolation: cleanupPreviousRuns + sanitizeStaleMissionState on mission start;
+ * roland_run_team passes --clean; team-orchestrator archives stale board entries.
+ */

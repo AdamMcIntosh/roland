@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ## MCP Live Sync Improvements
+ * ## MCP Project Context Fix
  *
  * Roland Dashboard Server — Dashboard 2.0
  *
@@ -88,6 +88,10 @@ import {
   repoDirName,
 } from './dashboard-github.js';
 import { encryptPat, decryptPat } from './dashboard-github-crypto.js';
+import {
+  deriveProjectRootFromStateDir,
+  resolveMcpProjectContext,
+} from '../dist/utils/mcp-project-context.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -285,6 +289,43 @@ function syncProcessEnvToActiveProject() {
 }
 
 syncProcessEnvToActiveProject();
+
+/**
+ * When Hermes calls MCP tools with project_root / cwd, align the dashboard
+ * active project before the tool handler runs so live panels read the right .roland/.
+ */
+async function alignDashboardProjectForMcpRequest(parsedBody) {
+  if (!parsedBody || parsedBody.method !== 'tools/call') return;
+  const args = parsedBody.params?.arguments;
+  if (!args || typeof args !== 'object') return;
+
+  const ctx = resolveMcpProjectContext(args);
+  const targetRoot = path.resolve(ctx.projectRoot);
+  if (targetRoot === path.resolve(activeProjectRoot)) return;
+  if (!isValidProjectRoot(targetRoot)) {
+    logProject('MCP tool call — invalid project_root ignored', {
+      targetRoot,
+      tool: parsedBody.params?.name ?? null,
+    });
+    return;
+  }
+
+  if (isMissionActive()) {
+    logProject('MCP tool call — project mismatch while mission active (not switching)', {
+      tool: parsedBody.params?.name ?? null,
+      activeProjectRoot,
+      targetRoot,
+    });
+    return;
+  }
+
+  logProject('MCP tool call — aligning dashboard to tool project context', {
+    tool: parsedBody.params?.name ?? null,
+    from: activeProjectRoot,
+    to: targetRoot,
+  });
+  await switchActiveProject(targetRoot, { force: false });
+}
 
 function getRolandEntryForProject(projectPath) {
   const localEntry = path.join(projectPath, 'dist', 'index.js');
@@ -640,7 +681,25 @@ async function tickServerHeartbeat() {
 }
 
 onMissionStateChange((stateDir, reason) => {
-  if (path.resolve(stateDir) !== path.resolve(activeStateDir)) return;
+  const resolved = path.resolve(stateDir);
+  if (resolved !== path.resolve(activeStateDir)) {
+    const targetRoot = deriveProjectRootFromStateDir(resolved);
+    if (!isMissionActive() && isValidProjectRoot(targetRoot)) {
+      logProject('Mission state change in non-active project — auto-switching dashboard', {
+        stateDir: resolved,
+        reason,
+        targetRoot,
+      });
+      void switchActiveProject(targetRoot, { force: false }).then(() => pushCurrentState());
+    } else {
+      logState('Mission state change outside active project (not switching)', {
+        stateDir: resolved,
+        activeStateDir,
+        reason,
+      });
+    }
+    return;
+  }
   logState('Mission state change — pushing live update', { reason, stateDir });
   void pushCurrentState();
 });
@@ -2217,11 +2276,12 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       if (mcpMatch === 'mcp') {
-        syncProcessEnvToActiveProject();
         let body;
         if (method === 'POST') {
           try { body = await readBody(req); } catch (e) { jsonErr(res, e.message); return; }
         }
+        await alignDashboardProjectForMcpRequest(body);
+        syncProcessEnvToActiveProject();
         await mcp.handleMcpHttpRequest(req, res, body);
         return;
       }
@@ -2991,3 +3051,12 @@ server.listen(port, host, () => {
   console.log(`\n  Open the URL above in your browser (Tailscale: use machine IP).\n`);
   adjustServerHeartbeat();
 });
+
+/*
+ * ## MCP Project Context + Dashboard Sync Fixed
+ *
+ * - MCP tools/call with project_root or cwd auto-switch the dashboard when idle.
+ * - onMissionStateChange auto-switches when a mission starts in another project.
+ * - summarizeSupervisorPayload reads projectRoot from mission-meta.json.
+ * - syncProcessEnvToActiveProject pins ROLAND_* before every MCP HTTP request.
+ */

@@ -3601,6 +3601,7 @@ What would you like to work on?`;
           '--background',
           '--quiet',
           '--no-tui',
+          '--clean',
           '--state-dir',
           resolvedStateDir,
         ];
