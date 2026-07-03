@@ -1,25 +1,25 @@
 /**
- * Cursor-native model policy for the PM team (Phase 3).
- *
- * The PM team runs entirely on Cursor's native models — there is no OpenRouter
- * here. Routing is deterministic and lane-based:
- *
- *   pm        → gpt-5.4-nano  (Lead PM only — orchestration + planning)
- *   reasoning → composer-2.5  (architect, reviewer, critic, planner, security…)
- *   coding    → composer-2.5  (executor, builder — cost-efficient default)
- *   light     → composer-2.5  (docs, tests, research — also standard)
- *
- * Cost strategy: GPT-5.4 Nano for the one orchestration agent ($0.20/$1.25 per MTok);
- * composer-2.5 for every engineer regardless of lane.
- *
- * This module is intentionally self-contained: it imports none of the legacy
- * OpenRouter constants and shares nothing with the RCO/triage routing path.
+ * ## Assumptions
+ * - [DEPRECATED] Legacy PM Team lane routing bridges to Loop Engineering ModelRouter when no explicit policy is passed.
+ * - Hermes is the recommended PM layer; this policy serves LeadPM / use_pm_team backward compatibility only.
+ * - DEFAULT_MODEL_POLICY uses Cursor SDK ids derived from config.yaml `models` section.
  */
+import { getModelRouter } from '../models/model-router.js';
+import { DEFAULT_ENGINEER_MODEL, DEFAULT_PM_MODEL } from '../rco/cursor-models.js';
 export const PROVIDER = 'cursor';
+/** [DEPRECATED] Build a legacy PM Team policy from Loop Engineering ModelRouter. */
+export function modelPolicyFromRouter(router) {
+    const r = router ?? getModelRouter();
+    return {
+        pm: r.resolveSdkModelId('lead-pm'),
+        fast: r.resolveSdkModelId('architect'),
+        standard: r.resolveSdkModelId('executor'),
+    };
+}
 export const DEFAULT_MODEL_POLICY = {
-    pm: 'gpt-5.4-nano',
-    fast: 'composer-2.5',
-    standard: 'composer-2.5',
+    pm: DEFAULT_PM_MODEL,
+    fast: DEFAULT_ENGINEER_MODEL,
+    standard: DEFAULT_ENGINEER_MODEL,
 };
 /** Map a lane to its Cursor model id + variant under a given policy. */
 export function modelForLane(lane, policy = DEFAULT_MODEL_POLICY) {
@@ -49,7 +49,7 @@ export function laneForEngineer(name, overrides = {}) {
         return 'pm';
     if (/architect|planner|critic|review|security|tdd|strateg/.test(name))
         return 'reasoning';
-    if (/test-executor|test-author|writer|doc|explore|research|analyst|accessibilit/.test(name))
+    if (/test-executor|test-author|qa-tester|writer|doc|explore|research|analyst|accessibilit/.test(name))
         return 'light';
     return 'coding';
 }

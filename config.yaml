@@ -153,10 +153,8 @@ roland:
     temperature: 0.7
     max_tokens: 2000
 
-# Goose integration — smart dispatcher model routing via OpenRouter
-goose:
-  dispatcher_model: anthropic/claude-haiku-4.5  # Main session: routing + execution (~$4/mo)
-  dispatcher_provider: openrouter
+# Budget control — spending limits and free-model fallbacks via OpenRouter
+budget:
   known_free_models:                              # All support tool calling, 128K+ context
     - qwen/qwen3-coder:free                      # Best free coder, 262K, agentic focus
     - nvidia/nemotron-3-super-120b-a12b:free      # Top SWE-Bench, multi-step planning
@@ -164,7 +162,6 @@ goose:
     - arcee-ai/trinity-large-preview:free         # Complex toolchains
     - mistralai/mistral-small-3.1-24b-instruct:free  # Fast structured output
     - z-ai/glm-4.5-air:free                      # Thinking mode, agent-centric
-  fallback_model: google/gemini-2.5-flash         # Budget-safe paid fallback
   budget_degradation_threshold: 0.8               # Switch to free models at 80%
   monthly_budget: 85                              # Monthly budget in USD
   billing_cycle_day: 1                            # Day of month to auto-reset spending

@@ -4,17 +4,14 @@ Roland includes 9 multi-agent workflow recipes. Recipes can be driven two ways:
 
 ## How Recipes Work
 
-### Option A — Autonomous (Goose, recommended)
+### Option A — Team mission (ClosedLoop, recommended)
 
-Each step spawns a headless Goose session with real file/shell access via the Developer extension. Agents actually edit files and run commands, not just produce text.
+Each step runs via Pure ClosedLoop with real file edits, tests, and verification gates.
 
 ```bash
-npx tsx scripts/run-recipe.ts --recipe BugFix --task "Fix login timeout" --project /path/to/project
-npx tsx scripts/run-recipe.ts --recipe VB6Migration --task "Migrate Form1.frm" --dry-run
-npx tsx scripts/run-recipe.ts --recipe PlanExecRevEx --task "Build a REST API" --max-retries 2
+roland team "Fix login timeout" --loop-template full-cycle-verified-loop
+roland team "Migrate Form1.frm to C#" --loop-template feature-implementation-loop
 ```
-
-Options: `--recipe`, `--task`, `--project`, `--dry-run`, `--timeout <seconds>`, `--max-turns <n>`, `--max-retries <n>`
 
 ### Option B — IDE-driven (Cursor / VS Code)
 
@@ -27,7 +24,7 @@ The IDE drives each step manually via MCP tools. The agent produces text; the ID
 
 ### Session continuity
 
-In autonomous mode, steps share a named Goose session (`--session roland-<id>`) so each agent sees the full conversation history of prior steps. A `SessionContextManager` also tracks decisions, file changes, and patterns across the run.
+In team mode, `SessionContextManager` tracks decisions, file changes, and patterns across the run.
 
 ## Available Recipes
 
@@ -197,9 +194,7 @@ Structured pipeline for migrating Visual Basic 6 codebases to C#. Loads project 
 **Best run autonomously** — Executor writes real files, Reviewer runs build/tests:
 
 ```bash
-npx tsx scripts/run-recipe.ts --recipe VB6Migration \
-  --task "Migrate src/Forms/Form1.frm to C#" \
-  --project /path/to/vb6-project
+roland team "Migrate src/Forms/Form1.frm to C#" --loop-template feature-implementation-loop
 ```
 
 ### CodeReviewCompliance
@@ -216,14 +211,14 @@ Comprehensive code review workflow that validates code against best practices an
 
 ## Quick Start
 
-### Autonomous (Goose)
+### Team mission (ClosedLoop)
 
 ```bash
-# Run end-to-end — Goose edits files, runs tests, commits
-npx tsx scripts/run-recipe.ts --recipe PlanExecRevEx --task "Refactor the auth module to use JWT tokens"
+# Run end-to-end with verification gates
+roland team "Refactor the auth module to use JWT tokens" --loop-template full-cycle-verified-loop
 
-# Preview prompts without executing
-npx tsx scripts/run-recipe.ts --recipe BugFix --task "Fix login timeout" --dry-run
+# Bug-fix workflow
+roland team "Fix login timeout" --loop-template full-cycle-verified-loop
 ```
 
 ### IDE-driven (Cursor / VS Code)

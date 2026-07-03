@@ -3,7 +3,7 @@
  *
  * Tracks decisions, file changes, patterns, errors, and migration progress
  * across subagent calls. Persists to disk so context survives across
- * Goose session restarts.
+ * session restarts.
  *
  * Solves the "long session context continuity" gap vs Claude Code:
  * each subagent gets the full structured context of everything that

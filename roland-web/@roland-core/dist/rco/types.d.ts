@@ -39,13 +39,13 @@ export declare const RcoSubagentSchema: z.ZodObject<{
 }, "strip", z.ZodTypeAny, {
     name: string;
     agentRef: string;
-    prompt?: string | undefined;
     claude_model?: string | undefined;
+    prompt?: string | undefined;
 }, {
     name: string;
     agentRef: string;
-    prompt?: string | undefined;
     claude_model?: string | undefined;
+    prompt?: string | undefined;
 }>;
 export declare const RcoWorkflowStepSchema: z.ZodObject<{
     agent: z.ZodString;
@@ -79,13 +79,13 @@ export declare const RcoRecipeSchema: z.ZodObject<{
     }, "strip", z.ZodTypeAny, {
         name: string;
         agentRef: string;
-        prompt?: string | undefined;
         claude_model?: string | undefined;
+        prompt?: string | undefined;
     }, {
         name: string;
         agentRef: string;
-        prompt?: string | undefined;
         claude_model?: string | undefined;
+        prompt?: string | undefined;
     }>, "many">>;
     workflow: z.ZodObject<{
         steps: z.ZodArray<z.ZodObject<{
@@ -155,8 +155,8 @@ export declare const RcoRecipeSchema: z.ZodObject<{
     subagents?: {
         name: string;
         agentRef: string;
-        prompt?: string | undefined;
         claude_model?: string | undefined;
+        prompt?: string | undefined;
     }[] | undefined;
 }, {
     name: string;
@@ -179,8 +179,8 @@ export declare const RcoRecipeSchema: z.ZodObject<{
     subagents?: {
         name: string;
         agentRef: string;
-        prompt?: string | undefined;
         claude_model?: string | undefined;
+        prompt?: string | undefined;
     }[] | undefined;
 }>;
 export type RcoSubagent = z.infer<typeof RcoSubagentSchema>;
@@ -387,6 +387,7 @@ export declare const WorkerInputSchema: z.ZodObject<{
     }>>;
 }, "strip", z.ZodTypeAny, {
     type: "run";
+    state: Record<string, unknown>;
     agentYaml: {
         name: string;
         provider?: string | undefined;
@@ -397,7 +398,6 @@ export declare const WorkerInputSchema: z.ZodObject<{
         claude_model?: string | undefined;
         tools?: string[] | undefined;
     };
-    state: Record<string, unknown>;
     taskContext: string;
     tools?: string[] | undefined;
     stepInput?: string | undefined;
@@ -416,6 +416,7 @@ export declare const WorkerInputSchema: z.ZodObject<{
     } | undefined;
 }, {
     type: "run";
+    state: Record<string, unknown>;
     agentYaml: {
         name: string;
         provider?: string | undefined;
@@ -426,7 +427,6 @@ export declare const WorkerInputSchema: z.ZodObject<{
         claude_model?: string | undefined;
         tools?: string[] | undefined;
     };
-    state: Record<string, unknown>;
     taskContext: string;
     tools?: string[] | undefined;
     stepInput?: string | undefined;
@@ -452,14 +452,14 @@ export declare const WorkerOutputSchema: z.ZodObject<{
     error: z.ZodOptional<z.ZodString>;
 }, "strip", z.ZodTypeAny, {
     type: "result";
-    output: string;
     success: boolean;
+    output: string;
     error?: string | undefined;
     dotGraph?: string | undefined;
 }, {
     type: "result";
-    output: string;
     success: boolean;
+    output: string;
     error?: string | undefined;
     dotGraph?: string | undefined;
 }>;

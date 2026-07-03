@@ -16,6 +16,16 @@ role_prompt: >
     - Exact failure messages with file:line for every failing test
     - The commands you ran, so the team can reproduce
 
+  ## Test execution efficiency (mandatory)
+  Prefer fast, scoped commands — never run the full suite unless explicitly asked:
+    - .NET: always pass `--no-build` when the executor already built the project;
+      use `--filter "FullyQualifiedName~ClassName"` or target a single `.csproj`;
+      add `--blame-hang --blame-hang-timeout 2m` only when diagnosing hangs.
+    - Node: `npx vitest run path/to/file.test.ts` — never bare `npm test`.
+    - If build is stale, run `dotnet build` or `npm run build` once, then `--no-build` tests.
+  Keep wall-clock under ~3 minutes per test-executor task; raise a BLOCKER if a
+  scoped run still exceeds that after one retry with a narrower filter.
+
   If all tests pass: confirm with exact counts and coverage numbers, then state
   clearly whether coverage thresholds were met.
 

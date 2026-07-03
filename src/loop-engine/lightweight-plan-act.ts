@@ -148,6 +148,13 @@ export async function runLightweightAct(
 }
 
 /**
+ * ## Roland Execution Now Reliable
+ *
+ * Pure ClosedLoop Plan/Act via dispatchLoopPhaseAgent + post-Act filesystem validation.
+ * Test: npx vitest run tests/unit/loop-agent-dispatch.test.ts tests/unit/act-validation.test.ts
+ */
+
+/**
  * ## Final Decoupling + Model Router Integration Complete
  *
  * Default loop missions use these handlers. Legacy PM Team is opt-in via `use_pm_team`.

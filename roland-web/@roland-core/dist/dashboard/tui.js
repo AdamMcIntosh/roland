@@ -286,7 +286,7 @@ export class TuiRenderer {
         const row = (content) => '║' + pad(content, C) + '║';
         // ── Header ──────────────────────────────────────────────────────────────
         const elapsedStr = elapsed(now - state.startedAt);
-        const titleLeft = ` ${b('🚀  Roland PM Team')}`;
+        const titleLeft = ` ${b('🚀  Roland')}`;
         const titleRight = d(`[${elapsedStr}]`) + ' ';
         const titlePad = C - vlen(titleLeft) - vlen(titleRight);
         lines.push(top);
@@ -365,10 +365,10 @@ export class TuiRenderer {
             }
         }
         else if (state.status === 'reviewing') {
-            lines.push(row(` ${cy(this.spinner())} ${b('Lead PM')} ${d('reviewing wave results…')}`));
+            lines.push(row(` ${cy(this.spinner())} ${b('[DEPRECATED] Lead PM')} ${d('reviewing wave results…')}`));
         }
         else if (state.status === 'synthesizing') {
-            lines.push(row(` ${cy(this.spinner())} ${b('Lead PM')} ${d('synthesizing final deliverable…')}`));
+            lines.push(row(` ${cy(this.spinner())} ${b('[DEPRECATED] Lead PM')} ${d('synthesizing final deliverable…')}`));
         }
         else if (state.status === 'done') {
             lines.push(row(` ${g('✅')} ${b('Complete')} ${d('·')} synthesis printed to stdout`));

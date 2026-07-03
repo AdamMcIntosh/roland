@@ -1,14 +1,26 @@
 /**
- * RCO Team Orchestrator — PM-style parallel agent execution with review loop.
+ * ## CLI-First + Hermes Monitoring Shift
  *
- * Execution flow:
+ * Assumptions:
+ * - Hermes is the primary PM / strategist; Roland ClosedLoop owns loop-template missions.
+ * - CLI + MCP (`hitl_status`, `poll_hitl_events`, `mission_summary`) are the monitoring backbone.
+ * - Dashboard is optional adjunct — not required for mission visibility.
+ * - [DEPRECATED] Legacy PM team mode (plan → waves → synthesis) serves non-loop missions only.
  *
- *   Phase 1 — Lead PM planning
+ * ## Dashboard De-emphasized — CLI + Hermes Hybrid Complete
+ *
+ * RCO Team Orchestrator — [DEPRECATED] PM-style parallel agent execution with review loop.
+ *
+ * Execution flow ([DEPRECATED] legacy PM path only):
+ *
+ *   Phase 1 — [DEPRECATED] Lead PM planning
  *     The Lead PM (Grok 4.3) reads the goal + Blackboard + roster and
  *     returns a structured task plan.
  *
  *   Phase 2 — Iterated wave execution (the PM control loop)
- *     Each wave runs all ready tasks in parallel. After every wave:
+ *     Each wave runs all ready tasks in parallel (DAG-aware via dependsOn).
+ *     Mission graph persisted to `.roland/mission-dag.json` when DAG planning
+ *     is enabled; wave scheduling unchanged for flat plans.
  *       - Worker signals are parsed (blockers posted to Blackboard, messages to Bus)
  *       - PM reviews results; blockers are surfaced prominently
  *       - PM decides: continue | adjust (spawn / unblock / re-scope)
@@ -17,13 +29,18 @@
  *   Phase 3 — Lead PM synthesis
  *     The PM reviews all results and produces the final deliverable.
  */
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { cleanupSdkSession, configureSdkProcessLimits, createShellExecStderrFilter, resolveSdkAgentLocalOptions, resolveSdkSettleMs, waitForSdkRun, } from '../utils/sdk-lifecycle.js';
+// Team CLI and supervisor import this module directly (not via index.ts).
+configureSdkProcessLimits();
 import { Blackboard } from './blackboard.js';
+import { CommandBlackboard } from './command-blackboard.js';
 import { MessageBus } from './message-bus.js';
 import { buildLeadPMPlanningPrompt, buildLeadPMReviewPrompt, buildLeadPMSynthesisPrompt, buildFallbackSynthesisPrompt, isReviewDecision, } from './pm-prompts.js';
 import { buildClaudeToolCallingPrompt } from './prompts.js';
+import { MissionDagStore, formatMissionGraphSummary, formatNodeDagContext, isDagPlanningEnabled, } from './mission-dag.js';
 import { loadAllAgents, resolveAgentsDir } from './loadConfig.js';
+import { hasLoopTemplate, runClosedLoopMission } from './loop-orchestrator.js';
+import { ModelRouter } from '../models/model-router.js';
 import { toCursorModelId } from './model-routing.js';
 import { parseWorkerSignals } from './worker-signals.js';
 import { AGENT_TIMEOUT_MS, AGENT_MAX_RETRIES, NETWORK_RETRY_DELAYS, GENERIC_RETRY_DELAYS, NETWORK_ERROR_PATTERNS, MAX_CONCURRENT_AGENTS, CIRCUIT_BREAKER_THRESHOLD, AGENT_WARMUP_DELAY_MS, BLACKBOARD_RESULT_MAX_CHARS, } from './constants.js';
@@ -31,7 +48,55 @@ import { ProjectMemory } from './project-memory.js';
 import { buildRetrospectivePrompt, parseRetrospectiveOutput, showMemoryProposal, applyRetroUpdate, parsePlanCitations, parseSelfCritique, collectHumanFeedback, } from './self-improvement.js';
 import { loadProjectKnowledge, appendDecisions } from './project-knowledge.js';
 import { buildTaskUsage, buildRunUsage, saveRunUsage } from './usage-tracker.js';
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import { emitHermesHitlEvent } from './hitl-hermes.js';
+import { loadUnscAgents, toSdkAgentDefinitions, legacyAgentToCallsign, } from './unsc-agents.js';
+import { finalizeSynthesisOutput } from './mission-complete.js';
+import { TaskGitWorkflow, isExecutorAgent, } from './task-git-workflow.js';
+/** Operator escalation threshold — cumulative blockers before surfacing to human command. */
+const OPERATOR_ESCALATION_THRESHOLD = 3;
+/** Max PM review parse failures before forcing an adjust decision with synthetic recovery. */
+const PM_REVIEW_PARSE_FAILURE_THRESHOLD = 2;
+/** Map legacy roster agent names to UNSC callsigns for Command Blackboard updates. */
+function agentToCallsign(agentName) {
+    const mapped = legacyAgentToCallsign(agentName);
+    const callsigns = ['Roland', 'Sparrow', 'Vanguard', 'Oracle', 'Sentinel', 'Forge', 'Specter'];
+    const match = callsigns.find((c) => c.toLowerCase() === mapped);
+    return match ?? 'Sparrow';
+}
+/**
+ * Tracks blocker frequency and PM review failures for operator escalation.
+ */
+class EscalationTracker {
+    _blockerCount = 0;
+    _agentBlockers = new Map();
+    _reviewParseFailures = 0;
+    _escalationNotes = [];
+    recordBlocker(agent, description) {
+        this._blockerCount++;
+        const count = (this._agentBlockers.get(agent) ?? 0) + 1;
+        this._agentBlockers.set(agent, count);
+        if (count >= 2) {
+            this._escalationNotes.push(`Repeated blocker from ${agent} (${count}× this run): ${description.slice(0, 120)}`);
+        }
+        if (this._blockerCount >= OPERATOR_ESCALATION_THRESHOLD) {
+            this._escalationNotes.push(`Cumulative blocker threshold reached (${this._blockerCount}). Operator review recommended — scope or environment may need adjustment.`);
+        }
+    }
+    recordReviewParseFailure(waveNumber) {
+        this._reviewParseFailures++;
+        if (this._reviewParseFailures >= PM_REVIEW_PARSE_FAILURE_THRESHOLD) {
+            this._escalationNotes.push(`PM review JSON unparseable ${this._reviewParseFailures}× (wave ${waveNumber}). Forcing adjust recovery.`);
+            return true;
+        }
+        return false;
+    }
+    get escalationNotes() {
+        return [...new Set(this._escalationNotes)];
+    }
+    shouldEscalateToOperator() {
+        return this._blockerCount >= OPERATOR_ESCALATION_THRESHOLD;
+    }
+}
 // ── Utilities ─────────────────────────────────────────────────────────────────
 function extractJsonBlock(text) {
     const match = text.match(/```json\s*([\s\S]*?)```/i);
@@ -81,10 +146,10 @@ function buildMinimalSynthesis(goal, taskResults) {
             lines.push('\n…(truncated)');
         lines.push('');
     }
-    lines.push('## Immediate Next Steps');
+    lines.push('## Next Steps');
     lines.push('');
     lines.push('1. Review the output excerpts above for files created or modified.');
-    lines.push('2. Run `dotnet test --no-build` (or `npm run test:run`) to check test status.');
+    lines.push('2. Run `npm run test:run` (or project-specific test command) to check test status.');
     lines.push('3. Use `roland team "..."` with a more focused goal to continue.');
     lines.push('');
     lines.push('_Full synthesis unavailable — rerun with a narrower goal if this recurs._');
@@ -190,42 +255,49 @@ function isNetworkError(err) {
     return NETWORK_ERROR_PATTERNS.some((p) => msg.toLowerCase().includes(p.toLowerCase()));
 }
 /** Single attempt: one SDK call with a hard timeout and a 60 s heartbeat. */
-async function callCursorAgentOnce(agentName, modelId, prompt) {
+async function callCursorAgentOnce(agentName, modelId, prompt, callOptions) {
     const apiKey = process.env.CURSOR_API_KEY;
     if (!apiKey)
         throw new Error('CURSOR_API_KEY is not set');
     const { Agent } = await import('@cursor/sdk');
-    const agent = await Agent.create({
-        apiKey,
-        model: { id: modelId },
-        name: agentName,
-        local: { cwd: process.cwd() },
-    });
-    const run = await agent.send(prompt);
-    const start = Date.now();
-    // Heartbeat: lets users see long-running agents are alive, not hung.
-    const heartbeat = setInterval(() => {
-        const m = ((Date.now() - start) / 60_000).toFixed(1);
-        console.error(`[Team]   ⏳ ${agentName} still running… (${m}m elapsed)`);
-    }, 60_000);
-    // Hard timeout — cleared in the finally block whether we win or lose the race.
-    let timeoutId;
-    const timeoutPromise = new Promise((_, reject) => {
-        timeoutId = setTimeout(() => {
-            reject(new Error(`Agent "${agentName}" timed out after ${(AGENT_TIMEOUT_MS / 60_000).toFixed(0)} min. ` +
-                `Raise the limit with ROLAND_AGENT_TIMEOUT_MS (ms).`));
-        }, AGENT_TIMEOUT_MS);
-    });
+    const sdkAgents = callOptions?.sdkAgents;
+    const hasSubAgents = sdkAgents && Object.keys(sdkAgents).length > 0;
+    let agent;
+    let run;
     try {
-        const result = await Promise.race([run.wait(), timeoutPromise]);
+        agent = await Agent.create({
+            apiKey,
+            model: { id: modelId },
+            name: callOptions?.isSupervisor ? 'Roland' : agentName,
+            local: resolveSdkAgentLocalOptions(agentName, {
+                cwd: process.cwd(),
+                settingSources: hasSubAgents ? ['project'] : [],
+            }),
+            ...(hasSubAgents ? { agents: sdkAgents } : {}),
+        });
+        run = await agent.send(prompt);
+        const result = await waitForSdkRun(run, {
+            timeoutMs: AGENT_TIMEOUT_MS,
+            agentName,
+            heartbeatIntervalMs: 30_000,
+            onHeartbeat: (elapsedMs) => {
+                const m = Math.floor(elapsedMs / 60_000);
+                const s = Math.floor((elapsedMs % 60_000) / 1000);
+                const elapsed = m > 0 ? `${m}m ${s}s` : `${s}s`;
+                console.error(`[Team]   ⏳ ${agentName} still running… (${elapsed} elapsed)`);
+            },
+        });
         if (result.status === 'error' || result.status === 'cancelled') {
             throw new Error(`Agent "${agentName}" ${result.status}: ${result.result ?? 'no detail'}`);
         }
         return result.result ?? '';
     }
     finally {
-        clearInterval(heartbeat);
-        clearTimeout(timeoutId);
+        const settleMs = resolveSdkSettleMs(agentName, prompt);
+        const { forced } = await cleanupSdkSession(agent, run, { settleMs, agentName });
+        if (forced) {
+            console.error(`[Team]   🧹 ${agentName} — force cleanup applied after settle (${settleMs}ms)`);
+        }
     }
 }
 /**
@@ -249,7 +321,7 @@ async function callCursorAgentOnce(agentName, modelId, prompt) {
  * On final failure returns a synthetic BLOCKER so the PM can handle it in the
  * next wave review without crashing the entire orchestration.
  */
-async function callCursorAgent(agentName, modelId, prompt, circuitBreaker) {
+async function callCursorAgent(agentName, modelId, prompt, circuitBreaker, callOptions) {
     // Fast-fail if the circuit is already open — skip all retry attempts
     if (circuitBreaker?.isOpen) {
         console.error(`[Team]   ⚡ ${agentName} — circuit open, task fast-failed (API connectivity issue)`);
@@ -266,7 +338,7 @@ async function callCursorAgent(agentName, modelId, prompt, circuitBreaker) {
     const maxAttempts = AGENT_MAX_RETRIES + 1;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
-            return await callCursorAgentOnce(agentName, modelId, prompt);
+            return await callCursorAgentOnce(agentName, modelId, prompt, callOptions);
         }
         catch (err) {
             lastErr = err instanceof Error ? err : new Error(String(err));
@@ -314,35 +386,183 @@ async function callCursorAgent(agentName, modelId, prompt, circuitBreaker) {
     ].filter(Boolean);
     return lines.join('\n');
 }
+/** Suppress [Team] progress logs — used for --quiet runs (synthesis-only output). */
+function muteConsoleError() {
+    const prev = console.error;
+    console.error = () => { };
+    return () => { console.error = prev; };
+}
 // ── Main export ───────────────────────────────────────────────────────────────
 export async function runTeam(opts) {
-    const { goal, stateDir = '.roland', agentsDir: agentsDirOverride, onPlanReady, onWaveStart, onTaskStart, onTaskComplete, onWaveComplete, onWaveReview, onTasksSpawned, onSynthesizing, onBlockerDetected, hitlQueue, onHitlPause, onAbortPending, noImprove = false, interactive = false, rl, onCircuitBreak, sequential = false, } = opts;
+    const { goal, stateDir = '.roland', agentsDir: agentsDirOverride, onPlanReady, onWaveStart, onTaskStart, onTaskComplete, onWaveComplete, onWaveReview, onTasksSpawned, onSynthesizing, onBlockerDetected, hitlQueue, onHitlPause, onAbortPending, noImprove = false, interactive = false, rl, onCircuitBreak, sequential = false, quiet = false, loopTemplate, onLoopStateChange, loopRunner, pmSlice, existingPlan, loopEmbedded, loopIteration, } = opts;
+    const restoreStderr = quiet ? createShellExecStderrFilter() : undefined;
+    const restoreLog = quiet ? muteConsoleError() : undefined;
+    try {
+        const result = await runTeamInner({
+            goal, stateDir, agentsDir: agentsDirOverride,
+            onPlanReady, onWaveStart, onTaskStart, onTaskComplete, onWaveComplete,
+            onWaveReview, onTasksSpawned, onSynthesizing,
+            onBlockerDetected, hitlQueue,
+            onHitlPause, onAbortPending,
+            noImprove, interactive, rl,
+            onCircuitBreak,
+            sequential,
+            quiet,
+            loopTemplate,
+            onLoopStateChange,
+            loopRunner,
+            pmSlice,
+            existingPlan,
+            loopEmbedded,
+            loopIteration,
+        });
+        if (!opts.loopEmbedded) {
+            try {
+                const { notifyHermesMissionCompleteFromTeamResult } = await import('./hitl-hermes.js');
+                notifyHermesMissionCompleteFromTeamResult(stateDir, result);
+            }
+            catch {
+                /* Hermes notification must not break mission return */
+            }
+        }
+        return result;
+    }
+    catch (err) {
+        if (!opts.loopEmbedded) {
+            try {
+                const { notifyHermesMissionFailed } = await import('./hitl-hermes.js');
+                notifyHermesMissionFailed(stateDir, goal, err);
+            }
+            catch {
+                /* non-fatal */
+            }
+        }
+        throw err;
+    }
+    finally {
+        restoreStderr?.();
+        restoreLog?.();
+    }
+}
+async function runTeamInner(opts) {
+    const { goal, stateDir = '.roland', agentsDir: agentsDirOverride, onPlanReady, onWaveStart, onTaskStart, onTaskComplete, onWaveComplete, onWaveReview, onTasksSpawned, onSynthesizing, onBlockerDetected, hitlQueue, onHitlPause, onAbortPending, noImprove = false, interactive = false, rl, onCircuitBreak, sequential = false, pmSlice, existingPlan, loopEmbedded = false, loopIteration, loopTemplate, } = opts;
+    if (!loopEmbedded) {
+        const { prepareMissionStart } = await import('./mission-state.js');
+        const { formatCleanupReport } = await import('./board-cleanup.js');
+        const projectRoot = process.env.ROLAND_PROJECT_ROOT?.trim() ||
+            process.env.ROLAND_ROOT?.trim() ||
+            process.cwd();
+        const cleanupResult = prepareMissionStart(stateDir, goal, { projectRoot });
+        const boardResult = cleanupResult.boardCleanup;
+        if (cleanupResult.metaArchived ||
+            cleanupResult.loopArtifactsReset ||
+            (boardResult && (boardResult.blackboardArchived > 0 ||
+                boardResult.commandBoard.activeTasksRemoved.length > 0 ||
+                boardResult.commandBoard.objectivesArchived.length > 0))) {
+            const label = hasLoopTemplate(loopTemplate) ? '[Loop]' : '[Team]';
+            console.error(`${label} Mission start hygiene — prior state archived`);
+            if (boardResult) {
+                for (const line of formatCleanupReport(boardResult).split('\n').slice(1, 4)) {
+                    if (line.trim())
+                        console.error(`${label}   ${line}`);
+                }
+            }
+            if (cleanupResult.loopArtifactsReset) {
+                console.error(`${label}   loop-state + checkpoint reset for fresh mission`);
+            }
+        }
+    }
+    // Loop Engineering pivot — ClosedLoop is the single source of truth for loop-template missions.
+    if (hasLoopTemplate(loopTemplate)) {
+        return runClosedLoopMission(opts);
+    }
+    const loopEmbedLabel = loopEmbedded
+        ? `[Loop][PM Team]${loopIteration != null ? ` iter=${loopIteration}` : ''}`
+        : '[Team]';
     // ── Usage tracking ────────────────────────────────────────────────────────
     const runId = Date.now().toString(36);
     const runStart = Date.now();
     const allTaskUsage = [];
     // ── Coordination layer ────────────────────────────────────────────────────
-    console.error('[Team] Initializing coordination layer...');
+    console.error(`${loopEmbedLabel} Initializing coordination layer...`);
     const blackboard = new Blackboard(stateDir);
+    const commandBoard = new CommandBlackboard(stateDir);
     const bus = new MessageBus(stateDir);
     const memory = new ProjectMemory(stateDir);
     const memorySnapshot = memory.smartSnapshot(goal);
     if (memorySnapshot)
         console.error('[Team] Project memory loaded — smart recall injecting into planning prompt');
+    // UNSC sub-agents for SDK delegation (Roland supervisor + worker callsigns)
+    const unscAgentMap = loadUnscAgents();
+    const sdkAgents = toSdkAgentDefinitions(unscAgentMap);
+    if (Object.keys(sdkAgents).length > 0) {
+        console.error(`[Team] UNSC sub-agents registered: ${Object.keys(sdkAgents).join(', ')}`);
+    }
+    // Seed Command Blackboard with mission objective
+    if (!loopEmbedded) {
+        commandBoard.appendBullet('Mission Objectives', `[P2 active] ${goal}`);
+    }
+    else {
+        commandBoard.appendBullet('Mission Objectives', `[Loop PM embed${loopIteration != null ? ` iter ${loopIteration}` : ''}] ${goal.slice(0, 100)}`);
+    }
+    commandBoard.setAgentStatus({
+        callsign: 'Roland',
+        state: 'active',
+        lastUpdated: Date.now(),
+        note: loopEmbedded ? `PM Team embedded — ${pmSlice ?? 'full'}` : 'Lead PM planning',
+    });
+    const getCommandBlackboardSnapshot = () => commandBoard.smartSnapshot(goal);
     const knowledge = loadProjectKnowledge(process.cwd());
     if (knowledge.files.length > 0) {
         console.error(`[Team] Project knowledge loaded — ${knowledge.summary}`);
     }
-    blackboard.post({ type: 'task', title: 'TEAM GOAL', content: goal, status: 'in_progress', author: 'system', priority: 'critical', tags: ['goal'], relatedIds: [] });
+    const projectRoot = process.env.ROLAND_PROJECT_ROOT?.trim()
+        || process.env.ROLAND_ROOT?.trim()
+        || process.cwd();
+    const dashboardPort = process.env.ROLAND_DASHBOARD_PORT ?? '8081';
+    const gitWorkflow = new TaskGitWorkflow({
+        stateDir,
+        projectRoot,
+        goal,
+        runId,
+        blackboard,
+        commandBoard,
+        missionUrl: `http://127.0.0.1:${dashboardPort}`,
+    });
+    const gitCfg = gitWorkflow.getConfig();
+    if (gitCfg.enabled) {
+        console.error('[GIT] Task git workflow enabled for executor tasks');
+    }
+    else {
+        console.error('[GIT] Task git workflow disabled');
+    }
+    blackboard.post({
+        type: 'task',
+        title: loopEmbedded ? 'LOOP PM SLICE' : 'TEAM GOAL',
+        content: goal,
+        status: 'in_progress',
+        author: 'system',
+        priority: loopEmbedded ? 'high' : 'critical',
+        tags: loopEmbedded ? ['goal', 'loop-pm-embed'] : ['goal'],
+        relatedIds: [],
+    });
+    // ── Legacy PM Team Engine (non-loop missions only) ─────────────────────────
+    // TODO: Legacy PM Team — scheduled for deprecation after Loop Engineering pivot.
+    // Loop-template missions return early via runClosedLoopMission() → ClosedLoop (100% loop path).
     const agentsDir = resolveAgentsDir(import.meta.url, agentsDirOverride);
     const rosterMap = loadAllAgents(agentsDir, { excludeVariants: true });
     const roster = Array.from(rosterMap.values());
     console.error(`[Team] Roster: ${roster.length} agents from ${agentsDir}`);
-    // ── Model config banner ───────────────────────────────────────────────────
+    // ── Model config banner (legacy PM path — routes via ModelRouter dispatch) ─
+    const legacyRouter = ModelRouter.fromConfig();
+    const pmDispatch = legacyRouter.resolveDispatch('pm', { agentName: 'lead-pm', log: false });
+    const codingDispatch = legacyRouter.resolveDispatch('coding', { agentName: 'executor', log: false });
+    const pmModelId = toCursorModelId(pmDispatch.model, 'lead-pm');
+    const engineerModelId = toCursorModelId(codingDispatch.model, 'executor');
     console.error('[Team] ─────────────────────────────────────────────────────');
-    console.error('[Team] Model config:');
-    console.error('[Team]   Lead PM     → gpt-5.4-nano     (orchestration + planning)');
-    console.error('[Team]   All engineers → composer-2.5 (reasoning, execution, tests, docs)');
+    console.error('[Team] Legacy PM Team — ModelRouter dispatch');
+    console.error(`[Team]   Lead PM     → ${pmDispatch.method} ${pmDispatch.displayLabel} → SDK ${pmModelId}`);
+    console.error(`[Team]   Engineers   → ${codingDispatch.method} ${codingDispatch.displayLabel} → SDK ${engineerModelId}`);
     console.error('[Team] ─────────────────────────────────────────────────────');
     // ── Shared execution state ─────────────────────────────────────────────────
     const taskResults = {};
@@ -350,6 +570,11 @@ export async function runTeam(opts) {
     let totalBlockers = 0;
     let currentWaveNumber = 0; // tracks active wave for onBlockerDetected calls
     const waveCircuit = new WaveCircuitBreaker(); // reused across waves; reset per-wave
+    const escalation = new EscalationTracker();
+    const supervisorCallOpts = { sdkAgents, isSupervisor: true };
+    const workerCallOpts = { sdkAgents };
+    let missionDag;
+    let syncMissionGraph = () => { };
     // ── HITL processor ────────────────────────────────────────────────────────
     // Called at the start of each wave. Returns true if the run should be aborted.
     async function processHitl() {
@@ -435,6 +660,9 @@ export async function runTeam(opts) {
             upstreamContext && `\n## Context from Upstream Tasks\n\n${upstreamContext}`,
             inbox && `\n## Your Inbox (from Lead PM or colleagues)\n\n${inbox}`,
         ].filter(Boolean).join('\n');
+        const dagContext = missionDag
+            ? formatNodeDagContext(missionDag.getSnapshot(), task.id)
+            : undefined;
         // Build prompt with full team awareness
         const workerPrompt = buildClaudeToolCallingPrompt({
             agentYaml,
@@ -442,20 +670,41 @@ export async function runTeam(opts) {
             stepInput: upstreamContext || undefined,
             teamGoal: goal,
             blackboardSnapshot: blackboard.snapshot(),
+            commandBlackboardSnapshot: getCommandBlackboardSnapshot(),
+            missionDagContext: dagContext,
             teamSize: roster.length,
         });
+        const callsign = agentToCallsign(task.agent);
         const modelId = toCursorModelId(agentYaml.claude_model ?? '', task.agent);
-        console.error(`[Team]   → ${task.agent} (${modelId}): "${task.title}"`);
+        console.error(`[Team]   → ${task.agent} [${callsign}] (${modelId}): "${task.title}"`);
+        commandBoard.setAgentStatus({
+            callsign,
+            state: 'active',
+            currentTaskId: task.id,
+            lastUpdated: Date.now(),
+            note: task.title.slice(0, 60),
+        });
         // Diagnostic: log the first 400 chars of the task description for test-author
         // so we can verify the ESM reminder is actually reaching the agent.
         if (agentKey === 'test-author') {
             const descPreview = task.description.slice(0, 400).replace(/\n/g, ' ↵ ');
             console.error(`[Team]   📋 [test-author] description[:400]: ${descPreview}`);
         }
-        onTaskStart?.(task.id, task.agent, task.title);
+        let taskGitInfo;
+        if (isExecutorAgent(task.agent)) {
+            try {
+                taskGitInfo = gitWorkflow.onTaskStart(task);
+            }
+            catch (e) {
+                console.error(`[GIT] onTaskStart failed for ${task.id}: ${e instanceof Error ? e.message : String(e)}`);
+            }
+        }
+        onTaskStart?.(task.id, task.agent, task.title, taskGitInfo);
+        missionDag?.markInProgress(task.id, currentWaveNumber);
+        syncMissionGraph();
         const taskCallStart = Date.now();
-        const output = await callCursorAgent(task.agent, modelId, workerPrompt, waveCircuit);
-        allTaskUsage.push(buildTaskUsage(task.id, task.title, task.agent, modelId, workerPrompt.length, output.length, Date.now() - taskCallStart));
+        const output = await callCursorAgent(callsign, modelId, workerPrompt, waveCircuit, workerCallOpts);
+        allTaskUsage.push(buildTaskUsage(task.id, task.title, task.agent, modelId, workerPrompt.length, output.length, Date.now() - taskCallStart, legacyRouter.resolveDispatch(task.agent, { log: false }).method));
         // ── Parse worker signals ───────────────────────────────────────────────
         const signals = parseWorkerSignals(output);
         const hadBlocker = signals.blockers.length > 0;
@@ -463,6 +712,15 @@ export async function runTeam(opts) {
             totalBlockers += signals.blockers.length;
             for (const blocker of signals.blockers) {
                 console.error(`[Team]   🚨 BLOCKER from ${task.agent}: ${blocker.description.slice(0, 100)}`);
+                escalation.recordBlocker(task.agent, blocker.description);
+                commandBoard.appendBullet('Open Intel', `[BLOCKER] ${callsign} on "${task.title}": ${blocker.description.slice(0, 200)}`);
+                commandBoard.setAgentStatus({
+                    callsign,
+                    state: 'blocked',
+                    currentTaskId: task.id,
+                    lastUpdated: Date.now(),
+                    note: blocker.description.slice(0, 80),
+                });
                 blackboard.post({
                     type: 'blocker',
                     title: `BLOCKER: ${task.agent} on "${task.title}"`,
@@ -473,6 +731,23 @@ export async function runTeam(opts) {
                     tags: ['blocker', task.id],
                     relatedIds: [],
                 });
+                try {
+                    emitHermesHitlEvent(stateDir, {
+                        kind: 'blocker',
+                        blockerDescription: blocker.description.slice(0, 200),
+                        currentGate: 'blocker',
+                        goal,
+                        suggestedActions: [
+                            `roland unblock ${task.id} "<guidance>"`,
+                            'roland hitl-status',
+                            'roland board-status --concise',
+                        ],
+                        detail: { taskId: task.id, agent: task.agent, waveNumber: currentWaveNumber },
+                    });
+                }
+                catch {
+                    /* Hermes event must not break wave execution */
+                }
                 // Fire blocker notification callback (wired to Notifier in team-cli.ts)
                 onBlockerDetected?.(task.id, task.agent, blocker.description, currentWaveNumber);
             }
@@ -484,6 +759,13 @@ export async function runTeam(opts) {
         // Record result
         taskResults[task.id] = { taskTitle: task.title, agent: task.agent, output, hadBlocker };
         completedIds.add(task.id);
+        if (hadBlocker) {
+            missionDag?.markBlocked(task.id);
+        }
+        else {
+            missionDag?.markDone(task.id, false);
+        }
+        syncMissionGraph();
         // Post result to Blackboard
         blackboard.post({
             type: 'result',
@@ -497,34 +779,111 @@ export async function runTeam(opts) {
             tags: ['result', task.id],
             relatedIds: [],
         });
-        onTaskComplete?.(task.id, task.agent, output, hadBlocker);
+        if (isExecutorAgent(task.agent) && !hadBlocker) {
+            try {
+                taskGitInfo = await gitWorkflow.onTaskComplete(task, taskGitInfo);
+            }
+            catch (e) {
+                console.error(`[GIT] onTaskComplete failed for ${task.id}: ${e instanceof Error ? e.message : String(e)}`);
+            }
+        }
+        onTaskComplete?.(task.id, task.agent, output, hadBlocker, taskGitInfo);
         console.error(`[Team]   ✓ ${task.agent} done: "${task.title}"${hadBlocker ? ' 🚨 (blocker signalled)' : ''}`);
+        if (!hadBlocker) {
+            commandBoard.setAgentStatus({
+                callsign,
+                state: 'complete',
+                currentTaskId: task.id,
+                lastUpdated: Date.now(),
+            });
+            commandBoard.appendAgentLog(callsign, `${task.title}: ${output.slice(0, 200).replace(/\n/g, ' ')}`);
+            commandBoard.appendBullet('Active Tasks', `[done] ${task.id} — ${callsign}: ${task.title}`);
+        }
         return { taskId: task.id, taskTitle: task.title, agent: task.agent, output, hasBlocker: hadBlocker };
     }
+    const dagPlanningEnabled = isDagPlanningEnabled(goal);
+    if (dagPlanningEnabled) {
+        console.error('[Team] Mission DAG planning enabled (complex goal or ROLAND_MISSION_DAG=1)');
+    }
     // ── Phase 1: Lead PM planning ─────────────────────────────────────────────
-    console.error('[Team] Phase 1: Lead PM planning...');
-    const planningPrompt = buildLeadPMPlanningPrompt({ goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined, projectMemory: memorySnapshot || undefined, projectKnowledge: knowledge.injectionBlock || undefined });
-    const pmPlanStart = Date.now();
-    const planText = await callCursorAgent('Lead-PM', 'gpt-5.4-nano', planningPrompt);
-    allTaskUsage.push(buildTaskUsage('pm-planning', 'Lead PM: Planning', 'Lead-PM', 'gpt-5.4-nano', planningPrompt.length, planText.length, Date.now() - pmPlanStart));
-    const rawPlan = extractJsonBlock(planText);
-    const plan = isTeamPlan(rawPlan) ? rawPlan : fallbackPlan(goal);
-    console.error(`[Team] Plan: ${plan.tasks.length} task(s)${plan.pmNotes ? ` — ${plan.pmNotes.slice(0, 80)}` : ''}`);
+    // TODO: Legacy PM Team — scheduled for deprecation after pivot (ClosedLoop Plan phase replaces this).
+    let plan;
+    let planText;
+    if (pmSlice === 'waves-only') {
+        if (!existingPlan?.tasks?.length) {
+            throw new Error('pmSlice waves-only requires existingPlan with tasks');
+        }
+        plan = existingPlan;
+        console.error(`${loopEmbedLabel} Phase 1 skipped — using existing plan (${plan.tasks.length} task(s)) from ClosedLoop Plan phase`);
+    }
+    else {
+        console.error(`${loopEmbedLabel} Phase 1: Lead PM planning...`);
+        const planningPrompt = buildLeadPMPlanningPrompt({
+            goal,
+            blackboardSnapshot: blackboard.snapshot(),
+            roster,
+            inboxMessages: bus.inboxSummary('Lead-PM') || undefined,
+            projectMemory: memorySnapshot || undefined,
+            projectKnowledge: knowledge.injectionBlock || undefined,
+            commandBlackboard: getCommandBlackboardSnapshot(),
+            dagPlanningEnabled,
+        });
+        const pmPlanStart = Date.now();
+        planText = await callCursorAgent('Lead-PM', pmModelId, planningPrompt, undefined, supervisorCallOpts);
+        allTaskUsage.push(buildTaskUsage('pm-planning', 'Lead PM: Planning', 'Lead-PM', pmModelId, planningPrompt.length, planText.length, Date.now() - pmPlanStart, pmDispatch.method));
+        const rawPlan = extractJsonBlock(planText);
+        plan = isTeamPlan(rawPlan) ? rawPlan : fallbackPlan(goal);
+    }
+    const planningMode = plan.planningMode ?? (dagPlanningEnabled ? 'dag' : 'flat');
+    console.error(`${loopEmbedLabel} Plan: ${plan.tasks.length} task(s) [${planningMode}]${plan.pmNotes ? ` — ${plan.pmNotes.slice(0, 80)}` : ''}`);
+    const missionDagStore = MissionDagStore.fromPlan({
+        stateDir,
+        goal,
+        runId,
+        tasks: plan.tasks,
+        planningMode,
+        dagNotes: plan.dagNotes,
+    });
+    missionDag = missionDagStore;
+    commandBoard.setMissionGraph(formatMissionGraphSummary(missionDagStore.getSnapshot()));
+    if (plan.dagNotes) {
+        commandBoard.appendBullet('Key Decisions', `DAG plan: ${plan.dagNotes.slice(0, 200)}`);
+    }
+    syncMissionGraph = () => {
+        missionDagStore.refreshReadyStates(completedIds);
+        commandBoard.setMissionGraph(formatMissionGraphSummary(missionDagStore.getSnapshot()));
+    };
+    syncMissionGraph();
     for (const task of plan.tasks) {
         blackboard.post({ type: 'task', title: task.title, content: task.description, status: 'pending', author: 'Lead-PM', assignee: task.agent, priority: task.priority, tags: ['dispatched', task.id], relatedIds: [] });
+        const callsign = agentToCallsign(task.agent);
+        commandBoard.appendBullet('Active Tasks', `[pending] ${task.id} — ${callsign}: ${task.title}`);
     }
+    commandBoard.setAgentStatus({ callsign: 'Roland', state: 'active', lastUpdated: Date.now(), note: `Wave control — ${plan.tasks.length} task(s)` });
     onPlanReady?.(plan.tasks);
     // ── Display memory citations (show user learning-in-action) ───────────────
-    if (memorySnapshot) {
+    if (memorySnapshot && planText) {
         const citations = parsePlanCitations(planText);
         if (citations.length > 0) {
-            console.error(`[Team] 🧠 Memory influenced this plan (${citations.length} citation${citations.length !== 1 ? 's' : ''}):`);
+            console.error(`${loopEmbedLabel} 🧠 Memory influenced this plan (${citations.length} citation${citations.length !== 1 ? 's' : ''}):`);
             for (const c of citations)
-                console.error(`[Team]   · ${c.slice(0, 120)}`);
+                console.error(`${loopEmbedLabel}   · ${c.slice(0, 120)}`);
         }
     }
+    // ClosedLoop Plan phase — return after planning without wave execution.
+    if (pmSlice === 'plan-only') {
+        console.error(`${loopEmbedLabel} Plan-only slice complete — returning to ClosedLoop`);
+        const runUsage = buildRunUsage({
+            runId, runStart, runEnd: Date.now(),
+            goal, wavesRun: 0, blockersEncountered: 0,
+            tasks: allTaskUsage,
+        });
+        saveRunUsage(stateDir, runUsage);
+        return { goal, plan, taskResults: {}, synthesis: '', wavesRun: 0, blockersEncountered: 0 };
+    }
     // ── Phase 2: PM control loop ──────────────────────────────────────────────
-    console.error('[Team] Phase 2: Starting PM control loop...');
+    // TODO: Legacy PM Team — scheduled for deprecation after pivot (ClosedLoop Act phase replaces waves).
+    console.error(`${loopEmbedLabel} Phase 2: Starting PM control loop...`);
     const remaining = [...plan.tasks];
     let waveNumber = 0;
     while (remaining.length > 0) {
@@ -552,6 +911,7 @@ export async function runTeam(opts) {
             ? `Step ${waveNumber}  [${ready[0]?.agent ?? '?'}]`
             : `Wave ${waveNumber}: ${ready.length} task(s) in parallel`;
         console.error(`[Team] ${modeLabel} — ${ready.map((t) => t.id).join(', ')}`);
+        syncMissionGraph();
         onWaveStart?.(waveNumber, ready);
         // Reset circuit breaker for this wave (clears error count and open flag)
         waveCircuit.reset();
@@ -668,14 +1028,55 @@ export async function runTeam(opts) {
                 roster,
                 inboxMessages: bus.inboxSummary('Lead-PM') || undefined,
                 detectedBlockers: detectedBlockers.length > 0 ? detectedBlockers : undefined,
+                commandBlackboard: getCommandBlackboardSnapshot(),
+                escalationNotes: escalation.escalationNotes.length > 0 ? [...escalation.escalationNotes] : undefined,
             });
             const pmReviewStart = Date.now();
-            const reviewText = await callCursorAgent('Lead-PM', 'gpt-5.4-nano', reviewPrompt);
-            allTaskUsage.push(buildTaskUsage(`pm-review-${waveNumber}`, `Lead PM: Wave ${waveNumber} Review`, 'Lead-PM', 'gpt-5.4-nano', reviewPrompt.length, reviewText.length, Date.now() - pmReviewStart));
+            const reviewText = await callCursorAgent('Lead-PM', pmModelId, reviewPrompt, undefined, supervisorCallOpts);
+            allTaskUsage.push(buildTaskUsage(`pm-review-${waveNumber}`, `Lead PM: Wave ${waveNumber} Review`, 'Lead-PM', pmModelId, reviewPrompt.length, reviewText.length, Date.now() - pmReviewStart));
             const rawDecision = extractJsonBlock(reviewText);
-            const decision = isReviewDecision(rawDecision)
+            let decision = isReviewDecision(rawDecision)
                 ? rawDecision
                 : { decision: 'continue' };
+            // Error recovery: unparseable review with blockers → force adjust
+            if (!isReviewDecision(rawDecision) && hasBlockers) {
+                const forceAdjust = escalation.recordReviewParseFailure(waveNumber);
+                if (forceAdjust || hasBlockers) {
+                    console.error('[Team] ⚠️  PM review JSON unparseable with active blockers — forcing adjust recovery');
+                    decision = {
+                        decision: 'adjust',
+                        pmNotes: 'Auto-recovery: PM review response was not parseable JSON. Blockers require resolution before continuing.',
+                        unblocks: detectedBlockers.map((b) => ({
+                            forAgent: waveResults.find((r) => b.includes(`[${r.agent}]`))?.agent ?? 'executor',
+                            message: `PM auto-recovery: resolve blocker — ${b.slice(0, 200)}`,
+                        })),
+                    };
+                }
+            }
+            // Operator escalation when cumulative blockers exceed threshold
+            if (escalation.shouldEscalateToOperator()) {
+                const note = `Operator escalation: ${totalBlockers} blockers this run. Review scope, environment, or provide HITL directive via /inject.`;
+                commandBoard.appendBullet('Open Intel', `[ESCALATION] ${note}`);
+                console.error(`[Team] ⚠️  ${note}`);
+                try {
+                    emitHermesHitlEvent(stateDir, {
+                        kind: 'loop-escalation',
+                        blockerDescription: note,
+                        currentGate: 'escalation',
+                        goal,
+                        suggestedActions: ['roland resume', 'roland replan', 'roland inject "ESCALATE: <operator guidance>"'],
+                        detail: { totalBlockers, waveNumber },
+                    });
+                }
+                catch {
+                    /* non-fatal */
+                }
+                if (hitlQueue && !hitlQueue.isPaused()) {
+                    hitlQueue.setPaused(true);
+                    onHitlPause?.(true);
+                    console.error('[Team] Run paused for operator review — use `roland resume` or `/resume` after addressing blockers.');
+                }
+            }
             onWaveComplete?.(waveNumber, decision);
             if (decision.decision === 'continue') {
                 console.error(`[Team] PM: wave ${waveNumber} approved — continuing`);
@@ -686,10 +1087,13 @@ export async function runTeam(opts) {
                 for (const task of spawnedTasks) {
                     console.error(`[Team]   + spawn ${task.id} → ${task.agent} ("${task.title}")`);
                     remaining.push(task);
+                    missionDag?.addNodes([task]);
                     blackboard.post({ type: 'task', title: task.title, content: task.description, status: 'pending', author: 'Lead-PM', assignee: task.agent, priority: task.priority, tags: ['spawned', task.id], relatedIds: [] });
                 }
-                if (spawnedTasks.length > 0)
+                if (spawnedTasks.length > 0) {
+                    syncMissionGraph();
                     onTasksSpawned?.(spawnedTasks);
+                }
                 for (const u of decision.unblocks ?? []) {
                     console.error(`[Team]   ↑ unblock ${u.forAgent}: "${u.message.slice(0, 80)}"`);
                     bus.send('Lead-PM', u.forAgent, 'PM Unblock Guidance', u.message);
@@ -707,14 +1111,33 @@ export async function runTeam(opts) {
             console.error(`[Team] Wave ${waveNumber} done — no remaining tasks, moving to synthesis`);
         }
     }
+    // ClosedLoop Act phase — skip synthesis; ClosedLoop owns verify/critique/reflect/PR.
+    if (loopEmbedded && pmSlice === 'waves-only') {
+        console.error(`${loopEmbedLabel} Waves-only slice complete (${waveNumber} wave(s), ${totalBlockers} blocker(s)) — returning to ClosedLoop`);
+        const runUsage = buildRunUsage({
+            runId, runStart, runEnd: Date.now(),
+            goal, wavesRun: waveNumber, blockersEncountered: totalBlockers,
+            tasks: allTaskUsage,
+        });
+        saveRunUsage(stateDir, runUsage);
+        return { goal, plan, taskResults, synthesis: '', wavesRun: waveNumber, blockersEncountered: totalBlockers };
+    }
     // ── Phase 3: Lead PM synthesis ────────────────────────────────────────────
-    console.error('[Team] Phase 3: Lead PM synthesis...');
+    // TODO: Legacy PM Team — scheduled for deprecation after pivot (ClosedLoop owns synthesis + PR).
+    console.error(`${loopEmbedLabel} Phase 3: Lead PM synthesis...`);
     onSynthesizing?.();
-    const synthesisCtx = { goal, blackboardSnapshot: blackboard.snapshot(), roster, inboxMessages: bus.inboxSummary('Lead-PM') || undefined, taskResults };
+    const synthesisCtx = {
+        goal,
+        blackboardSnapshot: blackboard.snapshot(),
+        roster,
+        inboxMessages: bus.inboxSummary('Lead-PM') || undefined,
+        taskResults,
+        commandBlackboard: getCommandBlackboardSnapshot(),
+    };
     const synthesisPrompt = buildLeadPMSynthesisPrompt(synthesisCtx);
     const pmSynthStart = Date.now();
-    let synthesis = await callCursorAgent('Lead-PM', 'gpt-5.4-nano', synthesisPrompt);
-    allTaskUsage.push(buildTaskUsage('pm-synthesis', 'Lead PM: Synthesis', 'Lead-PM', 'gpt-5.4-nano', synthesisPrompt.length, synthesis.length, Date.now() - pmSynthStart));
+    let synthesis = await callCursorAgent('Lead-PM', pmModelId, synthesisPrompt, undefined, supervisorCallOpts);
+    allTaskUsage.push(buildTaskUsage('pm-synthesis', 'Lead PM: Synthesis', 'Lead-PM', pmModelId, synthesisPrompt.length, synthesis.length, Date.now() - pmSynthStart));
     // "no detail" fallback: empty, too-short, or blocker-string responses mean the full
     // synthesis failed. Retry once with a minimal focused prompt; if that also fails,
     // auto-generate a plain-text summary from task outputs so the run always finishes.
@@ -724,14 +1147,21 @@ export async function runTeam(opts) {
         console.error('[Team] ⚠️  Run is still alive — use `roland status` to monitor');
         const fallbackPrompt = buildFallbackSynthesisPrompt(synthesisCtx);
         const pmFallbackStart = Date.now();
-        synthesis = await callCursorAgent('Lead-PM', 'gpt-5.4-nano', fallbackPrompt);
-        allTaskUsage.push(buildTaskUsage('pm-synthesis-fallback', 'Lead PM: Fallback Synthesis', 'Lead-PM', 'gpt-5.4-nano', fallbackPrompt.length, synthesis.length, Date.now() - pmFallbackStart));
+        synthesis = await callCursorAgent('Lead-PM', pmModelId, fallbackPrompt, undefined, supervisorCallOpts);
+        allTaskUsage.push(buildTaskUsage('pm-synthesis-fallback', 'Lead PM: Fallback Synthesis', 'Lead-PM', pmModelId, fallbackPrompt.length, synthesis.length, Date.now() - pmFallbackStart));
         if (synthesisFailed(synthesis)) {
             console.error('[Team] ⚠️  Fallback synthesis also failed — auto-generating minimal summary from task outputs');
             synthesis = buildMinimalSynthesis(goal, taskResults);
         }
     }
     console.error('[Team] Synthesis complete');
+    // Merge Command Blackboard updates from synthesis
+    const boardUpdates = commandBoard.extractAndMerge(synthesis);
+    if (boardUpdates > 0) {
+        console.error(`[Team] Command Blackboard updated — ${boardUpdates} new bullet(s) in .roland/command-blackboard.md`);
+    }
+    commandBoard.setAgentStatus({ callsign: 'Roland', state: 'complete', lastUpdated: Date.now(), note: 'Mission synthesis complete' });
+    commandBoard.appendBullet('Mission Objectives', `[complete] ${goal.slice(0, 120)}`);
     // ── Persist memory extract ────────────────────────────────────────────────
     const appended = memory.extractAndAppend(synthesis, goal, runId);
     if (appended) {
@@ -761,10 +1191,9 @@ export async function runTeam(opts) {
             .map(([id, r]) => `- ${id} [${r.agent}]: "${r.taskTitle}"${r.hadBlocker ? ' ⚠️ blocker' : ' ✓'}`)
             .join('\n');
         const retroPrompt = buildRetrospectivePrompt(goal, synthesis, taskSummary, memory.structuredSnapshot(), humanFeedback);
-        const pmModel = toCursorModelId('', 'lead-pm');
         const retroStart = Date.now();
-        const retroText = await callCursorAgent('Lead-PM', pmModel, retroPrompt);
-        allTaskUsage.push(buildTaskUsage('pm-retrospective', 'Lead PM: Retrospective', 'Lead-PM', pmModel, retroPrompt.length, retroText.length, Date.now() - retroStart));
+        const retroText = await callCursorAgent('Lead-PM', pmModelId, retroPrompt, undefined, supervisorCallOpts);
+        allTaskUsage.push(buildTaskUsage('pm-retrospective', 'Lead PM: Retrospective', 'Lead-PM', pmModelId, retroPrompt.length, retroText.length, Date.now() - retroStart));
         const retroMap = parseRetrospectiveOutput(retroText);
         if (retroMap) {
             const existingSections = memory.parsedSections();
@@ -813,6 +1242,24 @@ export async function runTeam(opts) {
     const goalEntry = blackboard.read({ type: 'task', status: 'in_progress' }).find((e) => e.tags.includes('goal'));
     if (goalEntry)
         blackboard.patch(goalEntry.id, { status: 'done' });
+    // Battlespace summary lives in the Mission Complete footer — avoid duplicating on stderr.
+    synthesis = finalizeSynthesisOutput(synthesis, {
+        goal,
+        blockersEncountered: totalBlockers,
+        wavesRun: waveNumber,
+        taskCount: Object.keys(taskResults).length,
+    });
     return { goal, plan, taskResults, synthesis, wavesRun: waveNumber, blockersEncountered: totalBlockers };
 }
+/**
+ * ## Final Legacy Cleanup + Model Router Integration Complete
+ *
+ * Routing at top of `runTeamInner()`:
+ * ```typescript
+ * if (hasLoopTemplate(opts.loopTemplate)) {
+ *   return runClosedLoopMission(opts); // ClosedLoop — 100% loop path
+ * }
+ * // TODO: Legacy PM Team — plan → waves → synthesis below
+ * ```
+ */
 //# sourceMappingURL=team-orchestrator.js.map

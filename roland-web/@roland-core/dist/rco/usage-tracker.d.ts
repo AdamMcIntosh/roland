@@ -12,6 +12,8 @@ export interface TaskUsageRecord {
     taskTitle: string;
     agent: string;
     model: string;
+    /** Dispatch backend used for this task (Loop Engineering observability). */
+    dispatchMethod?: 'cursor_sdk' | 'direct';
     inputChars: number;
     outputChars: number;
     estimatedInputTokens: number;
@@ -38,7 +40,7 @@ export declare function estimateTokenCost(model: string, inputTokens: number, ou
  * Build a TaskUsageRecord from raw char counts and wall-clock duration.
  * Called immediately after each callCursorAgent() returns.
  */
-export declare function buildTaskUsage(taskId: string, taskTitle: string, agent: string, model: string, inputChars: number, outputChars: number, durationMs: number): TaskUsageRecord;
+export declare function buildTaskUsage(taskId: string, taskTitle: string, agent: string, model: string, inputChars: number, outputChars: number, durationMs: number, dispatchMethod?: 'cursor_sdk' | 'direct'): TaskUsageRecord;
 /**
  * Aggregate per-task records into a RunUsageRecord for the whole run.
  */

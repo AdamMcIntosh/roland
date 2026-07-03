@@ -30,14 +30,13 @@ export interface SessionConfig {
   mcp_defaults: SessionDefaults;
 }
 
-export interface GooseConfig {
-  dispatcher_model: string;
-  dispatcher_provider: string;
+export interface BudgetConfig {
   known_free_models: string[];
-  fallback_model: string;
   monthly_budget: number;
   billing_cycle_day: number;
   budget_degradation_threshold: number;
+  free_model_coding?: string;
+  free_model_reasoning?: string;
 }
 
 export interface ClassifierConfig {
@@ -90,7 +89,7 @@ export interface PmConfig {
 export interface AppConfig {
   routing: RoutingConfig;
   roland: SessionConfig;
-  goose?: GooseConfig;
+  budget?: BudgetConfig;
   ollama?: OllamaConfig;
   classifier?: ClassifierConfig;
   diff_stream?: DiffStreamConfig;

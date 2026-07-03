@@ -16,6 +16,10 @@ import { runTool } from './tools.js';
 import { buildClaudeToolCallingPrompt } from './prompts.js';
 import { parseClaudeResponseText } from '../schemas.js';
 import { toCursorModelId } from './model-routing.js';
+import { getModelRouter } from '../models/model-router.js';
+import { AGENT_TIMEOUT_MS } from './constants.js';
+import { cleanupSdkSession, configureSdkProcessLimits, resolveSdkAgentLocalOptions, resolveSdkSettleMs, waitForSdkRun, } from '../utils/sdk-lifecycle.js';
+configureSdkProcessLimits();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 function log(phase, message) {
     const line = `[RCO worker ${phase}] ${message}`;
@@ -66,18 +70,32 @@ async function getResponseViaCursorSDK(prompt, agentName, model) {
         throw new Error('CURSOR_API_KEY is not set');
     // Dynamic import keeps the mock paths working without the SDK installed.
     const { Agent } = await import('@cursor/sdk');
-    const agent = await Agent.create({
-        apiKey,
-        model: { id: toCursorModelId(model, agentName) },
-        name: agentName,
-        local: { cwd: process.cwd() },
-    });
-    const run = await agent.send(prompt);
-    const runResult = await run.wait();
-    if (runResult.status === 'error' || runResult.status === 'cancelled') {
-        throw new Error(`Cursor agent "${agentName}" ${runResult.status}: ${runResult.result ?? 'no detail'}`);
+    let agent;
+    let run;
+    try {
+        agent = await Agent.create({
+            apiKey,
+            model: { id: toCursorModelId(model, agentName) },
+            name: agentName,
+            local: resolveSdkAgentLocalOptions(agentName, { cwd: process.cwd() }),
+        });
+        run = await agent.send(prompt);
+        const runResult = await waitForSdkRun(run, {
+            timeoutMs: AGENT_TIMEOUT_MS,
+            agentName,
+        });
+        if (runResult.status === 'error' || runResult.status === 'cancelled') {
+            throw new Error(`Cursor agent "${agentName}" ${runResult.status}: ${runResult.result ?? 'no detail'}`);
+        }
+        return JSON.stringify({ output: runResult.result ?? '', success: true });
     }
-    return JSON.stringify({ output: runResult.result ?? '', success: true });
+    finally {
+        const settleMs = resolveSdkSettleMs(agentName, prompt);
+        const { forced } = await cleanupSdkSession(agent, run, { settleMs, agentName });
+        if (forced) {
+            log('cursor-sdk', `Force cleanup after settle (${settleMs}ms) for ${agentName}`);
+        }
+    }
 }
 /**
  * Resilient wrapper around getResponseViaCursorSDK.
@@ -123,8 +141,14 @@ async function runAsync(input) {
     }
     const { agentYaml, state, taskContext, stepInput, tools, workflowSteps, fileBundle } = inputParsed.data;
     const agentName = agentYaml.name ?? 'unknown';
-    const model = agentYaml.claude_model ?? 'composer-2.5';
-    log('start', `Agent=${agentName} model=${model}`);
+    const dispatch = getModelRouter().resolveDispatch(agentName, {
+        yamlModel: agentYaml.claude_model,
+        log: true,
+    });
+    const model = dispatch.method === 'cursor_sdk'
+        ? (dispatch.sdkModelId ?? dispatch.model)
+        : dispatch.model;
+    log('start', `Agent=${agentName} dispatch=${dispatch.method} model=${model}`);
     const prompt = buildClaudeToolCallingPrompt({
         agentYaml,
         taskContext,

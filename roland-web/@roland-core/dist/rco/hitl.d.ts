@@ -57,6 +57,7 @@ export declare class HitlQueue {
     cleanup(): void;
     private readQueue;
     private writeQueue;
+    private _emitHermesCommand;
     /**
      * Refresh the observer-facing state file (hitl-state.json) with the current
      * queue length and abort-pending flag, preserving paused/pausedAt. Called from
@@ -69,7 +70,7 @@ export declare class HitlQueue {
 export declare function writeHitlCommand(stateDir: string, cmd: Omit<HitlCommand, 'timestamp'>): void;
 /** Print status of HITL state to stderr. */
 export declare function printHitlStatus(stateDir: string): void;
-/** Returns true if a run is currently active (not done or error). */
+/** Returns true when a supervisor or fresh run-state indicates an active mission. */
 export declare function isRunActive(stateDir: string): boolean;
 /** Returns the goal of the current/last run, or null. */
 export declare function readRunGoal(stateDir: string): string | null;

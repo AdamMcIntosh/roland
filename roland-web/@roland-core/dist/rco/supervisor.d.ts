@@ -1,4 +1,6 @@
 /**
+ * ## MCP Project Context Fix
+ *
  * Roland Supervisor — true background / detached process mode.
  *
  * Usage (from CLI):
@@ -35,6 +37,10 @@ export interface SupervisorRecord {
     logFile: string;
     restarts: number;
 }
+export interface SpawnBackgroundResult {
+    pid: number;
+    logFile: string;
+}
 export declare function isProcessRunning(pid: number): boolean;
 export declare function readSupervisorRecord(stateDir: string): SupervisorRecord | null;
 export declare function bgStatus(stateDir: string, json?: boolean): void;
@@ -56,5 +62,8 @@ export declare function bgStop(stateDir: string): void;
  * The parent writes a PID record and unrefs the child.
  */
 export declare function spawnBackground(goal: string, teamArgv: string[], // full argv as passed to runTeamCli, includes 'team' prefix
-stateDir: string): Promise<void>;
+stateDir: string, opts?: {
+    quiet?: boolean;
+    projectRoot?: string;
+}): Promise<SpawnBackgroundResult>;
 //# sourceMappingURL=supervisor.d.ts.map

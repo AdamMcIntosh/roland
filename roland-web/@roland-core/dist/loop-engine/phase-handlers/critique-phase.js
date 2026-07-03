@@ -1,0 +1,123 @@
+/**
+ * Critique phase — analyzes verification results and phase history, decides retry/escalate.
+ *
+ * Model routing via ModelRouter:
+ *   - critic role: high-level / multi-area failures, blockers, architecture
+ *   - coding role: code-specific failures (unit, lint, typecheck)
+ */
+import { ModelRouter } from '../../models/model-router.js';
+import { Phase } from '../loop-phases.js';
+import { CritiqueEngine, } from '../self-improvement/critique-engine.js';
+import { DEFAULT_ESCALATION_THRESHOLD } from '../self-improvement/escalation.js';
+export class CritiquePhaseHandler {
+    phase = Phase.Critique;
+    engine;
+    router;
+    constructor(opts = {}) {
+        this.router = opts.modelRouter ?? ModelRouter.fromConfig();
+        this.engine = new CritiqueEngine({ ...opts, modelRouter: this.router });
+    }
+    async execute(ctx) {
+        const maxRetries = ctx.maxRetries ?? 3;
+        const escalationThreshold = ctx.escalationThreshold ?? DEFAULT_ESCALATION_THRESHOLD;
+        console.error(`[Loop][critique] thresholds maxRetries=${maxRetries} escalationThreshold=${escalationThreshold} ` +
+            `retryCount=${ctx.state.retryCount} iteration=${ctx.iteration}`);
+        let critique;
+        try {
+            const output = this.engine.critique({
+                goal: ctx.goal,
+                iteration: ctx.iteration,
+                retryCount: ctx.state.retryCount,
+                maxRetries,
+                escalationThreshold,
+                hadBlockers: ctx.hadBlockers,
+                verification: ctx.state.lastVerification,
+                phaseHistory: ctx.state.phaseHistory.map((t) => ({
+                    phase: t.phase,
+                    success: t.success,
+                    summary: t.summary,
+                })),
+            });
+            critique = {
+                strengths: output.strengths,
+                issues: output.issues,
+                suggestions: output.suggestions,
+                retryDecision: output.retryDecision,
+                model: output.model,
+                summary: output.summary,
+                at: output.at,
+                iteration: output.iteration,
+                proposalCount: output.proposals.length,
+            };
+        }
+        catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            console.error('[Loop][critique] Critique engine error — defensive fallback', { error: message });
+            critique = {
+                strengths: [],
+                issues: [`Critique engine error: ${message}`],
+                suggestions: ['Review verification output manually and retry or escalate'],
+                retryDecision: ctx.state.retryCount >= maxRetries ? 'escalate' : 'retry',
+                model: 'critic',
+                summary: `Critique fallback — ${message}`,
+                at: Date.now(),
+                iteration: ctx.iteration,
+                proposalCount: 0,
+            };
+        }
+        const decisionLabel = critique.retryDecision.toUpperCase();
+        const modelLabel = critiqueModelLabel(critique.model, this.router);
+        ctx.blackboard.post({
+            type: 'result',
+            title: `Loop: Critique phase (iteration ${ctx.iteration})`,
+            content: [
+                critique.summary,
+                `Decision: ${decisionLabel} · Model: ${modelLabel}`,
+                critique.strengths.length ? `Strengths: ${critique.strengths.join('; ')}` : '',
+                critique.issues.length ? `Issues: ${critique.issues.join('; ')}` : '',
+                critique.suggestions.length ? `Suggestions: ${critique.suggestions.join('; ')}` : '',
+            ]
+                .filter(Boolean)
+                .join('\n'),
+            status: critique.retryDecision === 'escalate' ? 'blocked' : critique.retryDecision === 'proceed' ? 'done' : 'pending',
+            author: 'loop-engine',
+            priority: critique.retryDecision === 'escalate' ? 'critical' : 'high',
+            tags: ['loop', 'critique', 'retry-decision'],
+            relatedIds: [],
+        });
+        ctx.blackboard.post({
+            type: 'decision',
+            title: 'Loop: Critique structured output',
+            content: JSON.stringify(critique, null, 2),
+            status: 'done',
+            author: 'loop-engine',
+            priority: 'low',
+            tags: ['loop', 'critique', 'critique-detail'],
+            relatedIds: [],
+        });
+        ctx.commandBoard?.appendBullet('Key Decisions', `[CRITIQUE] ${decisionLabel} — ${critique.summary.slice(0, 160)}`);
+        ctx.commandBoard?.appendBullet('Open Intel', `[CRITIQUE] role=${critique.model} dispatch=${this.router.resolveDispatch(critique.model, { log: false }).method} ` +
+            `model=${critiqueModelLabel(critique.model, this.router)} ` +
+            `decision=${critique.retryDecision} retry=${ctx.state.retryCount}/${maxRetries} ` +
+            `escalationThreshold=${escalationThreshold} issues=${critique.issues.length}`);
+        const shouldEscalate = critique.retryDecision === 'escalate';
+        const shouldRetry = critique.retryDecision === 'retry' || critique.retryDecision === 'retry_focused';
+        const success = critique.retryDecision === 'proceed';
+        return {
+            success,
+            summary: critique.summary,
+            shouldRetry,
+            shouldEscalate,
+            critique,
+        };
+    }
+}
+function critiqueModelLabel(lane, router) {
+    const dispatch = router.resolveDispatch(lane, { phase: 'critique', log: false });
+    const laneDesc = lane === 'critic' ? 'high-level' : 'code-specific';
+    const base = dispatch.method === 'cursor_sdk'
+        ? `${dispatch.sdkModelId ?? dispatch.model}@cursor_sdk`
+        : `${dispatch.directModel.model}@${dispatch.directModel.provider}`;
+    return `${base} (${laneDesc})`;
+}
+//# sourceMappingURL=critique-phase.js.map

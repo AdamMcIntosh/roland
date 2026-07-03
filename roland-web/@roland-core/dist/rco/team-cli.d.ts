@@ -1,18 +1,11 @@
 #!/usr/bin/env node
 /**
- * RCO Team CLI — PM-style parallel agent execution.
+ * ## CLI-First + Hermes Monitoring Shift
  *
- * After global install:
- *   roland team "Build a task management API"
- *   roland team "..." --state-dir .roland --stream
- *   roland team "..." --quiet
+ * RCO Team CLI — Pure ClosedLoop mission launcher (primary execution path).
+ * Monitor with: roland hitl-status · roland board-status --concise · roland mission-summary
  *
- * Via npm scripts (dev):
- *   npm run rco:team:dev -- "Build a task management API"
- *   npm run rco:team:dev -- --task "..." --state-dir .roland
- *
- * Exports runTeamCli() so src/index.ts can delegate the `team` subcommand
- * without re-triggering the standalone main() guard.
+ * ## Dashboard De-emphasized — CLI + Hermes Hybrid Complete
  */
 export interface TeamCliArgs {
     goal: string;
@@ -29,6 +22,7 @@ export interface TeamCliArgs {
     webhookUrl?: string;
     agentsDir?: string;
     parallel: boolean;
+    loopTemplate?: string;
 }
 export declare function parseTeamArgs(argv: string[]): TeamCliArgs;
 export declare function runTeamCli(argv: string[]): Promise<void>;

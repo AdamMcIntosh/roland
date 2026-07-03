@@ -74,10 +74,10 @@ export declare const TaskValueSchema: z.ZodObject<{
         requests?: number | undefined;
     }>>;
 }, "strip", z.ZodTypeAny, {
-    description: string;
     title: string;
+    priority: "low" | "high" | "normal";
+    description: string;
     dependsOn: string[];
-    priority: "low" | "normal" | "high";
     artifactKeys: string[];
     blockerKeys: string[];
     usage: {
@@ -90,11 +90,11 @@ export declare const TaskValueSchema: z.ZodObject<{
     acceptanceCriteria?: string | undefined;
     reviewNotes?: string | undefined;
 }, {
-    description: string;
     title: string;
+    description: string;
     assignee?: string | undefined;
+    priority?: "low" | "high" | "normal" | undefined;
     dependsOn?: string[] | undefined;
-    priority?: "low" | "normal" | "high" | undefined;
     acceptanceCriteria?: string | undefined;
     artifactKeys?: string[] | undefined;
     blockerKeys?: string[] | undefined;

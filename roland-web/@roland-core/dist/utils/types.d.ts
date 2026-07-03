@@ -21,14 +21,13 @@ export interface SessionDefaults {
 export interface SessionConfig {
     mcp_defaults: SessionDefaults;
 }
-export interface GooseConfig {
-    dispatcher_model: string;
-    dispatcher_provider: string;
+export interface BudgetConfig {
     known_free_models: string[];
-    fallback_model: string;
     monthly_budget: number;
     billing_cycle_day: number;
     budget_degradation_threshold: number;
+    free_model_coding?: string;
+    free_model_reasoning?: string;
 }
 export interface ClassifierConfig {
     semantic_enabled?: boolean;
@@ -48,14 +47,39 @@ export interface ContextGatheringConfig {
     llm_timeout_ms: number;
     exclude_patterns: string[];
 }
+export interface RoleModelConfig {
+    provider: string;
+    model: string;
+    fallback?: RoleModelConfig;
+}
+export interface ModelsRoleConfig {
+    pm?: RoleModelConfig;
+    coding?: RoleModelConfig;
+    critic?: RoleModelConfig;
+    verifier?: RoleModelConfig;
+    researcher?: RoleModelConfig;
+    planner?: RoleModelConfig;
+    executor?: RoleModelConfig;
+    reviewer?: RoleModelConfig;
+    reasoning?: RoleModelConfig;
+    light?: RoleModelConfig;
+}
+export interface PmConfig {
+    lead_model?: string;
+    fast_model?: string;
+    standard_model?: string;
+    lane_overrides?: Record<string, string>;
+}
 export interface AppConfig {
     routing: RoutingConfig;
     roland: SessionConfig;
-    goose?: GooseConfig;
+    budget?: BudgetConfig;
     ollama?: OllamaConfig;
     classifier?: ClassifierConfig;
     diff_stream?: DiffStreamConfig;
     context_gathering?: ContextGatheringConfig;
+    models?: ModelsRoleConfig;
+    pm?: PmConfig;
     configPath?: string;
 }
 export interface AgentConfig {

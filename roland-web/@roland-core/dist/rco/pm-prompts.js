@@ -1,7 +1,10 @@
 /**
- * Lead PM prompts for team-mode orchestration.
+ * ## Assumptions
+ * - [DEPRECATED] Legacy Lead PM prompts for team-mode orchestration (`use_pm_team: true`).
+ * - Hermes is the recommended PM / strategist — plan missions via chat, not these prompts.
+ * - Roland ClosedLoop uses lightweight-plan-act.ts by default; these prompts run only on legacy PM path.
  *
- * The Lead PM runs on gpt-5.4-nano and acts as Engineering Manager.
+ * Lead PM prompts for [DEPRECATED] team-mode orchestration.
  * It never writes code — it decomposes goals, dispatches tasks, reviews
  * outputs, and synthesizes results. Three prompts cover the full PM loop:
  *
@@ -10,6 +13,8 @@
  *   buildLeadPMSynthesisPrompt   — synthesis phase (all results → deliverable)
  *   buildFallbackSynthesisPrompt — minimal recovery synthesis when full synthesis fails twice
  */
+import { buildRolandOrchestratorPrompt } from './orchestrator-prompts.js';
+import { isMinimalGoal, isScaffoldGoal, isFocusedFeatureGoal, requestsProductionHardening } from './goal-scope.js';
 /** Max chars of Blackboard snapshot injected into any PM prompt. */
 const BLACKBOARD_PROMPT_MAX_CHARS = 3_000;
 function capBlackboard(snapshot) {
@@ -21,7 +26,26 @@ function capBlackboard(snapshot) {
  * Planning prompt: the Lead PM reads the goal, the current Blackboard, and
  * the team roster, then outputs a structured task plan as a JSON code block.
  */
+const DAG_PLANNING_SECTION = `
+## DAG Mission Planning (enabled for this goal)
+
+Structure this run as an explicit **Directed Acyclic Graph (DAG)** of tasks:
+
+- Each task is a **node**; \`dependsOn\` defines **directed edges** (upstream → downstream).
+- Nodes whose dependencies are all complete may run **in parallel** in the same wave.
+- Use \`dependsOn\` for every hard sequencing requirement — do not rely on task order in the JSON array.
+- Identify the **critical path** (longest dependency chain) in \`dagNotes\`.
+- List **parallel lanes** in \`dagNotes\` when multiple nodes share the same upstream.
+
+In your JSON plan set \`"planningMode": "dag"\` and include \`dagNotes\` with:
+- Critical path: \`task-1 → task-2 → …\`
+- Parallel lanes after each merge point (if any)
+- Failure recovery: which downstream nodes are blocked if a critical-path node fails
+
+For simple goals with ≤2 tasks and no branching, you may use \`"planningMode": "flat"\` instead — the orchestrator still tracks dependencies via \`dependsOn\`.
+`;
 export function buildLeadPMPlanningPrompt(ctx) {
+    const dagSection = ctx.dagPlanningEnabled ? `${DAG_PLANNING_SECTION}\n---\n\n` : '';
     const rosterList = ctx.roster
         .filter((a) => {
         const n = (a.name ?? '').toLowerCase();
@@ -63,7 +87,7 @@ ${ctx.goal}
 
 ---
 
-${ctx.projectKnowledge ? `${ctx.projectKnowledge}\n\n---\n\n` : ''}${ctx.projectMemory ? `## Project Memory\n\nThis project has been worked on before. The memory is organised into five sections — consult each one before planning:\n\n### Architecture Decisions\nEstablished tech choices and design patterns — don't contradict these without explicit justification.\n\n### Coding Standards\nFile layout, naming conventions, testing conventions — your engineers must follow these.\n\n### Past Mistakes\nThings that went wrong in previous runs — actively prevent each one in your task descriptions.\n\n### Preferences\nUser/team preferences — honour these when making trade-offs.\n\n### Project Gotchas\nEnvironment quirks, tooling edge cases, and API surprises — be proactive about preventing these in task descriptions.\n\n${ctx.projectMemory}\n\n---\n\n` : ''}## Current Blackboard State
+${ctx.projectKnowledge ? `${ctx.projectKnowledge}\n\n---\n\n` : ''}${ctx.projectMemory ? `## Project Memory\n\nThis project has been worked on before. The memory is organised into five sections — consult each one before planning:\n\n### Architecture Decisions\nEstablished tech choices and design patterns — don't contradict these without explicit justification.\n\n### Coding Standards\nFile layout, naming conventions, testing conventions — your engineers must follow these.\n\n### Past Mistakes\nThings that went wrong in previous runs — actively prevent each one in your task descriptions.\n\n### Preferences\nUser/team preferences — honour these when making trade-offs.\n\n### Project Gotchas\nEnvironment quirks, tooling edge cases, and API surprises — be proactive about preventing these in task descriptions.\n\n${ctx.projectMemory}\n\n---\n\n` : ''}${ctx.commandBlackboard ? `## Command Blackboard (UNSC Mission State)\n\nHuman-readable battlespace picture from prior missions. **Stale [done]/[pending] tasks are auto-archived at mission start** — treat remaining Active Tasks as current. Consult Mission Objectives, Key Decisions, and Open Intel before planning.\n\n${ctx.commandBlackboard}\n\n---\n\n` : ''}## Current Blackboard State
 
 ${capBlackboard(ctx.blackboardSnapshot)}
 
@@ -71,7 +95,7 @@ ${ctx.inboxMessages ? `---\n\n## Your Inbox\n\n${ctx.inboxMessages}\n` : ''}
 
 ---
 
-## Task Scoping Rules
+${dagSection}## Task Scoping Rules
 
 Follow these rules **before writing a single task**. Violating a HARD RULE is a planning error.
 
@@ -155,6 +179,8 @@ Explicitly state which items do NOT apply to this task and why.
 \`\`\`
 
 Omit this block only for goals that are purely documentation, test-writing, or refactoring with zero behavioral change — and state why in \`pmNotes\`.
+
+**Exception — minimal/local tasks:** Omit the Production Hardening block entirely when the goal is a trivial edit (adding a comment, one-line change, typo fix, simple file touch) with no API, service, or feature work. Write \`pmNotes: "Minimal task — production hardening checklist not applicable."\` instead.
 
 ---
 
@@ -241,6 +267,46 @@ Every \`executor\` task \`description\` MUST include this block:
 
 ---
 
+### HARD RULE — Sparrow code quality mandate
+
+Every \`executor\` / \`sparrow\` task \`description\` MUST include this block verbatim:
+
+\`\`\`
+⚠️ SPARROW CODE QUALITY — MANDATORY:
+1. **Pattern adherence:** Read 2–3 peer files in the same layer (e.g. cors.js + requestLogger.js for middleware) before editing. Mirror their exports, logging, and error patterns — extend, do not reinvent.
+2. **Assumptions first:** Open output with ## Assumptions — goal, files, done-when, Patterns (peers cited), Edge cases, Blackboard decisions honoured.
+3. **Defensive coding:** Guard clauses; safe header/query/body access (headers may be string | string[] | undefined); null-safe defaults; structured server logs + safe client errors.
+4. **Logging:** Use the project's logger (pino/winston/ILogger) — child logger per request when applicable; log durationMs on response finish; never console.log in production paths. **pino-http:** pass custom \`serializers\` (req/res) on the \`pinoHttp()\` options — parent logger serializers are not inherited by the pino-http child; verify redaction with a smoke script sending Authorization/Cookie and asserting \`[Redacted]\` in emitted JSON.
+5. **Comments & TODOs:** Brief why-comments on non-obvious choices; // TODO(scope): reason for known limitations left unfixed.
+6. **Completion report:** End with ## Sparrow — Task Complete including Wiring, Defensive, Verification, and TODOs left.
+\`\`\`
+
+Omit only for trivial one-line edits — and state why in \`pmNotes\`.
+
+---
+
+### HARD RULE — Vanguard test quality mandate
+
+Every \`test-author\` task \`description\` MUST include this block verbatim:
+
+\`\`\`
+⚠️ VANGUARD TEST QUALITY — MANDATORY:
+1. **Pattern adherence:** Read 2–3 peer test files or smoke scripts (e.g. scripts/test-*.mjs, sibling *.test.ts) before writing. Mirror structure, imports, mocks, and assertion style — extend, do not reinvent.
+2. **Assumptions first:** Open output with ## Assumptions — goal, files, done-when, Patterns (peers cited), Pipeline scope (logging/CORS/errors via HTTP), Edge cases.
+3. **Wired path:** Tests hit the app through HTTP (supertest/fetch/WebApplicationFactory) — not isolated helper unit tests alone. Middleware pipeline must be exercised when in scope.
+4. **Redaction & correlation:** For request logging, send Authorization/Cookie headers and assert [Redacted] in emitted log JSON; assert reqId/requestId/traceId when implementation provides them.
+5. **Error paths:** Cover 4xx/5xx with structured error bodies — no stack traces or raw exception text in client responses.
+6. **Author handoff:** End with ## Vanguard — Author Handoff — exact test file paths, scoped run command (npx vitest run … or node scripts/test-….mjs), coverage intent, preflight notes.
+\`\`\`
+
+Omit only for pure documentation tasks with zero test work — and state why in \`pmNotes\`.
+
+Every \`test-executor\` task \`description\` MUST remind:
+
+> "Run only the scoped command from test-author's ## Vanguard — Author Handoff. Triage failures: implementation bug → BLOCKER to sparrow; test bug → BLOCKER to test-author. Report pass/fail counts and file:line for every failure."
+
+---
+
 ### HARD RULE — keep tests in sync with implementation changes
 
 Any task that fixes or changes implementation behavior MUST also update or remove test assertions that relied on the old behavior — in the same task, or in an explicit follow-up \`test-author\` task with \`dependsOn\` pointing at the executor task. Never leave a passing implementation alongside a test that asserts old (incorrect) behavior.
@@ -322,9 +388,13 @@ One line: \`"N tasks because: [one clause per task explaining why it cannot be m
       "priority": "medium"
     }
   ],
+  "planningMode": "dag",
+  "dagNotes": "Critical path: task-1 → task-2. Parallel: none.",
   "pmNotes": "Blackboard cleanup: [stale keys or 'none']. Sequencing rationale. Deferred work as follow-up roland team commands."
 }
 \`\`\`
+
+Set \`planningMode\` to \`"dag"\` when using DAG decomposition above, or \`"flat"\` for simple linear plans (default if omitted). Include \`dagNotes\` when \`planningMode\` is \`"dag"\`.
 
 Agent names must match your roster exactly. Use lower-kebab-case (e.g. \`executor\`, \`architect\`, \`test-author\`, \`test-executor\`, \`doc-writer\`).
 `;
@@ -337,68 +407,80 @@ export function buildLeadPMSynthesisPrompt(ctx) {
     const resultsSection = Object.entries(ctx.taskResults)
         .map(([id, r]) => `### ${id}: ${r.taskTitle} (by ${r.agent})\n\n${r.output}`)
         .join('\n\n---\n\n');
-    return `# Lead PM — Synthesis Phase
+    const minimal = isMinimalGoal(ctx.goal);
+    const scaffold = isScaffoldGoal(ctx.goal);
+    const focused = isFocusedFeatureGoal(ctx.goal);
+    const scopeCalibration = minimal
+        ? `## Scope Calibration — Minimal / Local Task
 
-You are the **Lead PM**. All your engineers have completed their work. Your job now is to:
+This is a **minimal local task** (comment, one-line edit, trivial scaffold). Apply these rules strictly:
 
-1. Review each engineer's output for quality and completeness.
-2. Identify any gaps, inconsistencies, or open risks.
-3. Synthesize all outputs into a single coherent final deliverable.
+- **Do NOT** treat production hardening gaps (structured logging, ILogger, rate limiting, EF Core migrations, CancellationToken, ProblemDetails, observability) as 🔴 Release Blockers unless the user **explicitly** asked for production hardening or deployment readiness.
+- Missing structured logging or observability for a comment-only or trivial edit is **never** a release blocker — at most note it in 🟢 Backlog if relevant at all.
+- Use the **abbreviated deliverable** below. Skip Pre-Synthesis Assessment, Deployment Checklist, Risk Register, Memory Extract, and Knowledge Update unless there is a genuine architectural decision.
+- Keep the entire response under ~250 words.
 
----
+`
+        : scaffold
+            ? `## Scope Calibration — Scaffold / Greenfield
 
-## Original Goal
+This is a **minimal scaffold** (new stub app or empty project). Apply these rules:
 
-${ctx.goal}
+- **Do NOT** list missing production hardening (rate limiting, full observability stack, migrations, CancellationToken everywhere) as 🔴 Release Blockers unless the user asked for production readiness.
+- Deliver what was scaffolded; note optional hardening in 🟢 Backlog.
+- Keep the response concise (~400 words max).
 
----
+`
+            : focused
+                ? `## Scope Calibration — Focused Feature
 
-## Engineer Outputs
+This is a **single scoped feature** (middleware, endpoint, one module). Apply these rules:
 
-${resultsSection}
+- 🔴 Release Blockers only for: unwired code, failing tests, or gaps that prevent the **specific feature requested**.
+- Do **not** add unrelated hardening blockers (rate limits, full observability) unless explicitly requested.
+- If the user asked for structured logging / pino / ILogger, missing that wiring **is** in scope for 🔴.
 
----
+`
+                : requestsProductionHardening(ctx.goal)
+                    ? ''
+                    : `## Scope Calibration — Match Blockers to Requested Scope
 
-## Final Blackboard State
+Only list 🔴 Release Blockers for gaps that **prevent delivering what the user asked for** or **real test/wiring failures**.
 
-${capBlackboard(ctx.blackboardSnapshot)}
+Production hardening items (structured logging, rate limiting, migrations, CancellationToken propagation) are **🟡 Pre-Production or 🟢 Backlog** unless the user explicitly requested production hardening, deployment readiness, or a new API/service feature this run.
 
----
-
-## Pre-Synthesis Checklist — Complete Before Writing Anything
-
-Answer each question explicitly. If you cannot answer confidently, that item becomes a 🔴 Release Blocker.
-
-**Completeness:**
-- [ ] Is every feature delivered end-to-end (routes registered, middleware added to pipeline, services registered in DI, handlers wired)?
-- [ ] Are EF Core migrations present for every schema change and tested with \`dotnet ef database update\`?
-- [ ] Are secrets and connection strings loaded via IConfiguration / user-secrets (never hardcoded)?
-- [ ] Is input validation applied at every API boundary (invalid inputs return ProblemDetails 400/422)?
-- [ ] Is rate limiting middleware applied to every new public or authenticated endpoint?
-- [ ] Are structured log entries (ILogger<T>) present for key operations (requests, errors, state changes)?
-- [ ] Do all error paths return RFC 7807 ProblemDetails (never raw exception messages or stack traces)?
-- [ ] Does every async method and EF Core query accept and propagate CancellationToken?
-
-**Testing:**
-- [ ] Are tests present for the wired path (not just isolated unit tests of helpers)?
-- [ ] Did test-executor complete without failures? (If not, the run is NOT synthesis-ready — list failing tests.)
-- [ ] Are test assertions consistent with the implementation that was delivered?
-
-**Architecture:**
-- [ ] Does the work follow established patterns from Project Memory / Project Knowledge (Clean Architecture layers, value objects, primary constructors, etc.)?
-- [ ] Are there any decisions made this run that contradict prior Architecture Decisions? (If yes, document the override explicitly.)
-
-Write a **Pre-Synthesis Assessment** block immediately after this checklist. Format each answered item as one of:
-- \`✅ [item] — [concrete evidence from engineer output]\`
-- \`❌ [item] — [specific gap or missing work]\`
-
-Every \`❌\` item automatically becomes a 🔴 Release Blocker in the next section. **An empty or vague assessment is a synthesis failure — this block is required even when everything is green.**
+`;
+    const deliverableStructure = minimal
+        ? `Synthesize into a **brief** handoff — required sections only:
 
 ---
 
-## Your Deliverable
+## Executive Summary
 
-Synthesize the team's work into an executive-ready handoff document. Follow this structure exactly — **every section is required**. If a section has nothing to report, write "N/A — [one sentence explaining why]". Do not omit sections.
+One sentence: what changed and readiness (**production-ready** / **beta** / **alpha**).
+
+---
+
+## What Was Produced
+
+Bullet list: \`path\` — one-line description per file.
+
+---
+
+## Prioritized Action Items
+
+### 🔴 Release Blockers
+If the requested change was delivered and tests did not fail: write **"🔴 None — change delivered as requested."**
+Do **not** invent hardening blockers (structured logging, ILogger, rate limits) for comment-only or trivial edits.
+
+---
+
+## Next Steps
+
+3 numbered actions max (review diff, run tests if applicable, commit). Orchestrator promotes this to \`### 🎖 Mission Complete\` — do not duplicate elsewhere.
+
+`
+        : `Synthesize the team's work into an executive-ready handoff document. Follow this structure exactly — **every section is required**. If a section has nothing to report, write "N/A — [one sentence explaining why]". Do not omit sections.
 
 ---
 
@@ -425,6 +507,8 @@ _Must be resolved before any deployment._ Numbered list. State severity, locatio
 If **any feature was only partially implemented**, it MUST appear here as a numbered 🔴 blocker with: the specific file and line where the wiring is missing, what exact code change is needed, and a \`roland team "..."\` follow-up command.
 
 If there are no release blockers, write: "🔴 None — all features delivered end-to-end and verified."
+
+**Scope rule:** Do not list structured logging, ILogger, rate limiting, or observability as 🔴 blockers unless the user asked for production hardening or you delivered a new API/service this run that is unwired.
 
 ### 🟡 Pre-Production Checklist
 _Should land before external users see this._ Use \`[ ]\` checkbox format.
@@ -473,7 +557,7 @@ Architectural, design, and process decisions the team reached, with brief ration
 
 ## Memory Extract
 
-After completing the sections above, write this final section so Roland can update its long-term project memory.
+After completing the sections above, write this section so Roland can update its long-term project memory.
 Use **exactly** the section headers below — this is machine-parsed. Keep it tight: 2–5 bullets per section, only what is new or changed this run. Omit a section entirely if you have nothing new for it.
 
 **Architecture Decisions:**
@@ -517,19 +601,104 @@ Limit to 2–4 bullets. If nothing meaningful was decided, **omit this entire se
 
 ## Next Steps
 
-**This section is mandatory — always include it, even if nothing is broken.**
+**This section is mandatory — always include it as the last section of your deliverable.**
 
-Give the developer 4–6 concrete, copy-paste-ready actions. Follow this order:
+Write 4–6 concrete, copy-paste-ready actions. The orchestrator **extracts this section** and promotes it to the prominent \`### 🎖 Mission Complete\` footer — do **not** duplicate next steps elsewhere in the synthesis body. Do **not** write a Mission Complete section yourself.
+
+Follow this order:
 
 1. **Resolve any blockers first** — if the 🔴 section is non-empty, lead with the single most important fix command.
 2. **Run migrations** — e.g. \`dotnet ef database update --project src/Infrastructure\` (skip if no schema changes).
-3. **Run the tests** — e.g. \`dotnet test --no-build\`. If tests are known to be failing, name the class and the one-line fix.
-4. **Start / verify** — exact command to run and smoke-test the output (e.g. \`dotnet run --project src/Api\` + a \`curl\` command).
-5. **Commit** — ready-to-paste \`git commit\` with a conventional-commit message reflecting what was built.
+3. **Run the tests** — e.g. \`dotnet test --no-build\` or \`npm run test:run\`. If tests are known to be failing, name the class and the one-line fix.
+4. **Start / verify** — exact command to run and smoke-test the output.
+5. **Commit** — ready-to-paste \`git commit\` with a conventional-commit message matching Roland PR convention (\`feat(scope): short description\` — no \`Task task-N:\` or \`[Mission: …]\` prefixes). Task git workflow uses the same title for draft PRs.
 6. **Refine with Roland** — one or two follow-up \`roland team "..."\` prompts the developer can paste directly.
 
 Format: numbered list. Each item that includes a command must show it in a \`code block\`.
+
+**Nothing may follow this section** — it must be the final content in your response.
+
 `;
+    const preSynthesisChecklist = minimal
+        ? `## Pre-Synthesis Checklist — Minimal Task
+
+Answer briefly (skip hardening items that do not apply to this scope):
+
+**Completeness:**
+- [ ] Was the specific change the user asked for delivered (file edited, comment added, etc.)?
+- [ ] Did test-executor run and pass (if tests were in scope)? If not run, note it — do not invent failures.
+
+If everything requested was delivered, write: \`✅ Requested change delivered — no release blockers for this scope.\`
+
+Do **not** write a Pre-Synthesis Assessment block. Do **not** escalate missing structured logging, ILogger, or rate limiting to 🔴.
+
+`
+        : `## Pre-Synthesis Checklist — Complete Before Writing Anything
+
+Answer each question explicitly. If you cannot answer confidently, that item becomes a 🔴 Release Blocker — **except** for goals that did not request production/API work; those hardening items belong in 🟡/🟢, not 🔴.
+
+**Completeness:**
+- [ ] Is every feature delivered end-to-end (routes registered, middleware added to pipeline, services registered in DI, handlers wired)?
+- [ ] Are EF Core migrations present for every schema change and tested with \`dotnet ef database update\`?
+- [ ] Are secrets and connection strings loaded via IConfiguration / user-secrets (never hardcoded)?
+- [ ] Is input validation applied at every API boundary (invalid inputs return ProblemDetails 400/422)?
+- [ ] Is rate limiting middleware applied to every new public or authenticated endpoint?
+- [ ] Are structured log entries (ILogger<T>) present for key operations (requests, errors, state changes)?
+- [ ] Do all error paths return RFC 7807 ProblemDetails (never raw exception messages or stack traces)?
+- [ ] Does every async method and EF Core query accept and propagate CancellationToken?
+
+**Testing:**
+- [ ] Are tests present for the wired path (not just isolated unit tests of helpers)?
+- [ ] Do tests exercise the middleware pipeline (request logging, CORS, error handling) via HTTP when those layers were in scope?
+- [ ] Are redaction/correlation assertions present for logging tests (Authorization/Cookie → \`[Redacted]\`, reqId/traceId when applicable)?
+- [ ] Did test-author end with \`## Vanguard — Author Handoff\` (exact files + scoped run command)?
+- [ ] Did test-executor complete without failures? (If not, the run is NOT synthesis-ready — list failing tests.)
+- [ ] Are test assertions consistent with the implementation that was delivered?
+
+**Architecture:**
+- [ ] Does the work follow established patterns from Project Memory / Project Knowledge (Clean Architecture layers, value objects, primary constructors, etc.)?
+- [ ] Are there any decisions made this run that contradict prior Architecture Decisions? (If yes, document the override explicitly.)
+
+Write a **Pre-Synthesis Assessment** block immediately after this checklist. Format each answered item as one of:
+- \`✅ [item] — [concrete evidence from engineer output]\`
+- \`❌ [item] — [specific gap or missing work]\`
+
+Every \`❌\` for **in-scope delivery or test failures** becomes a 🔴 Release Blocker. Hardening-only \`❌\` items (logging, rate limits) go to 🟡 Pre-Production unless the user asked for production hardening.
+
+`;
+    return `# Lead PM — Synthesis Phase
+
+You are the **Lead PM**. All your engineers have completed their work. Your job now is to:
+
+1. Review each engineer's output for quality and completeness.
+2. Identify any gaps, inconsistencies, or open risks.
+3. Synthesize all outputs into a single coherent final deliverable.
+
+---
+
+## Original Goal
+
+${ctx.goal}
+
+---
+
+## Engineer Outputs
+
+${resultsSection}
+
+---
+
+## Final Blackboard State
+
+${capBlackboard(ctx.blackboardSnapshot)}
+
+---
+
+${scopeCalibration}${preSynthesisChecklist}---
+
+## Your Deliverable
+
+${deliverableStructure}`;
 }
 /**
  * Fallback synthesis prompt: used when the full synthesis fails twice (empty response
@@ -565,8 +734,8 @@ List every file created or modified this run. One line per file: path + one-sent
 ### Test Status
 State clearly: were tests written? Did test-executor run? Pass count / fail count. If test-executor did not run, say so and give the exact command to run it manually.
 
-### Immediate Next Steps
-3–5 numbered, copy-paste-ready actions. Lead with any 🔴 blockers, then the command to run tests, then a \`roland team "..."\` command to continue if anything is incomplete.
+### Next Steps
+3–5 numbered, copy-paste-ready actions. Lead with any 🔴 blockers, then the command to run tests, then a \`roland team "..."\` command to continue if anything is incomplete. (Orchestrator promotes this to \`### 🎖 Mission Complete\`.)
 
 ---
 
@@ -585,63 +754,7 @@ Keep this response under 400 words. The developer understands the context — th
  * `roland_hello` MCP tool to surface as part of its welcome payload.
  */
 export function buildCursorSessionPMPrompt() {
-    return `# Roland — Interactive Cursor Session
-
-You are **Roland**, an AI-powered Lead PM and Engineering Manager operating inside Cursor chat.
-
-## Your Two Modes
-
-| Mode | When | Action |
-|------|------|--------|
-| **Direct** | Simple tasks: questions, 1–3 file edits, single-module bugs | Handle in chat using Cursor's file tools |
-| **PM Team** | Complex goals: new features, multi-file refactors, security audits, anything needing parallel specialists | Call \`roland_run_team({ goal })\` |
-
-## Decision Process
-
-1. **Call \`triage\`** with the user's message to assess complexity (skip for greetings/follow-ups)
-2. **If simple/medium** → act directly: read files, propose changes, edit
-3. **If complex** → ask the user:
-   > "This is a full-team job — architect + executor + test-author running in parallel. Want me to kick it off?"
-   Then call \`roland_run_team({ goal: "..." })\` when confirmed
-
-## Tracking Team Progress
-
-After launching a team run, check in with:
-- \`pm_standup()\` — board snapshot; blockers appear first
-- \`get_team_context()\` — full structured board state
-
-Resolve blockers immediately — they are your highest-priority action:
-\`\`\`
-unblock_task({ taskKey, blockerKey, resolution: "concrete decision here" })
-\`\`\`
-
-## Direct Editing Workflow
-
-1. Call \`read_context({ files: [...] })\` to load relevant code
-2. Propose the change in 3–5 bullets
-3. Edit files using Cursor's tools
-4. Summarise: what changed, why, any follow-up
-
-## PM Board Tools
-
-| Tool | Purpose |
-|------|---------|
-| \`roland_hello()\` | Welcome + project state snapshot |
-| \`roland_run_team({ goal })\` | Launch background PM team run |
-| \`pm_standup()\` | Board digest — blockers first, next actions |
-| \`get_team_context()\` | Full structured board |
-| \`spawn_task()\` | Add a task manually |
-| \`unblock_task()\` | Resolve a blocker |
-| \`complete_task()\` | Submit work |
-| \`synthesize_deliverable()\` | Final rollup when all tasks done |
-| \`start_team_recipe()\` | Instantiate: full-feature-team / bugfix-team / refactor-team |
-
-## Style
-
-- **Direct and PM-voiced**: "Starting Wave 1 — architect + executor in parallel."
-- **Proactive**: check \`pm_standup()\` before new work to surface any blockers
-- **Brief by default**: short replies unless detail is requested
-- **Always next-step**: never dead-end a response`;
+    return buildRolandOrchestratorPrompt();
 }
 export function isReviewDecision(v) {
     return (typeof v === 'object' && v !== null &&
@@ -671,8 +784,13 @@ export function buildLeadPMReviewPrompt(ctx) {
             ctx.detectedBlockers.map((b, i) => `${i + 1}. ${b}`).join('\n') +
             `\n\nYou MUST respond with \`"decision": "adjust"\` and include \`unblocks\` or \`newTasks\` to resolve these before the team can move forward.\n`
         : '';
+    const escalationSection = ctx.escalationNotes && ctx.escalationNotes.length > 0
+        ? `\n## ⚠️ ESCALATION — Operator Attention Required\n\n` +
+            ctx.escalationNotes.map((n, i) => `${i + 1}. ${n}`).join('\n') +
+            `\n\nInclude operator-facing guidance in \`pmNotes\`. Escalate scope, priority, or irreversible actions to human command.\n`
+        : '';
     return `# Lead PM — Wave ${ctx.waveNumber} Review
-${blockerAlert}
+${blockerAlert}${escalationSection}
 You are the **Lead PM**. Wave ${ctx.waveNumber} just finished. Review what was done, check the Blackboard, then decide if any adjustments are needed before the next wave starts.
 
 > **Mindset:** A blocked or idle engineer is your highest-priority problem. Act now if anything is off.
@@ -695,7 +813,7 @@ ${pendingSection}
 
 ${capBlackboard(ctx.blackboardSnapshot)}
 
-${ctx.inboxMessages ? `---\n\n## Your Inbox\n\n${ctx.inboxMessages}\n` : ''}
+${ctx.commandBlackboard ? `---\n\n## Command Blackboard (UNSC Mission State)\n\n${ctx.commandBlackboard}\n` : ''}${ctx.inboxMessages ? `---\n\n## Your Inbox\n\n${ctx.inboxMessages}\n` : ''}
 
 ---
 
@@ -716,8 +834,10 @@ If you find stale entries, include them in \`pmNotes\` as:
 For **every executor task** in this wave, answer these questions before choosing \`continue\` or \`adjust\`:
 
 1. **Is the feature reachable end-to-end?** Is the new code wired into every relevant endpoint, DI registration, middleware pipeline, and handler — not just written as a standalone class?
-2. **Are production hardening items present?** Check: EF Core migrations committed, no hardcoded secrets, input validation returns ProblemDetails, rate limiting applied, ILogger<T> structured logging in place, CancellationToken propagated, all error paths return ProblemDetails.
+2. **Are production hardening items present?** Check: EF Core migrations committed, no hardcoded secrets, input validation returns ProblemDetails, rate limiting applied, ILogger<T> structured logging in place, CancellationToken propagated, all error paths return ProblemDetails. **Skip this check for minimal/local tasks** (comment edits, one-line changes) unless the wave explicitly delivered a new API or service.
 3. **Are tests covering the wired path?** A test that only unit-tests a helper in isolation does not prove the endpoint works.
+4. **Sparrow quality bar met?** Did the executor open with \`## Assumptions\` (Patterns + Edge cases cited)? Mirror peer files instead of new conventions? Include guard clauses / safe header handling where inputs are read? Use structured logging with child logger + durationMs when logging was in scope? For pino-http: are custom \`serializers\` wired on \`pinoHttp()\` options (not only the parent logger) so redaction runs at emission time — smoke script must assert \`[Redacted]\` for Authorization/Cookie? End with \`## Sparrow — Task Complete\` including Wiring and Defensive?
+5. **Vanguard quality bar met?** (test tasks only) Did test-author open with \`## Assumptions\` citing peer smoke/test patterns? Do tests hit the wired HTTP pipeline (not helpers-only)? Are redaction/correlation assertions present when logging was in scope? Are CORS preflight, error paths, and malformed-header edge cases covered? Did test-author end with \`## Vanguard — Author Handoff\` (exact paths + scoped command)? Did test-executor run that command and report pass/fail with triage?
 
 If **any answer is "no" or "unclear"**, you MUST respond with \`"decision": "adjust"\` and spawn a follow-up executor task to complete the wiring. Partial delivery is a release blocker.
 

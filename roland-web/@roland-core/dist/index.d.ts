@@ -5,13 +5,20 @@
  * Primary commands:
  *   roland "goal"       Run a PM team on a goal (shortcut for `roland team`)
  *   roland team         PM-first parallel agent execution with live TUI
+ *   roland status       Unified mission snapshot (board + HITL + supervisor)
+ *   roland live         Continuous live monitor (refreshes every 5s)
  *   roland watch        Monitor git commits / file changes; auto-run on change
  *   roland pr [number]  Review (and optionally fix) a GitHub PR via `gh`
- *   roland status       Live TUI observer for a running job
+ *
+ * Monitoring (CLI primary — Hermes uses MCP parity):
+ *   roland board-status   UNSC summary
+ *   roland hitl-status    HITL gates and blockers
+ *   roland mission-summary  Last terminal mission outcome
  *
  * Utility commands:
- *   roland serve        Start the stdio MCP server (default when no subcommand)
- *   roland mcp-config   Print / merge the ~/.cursor/mcp.json entry
+ *   roland serve        Start stdio MCP (Cursor) or HTTP MCP with --mcp
+ *   roland mcp          Streamable HTTP MCP server (Hermes / external clients)
+ *   roland mcp-config   Print / merge ~/.cursor/mcp.json (or --general for HTTP)
  *   roland doctor       Diagnose the install
  *   roland pm-log       Print the PM event timeline for the current project
  *

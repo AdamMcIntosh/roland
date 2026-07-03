@@ -1,4 +1,6 @@
 /**
+ * ## MCP Project Context Fix
+ *
  * RunState — persists real-time orchestrator state to .roland/run-state.json.
  *
  * Written by the orchestrator (via RunStateWriter) during every lifecycle event.
@@ -12,9 +14,11 @@ export const RUN_STATE_FILE = 'run-state.json';
 export class RunStateWriter {
     state;
     filePath;
-    constructor(stateDir, goal) {
+    constructor(stateDir, goal, opts) {
         fs.mkdirSync(stateDir, { recursive: true });
         this.filePath = path.join(stateDir, RUN_STATE_FILE);
+        const envVia = process.env['ROLAND_TRIGGERED_VIA']?.trim();
+        const triggeredVia = opts?.triggeredVia ?? envVia;
         this.state = {
             runId: randomUUID().slice(0, 8),
             goal,
@@ -26,6 +30,7 @@ export class RunStateWriter {
             completedTasks: 0,
             tasks: [],
             activeTaskIds: [],
+            ...(triggeredVia ? { triggeredVia } : {}),
         };
         this.flush();
     }
@@ -51,18 +56,20 @@ export class RunStateWriter {
         }
         this.flush();
     }
-    taskStart(id) {
+    taskStart(id, git) {
         const task = this.state.tasks.find((t) => t.id === id);
         if (task) {
             task.status = 'running';
             task.startedAt = Date.now();
+            if (git)
+                task.git = { ...task.git, ...git };
         }
         if (!this.state.activeTaskIds.includes(id)) {
             this.state.activeTaskIds.push(id);
         }
         this.flush();
     }
-    taskComplete(id, output, hadBlocker) {
+    taskComplete(id, output, hadBlocker, git) {
         const task = this.state.tasks.find((t) => t.id === id);
         if (task) {
             task.status = hadBlocker ? 'blocked' : 'done';
@@ -70,10 +77,19 @@ export class RunStateWriter {
             task.hadBlocker = hadBlocker;
             const preview = output.replace(/\n{3,}/g, '\n\n').trim();
             task.outputPreview = preview.length > 300 ? '…' + preview.slice(-297) : preview;
+            if (git)
+                task.git = { ...task.git, ...git };
         }
         this.state.activeTaskIds = this.state.activeTaskIds.filter((a) => a !== id);
         // completedTasks is recomputed from task statuses in flush() — no manual increment.
         this.flush();
+    }
+    taskGitUpdate(id, git) {
+        const task = this.state.tasks.find((t) => t.id === id);
+        if (task) {
+            task.git = { ...task.git, ...git };
+            this.flush();
+        }
     }
     waveReviewing() {
         this.state.status = 'reviewing';
@@ -133,6 +149,52 @@ export class RunStateWriter {
         this.state.status = 'error';
         this.state.errorMessage = message;
         this.state.activeTaskIds = [];
+        this.flush();
+    }
+    /** Sync loop-engine state into run-state.json for dashboard / bg-status. */
+    updateLoopState(fields) {
+        if (fields.loopTemplateId !== undefined) {
+            this.state.loopTemplateId = fields.loopTemplateId;
+        }
+        if (fields.loopPhase !== undefined) {
+            this.state.loopPhase = fields.loopPhase;
+        }
+        if (fields.loopIteration !== undefined) {
+            this.state.loopIteration = fields.loopIteration;
+        }
+        if (fields.lastVerification !== undefined) {
+            this.state.lastVerification = fields.lastVerification;
+        }
+        if (fields.lastCritique !== undefined) {
+            this.state.lastCritique = fields.lastCritique;
+        }
+        if (fields.loopRetryCount !== undefined) {
+            this.state.loopRetryCount = fields.loopRetryCount;
+        }
+        if (fields.loopStatus !== undefined) {
+            this.state.loopStatus = fields.loopStatus;
+        }
+        if (fields.loopPhaseHistory !== undefined) {
+            this.state.loopPhaseHistory = fields.loopPhaseHistory;
+        }
+        if (fields.lastRetry !== undefined) {
+            this.state.lastRetry = fields.lastRetry;
+        }
+        if (fields.modelRouting !== undefined) {
+            this.state.modelRouting = fields.modelRouting;
+        }
+        if (fields.pmIntegration !== undefined) {
+            this.state.pmIntegration = fields.pmIntegration;
+        }
+        if (fields.liveActivity !== undefined) {
+            this.state.liveActivity = fields.liveActivity;
+        }
+        if (fields.pendingGitCommitApproval !== undefined) {
+            this.state.pendingGitCommitApproval = fields.pendingGitCommitApproval;
+        }
+        if (fields.spawnActivityHistory !== undefined) {
+            this.state.spawnActivityHistory = fields.spawnActivityHistory;
+        }
         this.flush();
     }
     get() {

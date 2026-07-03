@@ -5,6 +5,20 @@ All notable changes to Roland are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — Legacy External Agent Removal
+
+### Removed
+
+- Legacy Block external agent integration: agent config directory, session spawner, permission gate, headless task MCP tool, CLI recipe runner, recipe generator, container sandbox scripts, dispatch hints file, and dedicated user guide
+- Project scaffolding for external agent config and permission policy files from `roland init`
+- External agent setup steps from `scripts/setup.sh`, `scripts/setup.ps1`, and `packages/roland-setup`
+
+### Changed
+
+- Renamed `config.yaml` external-agent section to `budget:` (spending limits and free-model fallbacks only)
+- Documentation updated for Cursor + Pure ClosedLoop architecture
+- `RECIPES_CATALOG.md` — team missions via `roland team` replace headless external agent runner
+
 ## [1.0.0] — 2026-05-26 — PM Team System (Production Release)
 
 First production-stable release of the Cursor-native PM Team System. A Lead PM
@@ -74,14 +88,14 @@ from `roland team "..."`.
 ### Added — Inline Diffs & Docker Sandboxing
 
 - **`extension/` — Roland Diff VS Code extension** — inline accept/reject diffs using native `vscode.diff` API; watches `.omc/pending-changes/` for proposed changes, shows side-by-side diff with Apply/Discard buttons, status bar with pending count, bulk apply/discard all
-- **`Dockerfile` + `scripts/roland-docker.sh`** — Docker container isolation for process-level permission gating; mounts only the project directory, no host filesystem access outside the mount; one command to run sandboxed Goose sessions
+- **`Dockerfile` + `scripts/roland-docker.sh`** — Docker container isolation (removed in Unreleased)
 - **`.dockerignore`** — optimized Docker build context (excludes node_modules, src, tests, docs)
 - **`preview_changes` writes pending change files** — automatically writes `.omc/pending-changes/<file>-<timestamp>.json` manifests for VS Code extension consumption; opt-out via `write_pending: false`
 
 ### Changed
 
 - **Comparison docs updated** — honest strengths/weaknesses breakdown vs Claude Code
-- **Blog post rewritten** — reflects full coding agent with Goose integration, not just MCP server
+- **Blog post rewritten** — reflects full coding agent integration, not just MCP server
 - **Beta testers guide rewritten** — updated testing commands and focus areas for current feature set
 
 ## [0.1.3] - 2026-03-23
@@ -90,25 +104,24 @@ from `roland team "..."`.
 
 - **`src/utils/git-tools.ts`** — `git_status`, `git_diff`, `git_log`, `git_commit` MCP tools for native git awareness
 - **`src/utils/screenshot.ts`** — `analyze_screenshot` MCP tool; captures screen or loads image, sends to OpenRouter vision model (default: `google/gemini-2.5-flash`)
-- **`src/utils/permission-gate.ts`** — `.roland-permissions.json` policy file; `buildPermissionBlock()` converts policy to prompt instructions
-- **Supervised spawn mode** in `goose-runner.ts` — intercepts Goose tool-call confirmation prompts, auto-approves/denies based on permission policy
-- **Named Goose sessions** — `sessionName` option in `GooseSessionOptions`; uses `goose run --session <name>` for conversation continuity across recipe steps
-- **`SessionContextManager` in recipe runner** — starts session per recipe run, injects structured context into every step prompt, updates after each step
-- **Per-step retry logic** in `run-recipe.ts` — `maxRetries` option and `--max-retries` CLI flag; failed steps re-run with error context appended
-- **`.roland-permissions.json` scaffolded by `init.ts`** — default permissive policy created in project root on `roland init`
+- **`src/utils/permission-gate.ts`** — permission policy file (removed in Unreleased)
+- **Supervised spawn mode** — auto-approve/deny tool confirmations (removed in Unreleased)
+- **Named external agent sessions** — conversation continuity across recipe steps (removed in Unreleased)
+- **`SessionContextManager` in recipe runner** — structured context in step prompts (recipe runner removed in Unreleased)
+- **Per-step retry logic** — failed steps re-run with error context (removed in Unreleased)
+- **Permission policy scaffolded by `init.ts`** — removed in Unreleased
 
 ## [0.1.2] - 2026-03-20
 
-### Added — Coding Agent
+### Added — Coding Agent (legacy components removed in Unreleased)
 
-- **`src/utils/goose-runner.ts`** — headless Goose session spawner; replaced `spawnSync` with streaming `spawn` for real-time stdout/stderr output
-- **`run_goose_task` MCP tool** — spawn autonomous Goose coding sessions from any MCP client
-- **`scripts/run-recipe.ts`** — recipe runner using Goose sub-sessions (file/shell access per step via Developer extension)
+- **Headless external agent session spawner** — removed in Unreleased
+- **Headless task MCP tool** — removed in Unreleased
+- **CLI recipe runner** — removed in Unreleased; use `roland team` instead
 - **`src/utils/migration-context.ts`** — `roland-context.json` + `MIGRATION.md` context engine
 - **`load_migration_context` / `update_migration_context` MCP tools** — load and append to structured project context
 - **`preview_changes` MCP tool** — unified diff + HTML preview of file changes
-- **`ROLAND_PROJECT_ROOT` env var** — fixes cwd footgun in Goose sub-sessions
-- **`.goose/config.yaml` template** — scaffolded by `roland init` with Developer extension + smart routing instructions
+- **`ROLAND_PROJECT_ROOT` env var** — project root for MCP tool cwd resolution
 - **`VB6Migration` recipe** — 5-agent workflow: ContextLoader → Planner → Executor → Reviewer → Explainer with loop/retry
 
 ## [2.0.0] - 2026-02-12

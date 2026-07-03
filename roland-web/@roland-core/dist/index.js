@@ -5,13 +5,20 @@
  * Primary commands:
  *   roland "goal"       Run a PM team on a goal (shortcut for `roland team`)
  *   roland team         PM-first parallel agent execution with live TUI
+ *   roland status       Unified mission snapshot (board + HITL + supervisor)
+ *   roland live         Continuous live monitor (refreshes every 5s)
  *   roland watch        Monitor git commits / file changes; auto-run on change
  *   roland pr [number]  Review (and optionally fix) a GitHub PR via `gh`
- *   roland status       Live TUI observer for a running job
+ *
+ * Monitoring (CLI primary — Hermes uses MCP parity):
+ *   roland board-status   UNSC summary
+ *   roland hitl-status    HITL gates and blockers
+ *   roland mission-summary  Last terminal mission outcome
  *
  * Utility commands:
- *   roland serve        Start the stdio MCP server (default when no subcommand)
- *   roland mcp-config   Print / merge the ~/.cursor/mcp.json entry
+ *   roland serve        Start stdio MCP (Cursor) or HTTP MCP with --mcp
+ *   roland mcp          Streamable HTTP MCP server (Hermes / external clients)
+ *   roland mcp-config   Print / merge ~/.cursor/mcp.json (or --general for HTTP)
  *   roland doctor       Diagnose the install
  *   roland pm-log       Print the PM event timeline for the current project
  *
@@ -24,39 +31,119 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { setMaxListeners } from 'events';
-import { McpServer } from './server/mcp-server.js';
-import { loadConfig } from './config/config-loader.js';
+import { buildCursorMcpServerEntry, buildGeneralMcpHttpEntry, runMcpServer } from './server/mcp-server.js';
+import { runMcpHttpServer } from './server/mcp-http.js';
+import { bootstrapRolandEnv, resolveRolandInstallRoot } from './utils/project-root.js';
+import { configureSdkProcessLimits } from './utils/sdk-lifecycle.js';
 import { logger } from './utils/logger.js';
 import { Roster } from './pm/roster.js';
 import { TeamRecipes } from './pm/team-recipes.js';
 import { PMEventLog } from './pm/event-log.js';
 import { renderTimeline } from './pm/render.js';
 // Raise the global EventEmitter/EventTarget default before any SDK code runs.
-// The Cursor SDK adds one internal abort listener per parallel agent call; on a
-// wave with 10+ tasks the default limit of 10 fires MaxListenersExceededWarning.
-// setMaxListeners(n) with no target sets the process-wide default for all new
-// EventEmitter *and* EventTarget instances (including AbortSignal) — Node 15.4+.
-setMaxListeners(30);
+configureSdkProcessLimits();
+// When invoked via `node dist/index.js` (not bin/roland.js), still bootstrap env.
+bootstrapRolandEnv({ binUrl: import.meta.url, cwd: process.cwd() });
 const CURSOR_CONFIG = path.join(os.homedir(), '.cursor', 'mcp.json');
-const ROLAND_ENTRY = { command: 'roland', args: ['serve'] };
-async function serve() {
-    logger.info('🚀 Starting Roland MCP Server v2...');
-    const config = await loadConfig();
-    logger.info('✅ Configuration loaded');
-    const server = new McpServer(config);
-    await server.start();
-    logger.info('🔗 Waiting for client connection...');
-    const shutdown = async () => {
-        logger.info('\n📡 Shutting down gracefully...');
-        await server.stop();
-        process.exit(0);
-    };
-    process.on('SIGINT', shutdown);
-    process.on('SIGTERM', shutdown);
+function rolandMcpEntry() {
+    const rolandRoot = resolveRolandInstallRoot(import.meta.url);
+    return buildCursorMcpServerEntry({
+        rolandRoot,
+        projectRoot: process.env.ROLAND_PROJECT_ROOT?.trim() || process.cwd(),
+    });
 }
-function mcpConfig(write) {
-    const block = { mcpServers: { roland: ROLAND_ENTRY } };
+async function serve(rest) {
+    if (rest.includes('--mcp')) {
+        const portIdx = rest.indexOf('--port');
+        const hostIdx = rest.indexOf('--host');
+        const port = portIdx >= 0 ? Number(rest[portIdx + 1]) || 8081 : 8081;
+        const host = hostIdx >= 0 ? rest[hostIdx + 1] : '0.0.0.0';
+        await runMcpHttpServer({ host, port });
+        return;
+    }
+    await runMcpServer();
+}
+async function mcpHttp(rest) {
+    const portIdx = rest.indexOf('--port');
+    const hostIdx = rest.indexOf('--host');
+    const port = portIdx >= 0 ? Number(rest[portIdx + 1]) || 8081 : 8081;
+    const host = hostIdx >= 0 ? rest[hostIdx + 1] : '0.0.0.0';
+    await runMcpHttpServer({ host, port });
+}
+/** Verify @cursor/sdk is installable for `roland team` / orchestrate on this platform. */
+function checkCursorSdkRuntime(installRoot) {
+    const platform = process.platform;
+    const arch = process.arch;
+    const abi = process.versions.modules;
+    const sdkPkgPath = path.join(installRoot, 'node_modules', '@cursor', 'sdk', 'package.json');
+    const sdkDist = path.join(installRoot, 'node_modules', '@cursor', 'sdk', 'dist');
+    if (!fs.existsSync(sdkPkgPath)) {
+        return {
+            ok: false,
+            label: `@cursor/sdk (${platform}/${arch}, Node ABI ${abi})`,
+            hint: 'Run `npm ci` from the Roland install root.',
+        };
+    }
+    let sdkMeta = {};
+    try {
+        sdkMeta = JSON.parse(fs.readFileSync(sdkPkgPath, 'utf-8'));
+    }
+    catch {
+        // Fall through to dist-only check.
+    }
+    const platformPkgName = `@cursor/sdk-${platform}-${arch}`;
+    if (sdkMeta.optionalDependencies?.[platformPkgName]) {
+        const platformDir = path.join(installRoot, 'node_modules', '@cursor', `sdk-${platform}-${arch}`);
+        const platformOk = fs.existsSync(path.join(platformDir, 'package.json'));
+        return {
+            ok: platformOk,
+            label: `@cursor/sdk platform package (${platformPkgName})`,
+            hint: platformOk ? undefined : `Run \`npm ci\` from repo root to install ${platformPkgName}.`,
+        };
+    }
+    // Legacy @cursor/sdk releases shipped npm sqlite3 native bindings.
+    const sqliteRoot = path.join(installRoot, 'node_modules', 'sqlite3');
+    if (fs.existsSync(path.join(sqliteRoot, 'package.json'))) {
+        const sqliteBinding = path.join(sqliteRoot, 'lib', 'binding', `node-v${abi}-${platform}-${arch}`, 'node_sqlite3.node');
+        const sqliteRelease = path.join(sqliteRoot, 'build', 'Release', 'node_sqlite3.node');
+        const sqliteOk = fs.existsSync(sqliteBinding) || fs.existsSync(sqliteRelease);
+        return {
+            ok: sqliteOk,
+            label: `@cursor/sdk sqlite3 binding (${platform}/${arch}, Node ABI ${abi})`,
+            hint: sqliteOk
+                ? undefined
+                : 'Install VS "Desktop development with C++", then `npm rebuild sqlite3`. See docs/guides/mini-pc-deployment.md.',
+        };
+    }
+    const distOk = fs.existsSync(sdkDist);
+    return {
+        ok: distOk,
+        label: `@cursor/sdk (${platform}/${arch}, Node ABI ${abi})`,
+        hint: distOk ? undefined : 'Run `npm ci` from the Roland install root.',
+    };
+}
+function mcpConfig(write, rest) {
+    const general = rest.includes('--general') || rest.includes('--http');
+    const portIdx = rest.indexOf('--port');
+    const port = portIdx >= 0 ? Number(rest[portIdx + 1]) || 8081 : 8081;
+    const baseUrl = rest.find((a, i) => rest[i - 1] === '--url') ?? `http://127.0.0.1:${port}/mcp`;
+    if (general) {
+        const block = { mcpServers: { roland: buildGeneralMcpHttpEntry(baseUrl) } };
+        if (!write) {
+            console.log('General MCP (Streamable HTTP) — for Hermes and other HTTP MCP clients:\n');
+            console.log(JSON.stringify(block, null, 2));
+            console.log('\nHermes:');
+            console.log(`  hermes mcp add roland --url ${baseUrl.replace(/\/$/, '')}`);
+            console.log('\nHealth check:');
+            console.log(`  curl ${baseUrl.replace(/\/$/, '')}/health`);
+            console.log('\nCursor stdio (unchanged): roland mcp-config --write');
+            return;
+        }
+        console.log('Note: --write applies Cursor stdio config only. For Hermes, use:');
+        console.log(`  hermes mcp add roland --url ${baseUrl.replace(/\/$/, '')}`);
+        return;
+    }
+    const block = { mcpServers: { roland: rolandMcpEntry() } };
     if (!write) {
         console.log('Add this to ~/.cursor/mcp.json (merge into any existing mcpServers):\n');
         console.log(JSON.stringify(block, null, 2));
@@ -71,7 +158,7 @@ function mcpConfig(write) {
         // No config yet — create one.
     }
     const servers = existing.mcpServers ?? {};
-    servers.roland = ROLAND_ENTRY;
+    servers.roland = rolandMcpEntry();
     existing.mcpServers = servers;
     fs.mkdirSync(path.dirname(CURSOR_CONFIG), { recursive: true });
     fs.writeFileSync(CURSOR_CONFIG, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
@@ -80,9 +167,15 @@ function mcpConfig(write) {
 function doctor() {
     const checks = [];
     const add = (ok, label, hint) => checks.push({ ok, label, hint });
-    // dist build present (this file is running, so the dir it lives in exists)
-    const here = path.dirname(fileURLToPath(import.meta.url));
-    add(fs.existsSync(here), `Build present (${here})`);
+    const installRoot = resolveRolandInstallRoot(import.meta.url);
+    const distDir = path.join(installRoot, 'dist');
+    add(fs.existsSync(distDir), `Build present (${distDir})`, fs.existsSync(distDir) ? undefined : 'Run npm run build.');
+    const mcpEntry = path.join(distDir, 'server', 'mcp-server.js');
+    add(fs.existsSync(mcpEntry), `MCP server entry (${mcpEntry})`, fs.existsSync(mcpEntry) ? undefined : 'Run npm run build.');
+    const binEntry = path.join(installRoot, 'bin', 'roland.js');
+    add(fs.existsSync(binEntry), `Global CLI shim (${binEntry})`, fs.existsSync(binEntry) ? undefined : 'Missing bin/roland.js — reinstall or npm link from repo.');
+    add(true, `Install root: ${installRoot}`);
+    add(true, `Project root: ${process.env.ROLAND_PROJECT_ROOT ?? process.cwd()}`);
     // agents/
     const agentsDir = Roster.resolveAgentsDir();
     const agentCount = (() => {
@@ -122,7 +215,15 @@ function doctor() {
         canWrite = false;
     }
     add(canWrite, `Writable .roland/ in ${process.cwd()}`, canWrite ? undefined : 'Check directory permissions.');
-    console.log('🩺 Roland doctor\n');
+    // @cursor/sdk runtime (orchestrate + team mode)
+    const sdkCheck = checkCursorSdkRuntime(installRoot);
+    add(sdkCheck.ok, sdkCheck.label, sdkCheck.hint);
+    // SDK shell-exec cleanup tuning (optional env overrides)
+    const settleMs = process.env.ROLAND_SDK_SETTLE_MS ?? '3500 (default)';
+    const heavySettleMs = process.env.ROLAND_SDK_HEAVY_SETTLE_MS ?? '8000 (default)';
+    const terminalWaitMs = process.env.ROLAND_SDK_TERMINAL_WAIT_MS ?? '30000 (default)';
+    add(true, `SDK cleanup: ROLAND_SDK_SETTLE_MS=${settleMs}, ROLAND_SDK_HEAVY_SETTLE_MS=${heavySettleMs}`);
+    add(true, `SDK cleanup: ROLAND_SDK_TERMINAL_WAIT_MS=${terminalWaitMs}`, 'Raise settle if you see [shell-exec] Close event warnings during team runs.');
     for (const c of checks) {
         console.log(`${c.ok ? '✅' : '❌'} ${c.label}`);
         if (!c.ok && c.hint)
@@ -152,10 +253,19 @@ function printHelp() {
     ln();
     ln('  ' + b('DIRECT COMMANDS'));
     ln(`    ${cy('roland')} ${b('"goal"')}                      Run a PM team on a goal ${d('(shortcut)')}`);
-    ln(`    ${cy('roland')} ${b('team')} "goal"               Run a PM team with live dashboard`);
+    ln(`    ${cy('roland')} ${b('team')} "goal"               Run Pure ClosedLoop mission (CLI primary)`);
     ln(`    ${cy('roland')} ${b('watch')}                      Watch git commits, auto-run on change`);
     ln(`    ${cy('roland')} ${b('pr')} [number]               Review (and optionally fix) a GitHub PR`);
-    ln(`    ${cy('roland')} ${b('status')}                     Live dashboard for a running job`);
+    ln(`    ${cy('roland')} ${b('status')} [--json]              Unified snapshot ${d('(board + HITL + supervisor)')}`);
+    ln(`    ${cy('roland')} ${b('live')} [--interval N]          Live monitor ${d('(refreshes every 5s)')}`);
+    ln(`    ${cy('roland')} ${b('status --tui')}                 Legacy live TUI dashboard`);
+    ln(`    ${cy('roland')} ${b('board-status')}              UNSC summary (add --concise for chat-friendly)`);
+    ln(`    ${cy('roland')} ${b('hitl-status')} [--json]       HITL gates, blockers, mission outcome`);
+    ln(`    ${cy('roland')} ${b('mission-summary')} [--json]   Latest terminal mission report (Hermes)`);
+    ln(`    ${cy('roland')} ${b('hitl-events')} [--since N]   Poll HITL events since epoch ms`);
+    ln(`    ${cy('roland')} ${b('board-cleanup')}             Archive stale tasks from prior missions`);
+    ln(`    ${cy('roland')} ${b('pr-cleanup')} [--apply]       Clean legacy PR titles/bodies (--current, --body)`);
+    ln(`    ${cy('roland')} ${b('orchestrate')} "goal"       SDK supervisor + UNSC sub-agents`);
     ln();
     ln('  ' + b('OPTIONS') + '  ' + d('(team / watch / pr)'));
     ln(`    ${b('--notify')}, -n               Desktop notification on complete`);
@@ -195,13 +305,18 @@ function printHelp() {
     ln(`    ${cy('roland')} ${b('inject')} "directive"         Post a directive to the Lead PM`);
     ln(`    ${cy('roland')} ${b('replan')}                     Ask PM to re-evaluate the plan`);
     ln(`    ${cy('roland')} ${b('abort')}                      Stop the run after current wave`);
-    ln(`    ${cy('roland')} ${b('hitl-status')}                Show HITL queue state and pause status`);
+    ln(`    ${cy('roland')} ${b('hitl-status')} [--json]      HITL queue, gates, suggested actions`);
+    ln(`    ${cy('roland')} ${b('mission-summary')} [--json]  Last mission outcome (Hermes parity)`);
+    ln(`    ${cy('roland')} ${b('hitl-events')} [--since N]   Poll hermes-hitl-events.jsonl`);
+    ln(`    ${cy('roland')} ${b('approve-commit')} [id]        Approve pending git-commit (loop HITL)`);
+    ln(`    ${cy('roland')} ${b('reject-commit')} [id]         Reject pending git-commit (loop HITL)`);
     ln();
     ln('  ' + b('UTILITY COMMANDS'));
     ln(`    ${cy('roland')} doctor              Diagnose your Roland install`);
     ln(`    ${cy('roland')} pm-log              Print the PM event timeline`);
-    ln(`    ${cy('roland')} mcp-config          Print Cursor MCP config entry`);
-    ln(`    ${cy('roland')} serve               Start the MCP server (Cursor / VS Code)`);
+    ln(`    ${cy('roland')} mcp-config          Print Cursor MCP config (--general for HTTP)`);
+    ln(`    ${cy('roland')} mcp [--port N]      Streamable HTTP MCP on 0.0.0.0 (Hermes-ready)`);
+    ln(`    ${cy('roland')} serve [--mcp]       Stdio MCP (default) or HTTP with --mcp`);
     ln();
     ln('  ' + b('ENVIRONMENT'));
     ln(`    ${b('ROLAND_NOTIFY=1')}            Enable notifications for all commands`);
@@ -211,6 +326,9 @@ function printHelp() {
     ln(`    ${b('CURSOR_API_KEY')}             Required for agent execution`);
     ln(`    ${b('ROLAND_AGENT_TIMEOUT_MS')}    Agent timeout  ${d('(default: 25 min)')}`);
     ln(`    ${b('ROLAND_AGENT_RETRIES')}       Max retries per agent  ${d('(default: 5)')}`);
+    ln(`    ${b('ROLAND_PROJECT_ROOT')}        Target project when cwd is not the repo`);
+    ln(`    ${b('ROLAND_ROOT')}                Alias for ROLAND_PROJECT_ROOT`);
+    ln(`    ${b('ROLAND_STATE_DIR')}           Persistence dir  ${d('(default: .roland under project)')}`);
     ln();
     ln('  ' + b('EXAMPLES'));
     ln(`    ${d('# Run a team session')}`);
@@ -222,16 +340,24 @@ function printHelp() {
     ln(`    ${d('# Review a PR and push fixes')}`);
     ln(`    roland pr 42 --fix --notify`);
     ln();
-    ln(`    ${d('# Always notify (set once in shell profile)')}`);
-    ln(`    export ROLAND_NOTIFY=1`);
+    ln(`    ${d('# Monitor an active background mission')}`);
+    ln(`    roland live`);
+    ln(`    roland hitl-status --json`);
+    ln();
+    ln(`    ${d('# Approve a loop git-commit from terminal (HITL)')}`);
+    ln(`    roland approve-commit --message "feat: ship iteration 2"`);
+    ln(`    roland reject-commit --reason "needs more tests"`);
     ln();
 }
 // ── Known subcommands (used for bare-goal shortcut detection) ─────────────────
 const KNOWN_CMDS = new Set([
-    'serve', 'mcp-config', 'doctor', 'pm-log',
-    'team', 'run', 'goal', 'start', 'status', 'watch', 'pr', 'chat',
+    'serve', 'mcp', 'mcp-config', 'doctor', 'pm-log',
+    'team', 'run', 'goal', 'start', 'status', 'live', 'watch', 'pr', 'chat',
     // HITL controls
     'pause', 'resume', 'unblock', 'inject', 'replan', 'abort', 'hitl-status',
+    'hitl-events', 'mission-summary',
+    'approve-commit', 'reject-commit',
+    'board-status', 'board-cleanup', 'pr-cleanup', 'orchestrate',
     // Background supervisor
     'bg-status', 'bg-logs', 'bg-stop',
     '--help', '-h', '--version',
@@ -278,10 +404,13 @@ async function main() {
         switch (cmd) {
             case undefined:
             case 'serve':
-                await serve();
+                await serve(rest);
+                break;
+            case 'mcp':
+                await mcpHttp(rest);
                 break;
             case 'mcp-config':
-                mcpConfig(rest.includes('--write'));
+                mcpConfig(rest.includes('--write'), rest);
                 break;
             case 'doctor':
                 doctor();
@@ -320,16 +449,94 @@ async function main() {
             }
             case 'status': {
                 const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
-                const simpleFlag = rest.includes('--simple-tui') || rest.includes('--no-fancy');
-                const { isSimpleTui, SimpleTuiRenderer } = await import('./dashboard/simple-tui.js');
-                if (simpleFlag || isSimpleTui()) {
-                    await SimpleTuiRenderer.watch(stateDir);
+                const jsonMode = rest.includes('--json');
+                const concise = rest.includes('--concise') || rest.includes('-c');
+                const tuiMode = rest.includes('--tui') || rest.includes('--watch-tui');
+                const goalArgIdx = rest.indexOf('--goal');
+                const goal = goalArgIdx >= 0 ? rest[goalArgIdx + 1] : undefined;
+                if (tuiMode) {
+                    const simpleFlag = rest.includes('--simple-tui') || rest.includes('--no-fancy');
+                    const { isSimpleTui, SimpleTuiRenderer } = await import('./dashboard/simple-tui.js');
+                    if (simpleFlag || isSimpleTui()) {
+                        await SimpleTuiRenderer.watch(stateDir);
+                    }
+                    else {
+                        const { TuiRenderer } = await import('./dashboard/tui.js');
+                        await TuiRenderer.watch(stateDir);
+                    }
+                    break;
                 }
-                else {
-                    const { TuiRenderer } = await import('./dashboard/tui.js');
-                    await TuiRenderer.watch(stateDir);
-                }
+                const { printUnifiedStatus } = await import('./rco/status-cli.js');
+                printUnifiedStatus(stateDir, { json: jsonMode, goal, concise });
                 break;
+            }
+            case 'live': {
+                const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+                const jsonMode = rest.includes('--json');
+                const once = rest.includes('--once');
+                const concise = rest.includes('--concise') || rest.includes('-c');
+                const intervalIdx = rest.indexOf('--interval');
+                const intervalSec = intervalIdx >= 0 ? Number(rest[intervalIdx + 1]) || 5 : 5;
+                const goalArgIdx = rest.indexOf('--goal');
+                const goal = goalArgIdx >= 0 ? rest[goalArgIdx + 1] : undefined;
+                const { runLiveMonitor } = await import('./rco/status-cli.js');
+                await runLiveMonitor(stateDir, { json: jsonMode, goal, concise, intervalSec, once });
+                break;
+            }
+            case 'board-status': {
+                const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+                const jsonMode = rest.includes('--json');
+                const concise = rest.includes('--concise') || rest.includes('-c');
+                const goalArgIdx = rest.indexOf('--goal');
+                const goal = goalArgIdx >= 0 ? rest[goalArgIdx + 1] : undefined;
+                const { printBoardStatus } = await import('./rco/board-report.js');
+                printBoardStatus(stateDir, { json: jsonMode, goal, concise });
+                break;
+            }
+            case 'board-cleanup': {
+                const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+                const dryRun = rest.includes('--dry-run');
+                const goalArgIdx = rest.indexOf('--goal');
+                const goal = goalArgIdx >= 0 ? rest[goalArgIdx + 1] : '';
+                const { cleanupBoardsForNewMission, formatCleanupReport } = await import('./rco/board-cleanup.js');
+                const result = cleanupBoardsForNewMission(stateDir, goal, { dryRun });
+                console.log(formatCleanupReport(result));
+                if (rest.includes('--json'))
+                    console.log(JSON.stringify(result, null, 2));
+                break;
+            }
+            case 'orchestrate': {
+                const installRoot = resolveRolandInstallRoot(import.meta.url);
+                const script = path.join(installRoot, 'scripts', 'roland-orchestrate.mjs');
+                if (!fs.existsSync(script)) {
+                    console.error(`Orchestrate script not found: ${script}`);
+                    process.exit(1);
+                }
+                const goal = rest.join(' ').trim();
+                if (!goal) {
+                    console.error('Usage: roland orchestrate "<mission goal>"');
+                    process.exit(1);
+                }
+                const projectRoot = process.env.ROLAND_PROJECT_ROOT?.trim() || process.cwd();
+                const logDir = path.join(projectRoot, '.roland', 'logs');
+                fs.mkdirSync(logDir, { recursive: true });
+                const logFile = path.join(logDir, `orchestrate-${Date.now()}.log`);
+                if (process.stderr.isTTY) {
+                    const { spawnSync } = await import('child_process');
+                    const result = spawnSync(process.execPath, [script, goal], {
+                        stdio: 'inherit',
+                        cwd: projectRoot,
+                        env: process.env,
+                    });
+                    process.exit(result.status ?? 1);
+                }
+                const { spawnSilent } = await import('./utils/spawn-silent.js');
+                const child = spawnSilent(process.execPath, [script, goal], {
+                    cwd: projectRoot,
+                    log: { logFile, logMode: 'w' },
+                });
+                child.on('close', (code) => process.exit(code ?? 1));
+                return;
             }
             case 'watch': {
                 const { runWatchCli } = await import('./rco/watch-cli.js');
@@ -339,6 +546,11 @@ async function main() {
             case 'pr': {
                 const { runPrCli } = await import('./rco/pr-cli.js');
                 await runPrCli(['pr', ...rest]);
+                break;
+            }
+            case 'pr-cleanup': {
+                const { runPrCleanupCli } = await import('./rco/pr-cleanup-cli.js');
+                runPrCleanupCli(['pr-cleanup', ...rest]);
                 break;
             }
             // ── HITL controls ───────────────────────────────────────────────────────
@@ -441,34 +653,45 @@ async function main() {
             }
             case 'hitl-status': {
                 const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
-                const { isRunActive, readRunGoal, HitlQueue } = await import('./rco/hitl.js');
-                const active = isRunActive(stateDir);
-                const goal = readRunGoal(stateDir);
-                const q = new HitlQueue(stateDir);
-                const hitlState = q.readState();
-                const queueLen = hitlState.pendingCount ?? 0;
-                const bold = (s) => `\x1b[1m${s}\x1b[0m`;
-                const dim = (s) => `\x1b[2m${s}\x1b[0m`;
-                const cy = (s) => `\x1b[36m${s}\x1b[0m`;
-                const y = (s) => `\x1b[33m${s}\x1b[0m`;
-                const g = (s) => `\x1b[32m${s}\x1b[0m`;
-                console.error('');
-                console.error(`  ${bold('HITL Status')}  ${dim('(Human-in-the-Loop Controls)')}`);
-                console.error('');
-                console.error(`  Run active:    ${active ? g('yes') : dim('no')}${goal ? dim(` — "${goal.slice(0, 60)}"`) : ''}`);
-                console.error(`  Paused:        ${hitlState.paused ? y('yes ⏸') : dim('no')}`);
-                console.error(`  Abort pending: ${hitlState.abortPending ? y('yes ⚠️') : dim('no')}`);
-                console.error(`  Queue length:  ${queueLen > 0 ? y(String(queueLen)) : dim('0')}`);
-                console.error('');
-                if (active && !hitlState.paused) {
-                    console.error(`  ${cy('roland pause')}             Pause before next wave`);
-                    console.error(`  ${cy('roland abort')}             Stop after current wave`);
-                    console.error(`  ${cy('roland inject "..."')}      Send directive to Lead PM`);
-                }
-                else if (hitlState.paused) {
-                    console.error(`  ${cy('roland resume')}            Resume the paused run`);
-                }
-                console.error('');
+                const jsonMode = rest.includes('--json');
+                const goalArgIdx = rest.indexOf('--goal');
+                const goal = goalArgIdx >= 0 ? rest[goalArgIdx + 1] : undefined;
+                const { printHitlStatus } = await import('./rco/status-cli.js');
+                printHitlStatus(stateDir, { json: jsonMode, goal });
+                break;
+            }
+            case 'mission-summary': {
+                const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+                const jsonMode = rest.includes('--json');
+                const goalArgIdx = rest.indexOf('--goal');
+                const goal = goalArgIdx >= 0 ? rest[goalArgIdx + 1] : undefined;
+                const { printMissionSummary } = await import('./rco/status-cli.js');
+                printMissionSummary(stateDir, { json: jsonMode, goal });
+                break;
+            }
+            case 'hitl-events': {
+                const stateDir = rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland';
+                const jsonMode = rest.includes('--json');
+                const sinceIdx = rest.indexOf('--since');
+                const since = sinceIdx >= 0 ? Number(rest[sinceIdx + 1]) || 0 : 0;
+                const limitIdx = rest.indexOf('--limit');
+                const limit = limitIdx >= 0 ? Number(rest[limitIdx + 1]) || 50 : 50;
+                const { printHitlEvents } = await import('./rco/status-cli.js');
+                printHitlEvents(stateDir, { since, limit, json: jsonMode });
+                break;
+            }
+            case 'approve-commit': {
+                const { runApproveCommitCli } = await import('./rco/git-commit-approval-cli.js');
+                const code = runApproveCommitCli(rest);
+                if (code !== 0)
+                    process.exit(code);
+                break;
+            }
+            case 'reject-commit': {
+                const { runRejectCommitCli } = await import('./rco/git-commit-approval-cli.js');
+                const code = runRejectCommitCli(rest);
+                if (code !== 0)
+                    process.exit(code);
                 break;
             }
             // ── Background supervisor ───────────────────────────────────────────────

@@ -35,7 +35,6 @@ import { AdvancedCostTracker, getGlobalTracker } from '../orchestrator/advanced-
 import { BudgetManager } from '../utils/budget-manager.js';
 import { RecipeSessionManager, ParsedRecipe, SubagentDef, RecipeStepDef } from './recipe-session.js';
 import { generateDiff } from '../utils/diff-engine.js';
-import { normaliseGooseModel, spawnGooseSession, isGooseAvailable } from '../utils/goose-runner.js';
 import { gitStatus, gitDiff, gitLog, gitCommit } from '../utils/git-tools.js';
 import { spawnBackground } from '../rco/supervisor.js';
 import { randomUUID } from 'crypto';
@@ -345,11 +344,11 @@ export class McpServer {
 
     // Initialize budget manager with config from config.yaml
     BudgetManager.initialize();
-    if (config.goose) {
+    if (config.budget) {
       BudgetManager.configureFromAppConfig({
-        monthlyBudget: config.goose.monthly_budget,
-        warningThreshold: config.goose.budget_degradation_threshold,
-        billingCycleDay: config.goose.billing_cycle_day,
+        monthlyBudget: config.budget.monthly_budget,
+        warningThreshold: config.budget.budget_degradation_threshold,
+        billingCycleDay: config.budget.billing_cycle_day,
         enabled: true,
       });
     }
@@ -390,7 +389,6 @@ export class McpServer {
     this.registerPreviewChanges();
     this.registerLoadMigrationContext();
     this.registerUpdateMigrationContext();
-    this.registerRunGooseTask();
     this.registerSessionContext();
     this.registerProjectContext();
     this.registerQualitySignal();
@@ -824,7 +822,7 @@ export class McpServer {
           }
         }
 
-        // --- Goose dispatch fields ---
+        // --- Model routing fields ---
         const agentName = topAgent.score > 0 ? topAgent.name : 'executor';
         let openrouterModel = AGENT_OPENROUTER_MODELS[agentName]
           || OPENROUTER_MODELS[complexity.complexity]
@@ -2357,109 +2355,6 @@ export class McpServer {
           content: { type: 'string', description: '[section] Markdown content to append' },
         },
         required: ['type'],
-      }
-    );
-  }
-
-  // --------------------------------------------------------------------------
-  // run_goose_task — spawn a headless Goose session with smart model routing
-  // --------------------------------------------------------------------------
-  private registerRunGooseTask(): void {
-    this.registerTool(
-      'run_goose_task',
-      'Spawn a headless Goose coding session for a task. Goose has full file read/write and shell access via its Developer extension. Roland automatically routes to the cheapest adequate model using complexity analysis. Returns the session output.',
-      async (args: Record<string, unknown>) => {
-        const task = args.task as string;
-        if (!task) throw new McpToolError('run_goose_task', '"task" is required');
-
-        if (!isGooseAvailable()) {
-          return {
-            error: 'goose CLI not found in PATH',
-            install: 'https://block.github.io/goose/',
-            tip: 'Install Goose and ensure it is in PATH, then retry.',
-          };
-        }
-
-        const projectRoot = typeof args.project_root === 'string' && args.project_root
-          ? args.project_root
-          : undefined;
-
-        const maxTurns = typeof args.max_turns === 'number' ? args.max_turns : 30;
-        const timeoutMs = typeof args.timeout_seconds === 'number'
-          ? args.timeout_seconds * 1000
-          : 300_000;
-
-        // Force model overrides everything — bypasses routing entirely
-        const forceModel = typeof args.force_model === 'string' ? args.force_model : null;
-
-        // Auto-route: use force_model > provided model > complexity analysis
-        let modelId = forceModel ?? (typeof args.model === 'string' ? args.model : null);
-        let routingInfo: Record<string, unknown> = {};
-
-        if (forceModel) {
-          routingInfo = { auto_routed: false, forced: true, model_selected: forceModel };
-        } else if (!modelId) {
-          try {
-            const routing = ModelRouter.routeByComplexity(task);
-            modelId = routing.selected.model;
-            routingInfo = {
-              auto_routed: true,
-              complexity: ComplexityClassifier.getDetailedAnalysis(task).complexity,
-              model_selected: modelId,
-              estimated_cost: routing.selected.costPer1kTokens,
-            };
-          } catch {
-            modelId = 'claude-sonnet-4-5'; // safe default
-            routingInfo = { auto_routed: false, model_selected: modelId };
-          }
-        }
-
-        const gooseModel = normaliseGooseModel(modelId ?? 'claude-sonnet-4-5');
-
-        logger.info(`🦆 Spawning Goose session: ${gooseModel.provider}/${gooseModel.model}`);
-
-        const result = await spawnGooseSession({
-          task,
-          model: gooseModel,
-          projectRoot,
-          maxTurns,
-          timeoutMs,
-        });
-
-        return {
-          output: result.output,
-          exit_code: result.exitCode,
-          duration_seconds: Math.round(result.durationMs / 1000),
-          model_used: `${result.modelUsed.provider}/${result.modelUsed.model}`,
-          routing: routingInfo,
-          success: result.exitCode === 0,
-        };
-      },
-      {
-        type: 'object',
-        properties: {
-          task: {
-            type: 'string',
-            description: 'Full task description for the Goose session. Include all context needed — Goose will read files, run commands, and edit code autonomously.',
-          },
-          model: {
-            type: 'string',
-            description: 'Model ID to use (e.g. "claude-sonnet-4-5", "gpt-4o"). Omit to auto-route based on task complexity.',
-          },
-          project_root: {
-            type: 'string',
-            description: 'Working directory for the Goose session (default: ROLAND_PROJECT_ROOT env var, then cwd)',
-          },
-          max_turns: {
-            type: 'number',
-            description: 'Maximum LLM turns Goose is allowed (default: 30)',
-          },
-          timeout_seconds: {
-            type: 'number',
-            description: 'Session timeout in seconds (default: 300)',
-          },
-        },
-        required: ['task'],
       }
     );
   }

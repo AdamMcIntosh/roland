@@ -1,94 +1,58 @@
 /**
- * Cursor model routing for RCO agents.
+ * Cursor SDK model routing for RCO agents.
  *
- * Single source of truth used by both agentWorker (child process) and
- * team-orchestrator (main process). Resolves any model string + agent name
- * to a valid Cursor SDK model ID.
- *
- * ╔══════════════════════════════════════════════════════════════╗
- * ║  HARD MODEL STRATEGY — DO NOT ADD CLAUDE SONNET FALLBACKS   ║
- * ║                                                              ║
- * ║  Lead PM only  →  gpt-5.4-nano                              ║
- * ║  ALL engineers →  composer-2.5  (no exceptions)             ║
- * ╚══════════════════════════════════════════════════════════════╝
- *
- * Valid Cursor models (as of 2026-05):
- *   gpt-5.4-nano  — Lead PM / orchestration only ($0.20/$1.25 per MTok)
- *   composer-2.5  — ALL engineer agents (default for every non-PM agent)
- *   composer-2    — lighter composer variant (explicit use only)
- *   gpt-5-mini    — available but not used by default
- *   gpt-5.1-codex-mini — available but not used by default
- *   gemini-2.5-flash   — available but not used by default
- *
- * NOTE: claude-sonnet-*, claude-opus-*, openrouter/*, deepseek/*, qwen/*, and
- * minimax/* are NOT valid Cursor SDK model IDs. They must never appear in
- * VALID_CURSOR_MODELS. The legacy remap table below catches any stale YAML
- * values that slip through and normalises them to composer-2.5 or gpt-5.4-nano.
+ * Delegates role resolution to ModelRouter (`src/models/model-router.ts`).
+ * Legacy PM Team dispatch and agentWorker both call `toCursorModelId()` here.
  *
  * Resolution order:
- *  1. Agent-name PM heuristic — checked FIRST so Lead-PM always wins.
- *  2. Exact approved Cursor model ID.
- *  3. Legacy / stale model-string keywords → remap to gpt-5.4-nano or composer-2.5.
- *  4. Hard default → composer-2.5.
+ *  1. Valid Cursor model id from agent YAML
+ *  2. ModelRouter role → configured model (cursor provider uses id directly)
+ *  3. Keyword mapping for OpenRouter/Ollama model strings → Cursor SDK id
  */
-/** Only real Cursor SDK model IDs belong here — no Anthropic model strings. */
-const VALID_CURSOR_MODELS = new Set([
-    'gpt-5.4-nano',
-    'gpt-5-mini',
-    'gpt-5.1-codex-mini',
-    'gemini-2.5-flash',
-    'composer-2.5',
-    'composer-2',
-]);
+import { DEFAULT_ENGINEER_MODEL, DEFAULT_PM_MODEL, VALID_CURSOR_MODELS, isValidCursorModel, } from './cursor-models.js';
+import { getModelRouter, ModelRouter } from '../models/model-router.js';
+export { VALID_CURSOR_MODELS, isValidCursorModel } from './cursor-models.js';
+export { DEFAULT_PM_MODEL, DEFAULT_ENGINEER_MODEL } from './cursor-models.js';
+/**
+ * Resolve agent name + optional YAML model to a Cursor SDK model id.
+ * Loop Engineering uses ModelRouter directly; this bridges legacy PM Team paths.
+ */
 export function toCursorModelId(model, agentName = '') {
+    try {
+        const dispatch = getModelRouter().resolveDispatch(agentName ? ModelRouter.roleForAgent(agentName) : 'coding', { agentName, yamlModel: model, log: false });
+        if (dispatch.method === 'cursor_sdk') {
+            return dispatch.sdkModelId ?? dispatch.model;
+        }
+        return dispatch.model;
+    }
+    catch {
+        return toCursorModelIdLegacy(model, agentName);
+    }
+}
+/** Legacy fallback when ModelRouter config is unavailable. */
+function toCursorModelIdLegacy(model, agentName = '') {
     const m = model.toLowerCase().trim();
     const n = agentName.toLowerCase();
     const isPM = n.includes('pm') || n.includes('lead') || n.includes('manager');
-    // ── 1. Agent-name PM heuristic (always checked first) ────────────────────
-    // Ensures Lead-PM always gets gpt-5.4-nano regardless of YAML model field.
-    // Env var ROLAND_PM_MODEL overrides the default (must be a valid Cursor model ID).
     if (isPM) {
-        const pmOverride = process.env.ROLAND_PM_MODEL;
-        if (pmOverride && VALID_CURSOR_MODELS.has(pmOverride))
+        const pmOverride = process.env.ROLAND_PM_MODEL?.trim();
+        if (pmOverride && pmOverride !== 'auto' && isValidCursorModel(pmOverride))
             return pmOverride;
-        return 'gpt-5.4-nano';
+        return DEFAULT_PM_MODEL;
     }
-    // ── 1b. Engineer env var override ────────────────────────────────────────
-    // Env var ROLAND_ENGINEER_MODEL overrides the default for all non-PM agents.
-    const engOverride = process.env.ROLAND_ENGINEER_MODEL;
-    if (engOverride && VALID_CURSOR_MODELS.has(engOverride))
+    const engOverride = process.env.ROLAND_ENGINEER_MODEL?.trim();
+    if (engOverride && engOverride !== 'auto' && isValidCursorModel(engOverride))
         return engOverride;
-    // ── 2. Exact approved Cursor model ID ────────────────────────────────────
-    // claude-sonnet-* / claude-opus-* are intentionally excluded — they are
-    // Anthropic API identifiers, not Cursor SDK model IDs.
     if (VALID_CURSOR_MODELS.has(m))
         return m;
-    // ── 3. Legacy / stale model-string keywords → remap ──────────────────────
-    // Any grok or opus string in a legacy YAML → gpt-5.4-nano (PM-class reasoning).
     if (m.includes('grok'))
-        return 'gpt-5.4-nano';
+        return 'grok-4.3';
     if (m.includes('opus'))
-        return 'gpt-5.4-nano';
-    // Any OpenRouter provider prefix or stale non-Cursor model string → composer-2.5.
-    // This is a safety net — agent YAMLs should all use composer-2.5 directly now.
-    if (m.includes('openrouter'))
-        return 'composer-2.5';
+        return 'claude-opus-4-7';
     if (m.includes('sonnet'))
-        return 'composer-2.5';
-    if (m.includes('haiku'))
-        return 'composer-2.5';
-    if (m.includes('deepseek'))
-        return 'composer-2.5';
-    if (m.includes('qwen'))
-        return 'composer-2.5';
-    if (m.includes('minimax'))
-        return 'composer-2.5';
-    // Legacy "composer-2.5-fast" / "composer-2.5-standard" → composer-2.5
-    if (m.includes('composer-2.5'))
-        return 'composer-2.5';
-    if (m.includes('composer-2'))
-        return 'composer-2';
-    // ── 4. Hard default → composer-2.5 ───────────────────────────────────────
-    return 'composer-2.5';
+        return 'claude-sonnet-4-6';
+    if (m.includes('composer'))
+        return DEFAULT_ENGINEER_MODEL;
+    return DEFAULT_ENGINEER_MODEL;
 }
 //# sourceMappingURL=model-routing.js.map

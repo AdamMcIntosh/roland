@@ -7,9 +7,12 @@
 
 import { spawnHidden } from '../../utils/spawn-silent.js';
 import {
+  lacksLintConfig,
   lacksNpmTestScript,
+  lacksTypecheckConfig,
   isNoTestSpecifiedOutput,
   shouldSoftSkipMissingTests,
+  shouldSoftSkipMissingTooling,
 } from './minimal-project.js';
 import type {
   StrategyResult,
@@ -205,6 +208,27 @@ export class TestExecutor {
         skipped: true,
         skipReason: reason,
       };
+    }
+
+    if (shouldSoftSkipMissingTooling(strategy.type)) {
+      const skipLint = strategy.type === 'lint' && lacksLintConfig(this.cwd);
+      const skipTypecheck = strategy.type === 'typecheck' && lacksTypecheckConfig(this.cwd);
+      if (skipLint || skipTypecheck) {
+        const reason = skipLint
+          ? 'minimal project — no lint config (non-blocking for greenfield)'
+          : 'minimal project — no tsconfig.json (non-blocking for greenfield)';
+        logVerify(`${strategy.type} skipped — ${reason}`, { cwd: this.cwd });
+        return {
+          type: strategy.type,
+          pass: true,
+          command: strategy.command,
+          durationMs: Date.now() - started,
+          exitCode: 0,
+          failures: [],
+          skipped: true,
+          skipReason: reason,
+        };
+      }
     }
 
     try {

@@ -177,10 +177,13 @@ function noopLog(): void { /* */ }
 
 export function isProcessAlive(pid: number): boolean {
   if (!pid || pid <= 0) return false;
+  if (pid === process.pid) return true;
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
+  } catch (err: unknown) {
+    const code = err && typeof err === 'object' && 'code' in err ? String((err as NodeJS.ErrnoException).code) : '';
+    if (code === 'EPERM' || code === 'EACCES') return true;
     return false;
   }
 }
@@ -566,3 +569,12 @@ export function buildSupervisorStartDiagnostics(
     ],
   };
 }
+
+/**
+ * ## Roland Execution Now Reliable
+ *
+ * Mission state isolation — sanitize stale PIDs, archive prior meta, reset loop/HITL on new missions.
+ * Test commands:
+ *   npx vitest run tests/unit/mission-state.test.ts
+ *   npx vitest run tests/unit/mcp-project-context.test.ts
+ */

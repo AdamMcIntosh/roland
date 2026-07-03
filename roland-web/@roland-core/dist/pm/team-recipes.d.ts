@@ -19,20 +19,20 @@ export declare const TeamRecipeTaskSchema: z.ZodObject<{
     priority: z.ZodDefault<z.ZodEnum<["low", "normal", "high"]>>;
     acceptanceCriteria: z.ZodOptional<z.ZodString>;
 }, "strip", z.ZodTypeAny, {
-    description: string;
     title: string;
+    priority: "low" | "high" | "normal";
+    description: string;
     dependsOn: string[];
-    priority: "low" | "normal" | "high";
     slug: string;
     assignee?: string | undefined;
     acceptanceCriteria?: string | undefined;
 }, {
-    description: string;
     title: string;
+    description: string;
     slug: string;
     assignee?: string | undefined;
+    priority?: "low" | "high" | "normal" | undefined;
     dependsOn?: string[] | undefined;
-    priority?: "low" | "normal" | "high" | undefined;
     acceptanceCriteria?: string | undefined;
 }>;
 export type TeamRecipeTask = z.infer<typeof TeamRecipeTaskSchema>;
@@ -49,45 +49,45 @@ export declare const TeamRecipeSchema: z.ZodObject<{
         priority: z.ZodDefault<z.ZodEnum<["low", "normal", "high"]>>;
         acceptanceCriteria: z.ZodOptional<z.ZodString>;
     }, "strip", z.ZodTypeAny, {
-        description: string;
         title: string;
+        priority: "low" | "high" | "normal";
+        description: string;
         dependsOn: string[];
-        priority: "low" | "normal" | "high";
         slug: string;
         assignee?: string | undefined;
         acceptanceCriteria?: string | undefined;
     }, {
-        description: string;
         title: string;
+        description: string;
         slug: string;
         assignee?: string | undefined;
+        priority?: "low" | "high" | "normal" | undefined;
         dependsOn?: string[] | undefined;
-        priority?: "low" | "normal" | "high" | undefined;
         acceptanceCriteria?: string | undefined;
     }>, "many">;
 }, "strip", z.ZodTypeAny, {
+    tasks: {
+        title: string;
+        priority: "low" | "high" | "normal";
+        description: string;
+        dependsOn: string[];
+        slug: string;
+        assignee?: string | undefined;
+        acceptanceCriteria?: string | undefined;
+    }[];
     name: string;
     description: string;
-    tasks: {
-        description: string;
-        title: string;
-        dependsOn: string[];
-        priority: "low" | "normal" | "high";
-        slug: string;
-        assignee?: string | undefined;
-        acceptanceCriteria?: string | undefined;
-    }[];
 }, {
-    name: string;
     tasks: {
-        description: string;
         title: string;
+        description: string;
         slug: string;
         assignee?: string | undefined;
+        priority?: "low" | "high" | "normal" | undefined;
         dependsOn?: string[] | undefined;
-        priority?: "low" | "normal" | "high" | undefined;
         acceptanceCriteria?: string | undefined;
     }[];
+    name: string;
     description?: string | undefined;
 }>;
 export type TeamRecipe = z.infer<typeof TeamRecipeSchema>;

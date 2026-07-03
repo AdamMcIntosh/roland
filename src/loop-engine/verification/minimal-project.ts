@@ -40,3 +40,47 @@ export function isNoTestSpecifiedOutput(stdout: string, stderr: string): boolean
 export function shouldSoftSkipMissingTests(strategyType: string): boolean {
   return strategyType === 'unit' || strategyType === 'smoke';
 }
+
+const LINT_MARKERS = [
+  'eslint.config',
+  '.eslintrc',
+  'biome.json',
+  'rome.json',
+];
+
+/** True when the project has no lint runner config (greenfield / minimal). */
+export function lacksLintConfig(cwd: string): boolean {
+  const pkgPath = path.join(cwd, 'package.json');
+  try {
+    const raw = fs.readFileSync(pkgPath, 'utf-8');
+    const pkg = JSON.parse(raw) as { scripts?: Record<string, string> };
+    if (pkg.scripts?.lint?.trim()) return false;
+  } catch {
+    /* no package.json */
+  }
+  for (const marker of LINT_MARKERS) {
+    if (fs.existsSync(path.join(cwd, marker)) || fs.existsSync(path.join(cwd, `${marker}.js`))) {
+      return false;
+    }
+    if (fs.existsSync(path.join(cwd, `${marker}.json`))) return false;
+    if (fs.existsSync(path.join(cwd, `${marker}.cjs`))) return false;
+  }
+  return true;
+}
+
+/** True when TypeScript is mentioned but tsconfig is absent (bootstrap in progress). */
+export function lacksTypecheckConfig(cwd: string): boolean {
+  return !fs.existsSync(path.join(cwd, 'tsconfig.json'));
+}
+
+/** Strategy types that may soft-skip when tooling is not yet configured. */
+export function shouldSoftSkipMissingTooling(strategyType: string): boolean {
+  return strategyType === 'lint' || strategyType === 'typecheck';
+}
+
+/**
+ * ## Roland Execution Now Reliable
+ *
+ * Soft-skip helpers for greenfield projects missing test/lint/typecheck tooling.
+ * Test: npx vitest run tests/unit/act-validation.test.ts tests/unit/minimal-project-verification.test.ts
+ */

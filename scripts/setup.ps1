@@ -4,8 +4,8 @@
     One-command setup for Roland Code Orchestrator (Windows PowerShell)
 
 .DESCRIPTION
-    Checks environment, installs Goose if needed, prompts for OpenRouter API key,
-    clones/builds Roland, configures Goose globally, and initialises the current project.
+    Checks environment, prompts for OpenRouter API key,
+    clones/builds Roland, and initialises the current project.
 
 .EXAMPLE
     # Remote one-liner:
@@ -71,45 +71,6 @@ if (-not $gitPath) {
     exit 1
 }
 Write-Ok "Git $(git --version)"
-
-# ── Goose install/check ─────────────────────────────────────────────────────
-
-Write-Step "Checking for Goose"
-
-$HaveGoose = $false
-$goosePath = Get-Command goose -ErrorAction SilentlyContinue
-
-if ($goosePath) {
-    Write-Ok "Goose found ($($goosePath.Source))"
-    $HaveGoose = $true
-} else {
-    Write-Warn "Goose not found."
-    if (Confirm-Prompt "Install Goose now?") {
-        Write-Host "  Installing Goose..." -ForegroundColor Cyan
-        $tmpScript = Join-Path $env:TEMP "goose_download_cli.ps1"
-        try {
-            Invoke-WebRequest -Uri "https://raw.githubusercontent.com/block/goose/main/download_cli.ps1" -OutFile $tmpScript
-            & $tmpScript
-            Remove-Item $tmpScript -ErrorAction SilentlyContinue
-
-            # Refresh PATH
-            $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "User") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
-
-            $goosePath = Get-Command goose -ErrorAction SilentlyContinue
-            if ($goosePath) {
-                Write-Ok "Goose installed successfully"
-                $HaveGoose = $true
-            } else {
-                Write-Warn "Goose installed but not found in PATH. Restart your terminal after setup."
-            }
-        } catch {
-            Write-Err "Goose install failed: $_"
-            Write-Warn "You can install manually from https://block.github.io/goose/"
-        }
-    } else {
-        Write-Warn "Skipping Goose. Install later from https://block.github.io/goose/"
-    }
-}
 
 # ── OpenRouter API key ───────────────────────────────────────────────────────
 
@@ -211,106 +172,6 @@ try {
     Pop-Location
 }
 
-# ── Configure Goose globally ────────────────────────────────────────────────
-
-if ($HaveGoose) {
-    Write-Step "Configuring Goose"
-
-    # Detect config path via goose info
-    $GooseConfig = ""
-    try {
-        $info = goose info 2>&1 | Out-String
-        if ($info -match 'Config yaml:\s*(.+)') {
-            $GooseConfig = $Matches[1].Trim()
-        }
-    } catch {}
-
-    # Fallback
-    if ([string]::IsNullOrWhiteSpace($GooseConfig)) {
-        $GooseConfig = Join-Path $env:APPDATA "Block\goose\config\config.yaml"
-    }
-
-    $GooseConfigDir = Split-Path $GooseConfig -Parent
-    $RolandDist = (Join-Path $RolandDir "dist\index.js") -replace '\\', '/'
-
-    Write-Host "  Goose config: $GooseConfig"
-
-    if (-not (Test-Path $GooseConfigDir)) {
-        New-Item -ItemType Directory -Path $GooseConfigDir -Force | Out-Null
-    }
-
-    if (Test-Path $GooseConfig) {
-        $content = Get-Content $GooseConfig -Raw
-
-        # Add Roland extension if not present
-        if ($content -match "roland:") {
-            Write-Ok "Goose config already has Roland — skipping"
-        } else {
-            $rolandBlock = @"
-  roland:
-    name: Roland
-    type: stdio
-    cmd: node
-    args:
-      - "$RolandDist"
-    enabled: true
-    timeout: 300
-"@
-            # Insert inside the extensions block, before GOOSE_PROVIDER line
-            if ($content -match '(?m)^GOOSE_PROVIDER:') {
-                $content = $content -replace '(?m)^GOOSE_PROVIDER:', "$rolandBlock`nGOOSE_PROVIDER:"
-                Set-Content -Path $GooseConfig -Value $content -NoNewline
-            } elseif ($content -match '(?m)^extensions:') {
-                # Append after extensions block (end of file)
-                Add-Content -Path $GooseConfig -Value "`n$rolandBlock"
-            } else {
-                # No extensions block — add one
-                Add-Content -Path $GooseConfig -Value "`nextensions:`n$rolandBlock"
-            }
-            Write-Ok "Added Roland extension to existing Goose config"
-        }
-
-        # Offer to switch model
-        if ($content -match 'GOOSE_MODEL:\s*(.+)') {
-            $currentModel = $Matches[1].Trim()
-            Write-Host "  Current model: $currentModel"
-            if (Confirm-Prompt "Switch to anthropic/claude-haiku-4.5 (recommended)?") {
-                $content = $content -replace 'GOOSE_MODEL:.*', 'GOOSE_MODEL: anthropic/claude-haiku-4.5'
-                Set-Content -Path $GooseConfig -Value $content -NoNewline
-                Write-Ok "Model set to anthropic/claude-haiku-4.5"
-            }
-        }
-    } else {
-        # Write fresh config
-        $apiKeyLine = if ($ApiKey) { "OPENROUTER_API_KEY: $ApiKey" } else { "# OPENROUTER_API_KEY: sk-or-..." }
-        $freshConfig = @"
-# Goose global config — auto-generated by Roland setup
-# Edit or re-run 'goose configure' to change provider/model settings.
-
-GOOSE_PROVIDER: openrouter
-GOOSE_MODEL: anthropic/claude-haiku-4.5
-$apiKeyLine
-
-extensions:
-  developer:
-    name: Developer
-    type: builtin
-    enabled: true
-
-  roland:
-    name: Roland
-    type: stdio
-    cmd: node
-    args:
-      - "$RolandDist"
-    enabled: true
-    timeout: 300
-"@
-        Set-Content -Path $GooseConfig -Value $freshConfig
-        Write-Ok "Goose config written to $GooseConfig"
-    }
-}
-
 # ── Init current project ────────────────────────────────────────────────────
 
 Write-Step "Initialising current project"
@@ -343,10 +204,10 @@ if ($ApiKey) {
         $content = Get-Content $RolandConfig -Raw
         if ($content -match "openrouter_api_key:") {
             $content = $content -replace 'openrouter_api_key:.*', "openrouter_api_key: `"$ApiKey`""
-        } elseif ($content -match "^goose:") {
-            $content = $content -replace '(^goose:)', "`$1`n  openrouter_api_key: `"$ApiKey`""
+        } elseif ($content -match "^budget:") {
+            $content = $content -replace '(^budget:)', "`$1`n  openrouter_api_key: `"$ApiKey`""
         } else {
-            $content += "`ngoose:`n  openrouter_api_key: `"$ApiKey`"`n"
+            $content += "`nbudget:`n  openrouter_api_key: `"$ApiKey`"`n"
         }
         Set-Content -Path $RolandConfig -Value $content -NoNewline
     } else {
@@ -354,7 +215,7 @@ if ($ApiKey) {
 # Roland configuration
 # Auto-generated by roland setup
 
-goose:
+budget:
   openrouter_api_key: "$ApiKey"
 "@
         Set-Content -Path $RolandConfig -Value $yamlContent
@@ -376,18 +237,13 @@ Write-Host "  • Current project initialised with agent configs and MCP setting
 if ($ApiKey) {
     Write-Host "  • OpenRouter API key saved to " -NoNewline; Write-Host $RolandConfig -ForegroundColor Cyan
 }
-if ($HaveGoose) {
-    Write-Host "  • Goose configured with Roland extension"
-}
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor White
 Write-Host "  1. Open this project in Cursor or VS Code"
 Write-Host "  2. Verify: ask your IDE agent to `"Use the health_check tool`""
 Write-Host "     You should get: " -NoNewline; Write-Host "status: healthy" -ForegroundColor Green
-Write-Host "  3. Start a Goose session:"
-Write-Host "     goose session" -ForegroundColor Cyan
-Write-Host "  4. Try a recipe:"
-Write-Host "     goose run --recipe ~/.roland/roland/goose/recipes/roland-plan-exec-rev-ex.yaml --task `"...`"" -ForegroundColor Cyan
+Write-Host "  3. Run a team mission for multi-step work:"
+Write-Host "     roland team `"your goal`" --loop-template full-cycle-verified-loop" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Docs: https://github.com/AdamMcIntosh/roland"
 Write-Host ""

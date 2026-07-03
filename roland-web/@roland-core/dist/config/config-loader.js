@@ -31,14 +31,13 @@ const SessionDefaultsSchema = z.object({
 const SessionConfigSchema = z.object({
     mcp_defaults: SessionDefaultsSchema,
 });
-const GooseConfigSchema = z.object({
-    dispatcher_model: z.string().default('anthropic/claude-haiku-4.5'),
-    dispatcher_provider: z.string().default('openrouter'),
+const BudgetConfigSchema = z.object({
     known_free_models: z.array(z.string()).default([]),
-    fallback_model: z.string().default('google/gemini-2.5-flash'),
     monthly_budget: z.number().min(0).default(85),
     billing_cycle_day: z.number().min(1).max(28).default(1),
     budget_degradation_threshold: z.number().min(0).max(1).default(0.8),
+    free_model_coding: z.string().optional(),
+    free_model_reasoning: z.string().optional(),
 });
 const ClassifierConfigSchema = z.object({
     semantic_enabled: z.boolean().default(true),
@@ -50,11 +49,33 @@ const DiffStreamConfigSchema = z.object({
     enabled: z.boolean().default(true),
     port: z.number().min(1024).max(65535).default(8089),
 });
+const RoleModelConfigSchema = z.object({
+    provider: z.string().default('openrouter'),
+    model: z.string().min(1),
+    fallback: z
+        .object({
+        provider: z.string().default('openrouter'),
+        model: z.string().min(1),
+    })
+        .optional(),
+});
+const ModelsConfigSchema = z.object({
+    pm: RoleModelConfigSchema.optional(),
+    coding: RoleModelConfigSchema.optional(),
+    critic: RoleModelConfigSchema.optional(),
+    verifier: RoleModelConfigSchema.optional(),
+    researcher: RoleModelConfigSchema.optional(),
+    planner: RoleModelConfigSchema.optional(),
+    executor: RoleModelConfigSchema.optional(),
+    reviewer: RoleModelConfigSchema.optional(),
+    reasoning: RoleModelConfigSchema.optional(),
+    light: RoleModelConfigSchema.optional(),
+});
 // PM team (Phase 3) — Cursor-native model routing. Independent of OpenRouter.
 const PmConfigSchema = z.object({
-    lead_model: z.string().default('claude-opus-4-7'),
-    fast_model: z.string().default('composer-2.5-fast'),
-    standard_model: z.string().default('composer-2.5-standard'),
+    lead_model: z.string().default('gpt-5.4-nano'),
+    fast_model: z.string().default('composer-2.5'),
+    standard_model: z.string().default('composer-2.5'),
     lane_overrides: z
         .record(z.enum(['pm', 'reasoning', 'coding', 'light']))
         .default({}),
@@ -62,10 +83,11 @@ const PmConfigSchema = z.object({
 const AppConfigSchema = z.object({
     routing: RoutingConfigSchema,
     roland: SessionConfigSchema,
-    goose: GooseConfigSchema.optional(),
+    budget: BudgetConfigSchema.optional(),
     ollama: OllamaConfigSchema.optional(),
     classifier: ClassifierConfigSchema.optional(),
     diff_stream: DiffStreamConfigSchema.optional(),
+    models: ModelsConfigSchema.optional(),
     pm: PmConfigSchema.optional(),
 });
 // ============================================================================

@@ -68,7 +68,7 @@ export async function analyzeImageWithVision(imagePath, prompt, model, apiKey) {
         '.webp': 'image/webp',
     };
     const mimeType = mimeMap[ext] ?? 'image/png';
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = (await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${apiKey}`,
@@ -94,7 +94,7 @@ export async function analyzeImageWithVision(imagePath, prompt, model, apiKey) {
             ],
             max_tokens: 2048,
         }),
-    });
+    }));
     if (!response.ok) {
         const err = await response.text();
         throw new Error(`OpenRouter vision API error ${response.status}: ${err}`);

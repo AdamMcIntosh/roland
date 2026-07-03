@@ -1,18 +1,11 @@
 #!/usr/bin/env node
 /**
- * RCO Team CLI — PM-style parallel agent execution.
+ * ## CLI-First + Hermes Monitoring Shift
  *
- * After global install:
- *   roland team "Build a task management API"
- *   roland team "..." --state-dir .roland --stream
- *   roland team "..." --quiet
+ * RCO Team CLI — Pure ClosedLoop mission launcher (primary execution path).
+ * Monitor with: roland hitl-status · roland board-status --concise · roland mission-summary
  *
- * Via npm scripts (dev):
- *   npm run rco:team:dev -- "Build a task management API"
- *   npm run rco:team:dev -- --task "..." --state-dir .roland
- *
- * Exports runTeamCli() so src/index.ts can delegate the `team` subcommand
- * without re-triggering the standalone main() guard.
+ * ## Dashboard De-emphasized — CLI + Hermes Hybrid Complete
  */
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -23,7 +16,12 @@ import { TuiRenderer } from '../dashboard/tui.js';
 import { SimpleTuiRenderer, isSimpleTui } from '../dashboard/simple-tui.js';
 import { Notifier } from './notifier.js';
 import { HitlQueue } from './hitl.js';
+import { emitHermesHitlEvent } from './hitl-hermes.js';
 import { spawnBackground } from './supervisor.js';
+import { readLoopPmSession } from '../loop-engine/index.js';
+import { ModelRouter } from '../models/model-router.js';
+import { applyMcpProjectEnv, resolveMcpProjectContext, } from '../utils/mcp-project-context.js';
+import { prepareMissionStart, resetLoopArtifactsForNewMission, sanitizeStaleMissionState, } from './mission-state.js';
 // ── Terminal helpers ──────────────────────────────────────────────────────────
 const COLS = Math.min(process.stderr.columns ?? 80, 100);
 const c = {
@@ -48,11 +46,77 @@ function rule(ch = '─', indent = 2) {
     return ' '.repeat(indent) + ch.repeat(COLS - indent);
 }
 const err = (s = '') => process.stderr.write(s + '\n');
+function emitHermesBlocker(stateDir, agent, description, waveNumber) {
+    try {
+        emitHermesHitlEvent(stateDir, {
+            kind: 'blocker',
+            blockerDescription: description,
+            currentGate: 'blocker',
+            suggestedActions: [
+                'roland unblock <task-id> "<guidance>"',
+                'roland hitl-status',
+                'roland board-status --concise',
+            ],
+            detail: { agent, waveNumber },
+        });
+    }
+    catch { /* non-fatal */ }
+}
 // ── State helpers ─────────────────────────────────────────────────────────────
 /**
  * Delete blackboard.json and messages.json from stateDir.
  * Preserves memory.md — project memory is intentionally cross-run.
  */
+function syncLoopStateToRun(runState, loopState, stateDir) {
+    const recentHistory = loopState.phaseHistory.slice(-12).map((t) => ({
+        phase: t.phase,
+        success: t.success,
+        summary: t.summary?.slice(0, 80),
+        startedAt: t.startedAt,
+        completedAt: t.completedAt,
+    }));
+    const pmSession = readLoopPmSession(stateDir);
+    runState.updateLoopState({
+        loopTemplateId: loopState.templateId,
+        loopPhase: loopState.currentPhase,
+        loopIteration: loopState.iteration,
+        loopRetryCount: loopState.retryCount,
+        loopStatus: loopState.status,
+        loopPhaseHistory: recentHistory,
+        modelRouting: ModelRouter.fromConfig().serializeRoutingForState(),
+        pmIntegration: {
+            enabled: pmSession?.executionPath === 'pm_team',
+            reason: pmSession?.routingReason ?? 'pure ClosedLoop (no PM session)',
+            executionPath: pmSession?.executionPath ?? 'lightweight',
+        },
+        lastVerification: loopState.lastVerification,
+        lastCritique: loopState.lastCritique
+            ? {
+                summary: loopState.lastCritique.summary,
+                retryDecision: loopState.lastCritique.retryDecision,
+                model: loopState.lastCritique.model,
+                at: loopState.lastCritique.at,
+                iteration: loopState.lastCritique.iteration,
+                issueCount: loopState.lastCritique.issues?.length,
+                strengths: loopState.lastCritique.strengths,
+                issues: loopState.lastCritique.issues,
+                suggestions: loopState.lastCritique.suggestions,
+            }
+            : undefined,
+        lastRetry: loopState.lastRetry
+            ? {
+                attempt: loopState.lastRetry.attempt,
+                strategy: loopState.lastRetry.strategy,
+                focusAreas: loopState.lastRetry.focusAreas,
+                backoffMs: loopState.lastRetry.backoffMs,
+                at: loopState.lastRetry.at,
+            }
+            : undefined,
+        liveActivity: loopState.liveActivity,
+        pendingGitCommitApproval: loopState.pendingGitCommitApproval,
+        spawnActivityHistory: loopState.spawnActivityHistory,
+    });
+}
 function cleanState(stateDir) {
     const targets = ['blackboard.json', 'messages.json'];
     const removed = [];
@@ -62,6 +126,9 @@ function cleanState(stateDir) {
             fs.rmSync(p);
             removed.push(name);
         }
+    }
+    if (resetLoopArtifactsForNewMission(stateDir)) {
+        removed.push('loop-state.json', 'loop-checkpoint.json');
     }
     if (removed.length > 0) {
         err(`  ${c.yellow('🧹')} Cleaned stale state: ${removed.join(', ')} ${c.dim('(memory.md preserved)')}`);
@@ -87,6 +154,7 @@ export function parseTeamArgs(argv) {
     let parallel = process.env.ROLAND_SEQUENTIAL !== '1';
     let webhookUrl;
     let agentsDir;
+    let loopTemplate;
     for (let i = 0; i < args.length; i++) {
         const a = args[i];
         if ((a === '--task' || a === '-t') && args[i + 1]) {
@@ -150,12 +218,16 @@ export function parseTeamArgs(argv) {
             notify = true;
             continue;
         }
+        if (a === '--loop-template' && args[i + 1]) {
+            loopTemplate = args[++i];
+            continue;
+        }
         if (!a.startsWith('-') && !goal) {
             goal = a;
             continue;
         }
     }
-    return { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel };
+    return { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel, loopTemplate };
 }
 // ── Web-mode helpers ──────────────────────────────────────────────────────────
 /** Strip ANSI escape sequences from a string. */
@@ -199,7 +271,11 @@ function firstSentences(body, maxChars = 200) {
 }
 // ── Main CLI logic (exported so index.ts can delegate without re-running main) ─
 export async function runTeamCli(argv) {
-    const { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel } = parseTeamArgs(argv);
+    const parsed = parseTeamArgs(argv);
+    let { goal, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel, loopTemplate } = parsed;
+    const ctx = resolveMcpProjectContext({ state_dir: parsed.stateDir });
+    applyMcpProjectEnv(ctx);
+    const stateDir = ctx.stateDir;
     if (!goal) {
         err(c.bold('Roland — PM Team Mode'));
         err('');
@@ -227,6 +303,7 @@ export async function runTeamCli(argv) {
         err('    --web                   Streaming terminal-style output for web/chat — live progress, no ANSI');
         err('    --sequential            One agent at a time  ' + c.dim('(safe mode for unstable connections; overrides ROLAND_SEQUENTIAL=1)'));
         err('    --parallel              Force parallel even if ROLAND_SEQUENTIAL=1  ' + c.dim('(parallel is the default)'));
+        err('    --loop-template <id>    Attach a loop template (e.g. standard-code-loop)  ' + c.dim('(Loop Engineering)'));
         err('');
         process.exit(1);
     }
@@ -251,15 +328,22 @@ export async function runTeamCli(argv) {
     }
     // ── Background / detach mode ───────────────────────────────────────────────
     if (background) {
-        await spawnBackground(goal, argv, stateDir);
+        if (!process.env['ROLAND_TRIGGERED_VIA']) {
+            process.env['ROLAND_TRIGGERED_VIA'] = 'cli';
+        }
+        sanitizeStaleMissionState(stateDir);
+        prepareMissionStart(stateDir, goal, { projectRoot: ctx.projectRoot });
+        await spawnBackground(goal, argv, stateDir, { projectRoot: ctx.projectRoot });
         return; // parent exits immediately
     }
+    if (clean)
+        cleanState(stateDir);
+    sanitizeStaleMissionState(stateDir);
+    prepareMissionStart(stateDir, goal, { projectRoot: ctx.projectRoot, skipBoardCleanup: clean });
     // ── Web mode — streaming terminal-style output for browser / chat UI ────────
     if (web) {
         const out = (line) => process.stdout.write(line + '\n');
         const hitlQueue = new HitlQueue(stateDir);
-        if (clean)
-            cleanState(stateDir);
         const runState = new RunStateWriter(stateDir, goal);
         // Silence internal stderr noise — clients receive only our curated stdout
         const origConsoleError = console.error.bind(console);
@@ -277,6 +361,8 @@ export async function runTeamCli(argv) {
                 goal, stateDir, agentsDir, hitlQueue,
                 noImprove: true,
                 sequential: !parallel, interactive: false,
+                loopTemplate,
+                onLoopStateChange: (s) => syncLoopStateToRun(runState, s, stateDir),
                 onPlanReady: (tasks) => {
                     runState.planReady(tasks);
                     out(`Plan ready — ${tasks.length} task${tasks.length !== 1 ? 's' : ''}`);
@@ -295,8 +381,14 @@ export async function runTeamCli(argv) {
                     runState.taskStart(id);
                     out(`  → ${agent}: ${title}`);
                 },
-                onTaskComplete: (id, agent, output, hadBlocker) => {
-                    runState.taskComplete(id, output, hadBlocker);
+                onTaskComplete: (id, agent, output, hadBlocker, git) => {
+                    runState.taskComplete(id, output, hadBlocker, git ? {
+                        branch: git.branch,
+                        phase: git.phase,
+                        statusLabel: git.statusLabel,
+                        prUrl: git.prUrl,
+                        prNumber: git.prNumber,
+                    } : undefined);
                     const entry = webWaveEntries.get(id);
                     if (entry)
                         entry.hadBlocker = hadBlocker;
@@ -335,6 +427,7 @@ export async function runTeamCli(argv) {
                     out(`⚡ Connection issue in wave ${info.waveNumber} (${agents}) — retrying`);
                 },
                 onBlockerDetected: (taskId, agent, description) => {
+                    emitHermesBlocker(stateDir, agent, description);
                     out(`  ⚠️  BLOCKER [${taskId}/${agent}]: ${description}`);
                 },
             });
@@ -412,9 +505,7 @@ export async function runTeamCli(argv) {
     });
     // ── HITL queue ─────────────────────────────────────────────────────────────
     const hitlQueue = new HitlQueue(stateDir);
-    // ── Clean stale state if requested ──────────────────────────────────────────
-    if (clean)
-        cleanState(stateDir);
+    // ── Clean stale state if requested (--clean wipes blackboard + loop artifacts) ─
     // ── Quiet mode — no UI, but still write run-state.json for external monitors ─
     if (quiet) {
         const runStart = Date.now();
@@ -422,11 +513,23 @@ export async function runTeamCli(argv) {
         try {
             const result = await runTeam({
                 goal, stateDir, agentsDir, hitlQueue,
-                noImprove, sequential: !parallel, interactive: false,
+                noImprove, sequential: !parallel, interactive: false, quiet: true,
+                loopTemplate,
+                onLoopStateChange: (s) => syncLoopStateToRun(runState, s, stateDir),
                 onPlanReady: (tasks) => { runState.planReady(tasks); },
                 onWaveStart: (w, tasks) => { runState.waveStart(w, tasks.map((t) => t.id)); },
-                onTaskStart: (id) => { runState.taskStart(id); },
-                onTaskComplete: (id, _a, out, bl) => { runState.taskComplete(id, out, bl); },
+                onTaskStart: (id, _a, _t, git) => {
+                    runState.taskStart(id, git ? {
+                        branch: git.branch, phase: git.phase, statusLabel: git.statusLabel,
+                        prUrl: git.prUrl, prNumber: git.prNumber,
+                    } : undefined);
+                },
+                onTaskComplete: (id, _a, out, bl, git) => {
+                    runState.taskComplete(id, out, bl, git ? {
+                        branch: git.branch, phase: git.phase, statusLabel: git.statusLabel,
+                        prUrl: git.prUrl, prNumber: git.prNumber,
+                    } : undefined);
+                },
                 onWaveReview: () => { runState.waveReviewing(); },
                 onWaveComplete: (_w, d) => { runState.waveComplete(d.pmNotes); },
                 onTasksSpawned: (tasks) => { runState.addTasks(tasks); },
@@ -434,6 +537,7 @@ export async function runTeamCli(argv) {
                 onHitlPause: (p) => { runState.setHitlPaused(p); },
                 onAbortPending: () => { runState.setAbortPending(); },
                 onBlockerDetected: (taskId, agent, description, waveNumber) => {
+                    emitHermesBlocker(stateDir, agent, description, waveNumber);
                     void notifier.notify({
                         event: 'blocker', goal,
                         summary: `Blocked in wave ${waveNumber}`,
@@ -442,13 +546,15 @@ export async function runTeamCli(argv) {
                 },
             });
             runState.done();
-            console.log(result.synthesis);
+            hitlQueue.cleanup();
             await notifier.notify({
                 event: 'complete', goal, summary: 'Run complete',
                 tasksCompleted: Object.keys(result.taskResults).length,
                 wavesRun: result.wavesRun, blockersEncountered: result.blockersEncountered,
                 durationMs: Date.now() - runStart,
             });
+            // Synthesis (with ### 🎖 Mission Complete footer) is the definitive end of output.
+            console.log(result.synthesis);
         }
         catch (e) {
             runState.error(e instanceof Error ? e.message : String(e));
@@ -531,7 +637,13 @@ export async function runTeamCli(argv) {
                 agentsDir,
                 hitlQueue,
                 noImprove, sequential: !parallel, interactive: false,
+                loopTemplate,
+                onLoopStateChange: (s) => {
+                    syncLoopStateToRun(runState, s, stateDir);
+                    tui.update(runState.get());
+                },
                 onBlockerDetected: (taskId, agent, description, waveNumber) => {
+                    emitHermesBlocker(stateDir, agent, description, waveNumber);
                     void notifier.notify({
                         event: 'blocker', goal,
                         summary: `${agent} is blocked in wave ${waveNumber}`,
@@ -546,12 +658,18 @@ export async function runTeamCli(argv) {
                     runState.waveStart(waveNumber, tasks.map((t) => t.id));
                     tui.update(runState.get());
                 },
-                onTaskStart: (id) => {
-                    runState.taskStart(id);
+                onTaskStart: (id, _agent, _title, git) => {
+                    runState.taskStart(id, git ? {
+                        branch: git.branch, phase: git.phase, statusLabel: git.statusLabel,
+                        prUrl: git.prUrl, prNumber: git.prNumber,
+                    } : undefined);
                     tui.update(runState.get());
                 },
-                onTaskComplete: (id, _agent, output, hadBlocker) => {
-                    runState.taskComplete(id, output, hadBlocker);
+                onTaskComplete: (id, _agent, output, hadBlocker, git) => {
+                    runState.taskComplete(id, output, hadBlocker, git ? {
+                        branch: git.branch, phase: git.phase, statusLabel: git.statusLabel,
+                        prUrl: git.prUrl, prNumber: git.prNumber,
+                    } : undefined);
                     tui.update(runState.get());
                 },
                 onWaveReview: () => {
@@ -608,23 +726,7 @@ export async function runTeamCli(argv) {
             wavesRun: result.wavesRun, blockersEncountered: result.blockersEncountered,
             durationMs: Date.now() - runStart,
         });
-        // ── "What would you like to do next?" prompt (TUI mode) ─────────────────
-        const tuiBlockers = result.blockersEncountered;
-        err('');
-        err('  ' + c.bold('💡  Run complete. What would you like to do next?'));
-        err('');
-        err(`  ${c.cyan('npm run dev')}                        Start (or restart) the dev server`);
-        err(`  ${c.cyan('npm test')}                           Run the full test suite`);
-        err(`  ${c.cyan('git add -A && git commit -m "..."')}  Commit all changes`);
-        err(`  ${c.cyan('Ctrl+C')}                             Stop any background dev server`);
-        if (tuiBlockers > 0) {
-            err('');
-            err(`  ${c.red('⚠️  ' + tuiBlockers + ' blocker' + (tuiBlockers !== 1 ? 's' : '') + ' need attention — see 🔴 Release Blockers in the synthesis below.')}`);
-        }
-        err('');
-        err(`  ${c.dim('Ask Roland to refine:')}  roland team "Fix the failing tests"  ${c.dim('or')}  roland team "Add X"`);
-        err(`  ${c.dim('Full next-step detail in')} ${c.bold('## Next Steps')} ${c.dim('at the bottom of the synthesis ↓')}`);
-        err('');
+        // Synthesis (with ### 🎖 Mission Complete footer) is the definitive end of output.
         console.log(result.synthesis);
         return;
     }
@@ -653,7 +755,10 @@ export async function runTeamCli(argv) {
         noImprove,
         sequential: !parallel,
         interactive: Boolean(process.stderr.isTTY) && !noImprove,
+        loopTemplate,
+        onLoopStateChange: (s) => syncLoopStateToRun(runState, s, stateDir),
         onBlockerDetected: (taskId, agent, description, waveNumber) => {
+            emitHermesBlocker(stateDir, agent, description, waveNumber);
             void notifier.notify({
                 event: 'blocker', goal,
                 summary: `${agent} is blocked in wave ${waveNumber}`,
@@ -690,13 +795,19 @@ export async function runTeamCli(argv) {
             err('');
         },
         // ── Task starting ────────────────────────────────────────────────────────
-        onTaskStart: (id, agent, title) => {
-            runState.taskStart(id);
+        onTaskStart: (id, agent, title, git) => {
+            runState.taskStart(id, git ? {
+                branch: git.branch, phase: git.phase, statusLabel: git.statusLabel,
+                prUrl: git.prUrl, prNumber: git.prNumber,
+            } : undefined);
             err(`  ${c.cyan('→')} ${c.dim(rpad('[' + id + ']', 10))} ${rpad(agent, 22)} ${c.dim(title.slice(0, 50))}`);
         },
         // ── Task complete ─────────────────────────────────────────────────────────
-        onTaskComplete: (id, agent, output, hadBlocker) => {
-            runState.taskComplete(id, output, hadBlocker);
+        onTaskComplete: (id, agent, output, hadBlocker, git) => {
+            runState.taskComplete(id, output, hadBlocker, git ? {
+                branch: git.branch, phase: git.phase, statusLabel: git.statusLabel,
+                prUrl: git.prUrl, prNumber: git.prNumber,
+            } : undefined);
             const entry = waveEntries.get(id);
             if (entry)
                 entry.hadBlocker = hadBlocker;
@@ -810,22 +921,7 @@ export async function runTeamCli(argv) {
     err(`  ${c.dim('Messages:')}    ${stateDir}/messages.json`);
     err('  ' + '═'.repeat(COLS - 2));
     err('');
-    // ── "What would you like to do next?" prompt ────────────────────────────────
-    err('  ' + c.bold('💡  Run complete. What would you like to do next?'));
-    err('');
-    err(`  ${c.cyan('npm run dev')}                        Start (or restart) the dev server`);
-    err(`  ${c.cyan('npm test')}                           Run the full test suite`);
-    err(`  ${c.cyan('git add -A && git commit -m "..."')}  Commit all changes`);
-    err(`  ${c.cyan('Ctrl+C')}                             Stop any background dev server`);
-    if (blockers > 0) {
-        err('');
-        err(`  ${c.red('⚠️  ' + blockers + ' blocker' + (blockers !== 1 ? 's' : '') + ' need attention — see 🔴 Release Blockers in the synthesis below.')}`);
-    }
-    err('');
-    err(`  ${c.dim('Ask Roland to refine:')}  roland team "Fix the failing tests"  ${c.dim('or')}  roland team "Add X"`);
-    err(`  ${c.dim('Full next-step detail in')} ${c.bold('## Next Steps')} ${c.dim('at the bottom of the synthesis ↓')}`);
-    err('');
-    // Notify on completion (rich contextual message)
+    // Side effects before synthesis — nothing may print after Mission Complete footer.
     runState.done();
     hitlQueue.cleanup();
     await notifier.notify({
@@ -833,7 +929,7 @@ export async function runTeamCli(argv) {
         tasksCompleted: total, wavesRun: result.wavesRun,
         blockersEncountered: blockers, durationMs: Date.now() - scrollRunStart,
     });
-    // Synthesis to stdout — pipeable, separable from progress stderr
+    // Synthesis (with ### 🎖 Mission Complete footer) is the definitive end of output.
     console.log(result.synthesis);
 }
 // ── Standalone entry — guarded so importing this module from index.ts is safe ──

@@ -28,8 +28,12 @@ import { getGlobalTracker } from '../orchestrator/advanced-cost-tracker.js';
 import { BudgetManager } from '../utils/budget-manager.js';
 import { RecipeSessionManager } from './recipe-session.js';
 import { generateDiff } from '../utils/diff-engine.js';
-import { normaliseGooseModel, spawnGooseSession, isGooseAvailable } from '../utils/goose-runner.js';
 import { gitStatus, gitDiff, gitLog, gitCommit } from '../utils/git-tools.js';
+import { spawnBackground } from '../rco/supervisor.js';
+import { randomUUID } from 'crypto';
+import { writeMissionMetaFile, prepareMissionStart, sanitizeStaleMissionState, } from '../rco/mission-state.js';
+import { applyMcpProjectEnv, resolveMcpProjectContext, } from '../utils/mcp-project-context.js';
+import { configureSdkProcessLimits } from '../utils/sdk-lifecycle.js';
 import { analyzeScreenshot } from '../utils/screenshot.js';
 import { getDiffStreamServer, initDiffStreamServer } from './diff-stream.js';
 import { buildContextBlock, appendRule, appendDecision, appendTestPattern, appendCustomSection, readContext, writeRcoState, readRcoState, } from '../utils/migration-context.js';
@@ -40,11 +44,84 @@ import { LeadPM } from '../pm/lead-pm.js';
 import { renderTimeline, renderUsage } from '../pm/render.js';
 import { initializeQualityTracker } from '../orchestrator/quality-tracker.js';
 import { selectRelevantFiles, bundleFileContents, formatBundleAsMarkdown, DEFAULT_CONTEXT_GATHERING_CONFIG } from '../utils/file-gatherer.js';
+import { modelPolicyFromRouter } from '../pm/model-policy.js';
 import { resolveAgentsDir as resolveAgentsDirShared } from '../rco/loadConfig.js';
+import { classifyExecutionPath } from '../rco/execution-path.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import YAML from 'yaml';
+// ============================================================================
+// Cursor MCP configuration helpers
+// ============================================================================
+/** Read-only / low-risk tools safe for Cursor autoApprove in ~/.cursor/mcp.json */
+export const MCP_AUTO_APPROVE_TOOLS = [
+    'health_check',
+    'roland_hello',
+    'board_status',
+    'hitl_status',
+    'poll_hitl_events',
+    'mission_summary',
+    'report_completion',
+    'pm_standup',
+    'triage',
+    'list_team',
+    'list_team_recipes',
+    'list_recipes',
+    'get_team_context',
+    'get_pm_playbook',
+    'get_team_usage',
+    'get_pm_events',
+    'get_analytics',
+    'suggest_mode',
+    'route_model',
+    'blackboard_read',
+    'bus_poll',
+    'git_status',
+    'git_diff',
+    'git_log',
+    'read_context',
+];
+/** Resolve the built MCP server entry (dist/server/mcp-server.js). */
+export function resolveMcpServerEntry() {
+    try {
+        const thisFile = fileURLToPath(import.meta.url);
+        return path.resolve(path.dirname(thisFile), 'mcp-server.js');
+    }
+    catch {
+        return path.join(process.cwd(), 'dist', 'server', 'mcp-server.js');
+    }
+}
+/** Build the `mcpServers.roland` block for ~/.cursor/mcp.json (stdio — Cursor / VS Code). */
+export function buildCursorMcpServerEntry(options) {
+    const entry = options?.rolandRoot
+        ? path.join(options.rolandRoot, 'dist', 'server', 'mcp-server.js').replace(/\\/g, '/')
+        : resolveMcpServerEntry().replace(/\\/g, '/');
+    const env = { ROLAND_QUIET: '1' };
+    if (options?.projectRoot) {
+        env.ROLAND_PROJECT_ROOT = options.projectRoot.replace(/\\/g, '/');
+    }
+    const block = {
+        command: 'node',
+        args: [entry],
+        env,
+    };
+    if (options?.includeAutoApprove !== false) {
+        block.autoApprove = [...MCP_AUTO_APPROVE_TOOLS];
+    }
+    return block;
+}
+/** Build HTTP MCP client config for Hermes and other Streamable HTTP clients. */
+export function buildGeneralMcpHttpEntry(baseUrl = 'http://127.0.0.1:8081/mcp') {
+    const url = baseUrl.replace(/\/$/, '');
+    return {
+        url,
+        transport: 'streamable-http',
+    };
+}
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
 // ============================================================================
 // OpenRouter Model Mapping
 // ============================================================================
@@ -157,8 +234,15 @@ export class McpServer {
     qualityTracker;
     coordination;
     leadPm;
+    leadPmOpts;
     recipesDir;
-    constructor(config) {
+    transport = null;
+    shuttingDown = false;
+    connected = false;
+    transportMode = 'stdio';
+    skipSidecars;
+    constructor(config, options = {}) {
+        this.skipSidecars = options.skipSidecars ?? false;
         this.config = config;
         this.tools = new Map();
         this.toolDefinitions = new Map();
@@ -186,23 +270,25 @@ export class McpServer {
         // Routing is Cursor-native (Phase 3): an optional `pm:` config section can
         // override the three Cursor models and per-engineer lanes.
         const pmCfg = config.pm;
-        this.leadPm = new LeadPM(this.coordination, {
+        const loopPolicy = modelPolicyFromRouter();
+        this.leadPmOpts = {
             policy: pmCfg
                 ? {
-                    pm: pmCfg.lead_model ?? 'claude-opus-4-7',
-                    fast: pmCfg.fast_model ?? 'composer-2.5-fast',
-                    standard: pmCfg.standard_model ?? 'composer-2.5-standard',
+                    pm: pmCfg.lead_model ?? loopPolicy.pm,
+                    fast: pmCfg.fast_model ?? loopPolicy.fast,
+                    standard: pmCfg.standard_model ?? loopPolicy.standard,
                 }
-                : undefined,
+                : loopPolicy,
             laneOverrides: pmCfg?.lane_overrides,
-        });
+        };
+        this.leadPm = new LeadPM(this.coordination, this.leadPmOpts);
         // Initialize budget manager with config from config.yaml
         BudgetManager.initialize();
-        if (config.goose) {
+        if (config.budget) {
             BudgetManager.configureFromAppConfig({
-                monthlyBudget: config.goose.monthly_budget,
-                warningThreshold: config.goose.budget_degradation_threshold,
-                billingCycleDay: config.goose.billing_cycle_day,
+                monthlyBudget: config.budget.monthly_budget,
+                warningThreshold: config.budget.budget_degradation_threshold,
+                billingCycleDay: config.budget.billing_cycle_day,
                 enabled: true,
             });
         }
@@ -235,7 +321,6 @@ export class McpServer {
         this.registerPreviewChanges();
         this.registerLoadMigrationContext();
         this.registerUpdateMigrationContext();
-        this.registerRunGooseTask();
         this.registerSessionContext();
         this.registerProjectContext();
         this.registerQualitySignal();
@@ -250,7 +335,7 @@ export class McpServer {
     // health_check
     // --------------------------------------------------------------------------
     registerHealthCheck() {
-        this.registerTool('health_check', 'Check the health status of the Roland MCP server', async () => {
+        this.registerTool('health_check', 'Verify Roland MCP is running. Returns server version, uptime, registered tool count, and optional Ollama/classifier status. Call this first if MCP tools are not responding.', async () => {
             const result = {
                 status: 'healthy',
                 version: '2.0.0',
@@ -499,12 +584,13 @@ export class McpServer {
         },
     ];
     registerTriage() {
-        this.registerTool('triage', 'Auto-pilot: analyze any user message and recommend the best Roland agent persona and/or recipe workflow. Call this FIRST on every coding request to get intelligent routing. Returns which agent to adopt, whether a multi-agent recipe applies, and the reasoning.', async (args) => {
+        this.registerTool('triage', 'Auto-pilot: analyze any user message and recommend agent persona, recipe workflow, and execution path (direct in chat vs Pure ClosedLoop team mission). Call FIRST on new coding requests. In Cursor, @roland + triage is self-contained — no Hermes required. Returns execution_path.path, summary, team_offer, team_command (roland team + --loop-template), loop_template, loop_template_reason, forced, cleaned_goal, plus agent and complexity routing. Pure ClosedLoop default (use_pm_team: false). Power-user override: --force-team or force team / full team / run as team / spawn team.', async (args) => {
             const message = args.message;
             if (!message) {
                 throw new McpToolError('triage', 'message is required');
             }
             const lowerMessage = message.toLowerCase();
+            const executionPath = classifyExecutionPath(message);
             // --- Score agents ---
             const agentScores = McpServer.AGENT_CATALOG.map(agent => {
                 let score = 0;
@@ -552,6 +638,18 @@ export class McpServer {
             const suggestRecipe = topRecipe.score >= recipeThreshold;
             // --- Build recommendation ---
             const recommendation = {
+                execution_path: {
+                    path: executionPath.path,
+                    summary: executionPath.summary,
+                    reasons: executionPath.reasons,
+                    estimated_minutes: executionPath.estimatedMinutes,
+                    team_offer: executionPath.teamOffer,
+                    team_command: executionPath.teamCommand ?? null,
+                    loop_template: executionPath.loopTemplate ?? null,
+                    loop_template_reason: executionPath.loopTemplateReason ?? null,
+                    forced: executionPath.forced ?? false,
+                    cleaned_goal: executionPath.cleanedGoal ?? null,
+                },
                 agent: {
                     name: topAgent.score > 0 ? topAgent.name : 'executor',
                     role: topAgent.score > 0 ? topAgent.role : 'General implementation — no strong pattern match; defaulting to executor.',
@@ -614,7 +712,7 @@ export class McpServer {
                     complexity.complexity = fallbackTier;
                 }
             }
-            // --- Goose dispatch fields ---
+            // --- Model routing fields ---
             const agentName = topAgent.score > 0 ? topAgent.name : 'executor';
             let openrouterModel = AGENT_OPENROUTER_MODELS[agentName]
                 || OPENROUTER_MODELS[complexity.complexity]
@@ -687,11 +785,16 @@ export class McpServer {
                 recommendation.budget_degraded = true;
                 recommendation.budget_notice = `Budget ≥80% used — switched to free model (${openrouterModel}). Quality may be reduced.`;
             }
-            recommendation.instructions = suggestRecipe
-                ? `Adopt the "${agentName}" persona. A multi-agent recipe "${topRecipe.name}" is recommended — offer to run it, or proceed as the recommended agent if the user prefers a single pass.`
-                : isComplexExecution
-                    ? `This is a complex task. Spawn a subagent to write the code (see execution_strategy + relevant_files for full codebase context), then apply the output to files yourself.`
-                    : `Adopt the "${agentName}" persona for this task. Apply that agent's expertise and thinking style to your response.`;
+            recommendation.instructions = executionPath.path === 'team'
+                ? `${executionPath.summary} Do NOT implement in chat. ${executionPath.teamOffer ?? 'Offer roland team with --loop-template and wait for confirmation.'}` +
+                    (executionPath.loopTemplate
+                        ? ` Pure ClosedLoop template: ${executionPath.loopTemplate}.`
+                        : '')
+                : suggestRecipe
+                    ? `Adopt the "${agentName}" persona. A multi-agent recipe "${topRecipe.name}" is recommended — offer to run it, or proceed as the recommended agent if the user prefers a single pass. ${executionPath.summary}`
+                    : isComplexExecution
+                        ? `This is a complex task. Spawn a subagent to write the code (see execution_strategy + relevant_files for full codebase context), then apply the output to files yourself. ${executionPath.summary}`
+                        : `Adopt the "${agentName}" persona for this task. Apply that agent's expertise and thinking style to your response. ${executionPath.summary}`;
             return recommendation;
         }, {
             type: 'object',
@@ -1797,7 +1900,8 @@ export class McpServer {
             }
             catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
-                logger.error(`❌ Tool error (${toolName}):`, message);
+                const stack = error instanceof Error ? error.stack : undefined;
+                logger.error(`Tool "${toolName}" failed: ${message}`, stack ? { stack } : undefined);
                 return {
                     content: [
                         {
@@ -1810,10 +1914,18 @@ export class McpServer {
             }
         });
         this.server.onerror = (error) => {
-            logger.error('❌ MCP Server error:', error);
+            const message = error instanceof Error ? error.message : String(error);
+            const stack = error instanceof Error ? error.stack : undefined;
+            logger.error(`MCP protocol error: ${message}`, stack ? { stack } : undefined);
         };
         this.server.onclose = () => {
-            logger.info('🔌 MCP Server closed');
+            this.connected = false;
+            logger.info(`MCP ${this.transportMode} transport closed`);
+            if (this.transportMode === 'stdio' && !this.shuttingDown) {
+                // Stdio cannot reconnect in-process — exit cleanly so Cursor respawns us.
+                logger.warn('Client disconnected — exiting for Cursor to restart the MCP server');
+                process.exit(0);
+            }
         };
     }
     // --------------------------------------------------------------------------
@@ -1948,96 +2060,6 @@ export class McpServer {
         });
     }
     // --------------------------------------------------------------------------
-    // run_goose_task — spawn a headless Goose session with smart model routing
-    // --------------------------------------------------------------------------
-    registerRunGooseTask() {
-        this.registerTool('run_goose_task', 'Spawn a headless Goose coding session for a task. Goose has full file read/write and shell access via its Developer extension. Roland automatically routes to the cheapest adequate model using complexity analysis. Returns the session output.', async (args) => {
-            const task = args.task;
-            if (!task)
-                throw new McpToolError('run_goose_task', '"task" is required');
-            if (!isGooseAvailable()) {
-                return {
-                    error: 'goose CLI not found in PATH',
-                    install: 'https://block.github.io/goose/',
-                    tip: 'Install Goose and ensure it is in PATH, then retry.',
-                };
-            }
-            const projectRoot = typeof args.project_root === 'string' && args.project_root
-                ? args.project_root
-                : undefined;
-            const maxTurns = typeof args.max_turns === 'number' ? args.max_turns : 30;
-            const timeoutMs = typeof args.timeout_seconds === 'number'
-                ? args.timeout_seconds * 1000
-                : 300_000;
-            // Force model overrides everything — bypasses routing entirely
-            const forceModel = typeof args.force_model === 'string' ? args.force_model : null;
-            // Auto-route: use force_model > provided model > complexity analysis
-            let modelId = forceModel ?? (typeof args.model === 'string' ? args.model : null);
-            let routingInfo = {};
-            if (forceModel) {
-                routingInfo = { auto_routed: false, forced: true, model_selected: forceModel };
-            }
-            else if (!modelId) {
-                try {
-                    const routing = ModelRouter.routeByComplexity(task);
-                    modelId = routing.selected.model;
-                    routingInfo = {
-                        auto_routed: true,
-                        complexity: ComplexityClassifier.getDetailedAnalysis(task).complexity,
-                        model_selected: modelId,
-                        estimated_cost: routing.selected.costPer1kTokens,
-                    };
-                }
-                catch {
-                    modelId = 'claude-sonnet-4-5'; // safe default
-                    routingInfo = { auto_routed: false, model_selected: modelId };
-                }
-            }
-            const gooseModel = normaliseGooseModel(modelId ?? 'claude-sonnet-4-5');
-            logger.info(`🦆 Spawning Goose session: ${gooseModel.provider}/${gooseModel.model}`);
-            const result = await spawnGooseSession({
-                task,
-                model: gooseModel,
-                projectRoot,
-                maxTurns,
-                timeoutMs,
-            });
-            return {
-                output: result.output,
-                exit_code: result.exitCode,
-                duration_seconds: Math.round(result.durationMs / 1000),
-                model_used: `${result.modelUsed.provider}/${result.modelUsed.model}`,
-                routing: routingInfo,
-                success: result.exitCode === 0,
-            };
-        }, {
-            type: 'object',
-            properties: {
-                task: {
-                    type: 'string',
-                    description: 'Full task description for the Goose session. Include all context needed — Goose will read files, run commands, and edit code autonomously.',
-                },
-                model: {
-                    type: 'string',
-                    description: 'Model ID to use (e.g. "claude-sonnet-4-5", "gpt-4o"). Omit to auto-route based on task complexity.',
-                },
-                project_root: {
-                    type: 'string',
-                    description: 'Working directory for the Goose session (default: ROLAND_PROJECT_ROOT env var, then cwd)',
-                },
-                max_turns: {
-                    type: 'number',
-                    description: 'Maximum LLM turns Goose is allowed (default: 30)',
-                },
-                timeout_seconds: {
-                    type: 'number',
-                    description: 'Session timeout in seconds (default: 300)',
-                },
-            },
-            required: ['task'],
-        });
-    }
-    // --------------------------------------------------------------------------
     // preview_changes — markdown diff + optional HTML preview
     // --------------------------------------------------------------------------
     registerPreviewChanges() {
@@ -2148,31 +2170,71 @@ export class McpServer {
     // ==========================================================================
     // Lifecycle
     // ==========================================================================
-    async start() {
-        try {
-            logger.info('🚀 Starting Roland MCP Server v2...');
-            const transport = new StdioServerTransport();
-            await this.server.connect(transport);
-            logger.success('✅ MCP Server connected and ready');
-            logger.info(`📦 Tools: ${this.getTools().join(', ')}`);
-            // Start the diff stream WebSocket server
-            const diffStreamPort = this.config.diff_stream?.port ?? 8089;
-            const diffStreamEnabled = this.config.diff_stream?.enabled !== false;
-            if (diffStreamEnabled) {
-                const diffServer = initDiffStreamServer(diffStreamPort);
-                diffServer.start();
+    async start(options = {}) {
+        const maxRetries = options.maxConnectRetries ?? 5;
+        let lastError;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                await this.connectStdioTransport();
+                return;
             }
+            catch (error) {
+                lastError = error;
+                const message = error instanceof Error ? error.message : String(error);
+                const stack = error instanceof Error ? error.stack : undefined;
+                logger.error(`MCP stdio connect failed (attempt ${attempt}/${maxRetries}): ${message}`, stack ? { stack } : undefined);
+                if (attempt < maxRetries) {
+                    const delay = Math.min(500 * 2 ** (attempt - 1), 8000);
+                    logger.warn(`Retrying MCP connection in ${delay}ms…`);
+                    await sleep(delay);
+                }
+            }
+        }
+        const message = lastError instanceof Error ? lastError.message : String(lastError);
+        throw new McpServerError(`Failed to start MCP server after ${maxRetries} attempts: ${message}`);
+    }
+    /** Connect an arbitrary MCP transport (HTTP Streamable, stdio, etc.). */
+    async connectTransport(transport, mode = 'http') {
+        this.transportMode = mode;
+        this.transport = transport;
+        await this.server.connect(transport);
+        this.connected = true;
+        logger.success(`MCP server connected via ${mode} (${this.getTools().length} tools)`);
+        if (!this.skipSidecars && mode === 'stdio') {
+            this.startDiffStreamSidecar();
+        }
+    }
+    async connectStdioTransport() {
+        logger.info('Connecting Roland MCP server via stdio transport…');
+        const stdio = new StdioServerTransport();
+        await this.connectTransport(stdio, 'stdio');
+        logger.info(`Tools: ${this.getTools().join(', ')}`);
+    }
+    startDiffStreamSidecar() {
+        const diffStreamPort = this.config.diff_stream?.port ?? 8089;
+        const diffStreamEnabled = this.config.diff_stream?.enabled !== false;
+        if (!diffStreamEnabled)
+            return;
+        try {
+            const diffServer = initDiffStreamServer(diffStreamPort);
+            diffServer.start();
         }
         catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            throw new McpServerError(`Failed to start MCP server: ${message}`);
+            logger.warn(`Diff stream server unavailable (non-fatal): ${message}`);
         }
+    }
+    isShuttingDown() {
+        return this.shuttingDown;
+    }
+    isConnected() {
+        return this.connected;
     }
     // --------------------------------------------------------------------------
     // git_status / git_diff / git_log / git_commit
     // --------------------------------------------------------------------------
     registerGitTools() {
-        this.registerTool('git_status', 'Return the current git status (staged, unstaged, untracked files). Useful before planning file edits or commits.', async (args) => {
+        this.registerTool('git_status', 'Read-only: current git status (staged, unstaged, untracked). Use before planning edits or commits. Pass project_root to target a repo other than ROLAND_PROJECT_ROOT/cwd.', async (args) => {
             const cwd = typeof args.project_root === 'string' && args.project_root
                 ? args.project_root
                 : (process.env['ROLAND_PROJECT_ROOT']?.trim() || process.cwd());
@@ -2185,7 +2247,7 @@ export class McpServer {
                 raw: result.raw,
             };
         });
-        this.registerTool('git_diff', 'Return a unified diff of current changes. Pass staged=true for staged-only diff, file_path to limit to one file.', async (args) => {
+        this.registerTool('git_diff', 'Read-only: unified diff of working-tree changes. Pass staged:true for index-only, file_path to limit scope, max_lines to cap output.', async (args) => {
             const cwd = typeof args.project_root === 'string' && args.project_root
                 ? args.project_root
                 : (process.env['ROLAND_PROJECT_ROOT']?.trim() || process.cwd());
@@ -2195,7 +2257,7 @@ export class McpServer {
             const diff = gitDiff(cwd, { staged, filePath, maxLines });
             return { diff: diff || '(no changes)', staged, file_path: filePath ?? null };
         });
-        this.registerTool('git_log', 'Return the last N commits from git log (one-line format). Defaults to 10.', async (args) => {
+        this.registerTool('git_log', 'Read-only: recent commit history (one-line format). Defaults to 10 commits. Use to understand recent changes before editing.', async (args) => {
             const cwd = typeof args.project_root === 'string' && args.project_root
                 ? args.project_root
                 : (process.env['ROLAND_PROJECT_ROOT']?.trim() || process.cwd());
@@ -2203,7 +2265,7 @@ export class McpServer {
             const log = gitLog(cwd, limit);
             return { log: log || '(no commits)', limit };
         });
-        this.registerTool('git_commit', 'Stage files and create a git commit. Pass files[] to stage specific paths, or omit to stage all changes (git add -A).', async (args) => {
+        this.registerTool('git_commit', 'Create a git commit (mutating). Stages files[] or all changes (git add -A) then commits with message. Requires explicit user approval in Cursor.', async (args) => {
             const cwd = typeof args.project_root === 'string' && args.project_root
                 ? args.project_root
                 : (process.env['ROLAND_PROJECT_ROOT']?.trim() || process.cwd());
@@ -2296,19 +2358,61 @@ export class McpServer {
         });
     }
     async stop() {
+        if (this.shuttingDown)
+            return;
+        this.shuttingDown = true;
         try {
-            logger.info('🛑 Stopping MCP Server...');
-            // Stop the diff stream WebSocket server
+            logger.info('Stopping MCP server…');
             const diffServer = getDiffStreamServer();
-            if (diffServer)
-                diffServer.stop();
+            if (diffServer) {
+                try {
+                    diffServer.stop();
+                }
+                catch (error) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    logger.warn(`Error stopping diff stream server: ${message}`);
+                }
+            }
             await this.server.close();
-            logger.success('✅ MCP Server stopped');
+            this.connected = false;
+            this.transport = null;
+            logger.success('MCP server stopped cleanly');
         }
         catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            logger.error(`⚠️ Error stopping server: ${message}`);
+            const stack = error instanceof Error ? error.stack : undefined;
+            logger.error(`Error during MCP shutdown: ${message}`, stack ? { stack } : undefined);
         }
+    }
+    // ==========================================================================
+    // MCP project context — per-request isolation for Hermes / multi-repo MCP
+    // ==========================================================================
+    /** Shared schema fragment for project-scoped MCP tools. */
+    static PROJECT_CONTEXT_SCHEMA = {
+        project_root: {
+            type: 'string',
+            description: 'Absolute path to the target project directory (Hermes cwd). Default: ROLAND_PROJECT_ROOT env, then MCP server cwd.',
+        },
+        cwd: {
+            type: 'string',
+            description: 'Alias for project_root — working directory of the calling client.',
+        },
+        state_dir: {
+            type: 'string',
+            description: 'Path to .roland state directory (default: <project_root>/.roland).',
+        },
+    };
+    resolveToolProjectContext(args) {
+        const ctx = resolveMcpProjectContext(args);
+        applyMcpProjectEnv(ctx);
+        return ctx;
+    }
+    scopedCoordination(args) {
+        const ctx = this.resolveToolProjectContext(args);
+        return new CoordinationManager({ dir: ctx.stateDir });
+    }
+    scopedLeadPm(args) {
+        return new LeadPM(this.scopedCoordination(args), this.leadPmOpts);
     }
     // ==========================================================================
     // Tool Registration Helper
@@ -2326,7 +2430,7 @@ export class McpServer {
         // blackboard_post — create or update a shared entry
         this.registerTool('blackboard_post', 'Publish or update a shared entry on the team Blackboard (a fact, decision, task, artifact, blocker, or status). Re-posting the same key updates it and bumps its rev. Pass expectedRev to guard against overwriting a concurrent change.', async (args) => {
             try {
-                const entry = this.coordination.blackboard.post({
+                const entry = this.scopedCoordination(args).blackboard.post({
                     key: args.key,
                     type: args.type,
                     value: args.value,
@@ -2353,12 +2457,13 @@ export class McpServer {
                 author: { type: 'string', description: 'Agent id posting this, e.g. "lead-pm" or "executor#3".' },
                 status: { type: 'string', enum: ['open', 'in_progress', 'blocked', 'done', 'archived'], description: 'Optional lifecycle status (most useful for tasks/blockers).' },
                 expectedRev: { type: 'number', description: 'If set and the stored rev differs, the post is rejected with a concurrency error.' },
+                ...McpServer.PROJECT_CONTEXT_SCHEMA,
             },
             required: ['key', 'type', 'value', 'author'],
         });
         // blackboard_read — query the board
         this.registerTool('blackboard_read', 'Read entries from the team Blackboard, newest first. All filters are optional; with none, returns the most recent entries. Use this to get shared awareness of tasks, decisions, and blockers across the team.', async (args) => {
-            const entries = this.coordination.blackboard.read({
+            const entries = this.scopedCoordination(args).blackboard.read({
                 key: args.key,
                 type: args.type,
                 tags: args.tags,
@@ -2380,13 +2485,14 @@ export class McpServer {
                 since: { type: 'number', description: 'Only entries updated at or after this epoch-ms timestamp.' },
                 includeArchived: { type: 'boolean', description: 'Include archived entries (default false).' },
                 limit: { type: 'number', description: 'Max entries to return (default 50, max 200).' },
+                ...McpServer.PROJECT_CONTEXT_SCHEMA,
             },
             required: [],
         });
         // blackboard_patch — partial update of an existing entry
         this.registerTool('blackboard_patch', 'Partially update an existing Blackboard entry (e.g. transition a task status to in_progress/done, or revise its value). Bumps rev. Fails if the key does not exist.', async (args) => {
             try {
-                const entry = this.coordination.blackboard.patch({
+                const entry = this.scopedCoordination(args).blackboard.patch({
                     key: args.key,
                     author: args.author,
                     changes: args.changes ?? {},
@@ -2421,7 +2527,7 @@ export class McpServer {
         });
         // bus_send — send a peer-to-peer or broadcast message
         this.registerTool('bus_send', 'Send a message on the team Message Bus to a specific agent, or to "*" to broadcast to everyone but the sender. Use this for direct peer-to-peer coordination that does not belong on the shared Blackboard.', async (args) => {
-            const message = this.coordination.bus.send({
+            const message = this.scopedCoordination(args).bus.send({
                 from: args.from,
                 to: args.to,
                 topic: args.topic,
@@ -2442,7 +2548,7 @@ export class McpServer {
         });
         // bus_poll — drain a recipient's mailbox
         this.registerTool('bus_poll', 'Drain undelivered messages addressed to an agent (directly or via broadcast). By default acknowledges them so they are not returned again. Returns messages oldest-first plus a nextSince cursor for the next poll.', async (args) => {
-            const messages = this.coordination.bus.poll({
+            const messages = this.scopedCoordination(args).bus.poll({
                 recipient: args.recipient,
                 since: args.since,
                 topic: args.topic,
@@ -2475,24 +2581,174 @@ export class McpServer {
         // get_pm_playbook — adopt the Engineering-Manager posture
         this.registerTool('get_pm_playbook', 'Fetch the Lead PM playbook (the Engineering-Manager system prompt). Call this once at the start of a session so you operate as the PM: keep the team unblocked, decompose and delegate, review against acceptance criteria.', async () => this.leadPm.getPlaybook(), { type: 'object', properties: {}, required: [] });
         // pm_standup — the rendered, daily-driver heartbeat (Phase 4)
-        this.registerTool('pm_standup', 'The recommended top-of-turn call. Returns a rendered Markdown standup (board, blockers-first triage with the exact unblock calls, usage, and your next 3 actions) plus the structured context. Read the markdown, then act — unblock before starting new work.', async () => this.leadPm.getStandup(), { type: 'object', properties: {}, required: [] });
+        this.registerTool('pm_standup', 'Cursor daily-driver: rendered Markdown standup with blockers first, board state, usage, UNSC mission summary, and your next 3 actions. Call at the start of each chat turn when @roland is active, or after roland_run_team to track progress.', async (args) => {
+            const standup = this.scopedLeadPm(args).getStandup();
+            try {
+                const ctx = this.resolveToolProjectContext(args);
+                const { buildBoardStatusReport, formatConciseUnscSummary } = await import('../rco/board-report.js');
+                const { buildHitlStatusReport, formatHermesHitlSummary } = await import('../rco/hitl-hermes.js');
+                const unsc = formatConciseUnscSummary(buildBoardStatusReport(ctx.stateDir));
+                const hitlReport = buildHitlStatusReport(ctx.stateDir);
+                const hitlSummary = formatHermesHitlSummary(hitlReport);
+                const hitlSection = hitlReport.waitingOnHitl
+                    ? `\n\n---\n\n### 🎮 HITL — action required\n\n${hitlSummary}\n\nSuggested: \`${hitlReport.suggestedActions[0] ?? 'roland hitl-status'}\``
+                    : `\n\n---\n\n**HITL:** ${hitlSummary}`;
+                return {
+                    ...standup,
+                    markdown: `${standup.markdown}\n\n---\n\n${unsc}${hitlSection}`,
+                    unscSummary: unsc,
+                    hitlSummary,
+                    waitingOnHitl: hitlReport.waitingOnHitl,
+                    project_root: ctx.projectRoot,
+                    state_dir: ctx.stateDir,
+                };
+            }
+            catch {
+                return standup;
+            }
+        }, {
+            type: 'object',
+            properties: {
+                ...McpServer.PROJECT_CONTEXT_SCHEMA,
+            },
+            required: [],
+        });
+        // board_status — concise UNSC summary for end-of-task reporting
+        this.registerTool('board_status', 'Concise UNSC mission status from .roland/blackboard.json and command-blackboard.md. Use after team runs or at end of major tasks. Blockers listed first. Pass format:"json" for structured output, format:"verbose" for full report.', async (args) => {
+            const ctx = this.resolveToolProjectContext(args);
+            const { buildBoardStatusReport, formatConciseUnscSummary, formatBoardStatusReport } = await import('../rco/board-report.js');
+            const report = buildBoardStatusReport(ctx.stateDir, typeof args.goal === 'string' ? args.goal : undefined);
+            const concise = formatConciseUnscSummary(report);
+            if (args.format === 'json') {
+                return { ...report, concise, project_root: ctx.projectRoot, state_dir: ctx.stateDir };
+            }
+            if (args.format === 'verbose') {
+                return { markdown: formatBoardStatusReport(report), report, concise, project_root: ctx.projectRoot, state_dir: ctx.stateDir };
+            }
+            return { markdown: concise, report, concise, project_root: ctx.projectRoot, state_dir: ctx.stateDir };
+        }, {
+            type: 'object',
+            properties: {
+                ...McpServer.PROJECT_CONTEXT_SCHEMA,
+                goal: { type: 'string', description: 'Optional goal hint for smart command-board recall' },
+                format: { type: 'string', enum: ['markdown', 'json', 'verbose'], description: 'Output shape (default: markdown concise summary)' },
+            },
+            required: [],
+        });
+        // hitl_status — HITL escalations, blockers, verification gates (Hermes / Master Chief)
+        this.registerTool('hitl_status', 'Human-in-the-loop status for Hermes (Master Chief): mission blockers, git-commit approval, verification failures, loop escalation, pause/abort. Returns structured report + Master Chief summary line. Use when monitoring Roland team missions or after poll_hitl_events returns new events.', async (args) => {
+            const ctx = this.resolveToolProjectContext(args);
+            const { buildHitlStatusReport, formatHitlStatusMarkdown, formatHermesHitlSummary, } = await import('../rco/hitl-hermes.js');
+            const report = buildHitlStatusReport(ctx.stateDir);
+            const summary = formatHermesHitlSummary(report);
+            if (args.format === 'json') {
+                return { ...report, summary, project_root: ctx.projectRoot, state_dir: ctx.stateDir };
+            }
+            return {
+                markdown: formatHitlStatusMarkdown(report),
+                summary,
+                report,
+                project_root: ctx.projectRoot,
+                state_dir: ctx.stateDir,
+            };
+        }, {
+            type: 'object',
+            properties: {
+                ...McpServer.PROJECT_CONTEXT_SCHEMA,
+                format: { type: 'string', enum: ['markdown', 'json'], description: 'Output shape (default: markdown)' },
+            },
+            required: [],
+        });
+        // poll_hitl_events — push-style event poll for Hermes (since timestamp)
+        this.registerTool('poll_hitl_events', 'Poll new HITL and mission-complete events since a timestamp (epoch ms). Events append to .roland/hermes-hitl-events.jsonl when Roland hits HITL walls or reaches a terminal mission state. Hermes should poll during active missions; on mission-complete events call mission_summary and report to the operator.', async (args) => {
+            const ctx = this.resolveToolProjectContext(args);
+            const { pollHermesHitlEvents, buildHitlStatusReport, formatHermesHitlSummary } = await import('../rco/hitl-hermes.js');
+            const since = typeof args.since === 'number' ? args.since : 0;
+            const limit = typeof args.limit === 'number' ? args.limit : 50;
+            const events = pollHermesHitlEvents(ctx.stateDir, since, limit);
+            const report = buildHitlStatusReport(ctx.stateDir);
+            return {
+                events,
+                count: events.length,
+                latestTimestamp: events.length > 0 ? events[events.length - 1].timestamp : since,
+                waitingOnHitl: report.waitingOnHitl,
+                summary: formatHermesHitlSummary(report),
+                project_root: ctx.projectRoot,
+                state_dir: ctx.stateDir,
+            };
+        }, {
+            type: 'object',
+            properties: {
+                ...McpServer.PROJECT_CONTEXT_SCHEMA,
+                since: { type: 'number', description: 'Epoch ms — return events newer than this (default 0 = all recent)' },
+                limit: { type: 'number', description: 'Max events to return (default 50)' },
+            },
+            required: [],
+        });
+        const missionSummaryHandler = async (args) => {
+            const ctx = this.resolveToolProjectContext(args);
+            const { readMissionCompletionReport, buildMissionCompletionReport, formatMissionCompleteMarkdown, formatHermesMissionCompleteSummary, } = await import('../rco/hitl-hermes.js');
+            let report = readMissionCompletionReport(ctx.stateDir);
+            if (!report && typeof args.goal === 'string') {
+                report = buildMissionCompletionReport(ctx.stateDir, { goal: args.goal });
+            }
+            if (!report) {
+                return {
+                    found: false,
+                    summary: 'No mission completion recorded yet.',
+                    project_root: ctx.projectRoot,
+                    state_dir: ctx.stateDir,
+                };
+            }
+            const summary = formatHermesMissionCompleteSummary(report);
+            if (args.format === 'json') {
+                return { found: true, ...report, summary, project_root: ctx.projectRoot, state_dir: ctx.stateDir };
+            }
+            return {
+                found: true,
+                markdown: formatMissionCompleteMarkdown(report),
+                summary,
+                report,
+                project_root: ctx.projectRoot,
+                state_dir: ctx.stateDir,
+            };
+        };
+        const missionSummarySchema = {
+            type: 'object',
+            properties: {
+                ...McpServer.PROJECT_CONTEXT_SCHEMA,
+                goal: { type: 'string', description: 'Optional goal hint when no completion snapshot exists yet' },
+                format: { type: 'string', enum: ['markdown', 'json'], description: 'Output shape (default: markdown)' },
+            },
+            required: [],
+        };
+        // mission_summary — latest terminal mission outcome for Hermes (Master Chief)
+        this.registerTool('mission_summary', 'Latest Roland mission completion report for Hermes: goal, final status, success rate, deliverables, blockers, next action. Auto-written when roland team / ClosedLoop reaches a terminal state. Poll via poll_hitl_events (mission-complete kind) or call after mission finishes.', missionSummaryHandler, missionSummarySchema);
+        // report_completion — alias for mission_summary (Hermes hybrid loop compatibility)
+        this.registerTool('report_completion', 'Alias for mission_summary — returns the latest auto-reported mission completion snapshot for Hermes.', missionSummaryHandler, missionSummarySchema);
         // get_team_context — THE HEARTBEAT (structured; pass format:"markdown" for a rendered standup)
         this.registerTool('get_team_context', 'The PM heartbeat. Returns the full team digest: status counts, the blockers/reviews/stalled/ready items that need your attention (blockers first), your inbox, recent decisions, and concrete suggested next actions. Pass format:"markdown" for a rendered standup. Act on needsAttention top-down — unblock before starting new work.', async (args) => {
+            const leadPm = this.scopedLeadPm(args);
             if (args.format === 'markdown')
-                return this.leadPm.getStandup();
-            return this.leadPm.getTeamContext();
+                return leadPm.getStandup();
+            return leadPm.getTeamContext();
         }, {
             type: 'object',
             properties: {
                 format: { type: 'string', enum: ['json', 'markdown'], description: 'Output format. "markdown" returns a rendered standup; default is structured JSON.' },
+                ...McpServer.PROJECT_CONTEXT_SCHEMA,
             },
             required: [],
         });
         // list_team — the roster of engineers
-        this.registerTool('list_team', 'List the available engineer personas you can assign tasks to, with each one\'s specialty and recommended model.', async () => ({ engineers: this.leadPm.listTeam() }), { type: 'object', properties: {}, required: [] });
+        this.registerTool('list_team', 'List Roland engineer personas (executor, architect, test-author, etc.) with specialties and recommended models. Use before spawn_task or assign_task.', async (args) => ({ engineers: this.scopedLeadPm(args).listTeam() }), {
+            type: 'object',
+            properties: { ...McpServer.PROJECT_CONTEXT_SCHEMA },
+            required: [],
+        });
         // spawn_task — register a decomposed task
         this.registerTool('spawn_task', 'Register a decomposed unit of work as a task on the board (status: open). Returns the task plus a dispatch packet (engineer persona, recommended model, assembled brief, context files) you use to launch the engineer in your IDE.', async (args) => {
-            return this.leadPm.spawnTask({
+            return this.scopedLeadPm(args).spawnTask({
                 slug: args.slug,
                 title: args.title,
                 description: args.description,
@@ -2511,12 +2767,13 @@ export class McpServer {
                 dependsOn: { type: 'array', items: { type: 'string' }, description: 'Task keys that must be done before this can start.' },
                 priority: { type: 'string', enum: ['low', 'normal', 'high'] },
                 acceptanceCriteria: { type: 'string', description: 'Concrete bar the work is reviewed against.' },
+                ...McpServer.PROJECT_CONTEXT_SCHEMA,
             },
             required: ['slug', 'title', 'description'],
         });
         // assign_task — assign to an engineer and notify
         this.registerTool('assign_task', 'Assign a task to an engineer (open/in_progress → in_progress), notify them on the bus, and return a fresh dispatch packet to launch them.', async (args) => {
-            return this.leadPm.assignTask({
+            return this.scopedLeadPm(args).assignTask({
                 taskKey: args.taskKey,
                 assignee: args.assignee,
             });
@@ -2525,12 +2782,13 @@ export class McpServer {
             properties: {
                 taskKey: { type: 'string', description: 'Key of the task, e.g. "task:login-ui".' },
                 assignee: { type: 'string', description: 'Engineer persona id (see list_team).' },
+                ...McpServer.PROJECT_CONTEXT_SCHEMA,
             },
             required: ['taskKey', 'assignee'],
         });
         // mark_blocked — raise a blocker (engineer or PM)
         this.registerTool('mark_blocked', 'Flag a task as blocked (in_progress → blocked), recording exactly what is needed and notifying the PM. Engineers call this the moment they are stuck.', async (args) => {
-            return this.leadPm.markBlocked({
+            return this.scopedLeadPm(args).markBlocked({
                 taskKey: args.taskKey,
                 need: args.need,
                 raisedBy: args.raisedBy,
@@ -2548,7 +2806,7 @@ export class McpServer {
         });
         // unblock_task — PM resolves a blocker
         this.registerTool('unblock_task', 'Resolve a blocker with a concrete decision. Records the decision on the board, archives the blocker, returns the task to in_progress once no blockers remain, and notifies the assignee. This is your highest-priority action.', async (args) => {
-            return this.leadPm.unblockTask({
+            return this.scopedLeadPm(args).unblockTask({
                 taskKey: args.taskKey,
                 blockerKey: args.blockerKey,
                 resolution: args.resolution,
@@ -2564,7 +2822,7 @@ export class McpServer {
         });
         // complete_task — engineer submits work for review
         this.registerTool('complete_task', 'Submit completed work: attaches an artifact and moves the task to in_review, notifying the PM. Engineers call this when done. Optionally pass model + input_tokens/output_tokens to attribute Cursor usage in the same call (no need to also call report_usage).', async (args) => {
-            return this.leadPm.completeTask({
+            return this.scopedLeadPm(args).completeTask({
                 taskKey: args.taskKey,
                 summary: args.summary,
                 content: args.content,
@@ -2590,7 +2848,7 @@ export class McpServer {
         });
         // review_task — PM accepts or rejects
         this.registerTool('review_task', 'Review submitted work against its acceptance criteria. accept → done; reject → back to in_progress with your notes, and the engineer is notified to rework.', async (args) => {
-            return this.leadPm.reviewTask({
+            return this.scopedLeadPm(args).reviewTask({
                 taskKey: args.taskKey,
                 decision: args.decision,
                 notes: args.notes,
@@ -2605,12 +2863,20 @@ export class McpServer {
             required: ['taskKey', 'decision'],
         });
         // synthesize_deliverable — final rollup
-        this.registerTool('synthesize_deliverable', 'Roll up all completed tasks and their artifacts into a single deliverable summary for the human PM. Call this when nothing is open/in_progress/blocked/in_review.', async () => this.leadPm.synthesizeDeliverable(), { type: 'object', properties: {}, required: [] });
+        this.registerTool('synthesize_deliverable', 'Roll up all completed tasks and their artifacts into a single deliverable summary for the human PM. Call this when nothing is open/in_progress/blocked/in_review.', async (args) => this.scopedLeadPm(args).synthesizeDeliverable(), {
+            type: 'object',
+            properties: { ...McpServer.PROJECT_CONTEXT_SCHEMA },
+            required: [],
+        });
         // list_team_recipes — the pre-decomposed team templates
-        this.registerTool('list_team_recipes', 'List the bundled team recipes (e.g. full-feature-team, bugfix-team, refactor-team) — pre-decomposed task graphs you can drop onto the board in one call with start_team_recipe.', async () => ({ recipes: this.leadPm.listTeamRecipes() }), { type: 'object', properties: {}, required: [] });
+        this.registerTool('list_team_recipes', 'List the bundled team recipes (e.g. full-feature-team, bugfix-team, refactor-team) — pre-decomposed task graphs you can drop onto the board in one call with start_team_recipe.', async (args) => ({ recipes: this.scopedLeadPm(args).listTeamRecipes() }), {
+            type: 'object',
+            properties: { ...McpServer.PROJECT_CONTEXT_SCHEMA },
+            required: [],
+        });
         // start_team_recipe — instantiate a whole task graph for a goal
         this.registerTool('start_team_recipe', 'Instantiate a team recipe for a goal: seeds the entire task graph on the board (namespaced + dependency-linked) and returns dispatch packets for the tasks ready to start now. Use this to kick off a standard workflow without decomposing by hand.', async (args) => {
-            return this.leadPm.startTeamRecipe({
+            return this.scopedLeadPm(args).startTeamRecipe({
                 recipe: args.recipe,
                 goal: args.goal,
                 namespace: args.namespace,
@@ -2626,7 +2892,7 @@ export class McpServer {
         });
         // report_usage — attribute Cursor token usage to a task/engineer
         this.registerTool('report_usage', 'Attribute Cursor token usage to a task and engineer. Records usage for visibility (cost is $0 — Cursor billing is by subscription) and rolls it onto the task. Engineers can instead pass these fields directly to complete_task.', async (args) => {
-            return this.leadPm.recordUsage({
+            return this.scopedLeadPm(args).recordUsage({
                 taskKey: args.taskKey,
                 engineer: args.engineer,
                 model: args.model,
@@ -2646,7 +2912,7 @@ export class McpServer {
         });
         // get_team_usage — Cursor usage dashboard (pass format:"markdown" for a rendered view)
         this.registerTool('get_team_usage', 'Cursor usage attribution across the team: token/request totals broken down by engineer, model, and task. Figures are usage, not dollars (the PM team runs on the Cursor subscription). Pass format:"markdown" for a rendered view.', async (args) => {
-            const usage = this.leadPm.getTeamUsage();
+            const usage = this.scopedLeadPm(args).getTeamUsage();
             if (args.format === 'markdown')
                 return { markdown: renderUsage(usage), usage };
             return usage;
@@ -2659,7 +2925,7 @@ export class McpServer {
         });
         // get_pm_events — the audit timeline (Phase 4 observability)
         this.registerTool('get_pm_events', 'The PM event timeline: a reverse-chronological audit trail of lifecycle actions (spawn/assign/block/unblock/complete/review/usage/recipe-start) from .roland/pm-events.log. Use this to answer "what happened on this feature?". Pass format:"markdown" for a rendered timeline.', async (args) => {
-            const events = this.leadPm.getPmEvents(args.limit ?? 50, {
+            const events = this.scopedLeadPm(args).getPmEvents(args.limit ?? 50, {
                 action: args.action,
                 taskKey: args.taskKey,
             });
@@ -2686,11 +2952,9 @@ export class McpServer {
     // --------------------------------------------------------------------------
     registerChatTools() {
         // ── roland_hello ──────────────────────────────────────────────────────────
-        this.registerTool('roland_hello', 'Get a welcome message with Roland\'s capabilities and current project state. Call this at the start of a Cursor chat session when @roland is first mentioned in conversation.', async (args) => {
-            const projectRoot = process.env['ROLAND_PROJECT_ROOT']?.trim() || process.cwd();
-            const stateDir = typeof args.state_dir === 'string' && args.state_dir
-                ? args.state_dir
-                : path.join(projectRoot, '.roland');
+        this.registerTool('roland_hello', 'Start-of-session handshake for @roland in Cursor chat. Returns a welcome banner, capabilities table, current board/memory state, and quick-start hints. Call when the user first mentions @roland.', async (args) => {
+            const ctx = this.resolveToolProjectContext(args);
+            const { projectRoot, stateDir } = ctx;
             // ── Memory summary ───────────────────────────────────────────────────
             let memoryStatus = 'No project memory yet — builds automatically after each run.';
             let memoryBulletCount = 0;
@@ -2705,20 +2969,26 @@ export class McpServer {
             // ── Board summary ────────────────────────────────────────────────────
             let boardStatus = 'No active tasks.';
             let blockerCount = 0;
+            let unscSnippet = '';
             try {
-                const bb = JSON.parse(fs.readFileSync(path.join(stateDir, 'blackboard.json'), 'utf-8'));
-                const tasks = Object.entries(bb).filter(([k]) => k.startsWith('task:'));
-                if (tasks.length > 0) {
-                    const counts = {};
-                    for (const [, v] of tasks) {
-                        const s = v.status ?? 'unknown';
-                        counts[s] = (counts[s] ?? 0) + 1;
-                    }
-                    boardStatus = Object.entries(counts).map(([s, n]) => `${n} ${s}`).join(' · ');
-                    blockerCount = counts['blocked'] ?? 0;
+                const { buildBoardStatusReport, formatConciseUnscSummary } = await import('../rco/board-report.js');
+                const report = buildBoardStatusReport(stateDir);
+                blockerCount = report.counts.blockers;
+                if (report.counts.total > 0) {
+                    boardStatus = `${report.counts.total} entries · ${report.counts.blockers} blockers · ${report.counts.done} done`;
                 }
+                unscSnippet = formatConciseUnscSummary(report);
             }
-            catch { /* no board yet */ }
+            catch {
+                try {
+                    const bb = JSON.parse(fs.readFileSync(path.join(stateDir, 'blackboard.json'), 'utf-8'));
+                    const entries = Array.isArray(bb) ? bb : [];
+                    if (entries.length > 0) {
+                        boardStatus = `${entries.length} entries`;
+                    }
+                }
+                catch { /* no board yet */ }
+            }
             // ── Background run status ────────────────────────────────────────────
             let bgStatus = '';
             try {
@@ -2741,13 +3011,27 @@ export class McpServer {
             const greeting = `# 👋 Roland is ready
 
 ${blockerWarning}
+## In Cursor (no Hermes required)
+
+| Mode | Role |
+|------|------|
+| **@roland in chat** | PM, triage, direct edits — self-contained via MCP |
+| **ClosedLoop** | \`roland team "…" --loop-template …\` or \`roland_run_team\` for PACVRE missions |
+| **Dashboard** | Monitor active loops only (\`npm run serve-dashboard\`) |
+
+> **Hermes** (\`roland chat\` CLI) is optional for terminal-only workflows — Cursor users do not need it.
+
 ## What I can do
 
 | Mode | Use when | How |
 |------|----------|-----|
-| **Direct in chat** | Small tasks · 1–3 file edits · Quick bugs | I edit files here in Cursor |
-| **PM Team run** | Features · Refactors · Tests · Security audits | \`roland_run_team({ goal })\` |
+| **Direct in chat** | Single-file edits · Q&A · Quick fixes · < 30 min | I edit files here in Cursor |
+| **Team / ClosedLoop** | Features · Refactors · Tests · Multi-file · > 30 min | \`roland_run_team({ goal })\` or \`roland team … --loop-template …\` |
 | **Background mode** | Long-running goals while you keep working | \`roland team "goal" --background\` in terminal |
+
+> [DEPRECATED] Legacy in-loop PM Team (\`use_pm_team: true\`) — prefer Pure ClosedLoop (default).
+
+Every request is triaged to **Direct** or **Team** — I show the path and reasoning before acting.
 
 ## Current project state
 ${bgStatus}
@@ -2779,7 +3063,7 @@ roland status              # live TUI observer
 roland doctor              # verify install
 npm run serve-dashboard    # usage dashboard → http://127.0.0.1:8081
 \`\`\`
-
+${unscSnippet ? `\n---\n\n${unscSnippet}\n` : ''}
 What would you like to work on?`;
             return {
                 greeting,
@@ -2788,6 +3072,7 @@ What would you like to work on?`;
                     board: boardStatus,
                     blockers: blockerCount,
                     state_dir: stateDir,
+                    project_root: projectRoot,
                 },
                 quick_start: blockerCount > 0
                     ? 'Call pm_standup() first — there are open blockers to resolve.'
@@ -2796,66 +3081,65 @@ What would you like to work on?`;
         }, {
             type: 'object',
             properties: {
-                state_dir: {
-                    type: 'string',
-                    description: 'Path to .roland state directory (default: .roland/ in project root)',
-                },
+                ...McpServer.PROJECT_CONTEXT_SCHEMA,
             },
             required: [],
         });
         // ── roland_run_team ───────────────────────────────────────────────────────
-        this.registerTool('roland_run_team', 'Launch a PM team run for a complex goal directly from Cursor chat. The Lead PM (Opus) decomposes the goal into parallel tasks, dispatches specialist agents, and runs until synthesis. Spawns in the background and returns immediately. Track progress with pm_standup() or get_team_context().', async (args) => {
+        this.registerTool('roland_run_team', 'Launch a background PM team run for goals on the **Team** execution path. Use when work needs multi-file changes, Sparrow + Vanguard test orchestration, Command Blackboard tracking, wave synthesis, or > 30–45 min effort. Pass `project_root` (or `cwd`) when triggering from Hermes in a repo other than the MCP server cwd. Pass `loop_template` (e.g. closed-loop-harness, feature-implementation-loop) to route through **ClosedLoop** instead of legacy PM waves. Also use when the operator forces team mode via --force-team, "force team", "full team", "run as team", or "spawn team" (no confirmation needed — launch immediately). Do NOT use for single-file edits, Q&A, or quick fixes unless force-team was explicitly requested. Trade-off: team runs add PM overhead but provide parallel callsigns, blocker surfacing, and Mission Complete synthesis. Returns immediately; track with pm_standup() or get_team_context().', async (args) => {
             const goal = args.goal;
             if (!goal || typeof goal !== 'string' || !goal.trim()) {
                 throw new McpToolError('roland_run_team', '"goal" is required — describe what you want the team to build or fix');
             }
-            const projectRoot = process.env['ROLAND_PROJECT_ROOT']?.trim() || process.cwd();
-            const stateDir = typeof args.state_dir === 'string' && args.state_dir
-                ? args.state_dir
-                : path.join(projectRoot, '.roland');
-            // Locate the roland CLI entry point (dist/index.js from dist/server/)
-            let entryPoint;
-            try {
-                const thisFile = fileURLToPath(import.meta.url);
-                entryPoint = path.resolve(path.dirname(thisFile), '..', 'index.js');
-                if (!fs.existsSync(entryPoint))
-                    throw new Error('not found');
-            }
-            catch {
-                entryPoint = path.join(process.cwd(), 'dist', 'index.js');
-            }
-            // Prepare log file
-            const logDir = path.join(stateDir, 'logs');
-            fs.mkdirSync(logDir, { recursive: true });
-            const ts = Date.now();
-            const logFile = path.join(logDir, `chat-${ts}.log`);
-            const logFd = fs.openSync(logFile, 'a');
-            // Spawn detached — unref so the MCP server doesn't wait for it
-            const { spawn } = await import('child_process');
-            const child = spawn(process.execPath, [entryPoint, 'team', goal.trim(), '--background'], {
-                cwd: projectRoot,
-                detached: true,
-                stdio: ['ignore', logFd, logFd],
-                env: { ...process.env },
-            });
-            child.unref();
-            fs.closeSync(logFd);
-            const pid = child.pid ?? 0;
+            const ctx = this.resolveToolProjectContext(args);
+            const { projectRoot, stateDir: resolvedStateDir } = ctx;
+            const loopTemplate = typeof args.loop_template === 'string' ? args.loop_template.trim() : '';
+            const teamArgv = [
+                'team',
+                goal.trim(),
+                '--background',
+                '--quiet',
+                '--no-tui',
+                '--clean',
+                '--state-dir',
+                resolvedStateDir,
+            ];
+            if (loopTemplate)
+                teamArgv.push('--loop-template', loopTemplate);
+            process.env['ROLAND_TRIGGERED_VIA'] = 'mcp';
+            sanitizeStaleMissionState(resolvedStateDir);
+            prepareMissionStart(resolvedStateDir, goal.trim(), { projectRoot });
+            const { pid, logFile } = await spawnBackground(goal.trim(), teamArgv, resolvedStateDir, { quiet: true, projectRoot });
             const truncatedGoal = goal.trim().slice(0, 100) + (goal.trim().length > 100 ? '…' : '');
+            writeMissionMetaFile(resolvedStateDir, {
+                id: randomUUID(),
+                goal: goal.trim(),
+                effectiveGoal: goal.trim(),
+                status: 'active',
+                startedAt: Date.now(),
+                pid,
+                logFile,
+                projectRoot,
+                stateDir: resolvedStateDir,
+                triggeredVia: 'mcp',
+                loopTemplate: loopTemplate || null,
+            });
             return {
                 started: true,
                 goal: truncatedGoal,
                 pid,
                 log_file: logFile,
-                state_dir: stateDir,
+                state_dir: resolvedStateDir,
+                project_root: projectRoot,
+                triggered_via: 'mcp',
                 message: `✅ PM team started (PID ${pid}):\n"${truncatedGoal}"`,
                 next_steps: [
-                    'Call pm_standup() in ~30 seconds to see the task plan once Wave 1 begins',
-                    'Call get_team_context() for the full structured board state',
+                    `Call pm_standup({ project_root: "${projectRoot}" }) in ~30 seconds to see the task plan once Wave 1 begins`,
+                    `Call get_team_context({ project_root: "${projectRoot}" }) for the full structured board state`,
                     'Run `roland bg-status` in your terminal to check background job health',
                     `Logs: ${logFile}`,
                 ],
-                tip: 'The Lead PM is decomposing your goal now. Wave 1 kicks off in ~30 s — call pm_standup() to see the plan and any early blockers.',
+                tip: '[DEPRECATED] Legacy Lead PM is decomposing your goal. Prefer Pure ClosedLoop — call pm_standup() to see the plan and any early blockers.',
             };
         }, {
             type: 'object',
@@ -2864,9 +3148,10 @@ What would you like to work on?`;
                     type: 'string',
                     description: 'The engineering goal for the PM team. Be specific: include scope, constraints, and what "done" looks like. Examples: "add JWT refresh token rotation — 15-min access, 7-day refresh, stored in Redis" or "fix the N+1 query in GET /users — use eager loading for the roles relation".',
                 },
-                state_dir: {
+                ...McpServer.PROJECT_CONTEXT_SCHEMA,
+                loop_template: {
                     type: 'string',
-                    description: 'Path to .roland state directory (default: .roland/ in project root). Omit to use the project default.',
+                    description: 'Optional loop template id (e.g. closed-loop-harness, feature-implementation-loop). Routes through ClosedLoop harness — not legacy PM waves.',
                 },
             },
             required: ['goal'],
@@ -2941,5 +3226,58 @@ What would you like to work on?`;
             return process.cwd();
         }
     }
+}
+// ============================================================================
+// Standalone MCP entry (node dist/server/mcp-server.js)
+// ============================================================================
+function isMcpMainModule() {
+    const entry = process.argv[1];
+    if (!entry)
+        return false;
+    try {
+        return path.resolve(entry) === path.resolve(fileURLToPath(import.meta.url));
+    }
+    catch {
+        return false;
+    }
+}
+/** Run Roland as a stdio MCP server — used by `npm run mcp`, Cursor, and `roland serve`. */
+export async function runMcpServer() {
+    configureSdkProcessLimits();
+    const { loadConfig } = await import('../config/config-loader.js');
+    if (process.env.ROLAND_QUIET === '1' || process.env.ROLAND_QUIET === 'true') {
+        logger.setLevel('warn');
+    }
+    process.on('uncaughtException', (err) => {
+        logger.error(`Uncaught exception: ${err.message}`, err.stack ? { stack: err.stack } : undefined);
+        process.exit(1);
+    });
+    process.on('unhandledRejection', (reason) => {
+        const message = reason instanceof Error ? reason.message : String(reason);
+        const stack = reason instanceof Error ? reason.stack : undefined;
+        logger.error(`Unhandled rejection: ${message}`, stack ? { stack } : undefined);
+    });
+    logger.info('Starting Roland MCP server…');
+    const config = await loadConfig();
+    const server = new McpServer(config);
+    let shutdownPromise = null;
+    const shutdown = (signal) => {
+        if (shutdownPromise)
+            return;
+        logger.info(`Received ${signal} — shutting down gracefully`);
+        shutdownPromise = server.stop().finally(() => process.exit(0));
+    };
+    process.once('SIGINT', () => shutdown('SIGINT'));
+    process.once('SIGTERM', () => shutdown('SIGTERM'));
+    await server.start();
+    logger.info('Waiting for MCP client on stdio…');
+}
+if (isMcpMainModule()) {
+    runMcpServer().catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        const stack = error instanceof Error ? error.stack : undefined;
+        logger.error(`Fatal MCP startup error: ${message}`, stack ? { stack } : undefined);
+        process.exit(1);
+    });
 }
 //# sourceMappingURL=mcp-server.js.map

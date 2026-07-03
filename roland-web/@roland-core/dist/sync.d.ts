@@ -9,8 +9,8 @@ export declare const SyncRemoteSchema: z.ZodObject<{
     branch: z.ZodDefault<z.ZodString>;
 }, "strip", z.ZodTypeAny, {
     name: string;
-    url: string;
     branch: string;
+    url: string;
 }, {
     name: string;
     url: string;

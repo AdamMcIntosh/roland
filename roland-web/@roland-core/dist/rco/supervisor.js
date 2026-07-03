@@ -1,4 +1,6 @@
 /**
+ * ## MCP Project Context Fix
+ *
  * Roland Supervisor — true background / detached process mode.
  *
  * Usage (from CLI):
@@ -26,11 +28,13 @@
  *   - Child processes are fully detached (stdio=ignore, unref()).
  *   - ROLAND_NOTIFY=1 is honoured in background runs even without --notify flag.
  */
-import { spawn } from 'child_process';
+import { spawnSilent } from '../utils/spawn-silent.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { readRunState } from './run-state.js';
+import { sanitizeStaleMissionState } from './mission-state.js';
+import { applyMcpProjectEnv, chdirToProject, deriveProjectRootFromStateDir, resolveMcpProjectContext, } from '../utils/mcp-project-context.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MAX_RESTARTS = 3;
 const RESTART_DELAY_MS = 30_000; // 30 s × attempt number
@@ -96,6 +100,10 @@ function phaseLabel(status, wave) {
 }
 // ── bg-status ─────────────────────────────────────────────────────────────────
 export function bgStatus(stateDir, json = false) {
+    sanitizeStaleMissionState(stateDir, (msg, detail) => {
+        const extra = detail ? ` ${JSON.stringify(detail)}` : '';
+        process.stderr.write(`[STATE] ${msg}${extra}\n`);
+    });
     const rec = readSupervisorRecord(stateDir);
     const runState = readRunState(stateDir);
     if (!rec) {
@@ -374,50 +382,60 @@ export function bgStop(stateDir) {
  * The parent writes a PID record and unrefs the child.
  */
 export async function spawnBackground(goal, teamArgv, // full argv as passed to runTeamCli, includes 'team' prefix
-stateDir) {
+stateDir, opts) {
+    const resolvedStateDir = path.resolve(stateDir);
+    const projectRoot = opts?.projectRoot?.trim()
+        ? path.resolve(opts.projectRoot)
+        : deriveProjectRootFromStateDir(resolvedStateDir);
     const supervisorScript = path.join(__dirname, 'supervisor.js');
     if (!fs.existsSync(supervisorScript)) {
         throw new Error(`Supervisor script not found at ${supervisorScript}. Run \`npm run build\` first.`);
     }
-    const logDir = path.join(stateDir, SUPERVISOR_LOG_DIR);
+    const logDir = path.join(resolvedStateDir, SUPERVISOR_LOG_DIR);
     fs.mkdirSync(logDir, { recursive: true });
     const ts = Date.now();
     const logFile = path.join(logDir, `bg-${ts}.log`);
-    const logFd = fs.openSync(logFile, 'w');
     // Filter out the background flags; the worker runs with --quiet + --no-tui
     const filteredArgs = teamArgv.filter((a) => a !== '--background' && a !== '--detach' && a !== '-b');
-    const child = spawn(process.execPath, [supervisorScript, '--background-worker', goal, ...filteredArgs], {
-        detached: true,
-        stdio: ['ignore', logFd, logFd],
-        env: { ...process.env, ROLAND_STATE_DIR: stateDir },
+    const child = spawnSilent(process.execPath, [supervisorScript, '--background-worker', goal, ...filteredArgs], {
+        cwd: projectRoot,
+        env: {
+            ROLAND_STATE_DIR: resolvedStateDir,
+            ROLAND_PROJECT_ROOT: projectRoot,
+            ROLAND_ROOT: projectRoot,
+            ...(process.env['ROLAND_TRIGGERED_VIA']
+                ? { ROLAND_TRIGGERED_VIA: process.env['ROLAND_TRIGGERED_VIA'] }
+                : {}),
+        },
+        log: { logFile, logMode: 'w' },
     });
     if (!child.pid) {
-        fs.closeSync(logFd);
         throw new Error('Failed to spawn background process — no PID assigned');
     }
-    writeSupervisorRecord(stateDir, {
+    writeSupervisorRecord(resolvedStateDir, {
         pid: child.pid,
         goal: goal.slice(0, 120),
         startedAt: ts,
         logFile,
         restarts: 0,
     });
-    child.unref();
-    fs.closeSync(logFd);
-    const dim = (s) => `\x1b[2m${s}\x1b[0m`;
-    const bold = (s) => `\x1b[1m${s}\x1b[0m`;
-    const cyan = (s) => `\x1b[36m${s}\x1b[0m`;
-    process.stderr.write('\n');
-    process.stderr.write(`  ${bold('✅ Roland is running in the background')}\n`);
-    process.stderr.write(`\n`);
-    process.stderr.write(`  ${dim('PID')}       ${child.pid}\n`);
-    process.stderr.write(`  ${dim('Goal')}      ${goal.slice(0, 70)}${goal.length > 70 ? '…' : ''}\n`);
-    process.stderr.write(`  ${dim('Logs')}      ${logFile}\n`);
-    process.stderr.write(`\n`);
-    process.stderr.write(`  ${cyan('roland bg-status')}           check progress + wave info\n`);
-    process.stderr.write(`  ${cyan('roland bg-logs --follow')}    stream log output live\n`);
-    process.stderr.write(`  ${cyan('roland bg-stop')}             gracefully stop the run\n`);
-    process.stderr.write('\n');
+    if (!opts?.quiet) {
+        const dim = (s) => `\x1b[2m${s}\x1b[0m`;
+        const bold = (s) => `\x1b[1m${s}\x1b[0m`;
+        const cyan = (s) => `\x1b[36m${s}\x1b[0m`;
+        process.stderr.write('\n');
+        process.stderr.write(`  ${bold('✅ Roland is running in the background')}\n`);
+        process.stderr.write(`\n`);
+        process.stderr.write(`  ${dim('PID')}       ${child.pid}\n`);
+        process.stderr.write(`  ${dim('Goal')}      ${goal.slice(0, 70)}${goal.length > 70 ? '…' : ''}\n`);
+        process.stderr.write(`  ${dim('Logs')}      ${logFile}\n`);
+        process.stderr.write(`\n`);
+        process.stderr.write(`  ${cyan('roland bg-status')}           check progress + wave info\n`);
+        process.stderr.write(`  ${cyan('roland bg-logs --follow')}    stream log output live\n`);
+        process.stderr.write(`  ${cyan('roland bg-stop')}             gracefully stop the run\n`);
+        process.stderr.write('\n');
+    }
+    return { pid: child.pid, logFile };
 }
 // ── Supervisor worker main (runs inside the detached process) ─────────────────
 /**
@@ -429,7 +447,10 @@ async function supervisorWorkerMain(argv) {
     // argv[0] = '--background-worker', argv[1] = goal, argv[2+] = team args
     const goal = argv[1] ?? '';
     const teamArgs = argv.slice(2);
-    const stateDir = process.env.ROLAND_STATE_DIR ?? '.roland';
+    const ctx = resolveMcpProjectContext({ state_dir: process.env['ROLAND_STATE_DIR'] ?? '.roland' });
+    applyMcpProjectEnv(ctx);
+    chdirToProject(ctx);
+    const stateDir = ctx.stateDir;
     // Inject --notify when ROLAND_NOTIFY=1 is set globally but --notify wasn't passed
     const needsNotify = (process.env.ROLAND_NOTIFY === '1' || process.env.ROLAND_NOTIFY === 'true') &&
         !teamArgs.includes('--notify') &&
@@ -438,6 +459,18 @@ async function supervisorWorkerMain(argv) {
     process.stderr.write(`[Supervisor] Starting: ${goal.slice(0, 60)}\n`);
     process.stderr.write(`[Supervisor] State dir: ${stateDir}\n`);
     process.stderr.write(`[Supervisor] Max restarts: ${MAX_RESTARTS}\n`);
+    // Loop recovery intel — checkpoint / loop-state available for orchestrator resume.
+    try {
+        const { tryRecoverLoopState } = await import('../loop-engine/loop-checkpoint.js');
+        const recovery = tryRecoverLoopState(stateDir);
+        if (recovery.recovered) {
+            process.stderr.write(`[Supervisor] Loop recovery available from ${recovery.source} ` +
+                `(phase=${recovery.phase} iter=${recovery.state?.iteration})\n`);
+        }
+    }
+    catch {
+        // Loop engine not built — supervisor continues without recovery hint.
+    }
     if (needsNotify)
         process.stderr.write(`[Supervisor] ROLAND_NOTIFY=1 detected — notifications enabled\n`);
     process.stderr.write('\n');

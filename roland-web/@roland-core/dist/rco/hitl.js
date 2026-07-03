@@ -20,6 +20,8 @@
  */
 import fs from 'fs';
 import path from 'path';
+import { isSupervisorAlive, isRunStateActive } from './mission-state.js';
+import { emitHermesHitlEvent } from './hitl-hermes.js';
 export const HITL_COMMAND_FILE = 'hitl.json';
 export const HITL_STATE_FILE = 'hitl-state.json';
 export const HITL_POLL_INTERVAL_MS = 2_000;
@@ -39,6 +41,7 @@ export class HitlQueue {
         queue.push({ ...cmd, timestamp: Date.now() });
         this.writeQueue(queue);
         this._updateObserverState(cmd.cmd);
+        this._emitHermesCommand(cmd);
     }
     // ── Orchestrator side (read) ─────────────────────────────────────────────
     /** Drain and return all pending commands, clearing the file. */
@@ -79,6 +82,18 @@ export class HitlQueue {
         };
         fs.mkdirSync(path.dirname(this.stateFile), { recursive: true });
         fs.writeFileSync(this.stateFile, JSON.stringify(state, null, 2), 'utf-8');
+        if (paused) {
+            try {
+                const stateDir = path.dirname(this.stateFile);
+                emitHermesHitlEvent(stateDir, {
+                    kind: 'hitl-pause',
+                    blockerDescription: 'Run paused by operator — awaiting resume',
+                    currentGate: 'pause',
+                    suggestedActions: ['roland resume', 'roland inject "<directive>"', 'roland abort'],
+                });
+            }
+            catch { /* non-fatal */ }
+        }
     }
     /** Block until resumed, returns true if run should be aborted. */
     async waitForResume() {
@@ -128,6 +143,20 @@ export class HitlQueue {
     writeQueue(queue) {
         fs.mkdirSync(path.dirname(this.cmdFile), { recursive: true });
         fs.writeFileSync(this.cmdFile, JSON.stringify(queue, null, 2), 'utf-8');
+    }
+    _emitHermesCommand(cmd) {
+        try {
+            const stateDir = path.dirname(this.cmdFile);
+            if (cmd.cmd === 'abort') {
+                emitHermesHitlEvent(stateDir, {
+                    kind: 'hitl-abort-pending',
+                    blockerDescription: 'Abort queued — run will stop after current wave',
+                    currentGate: 'abort',
+                    suggestedActions: ['roland resume  # if paused', 'roland bg-stop  # immediate stop'],
+                });
+            }
+        }
+        catch { /* non-fatal */ }
     }
     /**
      * Refresh the observer-facing state file (hitl-state.json) with the current
@@ -182,16 +211,9 @@ export function printHitlStatus(stateDir) {
     process.stderr.write(`  Paused:  ${paused}${pausedAt ? ` (since ${new Date(pausedAt).toLocaleTimeString()})` : ''}\n`);
     process.stderr.write(`  Pending commands: ${queueLen}\n`);
 }
-/** Returns true if a run is currently active (not done or error). */
+/** Returns true when a supervisor or fresh run-state indicates an active mission. */
 export function isRunActive(stateDir) {
-    try {
-        const raw = fs.readFileSync(path.join(stateDir, 'run-state.json'), 'utf-8');
-        const st = JSON.parse(raw);
-        return st.status !== 'done' && st.status !== 'error';
-    }
-    catch {
-        return false;
-    }
+    return isSupervisorAlive(stateDir) || isRunStateActive(stateDir);
 }
 /** Returns the goal of the current/last run, or null. */
 export function readRunGoal(stateDir) {

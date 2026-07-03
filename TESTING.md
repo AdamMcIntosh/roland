@@ -250,29 +250,30 @@ Opens WebSocket on port 8080. In another terminal, run `npm run serve-dashboard`
 
 ---
 
-## Daily Driver Smoke Test (Goose + Roland)
+## Daily Driver Smoke Test (Cursor + Roland)
 
-End-to-end validation that Roland is ready for everyday use as a Goose coding agent.
+End-to-end validation that Roland is ready for everyday use as a Cursor MCP server.
 Run these tests in order after a fresh setup or upgrade.
 
 ### Prerequisites
 
-- Goose installed and configured (`goose session` starts without errors)
-- Roland listed in `/tools` (~22 tools under the `roland` extension)
-- OpenRouter account with credits (https://openrouter.ai/credits)
+- Cursor or VS Code with Roland MCP configured (green status in Settings → MCP)
+- Roland built (`npm run build` in the Roland install directory)
 
 ---
 
 ### Test 1: Verify Tools Connected
 
+In Cursor chat:
+
 ```
-/tools
+Use the health_check tool
 ```
 
-**Pass:** You see ~22 Roland tools including `health_check`, `triage`, `route_model`,
+**Pass:** Returns `status: healthy` with a list of available tools including `health_check`, `triage`, `route_model`,
 `preview_changes`, `session_context`, `git_status`, `git_diff`, `git_log`, `git_commit`,
 `manage_budget`, `track_cost`, `get_analytics`, `start_recipe`, `advance_recipe`,
-`list_recipes`, `suggest_mode`, `run_goose_task`, `project_context`,
+`list_recipes`, `suggest_mode`, `project_context`,
 `load_migration_context`, `update_migration_context`, `quality_signal`, `analyze_screenshot`.
 
 ---
@@ -283,7 +284,7 @@ Run these tests in order after a fresh setup or upgrade.
 Use the health_check tool
 ```
 
-**Pass:** Returns `status: healthy` with `tools_available: 22`.
+**Pass:** Returns `status: healthy`.
 
 ---
 
@@ -363,20 +364,19 @@ Use the list_recipes tool
 
 **Pass:** Returns 9+ recipes.
 
-In a **separate terminal**, run a recipe end-to-end:
+In a **separate terminal**, run a team mission:
 
 ```bash
-goose run --recipe ~/.roland/roland/goose/recipes/roland-plan-exec-rev-ex.yaml --task "Build a simple CLI todo app in TypeScript with JSON file storage"
+roland team "Build a simple CLI todo app in TypeScript with JSON file storage" --loop-template full-cycle-verified-loop
 ```
 
-**Pass:** Recipe completes all steps (Planner → Executor → Reviewer → Explainer)
-and produces working TypeScript code.
+**Pass:** Mission completes with verification gates and produces working TypeScript code.
 
 ---
 
 ### Test 7: Session Persistence
 
-Start a **fresh** Goose session in the same folder:
+Start a **fresh** Cursor chat in the same project:
 
 ```
 Continue working on the todo app we just built. Add a search feature and update the tests.
@@ -431,14 +431,13 @@ Use the preview_changes tool with file_path "test-file.txt" and original_content
 
 If you just need fast validation:
 
-1. `goose session`
-2. `/tools` → Roland tools listed
-3. `Use the health_check tool` → `status: healthy`
-4. `Use the manage_budget tool with action "get_status"` → budget info returned
-5. `Use the triage tool with query "fix a bug in the login form"` → triage response
-6. `Use the git_status tool` → git info returned
+1. Open Cursor chat in a Roland-init project
+2. `Use the health_check tool` → `status: healthy`
+3. `Use the manage_budget tool with action "get_status"` → budget info returned
+4. `Use the triage tool with message "fix a bug in the login form"` → triage response
+5. `Use the git_status tool` → git info returned
 
-All 6 pass = ready for daily use.
+All 5 pass = ready for daily use.
 
 ---
 
@@ -446,13 +445,13 @@ All 6 pass = ready for daily use.
 
 | Symptom | Fix |
 |---------|-----|
-| Roland tools not in `/tools` | Check Goose config has Roland extension, restart session |
+| Roland tools not available in chat | Check MCP config path, rebuild (`npm run build`), restart Cursor |
 | `health_check` fails | Rebuild: `cd ~/.roland/roland && npm run build` |
 | "Credits exhausted" on every call | Top up at https://openrouter.ai/credits |
 | Budget not degrading to free models | Set budget with `manage_budget` `set_limit` first |
-| Recipe not found | Check path: `ls ~/.roland/roland/goose/recipes/` |
+| Team mission fails | Check `roland board-status --concise` for blockers |
 | Session context empty | Use `session_context` with `action: observe` to record context first |
-| Roland in config but not loading | Use full path to node in Goose config cmd field |
+| MCP server red in settings | Verify absolute path to `dist/index.js` in `.cursor/mcp.json` |
 
 ---
 

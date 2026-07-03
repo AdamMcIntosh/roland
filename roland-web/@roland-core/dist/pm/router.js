@@ -7,12 +7,12 @@
  * forward-compatibility (a future heuristic could nuance within a lane) but is
  * not currently used: the engineer's persona alone determines the lane.
  */
-import { DEFAULT_MODEL_POLICY, laneForEngineer, modelForLane, PROVIDER, } from './model-policy.js';
+import { laneForEngineer, modelForLane, modelPolicyFromRouter, PROVIDER, } from './model-policy.js';
 export class TaskRouter {
     policy;
     laneOverrides;
     constructor(opts = {}) {
-        this.policy = opts.policy ?? DEFAULT_MODEL_POLICY;
+        this.policy = opts.policy ?? modelPolicyFromRouter();
         this.laneOverrides = opts.laneOverrides ?? {};
     }
     route(_taskDescription, engineerName) {

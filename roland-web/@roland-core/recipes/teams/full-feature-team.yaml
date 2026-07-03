@@ -26,6 +26,9 @@ tasks:
       Keep changes scoped to this feature.
     acceptanceCriteria: >
       Feature works per the design; no out-of-scope changes; builds clean.
+      If git workflow opens a draft PR, title follows conventional format
+      (feat/fix/refactor(scope): description) — no Task task-N or [Mission: …] prefixes;
+      see docs/guides/pr-title-convention.md.
 
   - slug: write-tests
     title: "Write tests: {{goal}}"

@@ -1,0 +1,200 @@
+/**
+ * Roland execution-path triage — Direct (Cursor chat) vs Team (roland team + ClosedLoop template).
+ *
+ * Used by:
+ *   - MCP `triage` tool (execution_path field)
+ *   - Orchestrator / Roland system prompts (EXECUTION_PATH_FRAMEWORK)
+ *   - Triage Router skill (.hermes/SKILL.md) and triage-router.ts
+ *   - Unit tests for routing examples
+ */
+import { recommendLoopTemplate, buildRolandTeamCommand, } from './triage-router.js';
+/** Case-insensitive triggers that force Team path regardless of task size. */
+export const FORCE_TEAM_TRIGGERS = [
+    { pattern: /--force-team\b/i, label: '--force-team' },
+    { pattern: /\bforce team\b/i, label: 'force team' },
+    { pattern: /\bfull team\b/i, label: 'full team' },
+    { pattern: /\brun as team\b/i, label: 'run as team' },
+    { pattern: /\bspawn team\b/i, label: 'spawn team' },
+];
+/** Detect power-user force-team override in the operator message. */
+export function detectForceTeam(message) {
+    return FORCE_TEAM_TRIGGERS.some(({ pattern }) => pattern.test(message));
+}
+/** Return the matched force-team trigger label, if any. */
+export function matchedForceTeamTrigger(message) {
+    for (const { pattern, label } of FORCE_TEAM_TRIGGERS) {
+        if (pattern.test(message))
+            return label;
+    }
+    return null;
+}
+/** Strip force-team triggers so the remainder is a clean goal for PM team runs. */
+export function stripForceTeamTriggers(message) {
+    let result = message;
+    for (const { pattern } of FORCE_TEAM_TRIGGERS) {
+        result = result.replace(pattern, ' ');
+    }
+    return result
+        .replace(/\s+/g, ' ')
+        .replace(/^\s*[:\-–—]\s*/, '')
+        .trim();
+}
+/** Embedded in Roland system prompts — keep in sync with classifyExecutionPath heuristics. */
+export const EXECUTION_PATH_FRAMEWORK = `## Execution Path Triage (mandatory — every new request)
+
+**Hybrid model:** In Cursor, \`@roland\` + MCP triage is self-contained (no Hermes). Roland ClosedLoop = execution engine · Pure ClosedLoop default (\`use_pm_team: false\`).
+
+Before acting, classify the request as **Direct** or **Team (ClosedLoop mission)**. State your decision visibly in one line (use the \`summary\` shape from \`triage\` when available).
+
+### Direct — handle in this Cursor chat (fast path)
+
+- Small, **single-file** edits (comment, typo, rename, one-liner)
+- Simple questions, debugging help, research, or quick fixes
+- Clarifications or planning discussions (no implementation yet)
+- Tasks estimated **< 30 minutes**
+- No structured tests or full PACVRE loop required
+
+**When Direct:** proceed immediately with Cursor tools. Do **not** call \`roland_run_team\`.
+
+### Team — spawn Pure ClosedLoop mission (recommended for multi-step work)
+
+- Multi-step features or refactors
+- Multiple files / components / services
+- Needs testing, verification gates, reflection, or loop memory
+- Estimated **> 30–45 minutes**
+
+**When Team:** do **not** start implementing in chat. Triage in Cursor via \`@roland\`, then offer:
+
+\`\`\`bash
+roland team "<goal>" --loop-template full-cycle-verified-loop
+\`\`\`
+
+Template preference: \`full-cycle-verified-loop\` (default) · \`feature-implementation-loop\` · \`refactor-and-modernize-loop\` · \`research-and-spec-loop\`.
+
+Wait for operator confirmation unless they used a force-team trigger.
+
+> [DEPRECATED] Do not suggest legacy LeadPM / \`use_pm_team: true\` unless the operator explicitly requests legacy PM behavior.
+
+### Force-team override (power user)
+
+Operators can bypass scoring and force **Team** with any of these triggers (case-insensitive):
+
+- \`--force-team\`
+- \`force team\`
+- \`full team\`
+- \`run as team\`
+- \`spawn team\`
+
+**When force-team is detected:** skip normal triage scoring, respond *"Understood — forcing full team mission."*, and launch with \`execution_path.team_command\` (includes \`--loop-template\`) immediately — no confirmation.
+
+### Trade-offs
+
+| Path | Pros | Cons |
+|------|------|------|
+| **Direct** | Fast feedback, low overhead, ideal for Q&A and tiny edits | No PACVRE loop, verification gates, or loop memory |
+| **Team + ClosedLoop** | @roland triage + Roland harness, EvaluationGate, reflection, clean PR output | Higher latency; overkill for trivial edits |`;
+const DIRECT_SIGNALS = [
+    { pattern: /\badd (a )?comment\b/i, reason: 'Single-file comment edit', weight: 5 },
+    { pattern: /\b(fix|correct) (a )?(typo|spelling)\b/i, reason: 'Typo or spelling fix', weight: 5 },
+    { pattern: /\b(rename|remove unused|delete unused)\b/i, reason: 'Small rename or cleanup', weight: 4 },
+    { pattern: /\b(why|how does|how do|what is|what are|explain|describe)\b/i, reason: 'Question or explanation', weight: 4 },
+    { pattern: /\b(debug help|help me debug|investigate why)\b/i, reason: 'Debugging assistance', weight: 3 },
+    { pattern: /\b(clarify|clarification|planning discussion|discuss approach)\b/i, reason: 'Planning or clarification', weight: 4 },
+    { pattern: /\bquick fix\b/i, reason: 'Explicit quick fix', weight: 4 },
+    { pattern: /\bone[- ]line(r)?\b/i, reason: 'One-liner scope', weight: 4 },
+    { pattern: /\b(read|show|list|find where)\b/i, reason: 'Read-only research', weight: 3 },
+];
+const TEAM_SIGNALS = [
+    { pattern: /\brefactor\b/i, reason: 'Multi-step refactor', weight: 5 },
+    { pattern: /\bimplement\b/i, reason: 'Feature implementation', weight: 4 },
+    { pattern: /\b(multi[- ]step|end[- ]to[- ]end|full feature|complete)\b/i, reason: 'Multi-step or full feature', weight: 5 },
+    { pattern: /\b(test|tests|testing|unit test|regression|e2e|test suite)\b/i, reason: 'Requires test orchestration', weight: 4 },
+    { pattern: /\b(blackboard|command blackboard|synthesis|structured waves?)\b/i, reason: 'Blackboard / synthesis workflow', weight: 5 },
+    { pattern: /\b(migration|migrate|rewrite|overhaul)\b/i, reason: 'Large migration or rewrite', weight: 5 },
+    { pattern: /\b(oauth|authentication system|authorization flow)\b/i, reason: 'Cross-cutting auth work', weight: 4 },
+    { pattern: /\bsecurity audit\b/i, reason: 'Security audit scope', weight: 5 },
+    { pattern: /\b(across|throughout|multiple files|several files|all endpoints|every route)\b/i, reason: 'Multi-file / multi-component scope', weight: 4 },
+    { pattern: /\b\w+\s+service\b/i, reason: 'Service-level change', weight: 3 },
+    { pattern: /\b(integrate|integration with)\b/i, reason: 'Integration work', weight: 3 },
+    { pattern: /\b(with pino|with winston|with logging|structured logging|request logging)\b/i, reason: 'Structured logging feature', weight: 4 },
+    { pattern: /\bsparrow\b.*\bvanguard\b|\bvanguard\b.*\bsparrow\b/i, reason: 'Explicit Sparrow + Vanguard collaboration', weight: 6 },
+];
+const SINGLE_FILE_PATTERN = /\b(?:to|in|on|into|file)\s+[\w./-]+\.(?:ts|tsx|js|jsx|mjs|cjs|py|go|rs|md|yaml|yml)\b/i;
+const MULTI_FILE_PATTERN = /\b(across|throughout|multiple files|several files|all endpoints|every route|components?)\b/i;
+function buildTeamPathExtras(goal) {
+    const loopRec = recommendLoopTemplate(goal);
+    return {
+        loopTemplate: loopRec.template,
+        loopTemplateReason: loopRec.reason,
+        teamCommand: buildRolandTeamCommand(goal, loopRec.template),
+    };
+}
+/** Classify whether Roland should act in chat (direct) or offer a ClosedLoop mission (team). */
+export function classifyExecutionPath(message) {
+    const trimmed = message.trim();
+    if (!trimmed) {
+        return {
+            path: 'direct',
+            reasons: ['Empty message — default to direct'],
+            estimatedMinutes: 5,
+            teamOffer: null,
+            summary: '**Execution path:** Direct (default)',
+        };
+    }
+    const forceTrigger = matchedForceTeamTrigger(trimmed);
+    if (forceTrigger) {
+        const cleanedGoal = stripForceTeamTriggers(trimmed) || trimmed;
+        const extras = buildTeamPathExtras(cleanedGoal);
+        return {
+            path: 'team',
+            forced: true,
+            cleanedGoal,
+            ...extras,
+            reasons: [`Force-team override (${forceTrigger}) — bypassing normal triage scoring`],
+            estimatedMinutes: 45,
+            teamOffer: `Understood — forcing full team mission. Launch \`${extras.teamCommand}\` now (no confirmation needed). ` +
+                `Why ${extras.loopTemplate}? ${extras.loopTemplateReason}`,
+            summary: '**Execution path:** Team — force-team override (operator request)',
+        };
+    }
+    let score = 0;
+    const reasons = [];
+    for (const { pattern, reason, weight } of DIRECT_SIGNALS) {
+        if (pattern.test(trimmed)) {
+            score -= weight;
+            reasons.push(`Direct: ${reason}`);
+        }
+    }
+    for (const { pattern, reason, weight } of TEAM_SIGNALS) {
+        if (pattern.test(trimmed)) {
+            score += weight;
+            reasons.push(`Team: ${reason}`);
+        }
+    }
+    const hasSingleFile = SINGLE_FILE_PATTERN.test(trimmed);
+    const hasMultiFile = MULTI_FILE_PATTERN.test(trimmed);
+    if (hasSingleFile && !hasMultiFile) {
+        score -= 3;
+        reasons.push('Direct: Single file target mentioned');
+    }
+    if (hasMultiFile) {
+        score += 3;
+        if (!reasons.some((r) => r.includes('Multi-file'))) {
+            reasons.push('Team: Multi-file / multi-component scope');
+        }
+    }
+    const path = score >= 3 ? 'team' : 'direct';
+    const estimatedMinutes = path === 'team' ? Math.max(45, 30 + Math.min(score, 8) * 5) : score <= -5 ? 5 : Math.max(10, 25 + score * 2);
+    const extras = path === 'team' ? buildTeamPathExtras(trimmed) : {};
+    const teamOffer = path === 'team' && extras.teamCommand
+        ? `This is a good candidate for a Pure ClosedLoop mission. Shall I start \`${extras.teamCommand}\` now? ` +
+            `Why ${extras.loopTemplate}? ${extras.loopTemplateReason}`
+        : null;
+    const directReasons = reasons.filter((r) => r.startsWith('Direct')).slice(0, 2);
+    const teamReasons = reasons.filter((r) => r.startsWith('Team')).slice(0, 2);
+    const summary = path === 'team'
+        ? `**Execution path:** Team — ${teamReasons.join('; ') || 'Complexity warrants PM orchestration'} (~${estimatedMinutes}+ min)`
+        : `**Execution path:** Direct — ${directReasons.join('; ') || 'Small, focused task'} (~${estimatedMinutes} min)`;
+    return { path, reasons, estimatedMinutes, teamOffer, summary, ...extras };
+}
+//# sourceMappingURL=execution-path.js.map

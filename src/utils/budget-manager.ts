@@ -3,7 +3,7 @@
  *
  * Tracks API spending and enforces budget limits to prevent unexpected costs.
  * Auto-resets spending on the 1st of every month.
- * Default budget loaded from config.yaml (goose.monthly_budget).
+ * Default budget loaded from config.yaml (budget.monthly_budget).
  */
 
 import fs from 'fs';
@@ -105,7 +105,7 @@ export class BudgetManager {
 
   /**
    * Configure budget from application config (called during startup).
-   * Sets the budget programmatically from config.yaml goose section.
+   * Sets the budget programmatically from config.yaml budget section.
    */
   static configureFromAppConfig(options: {
     monthlyBudget?: number;

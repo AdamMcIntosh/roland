@@ -1,35 +1,26 @@
 /**
- * Cursor model routing for RCO agents.
+ * Cursor SDK model routing for RCO agents.
  *
- * Single source of truth used by both agentWorker (child process) and
- * team-orchestrator (main process). Resolves any model string + agent name
- * to a valid Cursor SDK model ID.
- *
- * ╔══════════════════════════════════════════════════════════════╗
- * ║  HARD MODEL STRATEGY — DO NOT ADD CLAUDE SONNET FALLBACKS   ║
- * ║                                                              ║
- * ║  Lead PM only  →  gpt-5.4-nano                              ║
- * ║  ALL engineers →  composer-2.5  (no exceptions)             ║
- * ╚══════════════════════════════════════════════════════════════╝
- *
- * Valid Cursor models (as of 2026-05):
- *   gpt-5.4-nano  — Lead PM / orchestration only ($0.20/$1.25 per MTok)
- *   composer-2.5  — ALL engineer agents (default for every non-PM agent)
- *   composer-2    — lighter composer variant (explicit use only)
- *   gpt-5-mini    — available but not used by default
- *   gpt-5.1-codex-mini — available but not used by default
- *   gemini-2.5-flash   — available but not used by default
- *
- * NOTE: claude-sonnet-*, claude-opus-*, openrouter/*, deepseek/*, qwen/*, and
- * minimax/* are NOT valid Cursor SDK model IDs. They must never appear in
- * VALID_CURSOR_MODELS. The legacy remap table below catches any stale YAML
- * values that slip through and normalises them to composer-2.5 or gpt-5.4-nano.
+ * Delegates role resolution to ModelRouter (`src/models/model-router.ts`).
+ * Legacy PM Team dispatch and agentWorker both call `toCursorModelId()` here.
  *
  * Resolution order:
- *  1. Agent-name PM heuristic — checked FIRST so Lead-PM always wins.
- *  2. Exact approved Cursor model ID.
- *  3. Legacy / stale model-string keywords → remap to gpt-5.4-nano or composer-2.5.
- *  4. Hard default → composer-2.5.
+ *  1. Valid Cursor model id from agent YAML
+ *  2. ModelRouter role → configured model (cursor provider uses id directly)
+ *  3. Keyword mapping for OpenRouter/Ollama model strings → Cursor SDK id
+ */
+export { VALID_CURSOR_MODELS, isValidCursorModel } from './cursor-models.js';
+export { DEFAULT_PM_MODEL, DEFAULT_ENGINEER_MODEL } from './cursor-models.js';
+/**
+ * Resolve agent name + optional YAML model to a Cursor SDK model id.
+ * Loop Engineering uses ModelRouter directly; this bridges legacy PM Team paths.
  */
 export declare function toCursorModelId(model: string, agentName?: string): string;
+/**
+ * ## Final Legacy Cleanup + Model Router Integration Complete
+ *
+ * PM Team wave engine calls `toCursorModelId()` → ModelRouter.resolveSdkModelId().
+ * Loop-template missions use ModelRouter.getModel() directly in ClosedLoop harness.
+ */
+export {};
 //# sourceMappingURL=model-routing.d.ts.map

@@ -29,6 +29,10 @@ export interface ToolCallingPromptInput {
     teamGoal?: string;
     /** Current Blackboard snapshot — agents can see what colleagues have done. */
     blackboardSnapshot?: string;
+    /** UNSC Command Blackboard excerpt — mission objectives, key decisions, intel. */
+    commandBlackboardSnapshot?: string;
+    /** Per-node DAG context — upstream/downstream/critical path for this task. */
+    missionDagContext?: string;
     /** Number of agents on the team — gives agents a sense of scale. */
     teamSize?: number;
 }

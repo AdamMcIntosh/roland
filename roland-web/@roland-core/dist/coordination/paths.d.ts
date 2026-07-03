@@ -1,16 +1,11 @@
 /**
  * Project-scoped path resolution for the coordination substrate.
  *
- * Roland's binary is installed once (globally, e.g. ~/.roland), but coordination
- * state is per-project so it travels with the repo and never collides across
- * Cursor workspaces. State lives under <projectRoot>/.roland/ — the same
- * directory ProjectContextManager and QualityTracker already use, and which is
- * already gitignored.
+ * Roland's binary is installed once (globally via npm), but coordination state
+ * is per-project so it travels with the repo and never collides across Cursor
+ * workspaces. State lives under <projectRoot>/.roland/.
  *
- * Resolution order for the project root:
- *   1. ROLAND_PROJECT_ROOT env (set by the host when cwd is unreliable)
- *   2. nearest ancestor of cwd containing a .git directory
- *   3. process.cwd()
+ * @see resolveProjectRoot in ../utils/project-root.ts
  */
 export declare function projectRoot(): string;
 /** Resolve (and lazily create) the project-local .roland/ directory. */

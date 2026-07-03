@@ -1,20 +1,10 @@
 /**
- * Cursor-native model policy for the PM team (Phase 3).
- *
- * The PM team runs entirely on Cursor's native models — there is no OpenRouter
- * here. Routing is deterministic and lane-based:
- *
- *   pm        → gpt-5.4-nano  (Lead PM only — orchestration + planning)
- *   reasoning → composer-2.5  (architect, reviewer, critic, planner, security…)
- *   coding    → composer-2.5  (executor, builder — cost-efficient default)
- *   light     → composer-2.5  (docs, tests, research — also standard)
- *
- * Cost strategy: GPT-5.4 Nano for the one orchestration agent ($0.20/$1.25 per MTok);
- * composer-2.5 for every engineer regardless of lane.
- *
- * This module is intentionally self-contained: it imports none of the legacy
- * OpenRouter constants and shares nothing with the RCO/triage routing path.
+ * ## Assumptions
+ * - [DEPRECATED] Legacy PM Team lane routing bridges to Loop Engineering ModelRouter when no explicit policy is passed.
+ * - Hermes is the recommended PM layer; this policy serves LeadPM / use_pm_team backward compatibility only.
+ * - DEFAULT_MODEL_POLICY uses Cursor SDK ids derived from config.yaml `models` section.
  */
+import { type ModelRouter } from '../models/model-router.js';
 export type Lane = 'pm' | 'reasoning' | 'coding' | 'light';
 export type ModelVariant = 'opus' | 'fast' | 'standard';
 export declare const PROVIDER: "cursor";
@@ -27,6 +17,8 @@ export interface ModelPolicy {
     /** Background / execution engineers (coding + light lanes). */
     standard: string;
 }
+/** [DEPRECATED] Build a legacy PM Team policy from Loop Engineering ModelRouter. */
+export declare function modelPolicyFromRouter(router?: ModelRouter): ModelPolicy;
 export declare const DEFAULT_MODEL_POLICY: ModelPolicy;
 /** Map a lane to its Cursor model id + variant under a given policy. */
 export declare function modelForLane(lane: Lane, policy?: ModelPolicy): {

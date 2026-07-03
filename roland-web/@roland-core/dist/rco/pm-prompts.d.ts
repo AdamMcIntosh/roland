@@ -1,7 +1,10 @@
 /**
- * Lead PM prompts for team-mode orchestration.
+ * ## Assumptions
+ * - [DEPRECATED] Legacy Lead PM prompts for team-mode orchestration (`use_pm_team: true`).
+ * - Hermes is the recommended PM / strategist — plan missions via chat, not these prompts.
+ * - Roland ClosedLoop uses lightweight-plan-act.ts by default; these prompts run only on legacy PM path.
  *
- * The Lead PM runs on gpt-5.4-nano and acts as Engineering Manager.
+ * Lead PM prompts for [DEPRECATED] team-mode orchestration.
  * It never writes code — it decomposes goals, dispatches tasks, reviews
  * outputs, and synthesizes results. Three prompts cover the full PM loop:
  *
@@ -20,6 +23,10 @@ export interface PlanningContext {
     projectMemory?: string;
     /** Injection block from project knowledge files (ROLAND.md, ARCHITECTURE.md, etc.). */
     projectKnowledge?: string;
+    /** Keyword-scored excerpt from `.roland/command-blackboard.md` (UNSC mission state). */
+    commandBlackboard?: string;
+    /** When true, Lead PM receives DAG decomposition instructions (complex goals or ROLAND_MISSION_DAG=1). */
+    dagPlanningEnabled?: boolean;
 }
 export interface SynthesisContext extends PlanningContext {
     taskResults: Record<string, {
@@ -28,10 +35,6 @@ export interface SynthesisContext extends PlanningContext {
         output: string;
     }>;
 }
-/**
- * Planning prompt: the Lead PM reads the goal, the current Blackboard, and
- * the team roster, then outputs a structured task plan as a JSON code block.
- */
 export declare function buildLeadPMPlanningPrompt(ctx: PlanningContext): string;
 /**
  * Synthesis prompt: after all workers have completed, the Lead PM reviews
@@ -83,6 +86,10 @@ export interface ReviewContext {
     inboxMessages?: string;
     /** Blocker descriptions detected in this wave's agent outputs. */
     detectedBlockers?: string[];
+    /** Keyword-scored excerpt from `.roland/command-blackboard.md`. */
+    commandBlackboard?: string;
+    /** Escalation notes for operator attention (repeated blockers, parse failures). */
+    escalationNotes?: string[];
 }
 /**
  * What the PM can decide after reviewing a wave.

@@ -26,4 +26,6 @@ export interface LoadAllAgentsOptions {
 }
 export declare function loadAllAgents(agentsDir?: string, opts?: LoadAllAgentsOptions): Map<string, AgentYaml>;
 export declare function loadRecipe(recipeName: string, recipesDir?: string): RcoRecipe;
+/** Match task text against config task_routing patterns; fallback to planner + executor. */
+export declare function getPreferredAgentsForTask(task: string, config: RcoConfig): string[];
 //# sourceMappingURL=loadConfig.d.ts.map

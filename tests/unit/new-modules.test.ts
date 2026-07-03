@@ -1,46 +1,14 @@
 /**
  * Unit Tests: New Modules
  *
- * Tests for goose-runner, migration-context, diff-engine, git-tools,
- * screenshot, permission-gate, and session-context utilities.
+ * Tests for migration-context, diff-engine, git-tools,
+ * screenshot, and session-context utilities.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
-
-// ============================================================================
-// 1. goose-runner — normaliseGooseModel
-// ============================================================================
-
-import { normaliseGooseModel } from '../../src/utils/goose-runner.js';
-
-describe('goose-runner: normaliseGooseModel', () => {
-  it('maps claude-sonnet-4 to anthropic/ prefix on openrouter', () => {
-    const result = normaliseGooseModel('claude-sonnet-4');
-    expect(result).toEqual({ provider: 'openrouter', model: 'anthropic/claude-sonnet-4' });
-  });
-
-  it('maps gpt-4o to openai/ prefix on openrouter', () => {
-    const result = normaliseGooseModel('gpt-4o');
-    expect(result).toEqual({ provider: 'openrouter', model: 'openai/gpt-4o' });
-  });
-
-  it('passes through a model that already contains a slash', () => {
-    const result = normaliseGooseModel('anthropic/claude-sonnet-4');
-    expect(result).toEqual({ provider: 'openrouter', model: 'anthropic/claude-sonnet-4' });
-  });
-
-  it('maps deepseek-chat to deepseek/ prefix on openrouter', () => {
-    const result = normaliseGooseModel('deepseek-chat');
-    expect(result).toEqual({ provider: 'openrouter', model: 'deepseek/deepseek-chat' });
-  });
-});
-
-// ============================================================================
-// 2. migration-context
-// ============================================================================
 
 import {
   readContext,
@@ -198,70 +166,6 @@ describe('screenshot: exports', () => {
   });
 });
 
-// ============================================================================
-// 6. permission-gate
-// ============================================================================
-
-import {
-  readPermissions,
-  getPermissionBlock,
-  buildPermissionBlock,
-  DEFAULT_PERMISSIONS,
-} from '../../src/utils/permission-gate.js';
-
-describe('permission-gate', () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'roland-perm-test-'));
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  it('readPermissions returns default policy when no file exists in the directory', () => {
-    const policy = readPermissions(tmpDir);
-    expect(policy).toEqual(DEFAULT_PERMISSIONS);
-    expect(policy.allow_shell).toBe(true);
-    expect(policy.allow_write).toBe(true);
-    expect(policy.allow_read).toBe(true);
-  });
-
-  it('buildPermissionBlock returns empty string for a fully permissive policy with no deny lists', () => {
-    const permissivePolicy = {
-      allow_shell: true,
-      allow_write: true,
-      allow_read: true,
-      deny_commands: [],
-      deny_paths: [],
-      extra_instructions: '',
-    };
-    const block = buildPermissionBlock(permissivePolicy);
-    expect(block).toBe('');
-  });
-
-  it('getPermissionBlock returns non-empty string when deny lists are populated', () => {
-    const policy = {
-      allow_shell: true,
-      allow_write: true,
-      allow_read: true,
-      deny_commands: ['rm -rf /'],
-      deny_paths: ['.env'],
-      extra_instructions: '',
-    };
-    const policyFile = path.join(tmpDir, '.roland-permissions.json');
-    fs.writeFileSync(policyFile, JSON.stringify(policy), 'utf-8');
-
-    const block = getPermissionBlock(tmpDir);
-    expect(block.length).toBeGreaterThan(0);
-    expect(block).toContain('rm -rf /');
-  });
-});
-
-// ============================================================================
-// 7. session-context — SessionContextManager
-// ============================================================================
 
 import { SessionContextManager } from '../../src/server/session-context.js';
 

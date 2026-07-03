@@ -1,0 +1,81 @@
+name: feature-implementation-loop
+description: >
+  Feature delivery loop — plan scope, implement, verify with unit/integration/smoke gates, critique,
+  reflect learnings, and exit when gates green. Default is Pure ClosedLoop (Hermes PM + Roland Loop Engine).
+  [DEPRECATED] Set loop_engine.use_pm_team: true only for legacy PM-Enhanced Plan/Act.
+kickoff: >
+  Start the feature implementation loop. Goal: feature is implemented with tests passing and
+  integration smoke green. Self-pace: after each iteration run configured checks, reflect on
+  learnings, and only continue if exit conditions are not met.
+between_iterations:
+  action: git-commit
+  dry_run: true
+  optional: true
+  message_template: "feat(loop): iteration {iteration} — {goal}"
+phases:
+  - phase: plan
+    label: Plan feature
+    agent: pm
+    specialist_spawns:
+      - role: planner
+        prompt_template: "Decompose feature scope for {goal}"
+  - phase: act
+    label: Implement
+    agent: coding
+    specialist_spawns:
+      - role: coding
+        primary: true
+      - role: test-author
+        prompt_template: "Outline tests for iteration {iteration} of {goal}"
+  - phase: verify
+    label: Verify feature
+    agent: verifier
+    verification:
+      - type: unit
+        weight: 0.9
+        success_threshold: 1.0
+      - type: integration
+        optional: true
+        weight: 0.8
+        success_threshold: 0.9
+      - type: smoke
+        optional: true
+        weight: 0.6
+        success_threshold: 0.6
+    specialist_spawns:
+      - role: verifier
+        primary: true
+      - role: test-executor
+  - phase: critique
+    label: Critique delivery
+    agent: critic
+    specialist_spawns:
+      - role: critic
+        primary: true
+      - role: code-reviewer
+  - phase: retry
+    label: Retry implementation
+    optional: true
+  - phase: observe
+    label: Observe state
+    agent: researcher
+    after:
+      action: critique-only
+  - phase: reflect
+    label: Reflect on iteration
+    optional: true
+    agent: researcher
+maxIterations: 8
+maxRetries: 3
+escalationThreshold: 4
+testModeMaxRetries: 6
+testModeEscalationThreshold: 8
+min_confidence: 0.85
+# [DEPRECATED] Legacy PM Team opt-in — advanced only; prefer Hermes + Pure ClosedLoop (remove or set false).
+use_pm_team: true
+pm_plan: auto   # [DEPRECATED] requires use_pm_team: true
+pm_act: auto    # [DEPRECATED] requires use_pm_team: true
+reflection: true
+exit_conditions:
+  - type: all_gates_pass
+    description: Unit, integration, and smoke gates pass

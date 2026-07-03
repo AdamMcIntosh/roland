@@ -143,10 +143,23 @@ export class VerifyPhaseHandler implements PhaseHandler {
 
     if (ctx.stateDir && !evaluation.accepted) {
       const { emitHermesHitlEvent } = await import('../../rco/hitl-hermes.js');
+      const { isGreenfieldGoal } = await import('../../rco/goal-scope.js');
       const failedGates = evaluation.gates?.filter((g) => g.required && !g.skipped && !g.pass) ?? [];
-      const noTestSoftSkip = evaluation.gates?.some(
-        (g) => g.skipped && g.skipReason?.includes('no test'),
+      const softSkippedGates = evaluation.gates?.filter((g) => g.skipped) ?? [];
+      const noTestSoftSkip = softSkippedGates.some(
+        (g) => g.skipReason?.includes('no test') || g.skipReason?.includes('no npm test'),
       );
+      const greenfieldToolingSkip =
+        isGreenfieldGoal(ctx.goal) &&
+        failedGates.length === 0 &&
+        softSkippedGates.length > 0 &&
+        softSkippedGates.every(
+          (g) =>
+            g.skipReason?.includes('minimal project') ||
+            g.skipReason?.includes('greenfield') ||
+            g.skipReason?.includes('no test'),
+        );
+      const skipHitl = noTestSoftSkip || greenfieldToolingSkip;
       const suggestedActions = noTestSoftSkip
         ? [
             'roland board-status --concise',
@@ -165,7 +178,7 @@ export class VerifyPhaseHandler implements PhaseHandler {
               'roland inject "<fix guidance>"',
             ];
 
-      if (!noTestSoftSkip) {
+      if (!skipHitl) {
         emitHermesHitlEvent(ctx.stateDir, {
           kind: evaluation.confidence === 0 ? 'verification-gate' : 'verification-failure',
           blockerDescription: evaluation.summary,

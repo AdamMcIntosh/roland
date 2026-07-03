@@ -18,7 +18,24 @@
  *   preview_changes — generate markdown diff + optional HTML preview of file changes
  */
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { AppConfig } from '../utils/types.js';
+/** Read-only / low-risk tools safe for Cursor autoApprove in ~/.cursor/mcp.json */
+export declare const MCP_AUTO_APPROVE_TOOLS: readonly ["health_check", "roland_hello", "board_status", "hitl_status", "poll_hitl_events", "mission_summary", "report_completion", "pm_standup", "triage", "list_team", "list_team_recipes", "list_recipes", "get_team_context", "get_pm_playbook", "get_team_usage", "get_pm_events", "get_analytics", "suggest_mode", "route_model", "blackboard_read", "bus_poll", "git_status", "git_diff", "git_log", "read_context"];
+/** Resolve the built MCP server entry (dist/server/mcp-server.js). */
+export declare function resolveMcpServerEntry(): string;
+export interface McpServerOptions {
+    /** Skip diff-stream sidecar (ephemeral HTTP sessions). */
+    skipSidecars?: boolean;
+}
+/** Build the `mcpServers.roland` block for ~/.cursor/mcp.json (stdio — Cursor / VS Code). */
+export declare function buildCursorMcpServerEntry(options?: {
+    rolandRoot?: string;
+    projectRoot?: string;
+    includeAutoApprove?: boolean;
+}): Record<string, unknown>;
+/** Build HTTP MCP client config for Hermes and other Streamable HTTP clients. */
+export declare function buildGeneralMcpHttpEntry(baseUrl?: string): Record<string, unknown>;
 export declare class McpServer {
     private server;
     private config;
@@ -31,8 +48,14 @@ export declare class McpServer {
     private qualityTracker;
     private coordination;
     private leadPm;
+    private readonly leadPmOpts;
     private recipesDir;
-    constructor(config: AppConfig);
+    private transport;
+    private shuttingDown;
+    private connected;
+    private transportMode;
+    private readonly skipSidecars;
+    constructor(config: AppConfig, options?: McpServerOptions);
     private registerTools;
     private registerHealthCheck;
     /**
@@ -77,13 +100,25 @@ export declare class McpServer {
     private setupHandlers;
     private registerLoadMigrationContext;
     private registerUpdateMigrationContext;
-    private registerRunGooseTask;
     private registerPreviewChanges;
-    start(): Promise<void>;
+    start(options?: {
+        maxConnectRetries?: number;
+    }): Promise<void>;
+    /** Connect an arbitrary MCP transport (HTTP Streamable, stdio, etc.). */
+    connectTransport(transport: Transport, mode?: 'stdio' | 'http'): Promise<void>;
+    private connectStdioTransport;
+    private startDiffStreamSidecar;
+    isShuttingDown(): boolean;
+    isConnected(): boolean;
     private registerGitTools;
     private registerAnalyzeScreenshot;
     private registerReadContext;
     stop(): Promise<void>;
+    /** Shared schema fragment for project-scoped MCP tools. */
+    private static readonly PROJECT_CONTEXT_SCHEMA;
+    private resolveToolProjectContext;
+    private scopedCoordination;
+    private scopedLeadPm;
     private registerCoordinationTools;
     private registerPmTools;
     private registerChatTools;
@@ -106,4 +141,6 @@ export declare class McpServer {
      */
     static getRolandRoot(): string;
 }
+/** Run Roland as a stdio MCP server — used by `npm run mcp`, Cursor, and `roland serve`. */
+export declare function runMcpServer(): Promise<void>;
 //# sourceMappingURL=mcp-server.d.ts.map

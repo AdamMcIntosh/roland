@@ -11,15 +11,106 @@
 #   Main session (claude-haiku-4.5):        → ~$4/mo  (routing + file I/O)
 #   Total estimate:                         → ~$19/mo at moderate usage
 
+# Loop Engineering — role-based model routing (provider-agnostic).
+#
+# DEFAULT: OpenRouter (below). For full local Ollama, change provider to ollama per role:
+#   models:
+#     pm:     { provider: ollama, model: llama3.2:latest }
+#     coding: { provider: ollama, model: qwen3.5-coder:14b }
+#     critic: { provider: ollama, model: deepseek-r1:7b }
+#
+# Env overrides: ROLAND_MODEL_<ROLE>, ROLAND_MODEL_<ROLE>_PROVIDER,
+#   ROLAND_MODEL_<ROLE>_FALLBACK, ROLAND_MODEL_<ROLE>_FALLBACK_PROVIDER
+# Required loop roles: pm, coding, critic, verifier (validated at ClosedLoop startup).
+models:
+  pm:
+    provider: openrouter
+    model: grok-4.3
+    fallback:
+      provider: openrouter
+      model: gpt-5.4-nano
+  coding:
+    provider: openrouter
+    model: qwen/qwen3-coder-next
+    fallback:
+      provider: openrouter
+      model: deepseek/deepseek-v3-0324
+  critic:
+    provider: openrouter
+    model: deepseek/deepseek-chat
+    fallback:
+      provider: openrouter
+      model: minimax/minimax-m2.5
+  verifier:
+    provider: openrouter
+    model: deepseek/deepseek-v3-0324
+  researcher:
+    provider: openrouter
+    model: deepseek/deepseek-v3-0324
+  planner:
+    provider: openrouter
+    model: minimax/minimax-m2.5
+  executor:
+    provider: openrouter
+    model: qwen/qwen3-coder-next
+  reviewer:
+    provider: openrouter
+    model: deepseek/deepseek-chat
+  reasoning:
+    provider: openrouter
+    model: minimax/minimax-m2.5
+  light:
+    provider: openrouter
+    model: deepseek/deepseek-v3-0324
+
 # PM team (Phase 3) — Cursor-native model routing. The PM team does NOT use
 # OpenRouter; it runs on your Cursor subscription. Routing is lane-based:
-#   Lead PM   → lead_model      (grok-4.3: orchestration + planning only)
+#   Lead PM   → lead_model      (gpt-5.4-nano: orchestration + planning only)
 #   reasoning → fast_model      (composer-2.5: architect, reviewer, critic…)
 #   coding    → standard_model  (composer-2.5: executor — cost-efficient default)
 #   light     → standard_model  (composer-2.5: docs, tests, research)
-# Cost strategy: Grok 4.3 for the PM brain; composer-2.5 for every engineer.
+# Cost strategy: GPT-5.4 Nano for the PM brain; composer-2.5 for every engineer.
 # This section is optional; the defaults below are used if it is omitted.
+# Loop Engineering — phase templates for long-lived self-healing missions
+loop_engine:
+  default_template: standard-code-loop
+  templates_dir: recipes/loops
+  # Between-iteration self-pacing command (templates may override via between_iterations)
+  between_iterations: npm run test:run
+  # [DEPRECATED] Legacy PM Team in Plan/Act — default false (Hermes PM + Pure ClosedLoop).
+  # Set true only for advanced/legacy templates with pm_plan/pm_act: auto.
+  use_pm_team: false
+  timeout_ms: 1800000
+  verification:
+    # Legacy flag — Critique always runs after Verify; retry owned by critique phase
+    require_pass_before_critique: false
+    strategies:
+      - type: unit
+        command: npm run test:run
+        timeout_ms: 180000
+      - type: lint
+        command: npm run lint
+        timeout_ms: 120000
+        optional: true
+      - type: typecheck
+        command: npm run build
+        timeout_ms: 180000
+        optional: true
+  critique:
+    max_retries: 3
+    escalation_threshold: 4
+    test_mode:
+      max_retries: 6
+      escalation_threshold: 8
+  retry:
+    exponential_backoff:
+      enabled: false
+      base_ms: 2000
+      max_ms: 60000
+
 pm:
+  # [DEPRECATED] Legacy Lead PM model routing — Hermes is the recommended PM layer.
+  # These settings apply to use_pm_team: true and non-loop team runs only.
   lead_model: "gpt-5.4-nano"            # The Lead PM (GPT-5.4 Nano — fast, cheap orchestration)
   fast_model: "composer-2.5"            # Interactive / time-sensitive engineers
   standard_model: "composer-2.5"        # Background / execution engineers
@@ -62,10 +153,8 @@ roland:
     temperature: 0.7
     max_tokens: 2000
 
-# Goose integration — smart dispatcher model routing via OpenRouter
-goose:
-  dispatcher_model: anthropic/claude-haiku-4.5  # Main session: routing + execution (~$4/mo)
-  dispatcher_provider: openrouter
+# Budget control — spending limits and free-model fallbacks via OpenRouter
+budget:
   known_free_models:                              # All support tool calling, 128K+ context
     - qwen/qwen3-coder:free                      # Best free coder, 262K, agentic focus
     - nvidia/nemotron-3-super-120b-a12b:free      # Top SWE-Bench, multi-step planning
@@ -73,7 +162,6 @@ goose:
     - arcee-ai/trinity-large-preview:free         # Complex toolchains
     - mistralai/mistral-small-3.1-24b-instruct:free  # Fast structured output
     - z-ai/glm-4.5-air:free                      # Thinking mode, agent-centric
-  fallback_model: google/gemini-2.5-flash         # Budget-safe paid fallback
   budget_degradation_threshold: 0.8               # Switch to free models at 80%
   monthly_budget: 85                              # Monthly budget in USD
   billing_cycle_day: 1                            # Day of month to auto-reset spending

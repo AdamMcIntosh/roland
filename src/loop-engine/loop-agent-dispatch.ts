@@ -21,6 +21,11 @@ import {
   resolveSdkSettleMs,
   waitForSdkRun,
 } from '../utils/sdk-lifecycle.js';
+import {
+  captureWorkspaceBaseline,
+  validateActExecution,
+  type WorkspaceBaseline,
+} from './act-validation.js';
 import type { PhaseConfig } from './loop-phases.js';
 import type { LoopState } from './loop-state.js';
 
@@ -216,11 +221,58 @@ export async function dispatchLoopPhaseAgent(
   );
 
   try {
+    let actBaseline: WorkspaceBaseline | undefined;
+    if (opts.phase === 'act') {
+      actBaseline = captureWorkspaceBaseline(cwd);
+    }
+
     const output = await callSdkAgent(role, prompt, cwd);
     const signals = parseWorkerSignals(output);
-    const hadBlocker = signals.blockers.length > 0;
+    let hadBlocker = signals.blockers.length > 0;
 
-    if (hadBlocker) {
+    if (opts.phase === 'act' && actBaseline) {
+      const validation = validateActExecution({
+        cwd,
+        goal: opts.goal,
+        baseline: actBaseline,
+        agentOutput: output,
+        skipInTestMode: opts.isTestMode,
+      });
+
+      opts.commandBoard?.appendBullet(
+        'Open Intel',
+        validation.ok
+          ? `[ACT-VERIFY] ${validation.message}`
+          : `[ACT-VERIFY] FAILED — ${validation.message}`,
+      );
+
+      if (!validation.ok) {
+        hadBlocker = true;
+        opts.blackboard.post({
+          type: 'blocker',
+          title: 'BLOCKER: Act phase produced no files',
+          content: validation.message,
+          status: 'pending',
+          author: 'loop-engine',
+          priority: 'critical',
+          tags: ['blocker', 'loop', 'act', 'act-validation'],
+          relatedIds: [],
+        });
+      } else if (validation.filesCreated.length || validation.filesModified.length) {
+        opts.blackboard.post({
+          type: 'result',
+          title: 'Loop act: filesystem verification',
+          content: validation.message,
+          status: 'done',
+          author: 'loop-engine',
+          priority: 'medium',
+          tags: ['loop', 'act', 'act-validation'],
+          relatedIds: [],
+        });
+      }
+    }
+
+    if (hadBlocker && signals.blockers.length > 0) {
       for (const blocker of signals.blockers) {
         opts.blackboard.post({
           type: 'blocker',
@@ -255,7 +307,9 @@ export async function dispatchLoopPhaseAgent(
       output,
       hadBlocker,
       summary: hadBlocker
-        ? `${opts.phase} blocked — agent signalled blocker`
+        ? signals.blockers.length > 0
+          ? `${opts.phase} blocked — agent signalled blocker`
+          : `${opts.phase} blocked — no files written to disk`
         : `${opts.phase} complete via ${dispatch.displayLabel}`,
       agentRole: role,
     };
@@ -281,3 +335,14 @@ export async function dispatchLoopPhaseAgent(
     };
   }
 }
+
+/**
+ * ## Roland Execution Now Reliable
+ *
+ * Act phase dispatches Cursor SDK agents and validates filesystem changes afterward.
+ * Test commands:
+ *   npx vitest run tests/unit/act-validation.test.ts
+ *   npx vitest run tests/unit/loop-agent-dispatch.test.ts
+ * Greenfield E2E (requires CURSOR_API_KEY):
+ *   roland team "create minimal Node.js + TS project with hello-world.ts" --loop-template full-cycle-verified-loop
+ */

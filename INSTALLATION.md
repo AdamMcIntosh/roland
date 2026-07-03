@@ -21,8 +21,7 @@ Setup guide for Roland as an MCP server integrated with VS Code or Cursor.
 - **Node.js**: v22.0.0 or higher (see `package.json` engines)
 - **npm**: v9.0.0 or higher
 - **IDE**: Cursor (primary) or VS Code (with GitHub Copilot)
-- **Goose** (optional): [block.github.io/goose](https://block.github.io/goose/) — required for multi-model routing and autonomous recipes
-- **OpenRouter API key** (optional): [openrouter.ai](https://openrouter.ai/) — required for Goose integration
+- **OpenRouter API key** (optional): [openrouter.ai](https://openrouter.ai/) — for cost tracking and model routing metadata
 
 ## Installation Steps
 
@@ -39,7 +38,7 @@ irm https://raw.githubusercontent.com/AdamMcIntosh/roland/main/scripts/setup.ps1
 ```
 
 This single command will:
-1. Check your environment (Node.js version, Goose)
+1. Check your environment (Node.js version)
 2. Prompt for your OpenRouter API key and validate it
 3. Clone Roland into `~/.roland/roland/` (or update if already cloned)
 4. Build Roland (`npm install && npm run build`)
@@ -225,8 +224,6 @@ npm run init -- /path/to/your/project
 | `.vscode/mcp.json` | VS Code MCP config (absolute path to Roland) |
 | `.github/agents/*.agent.md` | VS Code Copilot agent personas |
 | `.github/copilot-instructions.md` | Agent catalog & usage guide |
-| `.goose/config.yaml` | Goose + Roland config with smart routing instructions |
-| `.roland-permissions.json` | Permission policy for Goose sessions |
 | `.roland/project-context.json` | Cross-session knowledge base (conventions, patterns, decisions) |
 | `.roland/model-quality.json` | Model A/B quality tracking data |
 | `roland-context.json` | Structured project context (rules, decisions, test patterns) |
@@ -271,7 +268,6 @@ Once connected, the Roland MCP server provides:
 | `preview_changes` | Generate unified diff + HTML preview of file changes |
 | `load_migration_context` | Load roland-context.json project context into session |
 | `update_migration_context` | Append rules, decisions, patterns to project context |
-| `run_goose_task` | Spawn autonomous Goose sub-session with file & shell access |
 | `git_status` | Current git status — staged, unstaged, untracked |
 | `git_diff` | Unified diff of working tree or staged changes |
 | `git_log` | Last N commits (oneline format) |
@@ -279,8 +275,6 @@ Once connected, the Roland MCP server provides:
 | `analyze_screenshot` | Capture screen or load image, analyze with vision model |
 | `project_context` | Cross-session knowledge base — observe conventions, patterns, decisions, errors |
 | `quality_signal` | Record model quality feedback (accept/retry/reject) for adaptive routing |
-
-**Goose users get the full tool set.** VS Code/Cursor users get the routing and cost tools. `run_goose_task`, `git_*`, and `analyze_screenshot` are most useful when Roland is paired with Goose as the MCP client.
 
 No API key is required for the MCP tools themselves. All tools run locally. The IDE's own model handles execution.
 
@@ -292,88 +286,23 @@ No API key is required for the MCP tools themselves. All tools run locally. The 
 2. Open any project in Cursor (with global config) or a project where you ran `init`
 3. Go to **Settings → MCP** and verify `roland` shows a green status
 4. Open Cursor chat and ask: *"Use the health_check tool"*
-5. You should get a response with `status: healthy` and a list of 20 tools
+5. You should get a response with `status: healthy` and a list of available tools
 
 See [TESTING.md](TESTING.md) for a full testing walkthrough.
 
-## Goose Setup (OpenRouter)
+## Team Missions (ClosedLoop)
 
-Roland works as a [Goose](https://block.github.io/goose/) MCP extension with smart model routing via OpenRouter.
-
-### How It Works
-
-```
-User prompt
-  → Goose main session (coordinator)
-    → Roland MCP tools: triage, route_model, session_context
-      → Routes to best model for the job
-    → Goose Developer extension: text_editor + bash
-      → Reads/writes files, runs shell commands, runs tests
-    → run_goose_task: spawns focused sub-sessions for heavy coding
-    → git_status/diff/commit: native git workflow
-    → analyze_screenshot: vision analysis for UI/error debugging
-  → Result returned to user, session context updated
-```
-
-### Prerequisites
-
-- **Goose**: Install from [block.github.io/goose](https://block.github.io/goose/)
-- **OpenRouter API key**: Sign up at [openrouter.ai](https://openrouter.ai/) and set `OPENROUTER_API_KEY`
-- **Roland**: Built (`npm run build`) — or use the [one-command setup](#option-a-one-command-setup-recommended) which handles everything
-
-### 1. Configure Goose
-
-Copy the template config or merge into your existing Goose config:
+For multi-step autonomous work, use Pure ClosedLoop team missions from the CLI:
 
 ```bash
-# Copy the template
-cp roland/goose/config.yaml ~/.config/goose/config.yaml
-
-# Or merge the roland extension into your existing config
+roland team "Refactor the auth module to use JWT tokens" --loop-template full-cycle-verified-loop
 ```
 
-Edit `~/.config/goose/config.yaml` and update the Roland extension path:
+Templates: `full-cycle-verified-loop` (default) · `feature-implementation-loop` · `refactor-and-modernize-loop` · `research-and-spec-loop`
 
-```yaml
-extensions:
-  roland:
-    type: stdio
-    cmd: "node"
-    args:
-      - "/absolute/path/to/roland/dist/index.js"   # <-- UPDATE THIS
-    enabled: true
-    timeout: 300
-```
+In Cursor chat, `@roland` triage routes Direct vs Team automatically. Team path spawns parallel callsigns (Sparrow, Vanguard, Oracle, Sentinel) with verification gates.
 
-### 2. Set Environment Variables
-
-```bash
-export OPENROUTER_API_KEY=sk-or-...your-key...
-```
-
-### 3. Verify
-
-```bash
-goose session
-# In the session, type:
-> /tools
-# You should see Roland's tools: triage, route_model, track_cost, etc.
-
-> Use the health_check tool
-# Should return: status: healthy
-```
-
-### 4. Use Goose Recipes (Optional)
-
-Run pre-built multi-agent workflows:
-
-```bash
-goose run --recipe goose/recipes/roland-plan-exec-rev-ex.yaml --task "Build a todo app"
-goose run --recipe goose/recipes/roland-bugfix.yaml --task "Fix the login timeout issue"
-goose run --recipe goose/recipes/roland-security-audit.yaml --task "Audit the auth module"
-```
-
-### 5. Init a Project (Recommended)
+### Init a Project (Recommended)
 
 Run `roland init` in your project directory to scaffold everything:
 
@@ -386,71 +315,12 @@ What gets created in your project:
 
 | File | Purpose |
 |------|---------|
-| `.goose/config.yaml` | Goose + Roland wiring with smart routing instructions |
-| `.roland-permissions.json` | Permission policy for Goose sessions (edit to add restrictions) |
-| `roland-context.json` | Structured project context (rules, decisions, patterns) |
-| `MIGRATION.md` | Human-readable companion to roland-context.json |
 | `.cursor/mcp.json` | Cursor MCP config |
-| `.vscode/mcp.json` | VS Code MCP config |
+| `.roland/project-context.json` | Cross-session knowledge base |
+| `roland-context.json` | Structured project context |
 | `.github/agents/*.agent.md` | Agent personas |
 
-The `.goose/config.yaml` wires Roland into every Goose session automatically — `load_migration_context` runs at session start, so the agent always has your project context.
-
-### Dispatcher Model Selection
-
-The dispatcher model handles routing only — it should be cheap/free and support tool calling. Recommended free models:
-
-| Model | Notes |
-|-------|-------|
-| `anthropic/claude-haiku-4.5` | Best instruction following, reliable tool calling (default) |
-| `google/gemini-2.5-flash` | Cheaper alternative, good tool calling |
-| `google/gemini-2.0-flash-exp:free` | Free option (less reliable) |
-
-Change the main session model in `~/.config/goose/config.yaml`:
-
-```yaml
-GOOSE_MODEL: anthropic/claude-haiku-4.5   # $52/mo — precise instruction following (default)
-# GOOSE_MODEL: anthropic/claude-sonnet-4  # $95/mo — upgrade if Haiku isn't enough
-# GOOSE_MODEL: google/gemini-2.5-flash    # $18/mo — budget option
-```
-
-The main session handles routing AND file edits. Sonnet 4 subagents handle complex code authoring via smart triage.
-
-## Docker Setup (Sandboxed Sessions)
-
-Run Roland + Goose inside a Docker container for process-level permission isolation. The container can only access the mounted project directory — no host filesystem, home directory, or system commands outside the mount.
-
-### Build the image
-
-```bash
-cd /path/to/roland
-npm run build
-docker build -t roland-goose:latest .
-```
-
-### Run a sandboxed session
-
-```bash
-# Interactive session
-./scripts/roland-docker.sh /path/to/project session
-
-# Headless task
-./scripts/roland-docker.sh /path/to/project run --no-session -t "Fix the auth bug"
-
-# Current directory
-./scripts/roland-docker.sh .
-```
-
-The script auto-builds the image if it doesn't exist. Set `OPENROUTER_API_KEY` in your environment before running.
-
-### What the container mounts
-
-| Mount | Access | Purpose |
-|-------|--------|---------|
-| `/workspace` (your project) | Read-write | File editing, git, tests |
-| `.goose/config.yaml` | Read-only | Goose + Roland wiring |
-
-Everything else (home directory, system files, other projects) is inaccessible. This is **stronger** than Claude Code's per-tool approval — the container physically cannot reach outside the project.
+`load_migration_context` at session start gives the agent your project context when invoked via MCP.
 
 ## VS Code Extension (Inline Diffs)
 
@@ -514,7 +384,6 @@ npm run clean          # Remove dist/
 
 1. **Quick setup**: `curl -fsSL https://raw.githubusercontent.com/AdamMcIntosh/roland/main/scripts/setup.sh | bash` — handles clone, build, API key, and project init in one command
 2. **Set your budget**: Ask the agent to use `manage_budget` with `set_limit`
-3. **Run a solo recipe**: `npx tsx scripts/run-recipe.ts --recipe QuickShip --task "Add user settings page"`
+3. **Run a team mission**: `roland team "Add user settings page" --loop-template feature-implementation-loop`
 4. **Monitor costs**: `get_analytics` — see where tokens and money are going, including model quality data
 5. **Build project knowledge**: Use `project_context` with `observe` to record conventions and patterns — they'll persist across sessions
-6. **Read the guides**: See `docs/guides/goose-user-guide.md` for full usage

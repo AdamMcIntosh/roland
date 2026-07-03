@@ -335,6 +335,9 @@ export async function runTeamCli(argv: string[]): Promise<void> {
 
   if (clean) cleanState(stateDir);
 
+  sanitizeStaleMissionState(stateDir);
+  prepareMissionStart(stateDir, goal, { projectRoot: ctx.projectRoot, skipBoardCleanup: clean });
+
   // ── Web mode — streaming terminal-style output for browser / chat UI ────────
   if (web) {
     const out = (line: string) => process.stdout.write(line + '\n');
