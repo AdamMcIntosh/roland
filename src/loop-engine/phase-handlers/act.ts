@@ -31,7 +31,11 @@ export class ActPhaseHandler implements PhaseHandler {
       return this.pmBridge.runAct(ctx.iteration, ctx.phaseConfig);
     }
     if (this.lightweight) {
-      return runLightweightAct(ctx.iteration, this.lightweight, ctx.waveNumber ?? 0);
+      return runLightweightAct(ctx.iteration, this.lightweight, {
+        waveNumber: ctx.waveNumber ?? 0,
+        phaseConfig: ctx.phaseConfig,
+        loopState: ctx.state,
+      });
     }
     const wave = ctx.waveNumber ?? 0;
     ctx.commandBoard?.setAgentStatus({

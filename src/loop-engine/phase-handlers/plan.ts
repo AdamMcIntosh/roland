@@ -31,7 +31,10 @@ export class PlanPhaseHandler implements PhaseHandler {
       return this.pmBridge.runPlanning(ctx.iteration, ctx.phaseConfig);
     }
     if (this.lightweight) {
-      return runLightweightPlan(ctx.iteration, this.lightweight);
+      return runLightweightPlan(ctx.iteration, this.lightweight, {
+        phaseConfig: ctx.phaseConfig,
+        loopState: ctx.state,
+      });
     }
     // LoopEngine direct usage (tests) — inline stub without PM session
     ctx.blackboard.post({

@@ -2,7 +2,10 @@
  * EvaluationGate unit tests — confidence scoring, custom criteria, manual review.
  */
 
-import { describe, it, expect } from 'vitest';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { afterEach, beforeEach, describe, it, expect } from 'vitest';
 import {
   EvaluationGate,
   evaluationResultToLoopState,
@@ -22,6 +25,16 @@ const failRunner: CommandRunner = async () => ({
 });
 
 describe('EvaluationGate', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'roland-eval-gate-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   it('passes with high confidence when all automated gates pass', async () => {
     const gate = new EvaluationGate({
       templateFilter: ['unit'],
@@ -140,5 +153,25 @@ describe('EvaluationGate', () => {
     const result = await gate.evaluate();
     expect(result.accepted).toBe(true);
     expect(result.exitPreview?.wouldExit).toBe(true);
+  });
+
+  it('includes soft-skipped unit gate in confidence scoring for greenfield projects', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({ name: 'app', scripts: {} }),
+    );
+
+    const gate = new EvaluationGate({
+      cwd: tmpDir,
+      templateFilter: ['unit', 'lint'],
+      goal: 'Bootstrap minimal app',
+      iteration: 1,
+    });
+
+    const result = await gate.evaluate();
+    const unitGate = result.gates.find((g) => g.type === 'unit');
+    expect(unitGate?.skipped).toBe(true);
+    expect(result.confidence).toBeGreaterThanOrEqual(0.85);
+    expect(result.accepted).toBe(true);
   });
 });

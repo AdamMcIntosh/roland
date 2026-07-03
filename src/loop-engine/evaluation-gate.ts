@@ -1,4 +1,6 @@
 /**
+ * ## Roland Execution Reliability Fix
+ *
  * ## Evaluation Gate & Blocker Fix
  *
  * ## Assumptions
@@ -120,11 +122,12 @@ function gateConfidence(pass: boolean, required: boolean, skipped: boolean): num
 }
 
 function computeOverallConfidence(gates: GateResult[]): number {
-  const active = gates.filter((g) => !g.skipped);
-  if (active.length === 0) return 1;
-  const totalWeight = active.reduce((sum, g) => sum + g.weight, 0);
+  if (gates.length === 0) return 1;
+  // Include soft-skipped gates (e.g. missing npm test) — they contribute weight at conf=1
+  // so greenfield projects are not penalized below min_confidence.
+  const totalWeight = gates.reduce((sum, g) => sum + g.weight, 0);
   if (totalWeight <= 0) return 1;
-  const weighted = active.reduce((sum, g) => sum + g.confidence * g.weight, 0);
+  const weighted = gates.reduce((sum, g) => sum + g.confidence * g.weight, 0);
   return Math.round((weighted / totalWeight) * 1000) / 1000;
 }
 

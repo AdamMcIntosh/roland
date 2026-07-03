@@ -126,6 +126,11 @@ export class LoopPmBridge {
       blackboard: this.opts.blackboard,
       commandBoard: this.opts.commandBoard,
       modelRouter: this.router,
+      cwd:
+        process.env.ROLAND_PROJECT_ROOT?.trim() ??
+        process.env.ROLAND_ROOT?.trim() ??
+        process.cwd(),
+      isTestMode: this.opts.isTestMode,
     };
   }
 

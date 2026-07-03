@@ -3749,7 +3749,7 @@ What would you like to work on?`;
         process.env['ROLAND_TRIGGERED_VIA'] = 'mcp';
 
         sanitizeStaleMissionState(resolvedStateDir);
-        prepareMissionStart(resolvedStateDir, goal.trim());
+        prepareMissionStart(resolvedStateDir, goal.trim(), { projectRoot });
 
         const { pid, logFile } = await spawnBackground(
           goal.trim(),

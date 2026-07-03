@@ -170,6 +170,12 @@ export class ClosedLoop {
       blackboard: opts.blackboard,
       commandBoard: opts.commandBoard,
       modelRouter: this.modelRouter,
+      cwd:
+        opts.cwd ??
+        process.env.ROLAND_PROJECT_ROOT?.trim() ??
+        process.env.ROLAND_ROOT?.trim() ??
+        process.cwd(),
+      isTestMode: opts.isTestMode,
     };
 
     const pmBridge = pmEnabled

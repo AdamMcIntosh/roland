@@ -1,4 +1,6 @@
 /**
+ * ## Roland Execution Reliability Fix
+ *
  * ## Evaluation Gate & Blocker Fix
  *
  * ## MCP Project Context Fix
@@ -14,6 +16,7 @@ import path from 'path';
 import { LOOP_CHECKPOINT_FILE } from '../loop-engine/loop-checkpoint.js';
 import { LOOP_STATE_FILE } from '../loop-engine/loop-state.js';
 import { cleanupBoardsForNewMission } from './board-cleanup.js';
+import { HitlQueue } from './hitl.js';
 
 export const MISSION_META_FILE = 'mission-meta.json';
 export const SUPERVISOR_PID_FILE = 'supervisor.pid';
@@ -97,6 +100,7 @@ export interface CleanupPreviousRunsResult {
   metaArchived: boolean;
   boardCleanup?: unknown;
   loopArtifactsReset?: boolean;
+  hitlReset?: boolean;
 }
 
 /** Remove loop checkpoint + loop-state so a new mission does not inherit prior gate failures. */
@@ -120,9 +124,21 @@ export function resetLoopArtifactsForNewMission(
   return reset;
 }
 
+/** Clear HITL queue/state from a prior mission so new runs start unpaused. */
+export function resetHitlStateForNewMission(stateDir: string, log: StateLogger = noopLog): boolean {
+  try {
+    const queue = new HitlQueue(stateDir);
+    queue.cleanup();
+    log('Reset HITL state for new mission', { stateDir });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Full mission-start hygiene — sanitize stale PIDs, archive prior meta,
- * reset loop artifacts, and optionally clean command boards.
+ * reset loop artifacts, clear HITL, and clean command boards.
  */
 export function prepareMissionStart(
   stateDir: string,
@@ -130,21 +146,31 @@ export function prepareMissionStart(
   options: {
     dryRun?: boolean;
     skipBoardCleanup?: boolean;
+    projectRoot?: string;
   } = {},
   log: StateLogger = noopLog,
 ): CleanupPreviousRunsResult {
-  return cleanupPreviousRuns(
+  if (options.projectRoot) {
+    process.env['ROLAND_PROJECT_ROOT'] = path.resolve(options.projectRoot);
+    process.env['ROLAND_ROOT'] = process.env['ROLAND_PROJECT_ROOT'];
+    process.env['ROLAND_STATE_DIR'] = path.resolve(stateDir);
+  }
+
+  const result = cleanupPreviousRuns(
     stateDir,
     goal,
     {
       dryRun: options.dryRun,
       resetLoopArtifacts: !options.dryRun,
+      resetHitlState: !options.dryRun,
       runBoardCleanup: options.skipBoardCleanup
         ? undefined
         : (dir, missionGoal) => cleanupBoardsForNewMission(dir, missionGoal),
     },
     log,
   );
+
+  return result;
 }
 
 function noopLog(): void { /* */ }
@@ -369,6 +395,7 @@ export function cleanupPreviousRuns(
   options: {
     dryRun?: boolean;
     resetLoopArtifacts?: boolean;
+    resetHitlState?: boolean;
     runBoardCleanup?: (stateDir: string, missionGoal: string) => unknown;
   } = {},
   log: StateLogger = noopLog,
@@ -397,13 +424,18 @@ export function cleanupPreviousRuns(
     loopArtifactsReset = resetLoopArtifactsForNewMission(stateDir, log);
   }
 
+  let hitlReset = false;
+  if (!options.dryRun && options.resetHitlState !== false) {
+    hitlReset = resetHitlStateForNewMission(stateDir, log);
+  }
+
   let boardCleanup: unknown;
   if (!options.dryRun && options.runBoardCleanup) {
     boardCleanup = options.runBoardCleanup(stateDir, goal);
     log('Board cleanup completed for new mission', { stateDir });
   }
 
-  return { sanitized, metaArchived, boardCleanup, loopArtifactsReset };
+  return { sanitized, metaArchived, boardCleanup, loopArtifactsReset, hitlReset };
 }
 
 // ── Client-facing active run-state (HTTP + WebSocket parity) ─────────────────

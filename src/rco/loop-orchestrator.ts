@@ -110,6 +110,10 @@ export async function runClosedLoopMission(opts: ClosedLoopMissionOptions): Prom
     isTestMode,
     skipBackoff: isTestMode,
     runner: loopRunner,
+    cwd:
+      process.env.ROLAND_PROJECT_ROOT?.trim() ??
+      process.env.ROLAND_ROOT?.trim() ??
+      process.cwd(),
     enablePmIntegration: opts.enablePmIntegration,
     hooks: { onStateChange: onLoopStateChange },
     teamOpts: {

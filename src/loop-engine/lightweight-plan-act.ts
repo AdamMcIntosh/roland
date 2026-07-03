@@ -1,15 +1,20 @@
 /**
+ * ## Roland Execution Reliability Fix
+ *
  * ## Assumptions
- * - Pure ClosedLoop Plan/Act use these handlers (no PM Team / runTeam).
- * - LoopPmBridge delegates here when PM routing chooses lightweight.
+ * - Pure ClosedLoop Plan/Act dispatch Cursor SDK agents via loop-agent-dispatch.ts.
+ * - [DEPRECATED] LoopPmBridge delegates to legacy PM Team when explicitly opted in.
  */
 
 import type { Blackboard } from '../rco/blackboard.js';
 import type { CommandBlackboard } from '../rco/command-blackboard.js';
 import type { LoopTemplate } from './loop-phases.js';
-import type { PhaseResult } from './phase-handlers/types.js';
+import type { PhaseConfig } from './loop-phases.js';
 import { writeLoopPmSession } from './loop-pm-session.js';
 import { ModelRouter } from '../models/model-router.js';
+import { dispatchLoopPhaseAgent } from './loop-agent-dispatch.js';
+import type { LoopState } from './loop-state.js';
+import type { PhaseResult } from './phase-handlers/types.js';
 
 export interface LightweightPlanActContext {
   stateDir: string;
@@ -18,13 +23,16 @@ export interface LightweightPlanActContext {
   blackboard: Blackboard;
   commandBoard?: CommandBlackboard;
   modelRouter?: ModelRouter;
+  cwd?: string;
+  isTestMode?: boolean;
 }
 
-/** Lightweight Plan — no PM Team decomposition. */
-export function runLightweightPlan(
+/** Lightweight Plan — scopes iteration; optional SDK dispatch when not in test mode. */
+export async function runLightweightPlan(
   iteration: number,
   opts: LightweightPlanActContext,
-): PhaseResult {
+  extras: { phaseConfig?: PhaseConfig; loopState?: LoopState } = {},
+): Promise<PhaseResult> {
   const router = opts.modelRouter ?? ModelRouter.fromConfig();
   const planDispatch = router.resolveDispatchForPhase('plan', { log: true });
 
@@ -39,11 +47,25 @@ export function runLightweightPlan(
     updatedAt: Date.now(),
   });
 
+  const dispatch = await dispatchLoopPhaseAgent({
+    phase: 'plan',
+    iteration,
+    goal: opts.goal,
+    stateDir: opts.stateDir,
+    blackboard: opts.blackboard,
+    commandBoard: opts.commandBoard,
+    modelRouter: router,
+    phaseConfig: extras.phaseConfig,
+    loopState: extras.loopState,
+    isTestMode: opts.isTestMode,
+    cwd: opts.cwd,
+  });
+
   opts.blackboard.post({
     type: 'decision',
     title: 'Loop: Plan phase (pure ClosedLoop)',
-    content: `Planning iteration ${iteration} for goal: ${opts.goal.slice(0, 200)}`,
-    status: 'done',
+    content: dispatch.output || `Planning iteration ${iteration} for goal: ${opts.goal.slice(0, 200)}`,
+    status: dispatch.hadBlocker ? 'blocked' : 'done',
     author: 'loop-engine',
     priority: 'medium',
     tags: ['loop', 'plan', 'lightweight', 'pure-closed-loop'],
@@ -59,19 +81,24 @@ export function runLightweightPlan(
   );
 
   return {
-    success: true,
-    summary: 'Planning complete (pure ClosedLoop — no PM Team)',
+    success: dispatch.success,
+    summary: dispatch.summary || 'Planning complete (pure ClosedLoop)',
   };
 }
 
-/** Lightweight Act — no PM Team waves. */
-export function runLightweightAct(
+/** Lightweight Act — dispatches coding agent to implement goal on disk. */
+export async function runLightweightAct(
   iteration: number,
   opts: LightweightPlanActContext,
-  waveNumber = 0,
-): PhaseResult {
+  extras: {
+    waveNumber?: number;
+    phaseConfig?: PhaseConfig;
+    loopState?: LoopState;
+  } = {},
+): Promise<PhaseResult> {
   const router = opts.modelRouter ?? ModelRouter.fromConfig();
   const actDispatch = router.resolveDispatchForPhase('act', { log: true });
+  const waveNumber = extras.waveNumber ?? 0;
 
   opts.commandBoard?.setAgentStatus({
     callsign: 'Roland',
@@ -80,13 +107,31 @@ export function runLightweightAct(
     note: 'Loop Act — pure ClosedLoop',
   });
 
+  const dispatch = await dispatchLoopPhaseAgent({
+    phase: 'act',
+    iteration,
+    goal: opts.goal,
+    stateDir: opts.stateDir,
+    blackboard: opts.blackboard,
+    commandBoard: opts.commandBoard,
+    modelRouter: router,
+    phaseConfig: extras.phaseConfig,
+    loopState: extras.loopState,
+    waveNumber,
+    isTestMode: opts.isTestMode,
+    cwd: opts.cwd,
+  });
+
   opts.blackboard.post({
     type: 'decision',
-    title: waveNumber > 0 ? `Loop: Act phase (pure, wave ${waveNumber})` : 'Loop: Act phase (pure ClosedLoop)',
-    content: `Lightweight execution for iteration ${iteration}`,
-    status: 'in_progress',
-    author: 'loop-engine',
-    priority: 'medium',
+    title:
+      waveNumber > 0
+        ? `Loop: Act phase (pure, wave ${waveNumber})`
+        : 'Loop: Act phase (pure ClosedLoop)',
+    content: dispatch.output || `Lightweight execution for iteration ${iteration}`,
+    status: dispatch.hadBlocker ? 'blocked' : 'done',
+    author: dispatch.agentRole,
+    priority: dispatch.hadBlocker ? 'high' : 'medium',
     tags: ['loop', 'act', 'lightweight', 'pure-closed-loop'],
     relatedIds: [],
   });
@@ -96,8 +141,9 @@ export function runLightweightAct(
   );
 
   return {
-    success: true,
-    summary: 'Act phase complete (pure ClosedLoop — no PM waves)',
+    success: dispatch.success,
+    summary: dispatch.summary || 'Act phase complete (pure ClosedLoop)',
+    shouldRetry: dispatch.hadBlocker,
   };
 }
 

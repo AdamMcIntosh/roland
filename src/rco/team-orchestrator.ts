@@ -748,7 +748,11 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
   if (!loopEmbedded) {
     const { prepareMissionStart } = await import('./mission-state.js');
     const { formatCleanupReport } = await import('./board-cleanup.js');
-    const cleanupResult = prepareMissionStart(stateDir, goal);
+    const projectRoot =
+      process.env.ROLAND_PROJECT_ROOT?.trim() ||
+      process.env.ROLAND_ROOT?.trim() ||
+      process.cwd();
+    const cleanupResult = prepareMissionStart(stateDir, goal, { projectRoot });
     const boardResult = cleanupResult.boardCleanup as import('./board-cleanup.js').BoardCleanupResult | undefined;
     if (
       cleanupResult.metaArchived ||

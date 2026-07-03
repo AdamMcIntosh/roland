@@ -56,7 +56,22 @@ export function isScaffoldGoal(goal: string): boolean {
   if (requestsProductionHardening(goal) || isFocusedFeatureGoal(goal)) return false;
   return (
     /\bscaffold\b.*\b(basic|minimal|simple|empty|stub|new)\b/.test(g) ||
-    /\b(create|bootstrap|init)\b.*\b(new|basic|minimal)\b.*\b(express|fastify|api|app|server)\b/.test(g)
+    /\b(create|bootstrap|init)\b.*\b(new|basic|minimal)\b.*\b(express|fastify|api|app|server|project)\b/.test(g)
+  );
+}
+
+/**
+ * Greenfield project creation — new repo/folder with initial files (Node, TS, hello-world, etc.).
+ * Used for verification tolerance and loop act dispatch briefs.
+ */
+export function isGreenfieldGoal(goal: string): boolean {
+  const g = goal.toLowerCase();
+  if (isScaffoldGoal(goal)) return true;
+  return (
+    /\b(create|bootstrap|init|setup|scaffold)\b.*\b(project|app|repo|directory|folder|workspace)\b/.test(g) ||
+    /\b(minimal|greenfield|hello[- ]world)\b.*\b(node|typescript|ts|javascript|express|project)\b/.test(g) ||
+    /\btest-hybrid[-\d]*\b/.test(g) ||
+    (/\bcreate\b/.test(g) && /\b(node\.?js|typescript|ts)\b/.test(g) && /\bproject\b/.test(g))
   );
 }
 

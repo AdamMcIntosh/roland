@@ -328,7 +328,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
       process.env['ROLAND_TRIGGERED_VIA'] = 'cli';
     }
     sanitizeStaleMissionState(stateDir);
-    prepareMissionStart(stateDir, goal);
+    prepareMissionStart(stateDir, goal, { projectRoot: ctx.projectRoot });
     await spawnBackground(goal, argv, stateDir, { projectRoot: ctx.projectRoot });
     return; // parent exits immediately
   }
