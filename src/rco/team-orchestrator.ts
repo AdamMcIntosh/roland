@@ -41,6 +41,10 @@ import {
   resolveSdkSettleMs,
   waitForSdkRun,
 } from '../utils/sdk-lifecycle.js';
+import {
+  ensureMissionProjectContext,
+  resolveMissionProjectRoot,
+} from '../utils/mcp-project-context.js';
 
 // Team CLI and supervisor import this module directly (not via index.ts).
 configureSdkProcessLimits();
@@ -170,6 +174,8 @@ interface AgentCallOptions {
   sdkAgents?: Record<string, SdkAgentDefinition>;
   /** When true, Agent.create uses name "Roland" and registers UNSC sub-agents. */
   isSupervisor?: boolean;
+  /** Project root for SDK local agent cwd — defaults to resolveMissionProjectRoot(). */
+  cwd?: string;
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -504,6 +510,7 @@ async function callCursorAgentOnce(
 
   let agent: SdkAgent | undefined;
   let run: SdkRun | undefined;
+  const agentCwd = callOptions?.cwd ?? resolveMissionProjectRoot();
 
   try {
     agent = await Agent.create({
@@ -511,7 +518,7 @@ async function callCursorAgentOnce(
       model: { id: modelId },
       name: callOptions?.isSupervisor ? 'Roland' : agentName,
       local: resolveSdkAgentLocalOptions(agentName, {
-        cwd: process.cwd(),
+        cwd: agentCwd,
         settingSources: hasSubAgents ? (['project'] as const) : [],
       }) as import('@cursor/sdk').LocalAgentOptions,
       ...(hasSubAgents ? { agents: sdkAgents } : {}),
@@ -745,13 +752,15 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
     loopTemplate,
   } = opts;
 
+  const resolvedStateDir = path.resolve(stateDir);
+  const projectRoot = resolveMissionProjectRoot(resolvedStateDir);
+  if (!loopEmbedded) {
+    ensureMissionProjectContext({ projectRoot, stateDir: resolvedStateDir });
+  }
+
   if (!loopEmbedded) {
     const { prepareMissionStart } = await import('./mission-state.js');
     const { formatCleanupReport } = await import('./board-cleanup.js');
-    const projectRoot =
-      process.env.ROLAND_PROJECT_ROOT?.trim() ||
-      process.env.ROLAND_ROOT?.trim() ||
-      process.cwd();
     const cleanupResult = prepareMissionStart(stateDir, goal, { projectRoot });
     const boardResult = cleanupResult.boardCleanup as import('./board-cleanup.js').BoardCleanupResult | undefined;
     if (
@@ -825,14 +834,12 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
 
   const getCommandBlackboardSnapshot = () => commandBoard.smartSnapshot(goal);
 
-  const knowledge = loadProjectKnowledge(process.cwd());
+  const knowledge = loadProjectKnowledge(projectRoot);
   if (knowledge.files.length > 0) {
     console.error(`[Team] Project knowledge loaded — ${knowledge.summary}`);
   }
 
-  const projectRoot = process.env.ROLAND_PROJECT_ROOT?.trim()
-    || process.env.ROLAND_ROOT?.trim()
-    || process.cwd();
+  console.error(`[Team] Project root: ${projectRoot}`);
   const dashboardPort = process.env.ROLAND_DASHBOARD_PORT ?? '8081';
   const gitWorkflow = new TaskGitWorkflow({
     stateDir,
@@ -888,8 +895,8 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
   let currentWaveNumber = 0; // tracks active wave for onBlockerDetected calls
   const waveCircuit    = new WaveCircuitBreaker(); // reused across waves; reset per-wave
   const escalation     = new EscalationTracker();
-  const supervisorCallOpts: AgentCallOptions = { sdkAgents, isSupervisor: true };
-  const workerCallOpts: AgentCallOptions = { sdkAgents };
+  const supervisorCallOpts: AgentCallOptions = { sdkAgents, isSupervisor: true, cwd: projectRoot };
+  const workerCallOpts: AgentCallOptions = { sdkAgents, cwd: projectRoot };
   let missionDag: MissionDagStore | undefined;
   let syncMissionGraph: () => void = () => {};
 
@@ -1551,7 +1558,7 @@ async function runTeamInner(opts: TeamOrchestratorOptions): Promise<TeamResult> 
   }
 
   // ── Persist knowledge update (DECISIONS.md) ───────────────────────────────
-  const decisionsAdded = appendDecisions(synthesis, goal, runId, process.cwd());
+  const decisionsAdded = appendDecisions(synthesis, goal, runId, projectRoot);
   if (decisionsAdded > 0) {
     console.error(`[Team] DECISIONS.md updated — ${decisionsAdded} new decision(s) appended`);
   }

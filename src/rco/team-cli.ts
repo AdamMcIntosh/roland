@@ -25,7 +25,7 @@ import type { LoopState } from '../loop-engine/index.js';
 import { readLoopPmSession } from '../loop-engine/index.js';
 import { ModelRouter } from '../models/model-router.js';
 import {
-  applyMcpProjectEnv,
+  ensureMissionProjectContext,
   resolveMcpProjectContext,
 } from '../utils/mcp-project-context.js';
 import {
@@ -268,7 +268,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
   let { goal, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel, loopTemplate } = parsed;
 
   const ctx = resolveMcpProjectContext({ state_dir: parsed.stateDir });
-  applyMcpProjectEnv(ctx);
+  ensureMissionProjectContext(ctx);
   const stateDir = ctx.stateDir;
 
   if (!goal) {

@@ -4,8 +4,11 @@ import path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   applyMcpProjectEnv,
+  chdirToProject,
   deriveProjectRootFromStateDir,
+  ensureMissionProjectContext,
   resolveMcpProjectContext,
+  resolveMissionProjectRoot,
 } from '../../src/utils/mcp-project-context.js';
 
 describe('mcp-project-context', () => {
@@ -65,5 +68,53 @@ describe('mcp-project-context', () => {
 
     expect(process.env.ROLAND_PROJECT_ROOT).toBe(project);
     expect(process.env.ROLAND_STATE_DIR).toBe(stateDir);
+  });
+
+  it('explicit project_root ignores stale ROLAND_STATE_DIR env', () => {
+    const stale = path.join(tmpDir, 'test-hybrid-2');
+    const target = path.join(tmpDir, 'linux-utils');
+    fs.mkdirSync(path.join(stale, '.roland'), { recursive: true });
+    fs.mkdirSync(path.join(target, '.roland'), { recursive: true });
+
+    process.env.ROLAND_PROJECT_ROOT = stale;
+    process.env.ROLAND_STATE_DIR = path.join(stale, '.roland');
+
+    const ctx = resolveMcpProjectContext({ project_root: target });
+    expect(ctx.projectRoot).toBe(target);
+    expect(ctx.stateDir).toBe(path.join(target, '.roland'));
+  });
+
+  it('explicit state_dir ignores stale ROLAND_PROJECT_ROOT env', () => {
+    const stale = path.join(tmpDir, 'test-hybrid-2');
+    const target = path.join(tmpDir, 'linux-utils');
+    fs.mkdirSync(path.join(stale, '.roland'), { recursive: true });
+    fs.mkdirSync(path.join(target, '.roland'), { recursive: true });
+
+    process.env.ROLAND_PROJECT_ROOT = stale;
+    process.env.ROLAND_ROOT = stale;
+
+    const ctx = resolveMcpProjectContext({ state_dir: path.join(target, '.roland') });
+    expect(ctx.projectRoot).toBe(target);
+    expect(ctx.stateDir).toBe(path.join(target, '.roland'));
+  });
+
+  it('ensureMissionProjectContext chdirs workers into project root', () => {
+    const project = path.join(tmpDir, 'chdir-target');
+    const stateDir = path.join(project, '.roland');
+    fs.mkdirSync(stateDir, { recursive: true });
+    const priorCwd = process.cwd();
+
+    ensureMissionProjectContext({ projectRoot: project, stateDir });
+
+    expect(process.cwd()).toBe(project);
+    expect(resolveMissionProjectRoot()).toBe(project);
+
+    process.chdir(priorCwd);
+  });
+
+  it('chdirToProject is a no-op when project root does not exist', () => {
+    const priorCwd = process.cwd();
+    chdirToProject({ projectRoot: path.join(tmpDir, 'missing-project'), stateDir: tmpDir });
+    expect(process.cwd()).toBe(priorCwd);
   });
 });

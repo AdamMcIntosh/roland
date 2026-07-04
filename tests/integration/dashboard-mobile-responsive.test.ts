@@ -12,6 +12,8 @@
  * Isolation: fresh server process + browser page + temp state dir per test.
  *
  * Run: npx vitest run tests/integration/dashboard-mobile-responsive.test.ts
+ *
+ * Requires Google Chrome installed locally (Puppeteer skips bundled browser download).
  */
 
 import { spawn, execSync, type ChildProcess } from 'child_process';
@@ -315,6 +317,7 @@ describe('dashboard mobile responsiveness (wired HTTP + Puppeteer)', () => {
     ensureDistBuilt();
     browser = await puppeteer.launch({
       headless: true,
+      channel: 'chrome',
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
   }, 120_000);

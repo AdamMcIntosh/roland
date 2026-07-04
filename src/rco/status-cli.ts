@@ -8,6 +8,7 @@
  * ## Dashboard Demoted — CLI + Hermes Primary Complete
  */
 
+import path from 'path';
 import {
   buildHitlStatusReport,
   formatHermesHitlSummary,
@@ -23,6 +24,7 @@ import { printGitCommitApprovalStatus } from './git-commit-approval-cli.js';
 import { readRunState } from './run-state.js';
 import { readActiveMissionMeta, readSupervisorRecord } from './mission-state.js';
 import { isProcessRunning } from './supervisor.js';
+import { resolveMissionProjectRootFromState } from '../utils/mcp-project-context.js';
 
 const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
 const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
@@ -77,18 +79,24 @@ function collectSuggestedActions(
 
 /** One-shot unified mission snapshot — primary `roland status` output. */
 export function printUnifiedStatus(stateDir = '.roland', opts: StatusCliOpts = {}): void {
-  const board = buildBoardStatusReport(stateDir, opts.goal);
-  const hitl = buildHitlStatusReport(stateDir);
-  const runState = readRunState(stateDir);
-  const meta = readActiveMissionMeta(stateDir);
-  const sup = readSupervisorRecord(stateDir);
+  const resolvedStateDir = path.resolve(stateDir);
+  const projectRoot =
+    readActiveMissionMeta(resolvedStateDir)?.projectRoot ??
+    resolveMissionProjectRootFromState(resolvedStateDir);
+  const board = buildBoardStatusReport(resolvedStateDir, opts.goal);
+  const hitl = buildHitlStatusReport(resolvedStateDir);
+  const runState = readRunState(resolvedStateDir);
+  const meta = readActiveMissionMeta(resolvedStateDir);
+  const sup = readSupervisorRecord(resolvedStateDir);
   const bgAlive = sup ? isProcessRunning(sup.pid) : false;
   const triggeredVia = runState?.triggeredVia ?? meta?.triggeredVia;
-  const suggestedActions = collectSuggestedActions(stateDir, hitl, board.runActive);
+  const suggestedActions = collectSuggestedActions(resolvedStateDir, hitl, board.runActive);
 
   const payload = {
     runActive: board.runActive,
     goal: board.goal,
+    projectRoot,
+    stateDir: resolvedStateDir,
     triggeredVia: triggeredVia ?? null,
     background: sup
       ? { pid: sup.pid, alive: bgAlive, logFile: sup.logFile, goal: sup.goal }
@@ -124,6 +132,8 @@ export function printUnifiedStatus(stateDir = '.roland', opts: StatusCliOpts = {
   w(`  ${bold('Roland Status')}  ${dim('(CLI · Hermes primary · dashboard optional)')}`);
   w(`  ${hr}`);
   w();
+  w(`  ${dim('Project')}       ${cy(projectRoot)}`);
+  w(`  ${dim('State dir')}     ${dim(resolvedStateDir)}`);
 
   const runWord = board.runActive ? g('ACTIVE') : dim('idle');
   w(`  ${dim('Run')}           ${runWord}${board.goal ? dim(` — "${board.goal.slice(0, 60)}"`) : ''}`);
@@ -175,7 +185,7 @@ export function printUnifiedStatus(stateDir = '.roland', opts: StatusCliOpts = {
   w(`  ${dim('Live monitor:')} ${cy('roland live')}  ${dim('· TUI:')} ${cy('roland status --tui')}`);
   w();
 
-  printGitCommitApprovalStatus(stateDir);
+  printGitCommitApprovalStatus(resolvedStateDir);
 
   if (!opts.concise) {
     console.log(formatConciseUnscSummary(board));

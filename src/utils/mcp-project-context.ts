@@ -1,10 +1,15 @@
 /**
- * ## MCP Project Context Fix
+ * ## Project Context & Agent Dispatch Fix
  *
  * Resolves project root + `.roland` state directory for MCP-triggered runs
  * (Hermes HTTP, Cursor stdio) and background team missions.
  *
- * Priority: explicit `project_root` / `cwd` arg → env → derive from `state_dir` → cwd walk.
+ * Priority:
+ *   1. explicit `project_root` / `cwd` arg
+ *   2. explicit `state_dir` arg → derive project root (ignores stale env)
+ *   3. ROLAND_PROJECT_ROOT / ROLAND_ROOT env
+ *   4. ROLAND_STATE_DIR env → derive project root
+ *   5. cwd walk (CLI backward compat)
  */
 
 import fs from 'fs';
@@ -21,6 +26,11 @@ function pickString(...vals: unknown[]): string {
     if (typeof v === 'string' && v.trim()) return v.trim();
   }
   return '';
+}
+
+function hasExplicitArg(args: Record<string, unknown> | undefined, key: string): boolean {
+  const v = args?.[key];
+  return typeof v === 'string' && v.trim().length > 0;
 }
 
 /** Derive project root when only a `.roland` path is known. */
@@ -50,28 +60,54 @@ export function resolveMcpProjectContext(args?: {
   cwd?: unknown;
   state_dir?: unknown;
 }): McpProjectContext {
-  const rawProject = pickString(
-    args?.project_root,
-    args?.cwd,
-    process.env['ROLAND_PROJECT_ROOT'],
-    process.env['ROLAND_ROOT'],
-  );
-  const rawState = pickString(args?.state_dir, process.env['ROLAND_STATE_DIR']);
+  const explicitProject = pickString(args?.project_root, args?.cwd);
+  const explicitStateArg = hasExplicitArg(args as Record<string, unknown> | undefined, 'state_dir');
+  const explicitState = explicitStateArg ? pickString(args?.state_dir) : '';
 
   let projectRoot: string;
-  if (rawProject) {
-    projectRoot = path.resolve(rawProject);
-  } else if (rawState) {
-    projectRoot = deriveProjectRootFromStateDir(rawState);
+  if (explicitProject) {
+    projectRoot = path.resolve(explicitProject);
+  } else if (explicitStateArg && explicitState) {
+    // Explicit state_dir on tool/CLI args — never trust stale ROLAND_PROJECT_ROOT.
+    projectRoot = deriveProjectRootFromStateDir(explicitState);
+  } else if (pickString(process.env['ROLAND_PROJECT_ROOT'], process.env['ROLAND_ROOT'])) {
+    projectRoot = path.resolve(
+      pickString(process.env['ROLAND_PROJECT_ROOT'], process.env['ROLAND_ROOT'])!,
+    );
+  } else if (pickString(process.env['ROLAND_STATE_DIR'])) {
+    projectRoot = deriveProjectRootFromStateDir(process.env['ROLAND_STATE_DIR']!);
   } else {
     projectRoot = resolveProjectRoot(process.cwd());
   }
 
-  const stateDir = rawState
-    ? normalizeStateDir(projectRoot, rawState)
-    : path.join(projectRoot, '.roland');
+  let stateDir: string;
+  if (explicitState) {
+    stateDir = normalizeStateDir(projectRoot, explicitState);
+  } else if (explicitProject) {
+    // Hermes project_root/cwd — do not inherit stale ROLAND_STATE_DIR from another repo.
+    stateDir = path.join(projectRoot, '.roland');
+  } else if (pickString(process.env['ROLAND_STATE_DIR'])) {
+    stateDir = normalizeStateDir(projectRoot, process.env['ROLAND_STATE_DIR']!);
+  } else {
+    stateDir = path.join(projectRoot, '.roland');
+  }
 
   return { projectRoot, stateDir };
+}
+
+/** Active mission cwd — env pin first, then optional fallback. */
+export function resolveMissionProjectRoot(fallbackCwd?: string): string {
+  const fromEnv = pickString(process.env['ROLAND_PROJECT_ROOT'], process.env['ROLAND_ROOT']);
+  if (fromEnv) return path.resolve(fromEnv);
+  if (fallbackCwd?.trim()) return path.resolve(fallbackCwd);
+  return process.cwd();
+}
+
+/** Resolve project root for status panels when only stateDir is known. */
+export function resolveMissionProjectRootFromState(stateDir: string): string {
+  const fromEnv = pickString(process.env['ROLAND_PROJECT_ROOT'], process.env['ROLAND_ROOT']);
+  if (fromEnv) return path.resolve(fromEnv);
+  return deriveProjectRootFromStateDir(stateDir);
 }
 
 /**
@@ -95,11 +131,21 @@ export function chdirToProject(ctx: McpProjectContext): void {
   }
 }
 
+/**
+ * Pin env + chdir for mission workers (CLI, supervisor, team orchestrator).
+ * Returns the resolved project root after chdir.
+ */
+export function ensureMissionProjectContext(ctx: McpProjectContext): string {
+  applyMcpProjectEnv(ctx);
+  chdirToProject(ctx);
+  return ctx.projectRoot;
+}
+
 /*
- * ## MCP Project Context + Dashboard Sync Fixed
+ * ## Project Context Switching and Agent Dispatch Fixed
  *
- * Resolution order: explicit `project_root` / `cwd` arg → ROLAND_PROJECT_ROOT env
- * → derive from `state_dir` → cwd walk (CLI backward compat).
+ * Resolution order: explicit `project_root` / `cwd` → explicit `state_dir` derivation
+ * → ROLAND_PROJECT_ROOT env → derive from ROLAND_STATE_DIR → cwd walk.
  *
  * MCP stdio (Cursor): pass `project_root` per tool call or set ROLAND_PROJECT_ROOT
  * in ~/.cursor/mcp.json env for the workspace.
@@ -112,4 +158,6 @@ export function chdirToProject(ctx: McpProjectContext): void {
  *
  * Isolation: cleanupPreviousRuns + sanitizeStaleMissionState on mission start;
  * roland_run_team passes --clean; team-orchestrator archives stale board entries.
+ *
+ * Test: npx vitest run tests/unit/mcp-project-context.test.ts tests/integration/mcp-mission-project-context.test.ts
  */

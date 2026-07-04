@@ -1,8 +1,8 @@
 /**
- * ## Roland Execution Reliability Fix
+ * ## Project Context & Agent Dispatch Fix
  *
  * Dispatches Cursor SDK agents for Pure ClosedLoop Plan/Act phases.
- * Previously lightweight act was a no-op stub — missions completed without creating files.
+ * Includes role fallbacks when Sparrow / primary agents fail to respond.
  */
 
 import type { Blackboard } from '../rco/blackboard.js';
@@ -28,6 +28,7 @@ import {
 } from './act-validation.js';
 import type { PhaseConfig } from './loop-phases.js';
 import type { LoopState } from './loop-state.js';
+import { resolveMissionProjectRoot } from '../utils/mcp-project-context.js';
 
 export interface LoopAgentDispatchOptions {
   phase: 'plan' | 'act';
@@ -63,6 +64,18 @@ Use your file tools — do not only describe changes.`;
 
 const PLAN_BRIEF = `Break the goal into concrete implementation steps for this loop iteration.
 Keep scope focused — the Act phase will implement immediately after planning.`;
+
+/** Fallback roles when primary agent dispatch fails (Sparrow → coding → executor). */
+const LOOP_AGENT_FALLBACKS: Record<string, string[]> = {
+  sparrow: ['coding', 'executor'],
+  executor: ['coding', 'sparrow'],
+  coding: ['executor', 'sparrow'],
+  pm: ['planner', 'lead-pm'],
+  planner: ['pm', 'lead-pm'],
+  'lead-pm': ['planner', 'pm'],
+  'test-author': ['test-executor', 'vanguard'],
+  'test-executor': ['test-author', 'vanguard'],
+};
 
 function resolveAgentRole(phase: 'plan' | 'act', phaseConfig?: PhaseConfig): string {
   if (phaseConfig?.agent) return phaseConfig.agent;
@@ -165,6 +178,46 @@ async function callSdkAgent(
   }
 }
 
+function fallbackRolesFor(role: string): string[] {
+  const key = role.toLowerCase().replace(/\s+/g, '-');
+  return LOOP_AGENT_FALLBACKS[key] ?? ['executor', 'coding'];
+}
+
+/** Try primary role then fallbacks before surfacing a hard failure. */
+async function callSdkAgentWithFallbacks(
+  primaryRole: string,
+  prompt: string,
+  cwd: string,
+): Promise<{ output: string; agentRole: string }> {
+  const tried = new Set<string>();
+  const roles = [primaryRole, ...fallbackRolesFor(primaryRole)];
+
+  let lastError: Error | undefined;
+  for (const role of roles) {
+    const key = role.toLowerCase();
+    if (tried.has(key)) continue;
+    tried.add(key);
+
+    try {
+      const output = await callSdkAgent(role, prompt, cwd);
+      if (role !== primaryRole) {
+        console.error(
+          `[Loop][agent] Fallback succeeded — ${primaryRole} → ${role} cwd=${cwd}`,
+        );
+      }
+      return { output, agentRole: role };
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      console.error(
+        `[Loop][agent] Dispatch failed for ${role}: ${lastError.message.slice(0, 120)}` +
+          (tried.size < roles.length ? ' — trying fallback' : ''),
+      );
+    }
+  }
+
+  throw lastError ?? new Error(`Agent "${primaryRole}" failed with no fallbacks`);
+}
+
 function testModeStub(opts: LoopAgentDispatchOptions): LoopAgentDispatchResult {
   const role = resolveAgentRole(opts.phase, opts.phaseConfig);
   const output =
@@ -185,7 +238,7 @@ export async function dispatchLoopPhaseAgent(
   opts: LoopAgentDispatchOptions,
 ): Promise<LoopAgentDispatchResult> {
   const role = resolveAgentRole(opts.phase, opts.phaseConfig);
-  const cwd = opts.cwd ?? process.env.ROLAND_PROJECT_ROOT ?? process.cwd();
+  const cwd = opts.cwd ?? resolveMissionProjectRoot();
 
   if (opts.isTestMode || process.env.ROLAND_LOOP_TEST_MODE === '1') {
     return testModeStub(opts);
@@ -226,7 +279,7 @@ export async function dispatchLoopPhaseAgent(
       actBaseline = captureWorkspaceBaseline(cwd);
     }
 
-    const output = await callSdkAgent(role, prompt, cwd);
+    const { output, agentRole: effectiveRole } = await callSdkAgentWithFallbacks(role, prompt, cwd);
     const signals = parseWorkerSignals(output);
     let hadBlocker = signals.blockers.length > 0;
 
@@ -310,8 +363,8 @@ export async function dispatchLoopPhaseAgent(
         ? signals.blockers.length > 0
           ? `${opts.phase} blocked — agent signalled blocker`
           : `${opts.phase} blocked — no files written to disk`
-        : `${opts.phase} complete via ${dispatch.displayLabel}`,
-      agentRole: role,
+        : `${opts.phase} complete via ${dispatch.displayLabel}${effectiveRole !== role ? ` (fallback: ${effectiveRole})` : ''}`,
+      agentRole: effectiveRole,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -337,12 +390,8 @@ export async function dispatchLoopPhaseAgent(
 }
 
 /**
- * ## Roland Execution Now Reliable
+ * ## Project Context Switching and Agent Dispatch Fixed
  *
- * Act phase dispatches Cursor SDK agents and validates filesystem changes afterward.
- * Test commands:
- *   npx vitest run tests/unit/act-validation.test.ts
- *   npx vitest run tests/unit/loop-agent-dispatch.test.ts
- * Greenfield E2E (requires CURSOR_API_KEY):
- *   roland team "create minimal Node.js + TS project with hello-world.ts" --loop-template full-cycle-verified-loop
+ * Act phase dispatches Cursor SDK agents with Sparrow/coding fallbacks and validates filesystem changes.
+ * Test: npx vitest run tests/unit/loop-agent-dispatch.test.ts tests/integration/mcp-mission-project-context.test.ts
  */
