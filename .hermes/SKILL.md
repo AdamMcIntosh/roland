@@ -115,7 +115,19 @@ Always prefer **Pure ClosedLoop** (`use_pm_team: false`).
 roland team "Exact clear goal here" --loop-template full-cycle-verified-loop
 ```
 
-Templates: `full-cycle-verified-loop` (default) · `feature-implementation-loop` · `refactor-and-modernize-loop` · `research-and-spec-loop`
+Templates: `full-cycle-verified-loop` (default) · `small-fix-loop` · `feature-implementation-loop` · `refactor-and-modernize-loop` · `research-and-spec-loop`
+
+### When to use `small-fix-loop`
+
+Prefer **small-fix-loop** for everyday quick work — typos, one-liners, hotfixes, cosmetic fixes, minor config tweaks — where full unit testing is not required or practical:
+
+```bash
+roland team "Fix small typo in README" --loop-template small-fix-loop
+roland team "Correct spelling in error message" --loop-template small-fix-loop
+roland team "Hotfix null check in login handler" --loop-template small-fix-loop
+```
+
+Use **full-cycle-verified-loop** when the change needs full verification, reflection, and exit conditions (production missions, behavior changes, multi-file work).
 
 When the user approves ("go", "run it", "execute"), run the exact command via shell.
 

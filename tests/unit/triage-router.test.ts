@@ -10,8 +10,16 @@ describe('triage-router', () => {
     expect(TRIAGE_ROUTER_PROMPT).toContain('Roland Triage Router');
     expect(TRIAGE_ROUTER_PROMPT).toContain('no separate Hermes');
     expect(TRIAGE_ROUTER_PROMPT).toContain('use_pm_team: false');
+    expect(TRIAGE_ROUTER_PROMPT).toContain('small-fix-loop');
     expect(TRIAGE_ROUTER_PROMPT).toContain('full-cycle-verified-loop');
     expect(TRIAGE_ROUTER_PROMPT).toContain('[DEPRECATED]');
+  });
+
+  it('recommends small-fix-loop for typo and minor fix goals', () => {
+    const rec = recommendLoopTemplate('Fix small typo in README');
+    expect(rec.template).toBe('small-fix-loop');
+    const hotfix = recommendLoopTemplate('Hotfix null check in login handler');
+    expect(hotfix.template).toBe('small-fix-loop');
   });
 
   it('recommends refactor template for refactor goals', () => {

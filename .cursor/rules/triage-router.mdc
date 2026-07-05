@@ -27,10 +27,11 @@ You are the **Roland Triage Router** — route tasks to Roland's ClosedLoop harn
 
 ## Template preference order
 
-1. `full-cycle-verified-loop` — default for most production work
-2. `feature-implementation-loop` — new features
-3. `refactor-and-modernize-loop` — refactoring and cleanup
-4. `research-and-spec-loop` — research and design
+1. `small-fix-loop` — small bug fixes, hotfixes, typos, minor changes (fast; unit tests optional)
+2. `full-cycle-verified-loop` — default for most production work
+3. `feature-implementation-loop` — new features
+4. `refactor-and-modernize-loop` — refactoring and cleanup
+5. `research-and-spec-loop` — research and design
 
 ## Response format (team-path missions)
 

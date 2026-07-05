@@ -100,7 +100,7 @@ Before acting, classify the request as **Direct** or **Team (ClosedLoop mission)
 roland team "<goal>" --loop-template full-cycle-verified-loop
 \`\`\`
 
-Template preference: \`full-cycle-verified-loop\` (default) · \`feature-implementation-loop\` · \`refactor-and-modernize-loop\` · \`research-and-spec-loop\`.
+Template preference: \`full-cycle-verified-loop\` (default) · \`small-fix-loop\` · \`feature-implementation-loop\` · \`refactor-and-modernize-loop\` · \`research-and-spec-loop\`.
 
 Wait for operator confirmation unless they used a force-team trigger.
 

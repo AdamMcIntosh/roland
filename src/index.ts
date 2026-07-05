@@ -417,7 +417,7 @@ async function main(): Promise<void> {
       const pkgPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json');
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as { version: string };
       console.log(`roland ${pkg.version}`);
-    } catch { console.log('roland 1.2.0'); }
+    } catch { console.log('roland 1.3.0'); }
     process.exit(0);
   }
 

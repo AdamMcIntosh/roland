@@ -67,6 +67,7 @@ Other common templates:
 roland team "ship user profile settings" --loop-template feature-implementation-loop
 roland team "clean up recent slop in src/" --loop-template refactor-and-modernize-loop
 roland team "add MCP tool for triage" --loop-template mcp-extension-loop
+roland team "Fix small typo in README" --loop-template small-fix-loop
 ```
 
 ### 3. Command center (dashboard — monitor & control)
@@ -139,6 +140,7 @@ Templates live in `recipes/loops/`. Attach with `--loop-template <name>`. Verifi
 
 | Template | When to use | Max iter | Key gates |
 |----------|-------------|----------|-----------|
+| **small-fix-loop** | Hotfixes, typos, minor changes — fast; unit tests optional | 3 | lint, typecheck, smoke |
 | **full-cycle-verified-loop** | Production missions — reflection, exit conditions, PR formatting | 10 | lint, unit, typecheck |
 | **feature-implementation-loop** | Ship a feature with integration + smoke | 8 | unit, integration, smoke |
 | **refactor-and-modernize-loop** | Refactor / de-sloppify without behavior change | 4 | lint, unit, typecheck |

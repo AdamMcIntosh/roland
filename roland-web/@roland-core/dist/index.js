@@ -378,7 +378,7 @@ async function main() {
             console.log(`roland ${pkg.version}`);
         }
         catch {
-            console.log('roland 1.2.0');
+            console.log('roland 1.3.0');
         }
         process.exit(0);
     }

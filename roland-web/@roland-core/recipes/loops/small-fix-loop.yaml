@@ -1,0 +1,72 @@
+## Small Fix Loop Template
+name: small-fix-loop
+description: >
+  Lightweight Pure ClosedLoop for small bug fixes, hotfixes, typos, and minor improvements where
+  full unit testing is not required or practical. Fast iteration — lint, typecheck, and smoke gates
+  only; unit tests optional (skipped by default with a warning).
+kickoff: >
+  Start the small-fix loop. Apply a minimal, targeted change quickly. Unit tests are optional and
+  skipped by default when not practical — lint, typecheck, and smoke must pass. Critique the diff,
+  then dry-run commit with a clean conventional message.
+use_pm_team: false
+between_iterations:
+  action: git-commit
+  dry_run: true
+  optional: true
+  message_template: "fix(loop): {goal}"
+phases:
+  - phase: plan
+    label: Plan minimal fix
+    agent: pm
+  - phase: act
+    label: Implement fix
+    agent: coding
+    specialist_spawns:
+      - role: coding
+        primary: true
+  - phase: verify
+    label: Lightweight gates
+    agent: verifier
+    verification:
+      - type: lint
+        weight: 0.6
+        success_threshold: 0.65
+        optional: true
+      - type: typecheck
+        weight: 0.65
+        success_threshold: 0.65
+        optional: true
+      - type: smoke
+        weight: 0.5
+        success_threshold: 0.5
+        optional: true
+      - type: unit
+        weight: 0.25
+        success_threshold: 0.8
+        optional: true
+  - phase: critique
+    label: Quick critique
+    agent: critic
+    specialist_spawns:
+      - role: critic
+        primary: true
+  - phase: retry
+    label: Retry fix
+    optional: true
+  - phase: observe
+    label: Observe state
+    agent: researcher
+maxIterations: 3
+maxRetries: 2
+escalationThreshold: 3
+testModeMaxRetries: 4
+testModeEscalationThreshold: 5
+timeout_ms: 600000
+min_confidence: 0.65
+exit_conditions:
+  - type: all_gates_pass
+    description: Lint, typecheck, and smoke gates pass (unit optional)
+  - type: confidence_streak
+    description: Success confidence ≥ 0.65 for 1 consecutive iteration
+    minConfidence: 0.65
+    consecutiveIterations: 1

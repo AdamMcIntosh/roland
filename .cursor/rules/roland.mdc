@@ -39,7 +39,7 @@ Before acting on new work, internally decide **Direct** or **Team**. Show the de
 roland team "<goal>" --loop-template full-cycle-verified-loop
 ```
 
-Templates: `full-cycle-verified-loop` (default) · `feature-implementation-loop` · `refactor-and-modernize-loop` · `research-and-spec-loop`.
+Templates: `full-cycle-verified-loop` (default) · `small-fix-loop` · `feature-implementation-loop` · `refactor-and-modernize-loop` · `research-and-spec-loop`
 
 > [DEPRECATED] Do not suggest legacy LeadPM / `use_pm_team: true` unless explicitly requested.
 

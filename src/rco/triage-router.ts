@@ -20,10 +20,11 @@ export const TRIAGE_ROUTER_PROMPT = `You are the Roland Triage Router — a fast
 
 ## Available Templates (in order of preference)
 
-1. \`full-cycle-verified-loop\` — Default / recommended for most tasks
-2. \`feature-implementation-loop\` — New features
-3. \`refactor-and-modernize-loop\` — Refactoring and cleanup
-4. \`research-and-spec-loop\` — Research and design work
+1. \`small-fix-loop\` — Small bug fixes, hotfixes, typos, minor changes (fast; unit tests optional)
+2. \`full-cycle-verified-loop\` — Default / recommended for most production tasks
+3. \`feature-implementation-loop\` — New features
+4. \`refactor-and-modernize-loop\` — Refactoring and cleanup
+5. \`research-and-spec-loop\` — Research and design work
 
 ## Response Format (Always Use This)
 
@@ -61,6 +62,16 @@ const TEMPLATE_CATALOG: Array<{
   patterns: RegExp[];
 }> = [
   {
+    template: 'small-fix-loop',
+    reason: 'Small bug fix, hotfix, typo, or minor change — fast loop with optional unit tests.',
+    patterns: [
+      /\b(small fix|hotfix|quick fix|minor (change|fix|update|improvement)|cosmetic|patch)\b/i,
+      /\bfix (a )?(small|minor|simple|quick)\b/i,
+      /\b(fix|correct) (a )?(typo|spelling|word)\b/i,
+      /\b(one[- ]line(r)?|tiny change|trivial fix)\b/i,
+    ],
+  },
+  {
     template: 'refactor-and-modernize-loop',
     reason: 'Refactoring or cleanup without behavior change — lint, unit, and typecheck gates.',
     patterns: [
@@ -93,13 +104,20 @@ export function recommendLoopTemplate(message: string): LoopTemplateRecommendati
   const trimmed = message.trim();
   const lower = trimmed.toLowerCase();
 
-  const researchHit = TEMPLATE_CATALOG[1]!.patterns.some((p) => p.test(lower));
+  const smallFixEntry = TEMPLATE_CATALOG.find((e) => e.template === 'small-fix-loop')!;
+  if (smallFixEntry.patterns.some((p) => p.test(lower))) {
+    return { template: smallFixEntry.template, reason: smallFixEntry.reason };
+  }
+
+  const researchEntry = TEMPLATE_CATALOG.find((e) => e.template === 'research-and-spec-loop')!;
+  const researchHit = researchEntry.patterns.some((p) => p.test(lower));
   const implementHit = /\b(implement|ship|add|build|deploy|code)\b/i.test(lower);
   if (researchHit && !implementHit) {
-    return { template: TEMPLATE_CATALOG[1]!.template, reason: TEMPLATE_CATALOG[1]!.reason };
+    return { template: researchEntry.template, reason: researchEntry.reason };
   }
 
   for (const entry of TEMPLATE_CATALOG) {
+    if (entry.template === 'small-fix-loop') continue;
     if (entry.template === 'research-and-spec-loop') continue;
     if (entry.template === 'full-cycle-verified-loop') continue;
     if (entry.patterns.some((p) => p.test(lower))) {

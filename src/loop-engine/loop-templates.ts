@@ -30,6 +30,7 @@ import {
 /** Canonical generic templates — readiness gate expects these to exist. */
 export const CORE_GENERIC_TEMPLATES = [
   'standard-code-loop',
+  'small-fix-loop',
   'feature-implementation-loop',
   'refactor-and-modernize-loop',
   'research-and-spec-loop',

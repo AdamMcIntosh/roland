@@ -66,6 +66,21 @@ describe('Generic loop templates', () => {
     expect(issues.some((i) => i.code === 'project_specific')).toBe(true);
   });
 
+  it('small-fix-loop is Pure ClosedLoop with optional unit gate', () => {
+    const tpl = templates.get('small-fix-loop')!;
+    expect(tpl.usePmTeam).toBe(false);
+    expect(tpl.maxIterations).toBe(3);
+    expect(tpl.minConfidence).toBe(0.65);
+    const verify = tpl.phases.find((p) => p.phase === 'verify');
+    const unitEntry = verify?.verification?.find(
+      (v) => typeof v === 'object' && v.type === 'unit',
+    );
+    expect(unitEntry && typeof unitEntry === 'object' && unitEntry.optional).toBe(true);
+    expect(summarizeBetweenIterationsConfig(tpl)).toContain('git-commit');
+    const act = tpl.phases.find((p) => p.phase === 'act');
+    expect(act?.specialistSpawns?.some((s) => s.role === 'coding')).toBe(true);
+  });
+
   it('feature-implementation-loop has PM opt-in fields', () => {
     const tpl = templates.get('feature-implementation-loop')!;
     expect(tpl.usePmTeam).toBe(true);

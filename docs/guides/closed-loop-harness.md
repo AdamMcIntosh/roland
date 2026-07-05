@@ -51,6 +51,10 @@ roland team "add user profile settings page" \
 # Refactor / modernize
 roland team "clean up slop in recent auth changes" \
   --loop-template refactor-and-modernize-loop
+
+# Small fix / hotfix / typo (fast — unit tests optional)
+roland team "Fix small typo in README" \
+  --loop-template small-fix-loop
 ```
 
 From **Cursor** (`@roland`) or the CLI, attach a loop template when launching a run:
@@ -96,6 +100,7 @@ All templates live in `recipes/loops/`. Templates are **generic-first** — proj
 
 | Template | Best for | Max iter | Verification | PM mode |
 |----------|----------|----------|--------------|---------|
+| `small-fix-loop` | Hotfixes, typos, minor changes | 3 | lint, typecheck, smoke (unit optional) | Pure ClosedLoop |
 | `standard-code-loop` | Default software loop | 5 | unit, lint, typecheck | Pure ClosedLoop (Hermes PM) |
 | `feature-implementation-loop` | Feature delivery | 8 | unit, integration, smoke | [DEPRECATED] PM-Enhanced opt-in |
 | `refactor-and-modernize-loop` | Refactor / de-sloppify | 4 | lint, unit, typecheck | Pure ClosedLoop (Hermes PM) |
@@ -145,6 +150,7 @@ roland team "add triage tool schema" --loop-template mcp-extension-loop
 
 ### When to use which
 
+- **small-fix-loop** — everyday quick work: typos, one-liners, hotfixes, cosmetic fixes, minor config tweaks. Skips unit tests by default (optional with warning); keeps lint, typecheck, and smoke. Faster iteration, lower confidence thresholds.
 - **full-cycle-verified-loop** — production missions with reflection, exit conditions, checkpoint recovery, PR output.
 - **feature-implementation-loop** — user-facing features; [DEPRECATED] set `use_pm_team: true` only if legacy PM waves are required (prefer Hermes + Pure ClosedLoop).
 - **refactor-and-modernize-loop** — structural cleanup without behavior change.
@@ -546,7 +552,7 @@ roland approve-commit --message "feat: iteration checkpoint"
 # or use dashboard Git Commit Approval panel
 ```
 
-For feature work with YAML specialist spawns and integration/smoke gates, prefer `feature-implementation-loop`. For production missions with reflection and declarative exit conditions, use `full-cycle-verified-loop`.
+For feature work with YAML specialist spawns and integration/smoke gates, prefer `feature-implementation-loop`. For production missions with reflection and declarative exit conditions, use `full-cycle-verified-loop`. For typos, hotfixes, and minor one-file changes, use `small-fix-loop`.
 
 ---
 
