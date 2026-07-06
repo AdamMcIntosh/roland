@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ## P0 Trust & Safety Fixes
+ * ## P2 Polish & Reach
  *
  * RCO Team CLI — Pure ClosedLoop mission launcher (primary execution path).
  * Default: auto-select loop template (small-fix-loop / standard templates).
@@ -199,7 +199,7 @@ export function resolveTeamLoopTemplate(opts: {
 
 export function parseTeamArgs(argv: string[]): TeamCliArgs {
   // Strip leading 'team' subcommand when forwarded from the roland binary
-  const args = argv[0] === 'team' ? argv.slice(1) : argv;
+  const args = argv[0] === 'team' || argv[0] === 'mission' ? argv.slice(1) : argv;
 
   let goal = '';
   let stateDir = '.roland';

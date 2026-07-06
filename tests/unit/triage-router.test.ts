@@ -11,7 +11,8 @@ describe('triage-router', () => {
     expect(TRIAGE_ROUTER_PROMPT).toContain('no separate Hermes');
     expect(TRIAGE_ROUTER_PROMPT).toContain('use_pm_team: false');
     expect(TRIAGE_ROUTER_PROMPT).toContain('small-fix-loop');
-    expect(TRIAGE_ROUTER_PROMPT).toContain('full-cycle-verified-loop');
+    expect(TRIAGE_ROUTER_PROMPT).toContain('standard-code-loop');
+    expect(TRIAGE_ROUTER_PROMPT).toContain('research-and-plan-loop');
     expect(TRIAGE_ROUTER_PROMPT).toContain('[DEPRECATED]');
   });
 
@@ -34,12 +35,12 @@ describe('triage-router', () => {
 
   it('recommends research template for research-only goals', () => {
     const rec = recommendLoopTemplate('Research OAuth provider options and produce a spec');
-    expect(rec.template).toBe('research-and-spec-loop');
+    expect(rec.template).toBe('research-and-plan-loop');
   });
 
-  it('defaults to full-cycle-verified-loop', () => {
+  it('defaults to standard-code-loop for general work', () => {
     const rec = recommendLoopTemplate('Harden loop checkpoint recovery semantics');
-    expect(rec.template).toBe('full-cycle-verified-loop');
+    expect(rec.template).toBe('standard-code-loop');
   });
 
   it('buildRolandTeamCommand includes loop template flag', () => {

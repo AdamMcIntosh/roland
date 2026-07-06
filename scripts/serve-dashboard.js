@@ -2,10 +2,12 @@
 /**
  * ## CLI-First Simplification
  *
- * Roland Dashboard Server — **optional / deprecated** HTTP adjunct for live loop/HITL monitoring.
- * Primary monitoring: CLI (`roland status`, `roland live`, `hitl-status`, `board-status`, `mission-summary`)
- * and MCP (`hitl_status`, `poll_hitl_events`, `mission_summary`, `board_status`).
- * Hermes (Master Chief) is the primary conversational interface — not this dashboard.
+ * Roland Dashboard Server — **read-only monitoring dashboard** (optional HTTP adjunct).
+ * Primary execution: CLI (`roland team`, `roland mission`) and MCP (`roland_run_team`).
+ * Primary monitoring: CLI (`roland status`, `roland live`, `roland mission-audit`) and MCP tools.
+ *
+ * Launcher features (POST /api/mission, create-project, github/clone) are **frozen** —
+ * use `roland team "goal"` from the terminal instead.
  *
  * ## Dashboard Demoted — CLI + Hermes Primary Complete
  *
@@ -160,6 +162,16 @@ function logApi(method, route, msg, detail) {
   const line = `[API] ${logTs()} ${method} ${route} — ${msg}`;
   if (detail !== undefined) console.log(line, detail);
   else console.log(line);
+}
+
+/** P2: Dashboard is read-only monitor — block launcher/clone endpoints. */
+function dashboardLauncherBlocked(res, feature) {
+  jsonErr(
+    res,
+    `Dashboard is read-only (monitoring only). ${feature} is disabled — use \`roland team "goal"\` from the CLI.`,
+    410,
+    { readOnly: true, cliAlternative: 'roland team "your goal"' },
+  );
 }
 
 // ── CLI args ──────────────────────────────────────────────────────────────────
@@ -2581,11 +2593,7 @@ const server = http.createServer(async (req, res) => {
 
   // ── /api/create-project POST ─────────────────────────────────────────────
   if (url === '/api/create-project' && method === 'POST') {
-    try {
-      const body = await readBody(req);
-      const result = await createProject(body);
-      jsonOk(res, result);
-    } catch (e) { jsonErr(res, e.message, 400); }
+    dashboardLauncherBlocked(res, 'Project scaffolding');
     return;
   }
 
@@ -2674,24 +2682,7 @@ const server = http.createServer(async (req, res) => {
 
   // ── /api/github/clone POST ───────────────────────────────────────────────
   if (url === '/api/github/clone' && method === 'POST') {
-    try {
-      const body = await readBody(req);
-      const result = await cloneGitHubRepo(body);
-      logGitHub('Clone/open complete', {
-        owner: body.owner,
-        repo: body.repo,
-        path: result.path,
-        cloned: result.cloned,
-      });
-      jsonOk(res, result);
-    } catch (e) {
-      if (e.code === 'PAT_CORRUPTED') {
-        jsonErr(res, e.message, 400, { needsReconnect: true });
-        return;
-      }
-      logGitHub('Clone failed', { error: e.message });
-      jsonErr(res, e.cause ? e.message : classifyGitError(e), 500, gitErrorFlags(e.cause ?? e));
-    }
+    dashboardLauncherBlocked(res, 'GitHub clone');
     return;
   }
 
@@ -2745,133 +2736,7 @@ const server = http.createServer(async (req, res) => {
 
   // ── /api/mission POST ────────────────────────────────────────────────────
   if (url === '/api/mission' && method === 'POST') {
-    try {
-      const body = await readBody(req);
-      logMission('POST /api/mission — request received', {
-        goal: typeof body.goal === 'string' ? body.goal.slice(0, 120) : null,
-        runName: body.runName ?? null,
-        priority: body.priority ?? 'P3',
-        cleanup: Boolean(body.cleanup),
-      });
-
-      const rawGoal = typeof body.goal === 'string' ? body.goal.trim() : '';
-      if (!rawGoal) {
-        logMission('POST /api/mission — rejected: missing goal');
-        jsonErr(res, 'goal is required');
-        return;
-      }
-
-      sanitizeStaleMissionState(activeStateDir, (msg, detail) => logState(msg, detail));
-
-      if (isSupervisorAlive(activeStateDir)) {
-        const supervisor = readSupervisorRecord();
-        logMission(`POST /api/mission — rejected: supervisor already running PID ${supervisor?.pid}`);
-        jsonErr(res, `A background mission is already running (PID ${supervisor?.pid}). Stop it with \`roland bg-stop\` or wait for completion.`, 409);
-        return;
-      }
-
-      if (isRunStateActive(activeStateDir)) {
-        const runState = readJson(path.join(activeStateDir, 'run-state.json'), null);
-        logMission(`POST /api/mission — rejected: active run ${runState?.runId} (${runState?.status})`);
-        jsonErr(res, `A team mission is already active (${runState?.status}). Wait for completion or use HITL controls.`, 409);
-        return;
-      }
-
-      const priority = ['P1', 'P2', 'P3', 'P4'].includes(body.priority) ? body.priority : 'P3';
-      const runName = typeof body.runName === 'string' ? body.runName.trim() : '';
-      const forceTeam = Boolean(body.forceTeam);
-      const pmModel = typeof body.pmModel === 'string' ? body.pmModel : DEFAULT_PM_MODEL;
-      const engineerModel = typeof body.engineerModel === 'string' ? body.engineerModel : DEFAULT_ENGINEER_MODEL;
-      const notify = Boolean(body.notify);
-      const cleanup = Boolean(body.cleanup);
-      const loopTemplate = typeof body.loopTemplate === 'string' ? body.loopTemplate.trim() : '';
-
-      const bbBefore = readBlackboardEntries().filter(e => e.status !== 'archived').length;
-      logMission('Blackboard before mission launch', { activeEntries: bbBefore });
-
-      const boardCleanupMod = await loadBoardCleanupModule();
-      cleanupPreviousRuns(
-        activeStateDir,
-        rawGoal,
-        {
-          runBoardCleanup: cleanup && boardCleanupMod
-            ? (dir, g) => boardCleanupMod.cleanupBoardsForNewMission(dir, g, { goal: g })
-            : undefined,
-        },
-        (msg, detail) => logState(msg, detail),
-      );
-
-      const effectiveGoal = buildMissionGoal(rawGoal, { priority, runName, forceTeam });
-      spawnTeamMission(effectiveGoal, {
-        pmModel,
-        engineerModel,
-        notify,
-        clean: cleanup,
-        loopTemplate: loopTemplate || undefined,
-      });
-
-      const missionId = randomUUID();
-      const { pid } = await confirmSupervisorAndWriteMissionMeta({
-        id: missionId,
-        goal: rawGoal,
-        effectiveGoal,
-        runName: runName || null,
-        priority,
-        forceTeam,
-        pmModel,
-        engineerModel,
-        loopTemplate: loopTemplate || null,
-        projectRoot: activeProjectRoot,
-        stateDir: activeStateDir,
-        status: 'active',
-        startedAt: Date.now(),
-        triggeredVia: 'dashboard',
-      });
-
-      let bbAfter = bbBefore;
-      try {
-        const bbResult = appendMissionLaunchEntry({ goal: rawGoal, runName, priority, pid });
-        bbAfter = bbResult.afterCount;
-      } catch (bbErr) {
-        logMission(`Blackboard write failed (mission still spawned): ${bbErr.message}`);
-      }
-
-      // Push WebSocket update so connected clients see the launch immediately
-      await pushCurrentState();
-
-      const title = runName || rawGoal.slice(0, 60);
-      logMission(`Started mission: ${missionId} — ${title} at ${new Date().toISOString()}`, {
-        pid,
-        priority,
-        blackboardBefore: bbBefore,
-        blackboardAfter: bbAfter,
-        stateDir: activeStateDir,
-        projectRoot: activeProjectRoot,
-      });
-
-      jsonOk(res, {
-        ok: true,
-        missionId,
-        pid,
-        goal: rawGoal,
-        effectiveGoal,
-        loopTemplate: loopTemplate || null,
-        startedAt: Date.now(),
-        message: 'Mission launched in background',
-        logHint: 'roland bg-logs --follow',
-        boardStatusUrl: '/api/board-status',
-      });
-    } catch (e) {
-      logMission(`POST /api/mission — error: ${e.message}`);
-      if (e instanceof SupervisorStartError) {
-        jsonErr(res, e.message, 500, {
-          code: e.code,
-          ...e.diagnostics,
-        });
-        return;
-      }
-      jsonErr(res, e.message, 500);
-    }
+    dashboardLauncherBlocked(res, 'Mission launch');
     return;
   }
 

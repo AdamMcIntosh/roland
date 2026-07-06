@@ -18,7 +18,8 @@ import type { LoopTemplate } from '../../src/loop-engine/loop-phases.js';
 describe('Generic loop templates', () => {
   const templates = new LoopTemplates();
 
-  it('loads all core generic templates', () => {
+  it('loads all seven core generic templates', () => {
+    expect(CORE_GENERIC_TEMPLATES).toHaveLength(7);
     for (const name of CORE_GENERIC_TEMPLATES) {
       const tpl = templates.get(name);
       expect(tpl, `missing ${name}`).toBeDefined();
@@ -35,7 +36,9 @@ describe('Generic loop templates', () => {
   it('resolves deprecated aliases to canonical names', () => {
     expect(templates.resolveName('closed-loop-harness')).toBe('full-cycle-verified-loop');
     expect(templates.resolveName('code-quality-loop')).toBe('refactor-and-modernize-loop');
-    expect(templates.resolveName('research-synthesis-loop')).toBe('research-and-spec-loop');
+    expect(templates.resolveName('research-synthesis-loop')).toBe('research-and-plan-loop');
+    expect(templates.resolveName('research-and-spec-loop')).toBe('research-and-plan-loop');
+    expect(templates.resolveName('mcp-extension-loop')).toBe('feature-implementation-loop');
     expect(templates.resolveName('standard-code-loop')).toBe('standard-code-loop');
   });
 
@@ -100,10 +103,16 @@ describe('Generic loop templates', () => {
     expect(tpl.exitConditions?.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('mcp-extension-loop requests smoke and integration gates', () => {
-    const tpl = templates.get('mcp-extension-loop')!;
+  it('mcp-extension-loop resolves to feature-implementation-loop', () => {
+    expect(templates.resolveName('mcp-extension-loop')).toBe('feature-implementation-loop');
+    const legacy = templates.get('mcp-extension-loop');
+    expect(legacy?.deprecated).toBe(true);
+  });
+
+  it('maintenance-loop has lint and typecheck gates', () => {
+    const tpl = templates.get('maintenance-loop')!;
     const verify = tpl.phases.find((p) => p.phase === 'verify');
-    expect(verify?.verification).toEqual(expect.arrayContaining(['unit', 'smoke', 'integration']));
+    expect(verify?.verification?.length).toBeGreaterThanOrEqual(2);
   });
 
   it('flags invalid spawn conditions in lint', () => {

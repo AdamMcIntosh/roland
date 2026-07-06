@@ -202,45 +202,29 @@ describe('dashboard project context persistence across restart', () => {
     await stopDashboard(restarted);
   }, 30_000);
 
-  it('persists create-project auto-switch across server restart', async () => {
+  it('returns 410 for create-project (dashboard read-only monitor)', async () => {
     const harness = await startHarness();
-    const newProjectPath = path.join(harness.anchorRoot, 'created-project');
 
-    const created = await jsonFetch<{
-      ok: boolean;
-      switched: boolean;
-      path: string;
-      projectContext: { cwd: string };
-    }>(`${harness.baseUrl}/api/create-project`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: 'created-project',
-        parentDir: harness.anchorRoot,
-        template: 'empty',
-        initGit: true,
-        initRoland: true,
-        installDeps: false,
-        switchContext: true,
-      }),
-    });
-    expect(created.status).toBe(200);
-    expect(created.body.switched).toBe(true);
-    expect(created.body.path).toBe(newProjectPath);
-    expect(created.body.projectContext.cwd).toBe(newProjectPath);
+    const created = await jsonFetch<{ readOnly?: boolean; error?: string }>(
+      `${harness.baseUrl}/api/create-project`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'created-project',
+          parentDir: harness.anchorRoot,
+          template: 'empty',
+          initGit: true,
+          initRoland: true,
+          installDeps: false,
+          switchContext: true,
+        }),
+      },
+    );
+    expect(created.status).toBe(410);
+    expect(created.body.readOnly).toBe(true);
+    expect(String(created.body.error ?? '')).toMatch(/read-only/i);
 
     await stopDashboard(harness.child);
-
-    const port = await getFreePort();
-    const baseUrl = `http://127.0.0.1:${port}`;
-    const restarted = spawnDashboard(harness.anchorRoot, harness.stateDir, port);
-    await waitForDashboard(baseUrl);
-
-    const afterRestart = await jsonFetch<{ cwd: string }>(
-      `${baseUrl}/api/project-context`,
-    );
-    expect(afterRestart.body.cwd).toBe(newProjectPath);
-
-    await stopDashboard(restarted);
   }, 30_000);
 });

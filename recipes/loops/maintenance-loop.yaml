@@ -1,0 +1,34 @@
+name: maintenance-loop
+description: >
+  Maintenance and hygiene loop — dependency updates, CI fixes, lint cleanup, and small
+  cross-cutting chores. Lighter iteration budget with lint/typecheck gates; optional unit tests.
+phases:
+  - phase: plan
+    label: Plan maintenance scope
+    agent: pm
+  - phase: act
+    label: Apply maintenance changes
+    agent: coding
+  - phase: verify
+    label: Verify hygiene
+    agent: verifier
+    verification:
+      - lint
+      - typecheck
+      - type: unit
+        optional: true
+  - phase: critique
+    label: Critique changes
+    agent: critic
+  - phase: retry
+    label: Retry fixes
+    optional: true
+  - phase: observe
+    label: Observe repo health
+    agent: researcher
+maxIterations: 3
+maxRetries: 2
+escalationThreshold: 3
+testModeMaxRetries: 4
+testModeEscalationThreshold: 5
+min_confidence: 0.7

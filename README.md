@@ -18,8 +18,8 @@ Roland is a multi-agent platform for **reliable, iterative software missions**:
 |-------|------|
 | **@roland (Cursor)** | PM, triage, direct edits — self-contained via MCP (no Hermes required) |
 | **Roland Closed-Loop Harness** | Loop execution engine — PACVRE iterations, gates, reflection ([guide](docs/guides/closed-loop-harness.md)) |
-| **Global CLI + MCP** | `roland team`, `roland_run_team`, Cursor MCP tools |
-| **Command Center** | Dashboard — monitor & control only |
+| **Global CLI + MCP** | `roland team`, `roland mission`, `roland mission-audit`, Cursor MCP tools |
+| **Monitoring Dashboard** | Read-only monitor at `:8081` — loop/HITL panels (launch via CLI) |
 
 > **Hermes** (`roland chat` CLI) is optional for terminal-only workflows — **not required in Cursor**.
 
@@ -29,10 +29,12 @@ Inspired by [loops.elorm.xyz](https://loops.elorm.xyz) patterns: self-paced iter
   Operator ──► @roland in Cursor (PM + triage) ──► roland team + loop template ──► Roland ClosedLoop (PACVRE)
                     │                                        │
                     ▼                                        ▼
-           Roland Dashboard (monitor)              EvaluationGate · LoopMemory
+           Roland Dashboard (read-only monitor)              EvaluationGate · LoopMemory
 ```
 
-> [DEPRECATED] In-loop PM Team (`use_pm_team: true`) is legacy opt-in only.
+> **roland-web** (`roland-web/`) is **experimental** — a separate hosted UI prototype; not required for daily Roland use. See `roland-web/README.md`.
+
+> [DEPRECATED] In-loop PM Team (`use_pm_team: true`) is legacy opt-in only. CLI aliases `run`, `goal`, `start`, `orchestrate` soft-deprecated — use `roland team` or `roland mission`.
 
 ---
 

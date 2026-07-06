@@ -1,8 +1,8 @@
-name: research-and-spec-loop
-deprecated: true
-alias_of: research-and-plan-loop
+name: research-and-plan-loop
 description: >
-  [DEPRECATED — use research-and-plan-loop] Research and specification loop.
+  Research and planning loop — investigate a problem space, synthesize findings into an
+  actionable plan or spec, validate completeness, critique gaps, and iterate until solid.
+  No code verification gates; critic validates synthesis quality.
 phases:
   - phase: plan
     label: Plan investigation
@@ -11,7 +11,7 @@ phases:
       - role: planner
         prompt_template: "Plan research scope for {goal}"
   - phase: act
-    label: Research and draft spec
+    label: Research and draft plan
     agent: researcher
     specialist_spawns:
       - role: researcher
@@ -34,7 +34,7 @@ phases:
       - role: writer
         prompt_template: "Document findings for iteration {iteration}"
   - phase: reflect
-    label: Reflect on spec quality
+    label: Reflect on plan quality
     optional: true
     agent: researcher
 maxIterations: 3
@@ -45,6 +45,6 @@ testModeEscalationThreshold: 6
 reflection: true
 exit_conditions:
   - type: confidence_streak
-    description: Spec confidence stable across iterations
+    description: Plan confidence stable across iterations
     minConfidence: 0.8
     consecutiveIterations: 2

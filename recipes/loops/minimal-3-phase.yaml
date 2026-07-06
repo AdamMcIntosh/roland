@@ -1,6 +1,8 @@
 name: minimal-3-phase
+deprecated: true
+alias_of: small-fix-loop
 description: >
-  Minimal reference loop for E2E tests — plan, act, verify only.
+  [DEPRECATED — use small-fix-loop] Minimal reference loop for E2E tests.
 phases:
   - phase: plan
     label: Plan

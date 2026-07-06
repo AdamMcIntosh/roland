@@ -27,22 +27,26 @@ import {
   listPhaseAfterHooks,
 } from './loop-template-resolution.js';
 
-/** Canonical generic templates — readiness gate expects these to exist. */
+/** Canonical generic templates — readiness gate expects these to exist (7 templates). */
 export const CORE_GENERIC_TEMPLATES = [
-  'standard-code-loop',
   'small-fix-loop',
+  'standard-code-loop',
   'feature-implementation-loop',
   'refactor-and-modernize-loop',
-  'research-and-spec-loop',
-  'mcp-extension-loop',
+  'research-and-plan-loop',
   'full-cycle-verified-loop',
+  'maintenance-loop',
 ] as const;
 
 /** Backward-compatible aliases when alias_of is not in YAML. */
 export const TEMPLATE_ALIASES: Record<string, string> = {
   'closed-loop-harness': 'full-cycle-verified-loop',
   'code-quality-loop': 'refactor-and-modernize-loop',
-  'research-synthesis-loop': 'research-and-spec-loop',
+  'research-synthesis-loop': 'research-and-plan-loop',
+  'research-and-spec-loop': 'research-and-plan-loop',
+  'mcp-extension-loop': 'feature-implementation-loop',
+  'minimal-3-phase': 'small-fix-loop',
+  'research-loop': 'research-and-plan-loop',
 };
 
 const LEGACY_AGENT_NAMES = new Set([

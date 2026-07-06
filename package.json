@@ -61,6 +61,7 @@
     "@octokit/rest": "^21.1.1",
     "@sentry/node": "^10.63.0",
     "chart.js": "^4.4.6",
+    "commander": "^13.1.0",
     "hotkeys-js": "^3.13.0",
     "js-yaml": "^4.1.0",
     "papaparse": "^5.4.1",
