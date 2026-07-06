@@ -8,7 +8,7 @@
  * planning prompts or worker context.
  */
 
-import { Blackboard, type BlackboardEntry } from './blackboard.js';
+import { Blackboard, type BlackboardEntry } from '../coordination/legacy-blackboard.js';
 import {
   CommandBlackboard,
   UNSC_CALLSIGNS,

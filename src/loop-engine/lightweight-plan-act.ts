@@ -6,7 +6,7 @@
  * - [DEPRECATED] LoopPmBridge delegates to legacy PM Team when explicitly opted in.
  */
 
-import type { Blackboard } from '../rco/blackboard.js';
+import type { Blackboard } from '../coordination/legacy-blackboard.js';
 import type { CommandBlackboard } from '../rco/command-blackboard.js';
 import type { LoopTemplate } from './loop-phases.js';
 import type { PhaseConfig } from './loop-phases.js';

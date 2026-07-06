@@ -10,7 +10,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { Blackboard } from './blackboard.js';
+import { Blackboard } from '../coordination/legacy-blackboard.js';
 import { isGoalRelevant, tokenize } from './command-blackboard.js';
 import { readMissionMetaFile } from './mission-state.js';
 import { HitlQueue, isRunActive, readRunGoal } from './hitl.js';

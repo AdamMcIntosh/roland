@@ -9,7 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import { execSync, spawnSync } from 'child_process';
 import { laneForEngineer } from '../pm/model-policy.js';
-import type { Blackboard } from './blackboard.js';
+import type { Blackboard } from '../coordination/legacy-blackboard.js';
 import type { CommandBlackboard } from './command-blackboard.js';
 import type { TeamTask } from './team-orchestrator.js';
 import {

@@ -28,7 +28,7 @@ Roland adopts and extends the best ideas from loops.elorm.xyz while adding produ
 
 Roland consists of three primary layers:
 
-- **Orchestration Layer** — ClosedLoop Harness, EvaluationGate, SpecialistSpawner, LoopMemory
+- **Orchestration Layer** — ClosedLoop Harness, EvaluationGate, PhaseIntentPoster, LoopMemory
 - **Execution Layer** — Flexible routing to local models (Ollama) or cloud providers
 - **Interface Layer** — CLI, Dashboard (mobile-friendly), MCP for IDEs (Cline, Cursor, etc.)
 

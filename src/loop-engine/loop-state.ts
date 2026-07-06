@@ -1,11 +1,15 @@
 /**
+ * ## P1 Honesty & Consolidation
+ *
  * Loop state persistence — `.roland/loop-state.json`
  *
  * Survives supervisor restarts; read by dashboard via run-state loop fields.
+ * Writes use the shared stateLock scheme (same as coordination store).
  */
 
 import fs from 'fs';
 import path from 'path';
+import { acquireLock, readStateUnlocked, writeStateUnlocked } from '../rco/stateLock.js';
 import type { LoopCritiqueSnapshot } from './self-improvement/types.js';
 import type { Phase } from './loop-phases.js';
 
@@ -98,6 +102,8 @@ export interface LoopState {
   pendingGitCommitApproval?: LoopGitCommitApprovalSnapshot;
   /** Recent specialist spawn pulses for dashboard history. */
   spawnActivityHistory?: LoopSpawnPulse[];
+  /** Consecutive identical verification failure tracking for flaky escape hatch. */
+  flakyVerification?: import('./flaky-verification.js').FlakyVerificationState;
 }
 
 export interface LoopSpawnPulse {
@@ -222,6 +228,9 @@ export class LoopStateStore {
         ? { ...this.state.pendingGitCommitApproval }
         : undefined,
       spawnActivityHistory: this.state.spawnActivityHistory?.map((s) => ({ ...s })),
+      flakyVerification: this.state.flakyVerification
+        ? { ...this.state.flakyVerification }
+        : undefined,
     };
   }
 
@@ -338,9 +347,22 @@ export class LoopStateStore {
     return this.state.spawnActivityHistory?.map((s) => ({ ...s })) ?? [];
   }
 
+  setFlakyVerification(
+    flaky: import('./flaky-verification.js').FlakyVerificationState | undefined,
+  ): void {
+    this.state.flakyVerification = flaky;
+    this.state.updatedAt = Date.now();
+    this.flush();
+  }
+
   private flush(): void {
     try {
-      fs.writeFileSync(this.filePath, JSON.stringify(this.state, null, 2), 'utf-8');
+      const release = acquireLock(this.filePath);
+      try {
+        writeStateUnlocked(this.filePath, this.state);
+      } finally {
+        release();
+      }
     } catch {
       // Non-fatal — in-memory state still drives the current run.
     }
@@ -348,10 +370,13 @@ export class LoopStateStore {
 }
 
 export function readLoopState(stateDir: string): LoopState | null {
+  const filePath = path.join(stateDir, LOOP_STATE_FILE);
+  const release = acquireLock(filePath);
   try {
-    const raw = fs.readFileSync(path.join(stateDir, LOOP_STATE_FILE), 'utf-8');
-    return JSON.parse(raw) as LoopState;
+    return readStateUnlocked<LoopState>(filePath);
   } catch {
     return null;
+  } finally {
+    release();
   }
 }

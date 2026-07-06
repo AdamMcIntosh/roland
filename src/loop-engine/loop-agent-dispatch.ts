@@ -5,7 +5,7 @@
  * Includes role fallbacks when Sparrow / primary agents fail to respond.
  */
 
-import type { Blackboard } from '../rco/blackboard.js';
+import type { Blackboard } from '../coordination/legacy-blackboard.js';
 import type { CommandBlackboard } from '../rco/command-blackboard.js';
 import { AGENT_TIMEOUT_MS } from '../rco/constants.js';
 import { buildClaudeToolCallingPrompt } from '../rco/prompts.js';

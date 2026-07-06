@@ -17,7 +17,7 @@ import {
   Phase,
   type CommandRunner,
 } from '../../src/loop-engine/index.js';
-import { Blackboard } from '../../src/rco/blackboard.js';
+import { Blackboard } from '../../src/coordination/legacy-blackboard.js';
 import { LoopTemplates } from '../../src/loop-engine/loop-templates.js';
 
 const passRunner: CommandRunner = async () => ({

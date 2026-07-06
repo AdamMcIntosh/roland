@@ -1,13 +1,15 @@
 # Onboarding — Roland in Cursor
 
-Welcome. Roland turns Cursor into an AI engineering supervisor with **Hermes (Master Chief)** as the primary conversational layer and **CLI** as the monitoring source of truth.
+Welcome. Roland is a **production-grade closed-loop agent harness** for Cursor. The default workflow is **@roland in Cursor** (MCP triage) → **Direct** (small fixes in chat) or **Pure ClosedLoop** (`roland team` with loop templates).
 
 | Surface | Role |
 |---------|------|
-| **Hermes / Master Chief** | Primary PM — `roland chat`, Cursor `@roland`, MCP monitoring |
-| **Roland CLI** | **Status & control** — `roland status`, `roland live`, `roland hitl-status`, `roland board-status` |
+| **@roland (Cursor MCP)** | Primary entry — triage, direct edits, team launch |
+| **Roland CLI** | Status & control — `roland status`, `roland live`, `roland hitl-status`, `roland board-status` |
 | **Roland ClosedLoop** | Loop execution — `roland team "…" --loop-template …` |
-| **Dashboard** | **Optional / deprecated** — live loop panels only when CLI is inconvenient |
+| **Dashboard** | Optional adjunct — monitor/control when CLI is inconvenient (`npm run serve-dashboard`) |
+
+> **Hermes** (`roland chat`) is optional for terminal-only workflows — **not required in Cursor**.
 
 ## 60-second setup
 
@@ -22,40 +24,64 @@ Restart Cursor. Verify with:
 
 ```bash
 roland doctor
+roland --version    # expect 1.3.0+
 ```
 
 ## Your first session
 
-1. **Plan & converse** — Hermes (`roland chat`) or Cursor `@roland` (triage runs automatically).
-2. **Launch** — `roland team "goal" --loop-template full-cycle-verified-loop`
+1. **Plan in Cursor** — `@roland` (triage runs automatically on new work).
+2. **Launch a loop** — when triage recommends Team:
+
+```bash
+roland team "add rate limiting to the password reset endpoint" \
+  --loop-template full-cycle-verified-loop
+```
+
 3. **Monitor** — CLI (preferred):
 
 ```bash
-roland status              # one-shot snapshot (board + HITL + supervisor)
-roland live                # continuous refresh every 5s
-roland hitl-status         # HITL gates and suggested actions
+roland status
+roland live
+roland hitl-status
 roland board-status --concise
-roland mission-summary     # after terminal state
+roland mission-summary
 ```
 
-4. **Optional dashboard** (phone/Tailscale only):
+4. **Optional dashboard** (phone/Tailscale):
 
 ```bash
-npm run serve-dashboard    # http://127.0.0.1:8081 — monitor/control adjunct only
+npm run serve-dashboard    # http://127.0.0.1:8081
 ```
+
+## Architecture (post-P1)
+
+| Component | What it does |
+|-----------|--------------|
+| **ClosedLoop hot path** | `loop-engine` — Plan → Act → Verify → Critique → Retry |
+| **EvaluationGate** | Automated lint/unit/typecheck gates with confidence scoring |
+| **PhaseIntentPoster** | Posts phase intents to blackboard (does **not** spawn sub-agents on hot path) |
+| **Critique phase** | Rule-based structured critique (**no LLM**) — retry/escalate decisions |
+| **Coordination store** | Single locked blackboard at `.roland/blackboard.json` |
+| **MCP server** | Modular tools under `src/server/tools/` |
+
+> [DEPRECATED] In-loop PM Team (`use_pm_team: true`) is legacy opt-in only.
 
 ## The mindset
 
-> **Hermes plans. Roland ClosedLoop executes. CLI shows the battlespace. Keep blockers cleared.**
-
-Prefer **Pure ClosedLoop** (default) — `use_pm_team: false`.
+> **Triage first. Direct for small fixes. Pure ClosedLoop for missions. CLI shows the battlespace.**
 
 ## Where state lives
 
-Per-project under `.roland/` (gitignored): Blackboard, loop memory, `pm-events.log`, `hermes-hitl-events.jsonl`.
+Per-project under `.roland/` (gitignored):
+
+- `blackboard.json` — locked coordination store (tasks, decisions, loop posts)
+- `command-blackboard.md` — human-readable mission summary
+- `loop-state.json` — active loop iteration state
+- `loop-memory.json` — reflection / confidence history
+- `hermes-hitl-events.jsonl` — HITL escalation events
 
 ## Learn more
 
-- **Closed-loop harness:** `docs/guides/closed-loop-harness.md`
-- **Hermes skill:** `.hermes/SKILL.md`
-- **Install:** `INSTALLATION.md`
+- **Closed-loop harness:** [docs/guides/closed-loop-harness.md](docs/guides/closed-loop-harness.md)
+- **Full README:** [README.md](README.md)
+- **Install:** [INSTALLATION.md](INSTALLATION.md)

@@ -29,7 +29,7 @@ import {
   type PhaseTransition,
   type CommandRunner,
 } from '../../src/loop-engine/index.js';
-import { Blackboard } from '../../src/rco/blackboard.js';
+import { Blackboard } from '../../src/coordination/legacy-blackboard.js';
 import { RunStateWriter, readRunState, RUN_STATE_FILE } from '../../src/rco/run-state.js';
 import { parseTeamArgs } from '../../src/rco/team-cli.js';
 import { clearLoopEngineConfigCache } from '../../src/loop-engine/loop-config.js';

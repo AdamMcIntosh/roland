@@ -48,7 +48,7 @@ import {
 
 // Team CLI and supervisor import this module directly (not via index.ts).
 configureSdkProcessLimits();
-import { Blackboard } from './blackboard.js';
+import { Blackboard } from '../coordination/legacy-blackboard.js';
 import { CommandBlackboard } from './command-blackboard.js';
 import type { Callsign } from './command-blackboard.js';
 import { MessageBus } from './message-bus.js';

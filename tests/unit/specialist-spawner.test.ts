@@ -1,4 +1,6 @@
 /**
+ * ## P1 Honesty & Consolidation
+ *
  * YAML-configurable specialist spawns — unit tests.
  *
  * Scoped: npm run test:run -- tests/unit/specialist-spawner.test.ts
@@ -13,14 +15,14 @@ import {
   interpolateSpawnPrompt,
   resolvePhaseSpawns,
   PHASE_SPECIALIST_DEFAULTS,
-  SpecialistSpawner,
-} from '../../src/loop-engine/specialist-spawner.js';
+  PhaseIntentPoster,
+} from '../../src/loop-engine/phase-intent-poster.js';
 import { Phase } from '../../src/loop-engine/loop-phases.js';
 import type { PhaseConfig } from '../../src/loop-engine/loop-phases.js';
 import { LoopTemplates, summarizeTemplateSpawns } from '../../src/loop-engine/loop-templates.js';
-import { Blackboard } from '../../src/rco/blackboard.js';
+import { Blackboard } from '../../src/coordination/legacy-blackboard.js';
 
-describe('SpecialistSpawner YAML resolution', () => {
+describe('PhaseIntentPoster YAML resolution', () => {
   const baseCtx = { iteration: 2, retryCount: 1, goal: 'Ship OAuth flow' };
 
   it('evaluateSpawnConditions respects iteration and retry gates', () => {
@@ -109,19 +111,20 @@ describe('Loop template YAML spawns', () => {
     expect(feature?.executionModes.usePmTeam).toBe(false);
   });
 
-  it('emits onSpawnPulse when specialists are recorded', () => {
-    const pulses: Array<{ role: string; phase: string }> = [];
+  it('emits onSpawnPulse with intent posted to blackboard label', () => {
+    const pulses: Array<{ role: string; phase: string; label: string }> = [];
     const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'roland-spawn-'));
-    const spawner = new SpecialistSpawner({
+    const poster = new PhaseIntentPoster({
       blackboard: new Blackboard(stateDir),
       goal: 'Test spawn pulse',
       onSpawnPulse: (pulse) => {
-        pulses.push({ role: pulse.role, phase: pulse.phase });
+        pulses.push({ role: pulse.role, phase: pulse.phase, label: pulse.label });
       },
     });
-    spawner.spawnForPhase(Phase.Plan, 1);
-    expect(pulses.length).toBeGreaterThan(0);
-    expect(pulses[0]?.phase).toBe('plan');
+    poster.spawnOnDemand('verification_failed', 1, 'unit tests failed');
+    expect(pulses.length).toBe(1);
+    expect(pulses[0]?.label).toContain('intent posted to blackboard');
+    expect(pulses[0]?.label).toContain('test-author');
     fs.rmSync(stateDir, { recursive: true, force: true });
   });
 });

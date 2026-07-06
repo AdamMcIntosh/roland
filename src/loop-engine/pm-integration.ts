@@ -6,7 +6,7 @@
  * - Production delegates to `runTeam` with `pmSlice` / `loopEmbedded` flags when legacy PM path is chosen.
  */
 import fs from 'fs';
-import type { Blackboard } from '../rco/blackboard.js';
+import type { Blackboard } from '../coordination/legacy-blackboard.js';
 import type { CommandBlackboard } from '../rco/command-blackboard.js';
 import { ComplexityClassifier } from '../orchestrator/complexity-classifier.js';
 import type { TeamPlan, TeamOrchestratorOptions, TeamTaskResult } from '../rco/team-orchestrator.js';

@@ -4,7 +4,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import type { BlackboardEntry } from '../rco/blackboard.js';
+import type { BlackboardEntry } from '../coordination/legacy-blackboard.js';
 import { readRunState } from '../rco/run-state.js';
 import { readSupervisorRecord, isProcessRunning } from '../rco/supervisor.js';
 import { readLoopState, LOOP_STATE_FILE, type LoopState } from './loop-state.js';
@@ -196,7 +196,7 @@ function readClosedLoopPr(stateDir: string): LoopHealthReport['closedLoopPr'] {
   }
 }
 
-/** Parse SpecialistSpawner blackboard posts into dashboard-friendly rows. */
+/** Parse PhaseIntentPoster blackboard posts into dashboard-friendly rows. */
 function extractSpecialistSpawns(entries: BlackboardEntry[]): LoopHealthReport['specialistSpawns'] {
   const spawns: LoopHealthReport['specialistSpawns'] = [];
   for (const entry of entries) {

@@ -6,7 +6,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-green.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Current status:** Closed-Loop Harness, EvaluationGate, loop memory, clean PR formatting, dashboard GitHub discovery, and mobile-responsive UI are production-ready.
+**Current status (v1.3.0):** Closed-Loop Harness, EvaluationGate, loop memory, locked coordination blackboard, modular MCP tools, and clean PR formatting are production-ready. Critique phase is **rule-based (no LLM)**. `PhaseIntentPoster` records phase intents on the blackboard — it does not spawn sub-agents on the ClosedLoop hot path.
 
 ---
 

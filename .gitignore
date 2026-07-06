@@ -60,6 +60,8 @@ coverage/
 # Runtime
 *.log
 *.pid
+run.stdout
+run.stderr
 .rco-state.json
 .rco-state-*.json
 .rco-qa-*.json

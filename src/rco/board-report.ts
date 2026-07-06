@@ -9,7 +9,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { Blackboard, type BlackboardEntry, type EntryStatus, type EntryType } from './blackboard.js';
+import { Blackboard, type BlackboardEntry, type EntryStatus, type EntryType } from '../coordination/legacy-blackboard.js';
 import {
   CommandBlackboard,
   UNSC_CALLSIGNS,

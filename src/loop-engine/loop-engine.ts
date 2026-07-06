@@ -8,7 +8,7 @@
  *   3. Coordinator-driven — team-orchestrator calls lifecycle hooks per wave.
  */
 
-import type { Blackboard } from '../rco/blackboard.js';
+import type { Blackboard } from '../coordination/legacy-blackboard.js';
 import type { CommandBlackboard } from '../rco/command-blackboard.js';
 import type { LoopTemplate, Phase, PhaseConfig } from './loop-phases.js';
 import { Phase as P } from './loop-phases.js';
@@ -103,6 +103,7 @@ export class LoopEngine {
   private readonly runner?: CommandRunner;
   private readonly cwd: string;
   private readonly liveContext?: LoopEngineOptions['liveContext'];
+  private readonly isTestMode: boolean;
   private lastEvaluation?: EvaluationGateResult;
 
   constructor(opts: LoopEngineOptions) {
@@ -128,6 +129,7 @@ export class LoopEngine {
     this.runner = opts.runner;
     this.cwd = opts.cwd ?? process.cwd();
     this.liveContext = opts.liveContext;
+    this.isTestMode = Boolean(opts.isTestMode || process.env.ROLAND_LOOP_TEST_MODE === '1');
     this.observability = new LoopObservability(opts.stateDir, opts.blackboard);
     this.critiqueThresholds = resolveCritiqueThresholds(opts.template, {
       isTestMode: opts.isTestMode,
@@ -678,6 +680,7 @@ export class LoopEngine {
         phaseConfig,
         maxRetries: this.critiqueThresholds.maxRetries,
         escalationThreshold: this.critiqueThresholds.escalationThreshold,
+        isTestMode: this.isTestMode,
         reportLiveActivity: (activity) => this.setLiveActivity(activity),
       });
     } catch (err) {
@@ -700,6 +703,10 @@ export class LoopEngine {
 
     if (phase === P.Verify && result.evaluation) {
       this.lastEvaluation = result.evaluation;
+    }
+
+    if (result.flakyVerification) {
+      this.store.setFlakyVerification(result.flakyVerification);
     }
 
     const durationMs = Date.now() - phaseStartedAt;

@@ -268,7 +268,7 @@ See [pr-title-convention.md](./pr-title-convention.md) for title/body rules and 
 
 ## Specialist spawning
 
-**SpecialistSpawner** fires on phase transitions, dispatching focused sub-agents when the harness detects scope gaps (e.g. security review after a failed lint gate). Spawn count is reported in `ClosedLoopResult`.
+**PhaseIntentPoster** (formerly SpecialistSpawner) fires on phase transitions and **posts spawn intents to the blackboard** for the team orchestrator — it does **not** dispatch sub-agents on the ClosedLoop hot path. Intent count is reported in `ClosedLoopResult`.
 
 ### YAML-configurable spawns
 
@@ -474,7 +474,7 @@ Startup banner example:
 
 ```typescript
 import { ClosedLoop } from './loop-engine/index.js';
-import { Blackboard } from './rco/blackboard.js';
+import { Blackboard } from './coordination/legacy-blackboard.js';
 
 const blackboard = new Blackboard({ stateDir: '.roland' });
 

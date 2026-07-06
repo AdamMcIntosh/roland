@@ -28,7 +28,7 @@ import {
   VerifyPhaseHandler,
   type CommandRunner,
 } from '../../src/loop-engine/index.js';
-import { Blackboard } from '../../src/rco/blackboard.js';
+import { Blackboard } from '../../src/coordination/legacy-blackboard.js';
 
 const mockPassRunner: CommandRunner = async () => ({
   exitCode: 0,

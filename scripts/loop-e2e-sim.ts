@@ -21,7 +21,7 @@ import {
 } from '../src/loop-engine/index.js';
 import type { ResolvedBetweenIterationsHook } from '../src/loop-engine/loop-template-resolution.js';
 import { ModelRouter, resetModelRouter } from '../src/models/model-router.js';
-import { Blackboard } from '../src/rco/blackboard.js';
+import { Blackboard } from '../src/coordination/legacy-blackboard.js';
 import { CommandBlackboard } from '../src/rco/command-blackboard.js';
 import { decideGitCommitApprovalCli } from '../src/rco/git-commit-approval-cli.js';
 import { clearLoopEngineConfigCache } from '../src/loop-engine/loop-config.js';

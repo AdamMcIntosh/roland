@@ -1,4 +1,6 @@
 /**
+ * ## P1 Honesty & Consolidation
+ *
  * ## Evaluation Gate & Blocker Fix
  *
  * Verify phase — runs EvaluationGate and surfaces structured results to loop state.
@@ -6,13 +8,17 @@
 
 import type { PhaseHandler, PhaseHandlerContext, PhaseResult } from './types.js';
 import { Phase } from '../loop-phases.js';
-import { loadLoopEngineConfig } from '../loop-config.js';
+import { resolveFlakyEscapeThreshold } from '../loop-config.js';
 import {
   EvaluationGate,
   evaluationResultToLoopState,
 } from '../evaluation-gate.js';
 import { resolveVerificationStrategies } from '../loop-template-resolution.js';
 import type { CommandRunner } from '../verification/index.js';
+import {
+  FLAKY_DIAGNOSIS,
+  updateFlakyVerification,
+} from '../flaky-verification.js';
 
 export interface VerifyPhaseHandlerOptions {
   cwd?: string;
@@ -200,11 +206,72 @@ export class VerifyPhaseHandler implements PhaseHandler {
       }
     }
 
+    const hasCritiquePhase =
+      this.opts.template?.phases.some((p) => p.phase === Phase.Critique) ?? true;
+    const maxRetries = ctx.maxRetries ?? 3;
+    const flakyThreshold = ctx.isTestMode ? Number.MAX_SAFE_INTEGER : resolveFlakyEscapeThreshold();
+    const flakyUpdate = updateFlakyVerification(
+      ctx.state.flakyVerification,
+      evaluation.gates ?? [],
+      evaluation.accepted,
+      flakyThreshold,
+    );
+
+    // When a Critique phase exists and retry budget remains, let critique decide retry vs escalate.
+    const deferFlakyToCritique =
+      hasCritiquePhase && (ctx.state.retryCount ?? 0) <= maxRetries;
+
+    let shouldEscalate = false;
+    let summary = evaluation.summary;
+
+    if (flakyUpdate.hitThreshold && !deferFlakyToCritique && !ctx.isTestMode) {
+      shouldEscalate = true;
+      summary =
+        `Flaky verification escape hatch: ${FLAKY_DIAGNOSIS} — ` +
+        `identical failures ${flakyUpdate.state.consecutiveIdenticalFailures} times ` +
+        `(threshold=${flakyThreshold})`;
+
+      console.error(`[Loop][verify] ${summary}`, {
+        fingerprint: flakyUpdate.fingerprint,
+        diagnosis: flakyUpdate.diagnosis,
+      });
+
+      ctx.commandBoard?.appendBullet(
+        'Open Intel',
+        `[EVAL-GATE] flaky escape hatch — ${FLAKY_DIAGNOSIS} ` +
+          `(consecutive=${flakyUpdate.state.consecutiveIdenticalFailures}, threshold=${flakyThreshold})`,
+      );
+
+      if (ctx.stateDir) {
+        const { emitHermesHitlEvent } = await import('../../rco/hitl-hermes.js');
+        emitHermesHitlEvent(ctx.stateDir, {
+          kind: 'verification-failure',
+          blockerDescription: summary,
+          currentGate: 'verification',
+          suggestedActions: [
+            'roland hitl-status',
+            'roland board-status --concise',
+            'Investigate test environment / flaky suite — rerun tests locally',
+            'roland inject "stabilize test environment or skip flaky gate"',
+          ],
+          detail: {
+            diagnosis: FLAKY_DIAGNOSIS,
+            fingerprint: flakyUpdate.fingerprint,
+            consecutiveIdenticalFailures: flakyUpdate.state.consecutiveIdenticalFailures,
+            threshold: flakyThreshold,
+            iteration: ctx.iteration,
+          },
+        });
+      }
+    }
+
     return {
       success: evaluation.accepted,
-      summary: evaluation.summary,
+      summary,
       verification: loopSnapshot,
       evaluation,
+      flakyVerification: flakyUpdate.state,
+      shouldEscalate,
     };
   }
 }

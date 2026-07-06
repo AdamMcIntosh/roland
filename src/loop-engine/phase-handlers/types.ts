@@ -1,4 +1,4 @@
-import type { Blackboard } from '../../rco/blackboard.js';
+import type { Blackboard } from '../../coordination/legacy-blackboard.js';
 import type { CommandBlackboard } from '../../rco/command-blackboard.js';
 import type { Phase, PhaseConfig } from '../loop-phases.js';
 import type { LoopCritiqueSnapshot } from '../self-improvement/types.js';
@@ -17,6 +17,8 @@ export interface PhaseResult {
   critique?: LoopCritiqueSnapshot;
   /** Structured retry output when phase is retry */
   retry?: LoopRetrySnapshot;
+  /** Updated flaky verification tracking when phase is verify */
+  flakyVerification?: import('../flaky-verification.js').FlakyVerificationState;
   /** Full EvaluationGate result when phase is verify */
   evaluation?: import('../evaluation-gate.js').EvaluationGateResult;
 }
@@ -36,6 +38,8 @@ export interface PhaseHandlerContext {
   maxRetries?: number;
   /** Consecutive verify failures before HITL (from loop template / config). */
   escalationThreshold?: number;
+  /** When true, skip flaky-verification escape hatch (controlled e2e / test mode). */
+  isTestMode?: boolean;
   /** Push live dashboard activity updates during long-running phases. */
   reportLiveActivity?: (activity: LoopLiveActivity) => void;
 }

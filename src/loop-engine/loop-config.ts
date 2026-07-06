@@ -1,4 +1,6 @@
 /**
+ * ## P1 Honesty & Consolidation
+ *
  * ## Assumptions
  * - Loaded from config.yaml `loop_engine` section only.
  * - `default_dispatch: cursor_sdk` is the Loop Engineering default unless overridden.
@@ -17,6 +19,7 @@ import {
 } from './self-improvement/escalation.js';
 import type { LoopTemplate } from './loop-phases.js';
 import { resolveBetweenIterationsCommand } from './loop-template-resolution.js';
+import { DEFAULT_FLAKY_ESCAPE_THRESHOLD } from './flaky-verification.js';
 import { warnGlobalUsePmTeamIfNeeded } from './pm-deprecation.js';
 
 const VerificationStrategySchema = z.object({
@@ -55,6 +58,7 @@ export const LoopEngineConfigSchema = z.object({
       require_pass_before_critique: z.boolean().optional(),
       min_confidence: z.number().min(0).max(1).optional(),
       strategies: z.array(VerificationStrategySchema).optional(),
+      flaky_escape_threshold: z.number().int().positive().optional(),
     })
     .optional(),
   critique: z
@@ -89,6 +93,7 @@ export type LoopEngineConfig = z.infer<typeof LoopEngineConfigSchema> & {
   verification?: {
     require_pass_before_critique?: boolean;
     minConfidence?: number;
+    flakyEscapeThreshold?: number;
     strategies?: Array<{
       type: string;
       command?: string;
@@ -135,6 +140,7 @@ const DEFAULT_CONFIG: LoopEngineConfig = {
   templates_dir: 'recipes/loops',
   verification: {
     require_pass_before_critique: false,
+    flakyEscapeThreshold: DEFAULT_FLAKY_ESCAPE_THRESHOLD,
   },
   critique: {
     maxRetries: DEFAULT_MAX_RETRIES,
@@ -184,6 +190,7 @@ function normaliseVerification(
   return {
     require_pass_before_critique: raw.require_pass_before_critique ?? false,
     minConfidence: raw.min_confidence,
+    flakyEscapeThreshold: raw.flaky_escape_threshold ?? DEFAULT_FLAKY_ESCAPE_THRESHOLD,
     strategies: raw.strategies?.map((s) => ({
       type: s.type,
       command: s.command ?? commandForStrategyType(s.type),
@@ -258,6 +265,10 @@ export function resolveCritiqueThresholds(
   }
 
   return { maxRetries: baseMaxRetries, escalationThreshold: baseEscalation };
+}
+
+export function resolveFlakyEscapeThreshold(): number {
+  return loadLoopEngineConfig().verification?.flakyEscapeThreshold ?? DEFAULT_FLAKY_ESCAPE_THRESHOLD;
 }
 
 export function loadLoopEngineConfig(): LoopEngineConfig {

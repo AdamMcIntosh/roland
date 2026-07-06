@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { CommandBlackboard } from '../../src/rco/command-blackboard.js';
-import { Blackboard } from '../../src/rco/blackboard.js';
+import { Blackboard } from '../../src/coordination/legacy-blackboard.js';
 import {
   cleanupBoardsForNewMission,
   cleanupCommandBlackboard,

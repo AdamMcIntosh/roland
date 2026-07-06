@@ -8,7 +8,7 @@ import {
   parseCallsignRoster,
 } from '../../src/rco/board-report.js';
 import { CommandBlackboard } from '../../src/rco/command-blackboard.js';
-import { Blackboard } from '../../src/rco/blackboard.js';
+import { Blackboard } from '../../src/coordination/legacy-blackboard.js';
 
 describe('board-report', () => {
   let tmpDir: string;

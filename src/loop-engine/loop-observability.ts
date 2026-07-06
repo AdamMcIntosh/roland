@@ -10,7 +10,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import type { Blackboard } from '../rco/blackboard.js';
+import type { Blackboard } from '../coordination/legacy-blackboard.js';
 import type { Phase } from './loop-phases.js';
 import type { LoopState, LoopRunStatus } from './loop-state.js';
 import type { PhaseResult } from './phase-handlers/types.js';

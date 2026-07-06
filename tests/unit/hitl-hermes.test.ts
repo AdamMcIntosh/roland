@@ -21,7 +21,7 @@ import {
   HERMES_MISSION_COMPLETION_FILE,
 } from '../../src/rco/hitl-hermes.js';
 import { HitlQueue } from '../../src/rco/hitl.js';
-import { Blackboard } from '../../src/rco/blackboard.js';
+import { Blackboard } from '../../src/coordination/legacy-blackboard.js';
 import { GitCommitApprovalQueue } from '../../src/loop-engine/git-commit-approval.js';
 
 describe('hitl-hermes', () => {

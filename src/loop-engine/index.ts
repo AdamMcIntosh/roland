@@ -134,15 +134,21 @@ export type {
 } from './evaluation-gate.js';
 
 export {
-  SpecialistSpawner,
+  PhaseIntentPoster,
+  PhaseIntentPoster as SpecialistSpawner,
   PHASE_SPECIALIST_DEFAULTS,
   ON_DEMAND_SPECIALISTS,
   evaluateSpawnConditions,
   interpolateSpawnPrompt,
   resolvePhaseSpawns,
   collapseToSpawnRequest,
-} from './specialist-spawner.js';
-export type { SpawnRequest, SpecialistSpawnerOptions, SpawnContext } from './specialist-spawner.js';
+} from './phase-intent-poster.js';
+export type {
+  SpawnRequest,
+  PhaseIntentPosterOptions,
+  PhaseIntentPosterOptions as SpecialistSpawnerOptions,
+  SpawnContext,
+} from './phase-intent-poster.js';
 
 export {
   LoopObservability,

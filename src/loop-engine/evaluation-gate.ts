@@ -10,7 +10,7 @@
  * - Confidence is a weighted pass ratio across required gates (0–1); optional gates do not reduce confidence below 0.5 when skipped.
  */
 
-import type { Blackboard } from '../rco/blackboard.js';
+import type { Blackboard } from '../coordination/legacy-blackboard.js';
 import {
   TestExecutor,
   resolveStrategies,

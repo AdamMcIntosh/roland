@@ -15,7 +15,7 @@ import {
   runLoopReadinessCheck,
 } from '../../src/loop-engine/index.js';
 import { ModelRouter, resetModelRouter } from '../../src/models/model-router.js';
-import { Blackboard } from '../../src/rco/blackboard.js';
+import { Blackboard } from '../../src/coordination/legacy-blackboard.js';
 import { clearLoopEngineConfigCache } from '../../src/loop-engine/loop-config.js';
 import type { CommandRunner } from '../../src/loop-engine/verification/index.js';
 

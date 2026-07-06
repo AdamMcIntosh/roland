@@ -1,6 +1,8 @@
 /**
- * Critique phase model label — blackboard display must show routed model IDs via ModelRouter,
- * not hardcoded brand strings like "Grok".
+ * ## P1 Honesty & Consolidation
+ *
+ * Critique phase mode label — blackboard display must show rule-based critique,
+ * not misleading LLM model dispatch labels.
  *
  * Scoped run: npx vitest run tests/unit/loop-critique-model-label.test.ts
  */
@@ -9,12 +11,15 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { CritiquePhaseHandler } from '../../src/loop-engine/phase-handlers/critique-phase.js';
+import {
+  CritiquePhaseHandler,
+  critiqueModelLabel,
+} from '../../src/loop-engine/phase-handlers/critique-phase.js';
 import { createInitialLoopState } from '../../src/loop-engine/loop-state.js';
 import { Phase } from '../../src/loop-engine/loop-phases.js';
-import { Blackboard } from '../../src/rco/blackboard.js';
+import { Blackboard } from '../../src/coordination/legacy-blackboard.js';
 import { ModelRouter } from '../../src/models/model-router.js';
-import type { BlackboardEntry } from '../../src/rco/blackboard.js';
+import type { BlackboardEntry } from '../../src/coordination/legacy-blackboard.js';
 
 function findCritiqueResultEntry(entries: BlackboardEntry[]): BlackboardEntry | undefined {
   return entries.find(
@@ -26,34 +31,27 @@ function findCritiqueResultEntry(entries: BlackboardEntry[]): BlackboardEntry | 
   );
 }
 
-function modelLineFromContent(content: string): string | undefined {
-  return content.split('\n').find((line) => line.startsWith('Decision:') && line.includes('Model:'));
+function decisionLineFromContent(content: string): string | undefined {
+  return content.split('\n').find((line) => line.startsWith('Decision:') && line.includes('rule-based'));
 }
 
-describe('CritiquePhaseHandler — model label rendering', () => {
+describe('CritiquePhaseHandler — honest mode label rendering', () => {
   let tmpDir: string;
   let blackboard: Blackboard;
   let handler: CritiquePhaseHandler;
-  let router: ModelRouter;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'roland-critique-label-'));
     blackboard = new Blackboard(tmpDir);
-    router = new ModelRouter({
-      pm: { provider: 'openrouter', model: 'grok-4.3' },
-      coding: { provider: 'openrouter', model: 'qwen/qwen3-coder-next' },
-      critic: { provider: 'openrouter', model: 'deepseek/deepseek-chat' },
-      verifier: { provider: 'openrouter', model: 'deepseek/deepseek-v3-0324' },
-    });
-    handler = new CritiquePhaseHandler({ modelRouter: router });
+    handler = new CritiquePhaseHandler();
   });
 
   afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('renders critic role model on blackboard for high-level lane', async () => {
-    const state = createInitialLoopState('minimal-3-phase', 'model label test', Phase.Critique);
+  it('renders rule-based label on blackboard for high-level lane', async () => {
+    const state = createInitialLoopState('minimal-3-phase', 'mode label test', Phase.Critique);
     state.retryCount = 0;
     state.lastVerification = {
       pass: true,
@@ -63,7 +61,7 @@ describe('CritiquePhaseHandler — model label rendering', () => {
     };
 
     await handler.execute({
-      goal: 'model label test',
+      goal: 'mode label test',
       state,
       blackboard,
       iteration: 1,
@@ -74,14 +72,14 @@ describe('CritiquePhaseHandler — model label rendering', () => {
     const entry = findCritiqueResultEntry(blackboard.read());
     expect(entry).toBeDefined();
 
-    const modelLine = modelLineFromContent(entry!.content);
-    expect(modelLine).toBeDefined();
-    expect(modelLine).toContain('Model: deepseek/deepseek-chat@openrouter (high-level)');
-    expect(modelLine).not.toMatch(/Grok/i);
-    expect(entry!.content).not.toMatch(/Grok/i);
+    const decisionLine = decisionLineFromContent(entry!.content);
+    expect(decisionLine).toBeDefined();
+    expect(decisionLine).toContain('rule-based structured critique (no LLM)');
+    expect(decisionLine).toContain('lane=critic (high-level)');
+    expect(entry!.content).not.toMatch(/@openrouter|@cursor_sdk/i);
   });
 
-  it('renders critic model when blockers force high-level lane', async () => {
+  it('renders rule-based label when blockers force high-level lane', async () => {
     const state = createInitialLoopState('minimal-3-phase', 'blocker label test', Phase.Critique);
     state.retryCount = 1;
     state.lastVerification = {
@@ -107,12 +105,12 @@ describe('CritiquePhaseHandler — model label rendering', () => {
     const entry = findCritiqueResultEntry(blackboard.read());
     expect(entry).toBeDefined();
 
-    const modelLine = modelLineFromContent(entry!.content);
-    expect(modelLine).toContain('deepseek/deepseek-chat@openrouter (high-level)');
-    expect(modelLine).not.toMatch(/Grok/i);
+    const decisionLine = decisionLineFromContent(entry!.content);
+    expect(decisionLine).toContain('rule-based structured critique (no LLM)');
+    expect(decisionLine).toContain('lane=critic (high-level)');
   });
 
-  it('renders coding role model for code-specific lane', async () => {
+  it('renders rule-based label for code-specific lane', async () => {
     const state = createInitialLoopState('minimal-3-phase', 'coding label test', Phase.Critique);
     state.retryCount = 0;
     state.lastVerification = {
@@ -136,13 +134,12 @@ describe('CritiquePhaseHandler — model label rendering', () => {
     const entry = findCritiqueResultEntry(blackboard.read());
     expect(entry).toBeDefined();
 
-    const modelLine = modelLineFromContent(entry!.content);
-    expect(modelLine).toContain('Model: qwen/qwen3-coder-next@openrouter (code-specific)');
-    expect(modelLine).not.toMatch(/Grok/i);
-    expect(entry!.content).not.toMatch(/Grok/i);
+    const decisionLine = decisionLineFromContent(entry!.content);
+    expect(decisionLine).toContain('rule-based structured critique (no LLM)');
+    expect(decisionLine).toContain('lane=coding (code-specific)');
   });
 
-  it('keeps canonical lane key in structured JSON while display uses routed model', async () => {
+  it('keeps canonical lane key in structured JSON while display is rule-based', async () => {
     const state = createInitialLoopState('minimal-3-phase', 'structured label test', Phase.Critique);
     state.lastVerification = {
       pass: true,
@@ -168,8 +165,29 @@ describe('CritiquePhaseHandler — model label rendering', () => {
     expect(snapshot.model).toBe('critic');
 
     const result = findCritiqueResultEntry(blackboard.read());
-    const modelLine = modelLineFromContent(result!.content);
-    expect(modelLine).toContain('deepseek/deepseek-chat@openrouter');
-    expect(modelLine).not.toMatch(/Grok/i);
+    const decisionLine = decisionLineFromContent(result!.content);
+    expect(decisionLine).toContain('rule-based structured critique (no LLM)');
+    expect(decisionLine).not.toMatch(/deepseek|grok|qwen/i);
+  });
+});
+
+describe('critiqueModelLabel', () => {
+  it('returns rule-based label with lane metadata', () => {
+    expect(critiqueModelLabel('critic')).toBe(
+      'rule-based structured critique (no LLM) · lane=critic (high-level)',
+    );
+    expect(critiqueModelLabel('coding')).toBe(
+      'rule-based structured critique (no LLM) · lane=coding (code-specific)',
+    );
+  });
+
+  it('does not include LLM provider or model IDs', () => {
+    const router = new ModelRouter({
+      critic: { provider: 'openrouter', model: 'deepseek/deepseek-chat' },
+      coding: { provider: 'openrouter', model: 'qwen/qwen3-coder-next' },
+    });
+    void router;
+    expect(critiqueModelLabel('critic')).not.toMatch(/deepseek|openrouter/i);
+    expect(critiqueModelLabel('coding')).not.toMatch(/qwen|openrouter/i);
   });
 });

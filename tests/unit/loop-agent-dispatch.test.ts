@@ -8,7 +8,7 @@ import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { dispatchLoopPhaseAgent } from '../../src/loop-engine/loop-agent-dispatch.js';
-import { Blackboard } from '../../src/rco/blackboard.js';
+import { Blackboard } from '../../src/coordination/legacy-blackboard.js';
 import { isGreenfieldGoal } from '../../src/rco/goal-scope.js';
 import { ClosedLoop } from '../../src/loop-engine/closed-loop.js';
 import type { CommandRunner } from '../../src/loop-engine/verification/index.js';
