@@ -72,7 +72,7 @@ import {
   DEFAULT_PM_MODEL,
   DEFAULT_ENGINEER_MODEL,
 } from '../dist/rco/cursor-models.js';
-import { ModelRouter } from '../dist/models/model-router.js';
+import { RoleModelRouter } from '../dist/models/role-model-router.js';
 import {
   sanitizeStaleMissionState,
   cleanupPreviousRuns,
@@ -470,7 +470,7 @@ function formatPricing(p) {
 
 function buildRoleRoutingPayload() {
   try {
-    const router = ModelRouter.fromConfig();
+    const router = RoleModelRouter.fromConfig();
     const routing = router.getActiveRouting();
     return Object.fromEntries(
       Object.entries(routing).map(([role, m]) => [
@@ -501,7 +501,7 @@ function buildModelsApiPayload() {
     roleRouting: buildRoleRoutingPayload(),
     roleRoutingSummary: (() => {
       try {
-        return ModelRouter.fromConfig().formatRoutingSummary();
+        return RoleModelRouter.fromConfig().formatRoutingSummary();
       } catch {
         return null;
       }

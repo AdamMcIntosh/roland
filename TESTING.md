@@ -65,7 +65,7 @@ tests/
 - Stub tools: `search`, `code`, unknown tool handling
 
 **Integration — `integration.test.ts`** (5 tests)
-- Full pipeline: `loadConfig` → `ComplexityClassifier` → `ModelRouter.routeByComplexity` → `AdvancedCostTracker`
+- Full pipeline: `loadConfig` → `ComplexityClassifier` → `RoleModelRouter.routeByComplexity` → `AdvancedCostTracker`
 - Score monotonicity across increasing complexity levels
 
 **RCO — `orchestrator.test.ts`** (17 tests)

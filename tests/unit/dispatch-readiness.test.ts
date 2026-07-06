@@ -9,10 +9,10 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import {
-  ModelRouter,
-  resetModelRouter,
+  RoleModelRouter,
+  resetRoleModelRouter,
   DEFAULT_MODELS_CONFIG,
-} from '../../src/models/model-router.js';
+} from '../../src/models/role-model-router.js';
 import { clearLoopEngineConfigCache } from '../../src/loop-engine/loop-config.js';
 import {
   runLoopReadinessCheck,
@@ -21,14 +21,14 @@ import {
 
 describe('Cursor SDK default dispatch', () => {
   beforeEach(() => {
-    resetModelRouter();
+    resetRoleModelRouter();
     clearLoopEngineConfigCache();
     delete process.env.CURSOR_API_KEY;
     delete process.env.ROLAND_DEFAULT_DISPATCH;
   });
 
   afterEach(() => {
-    resetModelRouter();
+    resetRoleModelRouter();
     clearLoopEngineConfigCache();
     for (const key of Object.keys(process.env)) {
       if (key.startsWith('ROLAND_MODEL_') || key === 'ROLAND_DEFAULT_DISPATCH' || key === 'CURSOR_API_KEY') {
@@ -39,7 +39,7 @@ describe('Cursor SDK default dispatch', () => {
 
   it('defaults to cursor_sdk dispatch when API key is set', () => {
     process.env.CURSOR_API_KEY = 'test-key';
-    const router = new ModelRouter(DEFAULT_MODELS_CONFIG, 'cursor_sdk');
+    const router = new RoleModelRouter(DEFAULT_MODELS_CONFIG, 'cursor_sdk');
     const d = router.resolveDispatch('pm', { log: false });
     expect(d.method).toBe('cursor_sdk');
     expect(d.sdkModelId).toBeTruthy();
@@ -47,7 +47,7 @@ describe('Cursor SDK default dispatch', () => {
   });
 
   it('falls back to direct when CURSOR_API_KEY is missing', () => {
-    const router = new ModelRouter(DEFAULT_MODELS_CONFIG, 'cursor_sdk');
+    const router = new RoleModelRouter(DEFAULT_MODELS_CONFIG, 'cursor_sdk');
     const d = router.resolveDispatch('coding', { log: false });
     expect(d.method).toBe('direct');
     expect(d.provider).toBe('openrouter');
@@ -58,7 +58,7 @@ describe('Cursor SDK default dispatch', () => {
     process.env.CURSOR_API_KEY = 'test-key';
     process.env.ROLAND_MODEL_CODING_PROVIDER = 'ollama';
     process.env.ROLAND_MODEL_CODING = 'qwen3.5-coder:14b';
-    const router = ModelRouter.fromConfig();
+    const router = RoleModelRouter.fromConfig();
     const d = router.resolveDispatch('coding', { log: false });
     expect(d.method).toBe('direct');
     expect(d.provider).toBe('ollama');
@@ -66,7 +66,7 @@ describe('Cursor SDK default dispatch', () => {
 
   it('respects per-role use_cursor_sdk: false', () => {
     process.env.CURSOR_API_KEY = 'test-key';
-    const router = new ModelRouter({
+    const router = new RoleModelRouter({
       ...DEFAULT_MODELS_CONFIG,
       pm: {
         provider: 'openrouter',
@@ -81,7 +81,7 @@ describe('Cursor SDK default dispatch', () => {
 
   it('opens SDK circuit on recordSdkFailure and switches to direct', () => {
     process.env.CURSOR_API_KEY = 'test-key';
-    const router = new ModelRouter(DEFAULT_MODELS_CONFIG, 'cursor_sdk');
+    const router = new RoleModelRouter(DEFAULT_MODELS_CONFIG, 'cursor_sdk');
     const before = router.resolveDispatch('critic', { log: false });
     expect(before.method).toBe('cursor_sdk');
 
@@ -93,7 +93,7 @@ describe('Cursor SDK default dispatch', () => {
 
   it('recordSdkFailure chains provider fallback on rate limits', () => {
     process.env.CURSOR_API_KEY = 'test-key';
-    const router = new ModelRouter({
+    const router = new RoleModelRouter({
       critic: {
         provider: 'openrouter',
         model: 'deepseek/deepseek-chat',
@@ -108,8 +108,8 @@ describe('Cursor SDK default dispatch', () => {
   });
 
   it('validateOnStartup includes dispatch warnings when SDK key missing', () => {
-    const router = new ModelRouter(DEFAULT_MODELS_CONFIG, 'cursor_sdk');
-    const v = ModelRouter.validateOnStartup(router);
+    const router = new RoleModelRouter(DEFAULT_MODELS_CONFIG, 'cursor_sdk');
+    const v = RoleModelRouter.validateOnStartup(router);
     expect(v.defaultDispatch).toBe('cursor_sdk');
     expect(v.cursorSdkAvailable).toBe(false);
     expect(v.dispatchWarnings.some((w) => w.includes('CURSOR_API_KEY'))).toBe(true);
@@ -117,7 +117,7 @@ describe('Cursor SDK default dispatch', () => {
 
   it('serializeRoutingForState includes dispatchMethod per role', () => {
     process.env.CURSOR_API_KEY = 'test-key';
-    const router = new ModelRouter(DEFAULT_MODELS_CONFIG, 'cursor_sdk');
+    const router = new RoleModelRouter(DEFAULT_MODELS_CONFIG, 'cursor_sdk');
     const snap = router.serializeRoutingForState();
     expect(snap.defaultDispatch).toBe('cursor_sdk');
     expect(snap.cursorSdkAvailable).toBe(true);
@@ -127,7 +127,7 @@ describe('Cursor SDK default dispatch', () => {
 
   it('global default_dispatch direct disables SDK', () => {
     process.env.CURSOR_API_KEY = 'test-key';
-    const router = new ModelRouter(DEFAULT_MODELS_CONFIG, 'direct');
+    const router = new RoleModelRouter(DEFAULT_MODELS_CONFIG, 'direct');
     const d = router.resolveDispatch('pm', { log: false });
     expect(d.method).toBe('direct');
     expect(d.reason).toContain('default_dispatch=direct');
@@ -136,12 +136,12 @@ describe('Cursor SDK default dispatch', () => {
 
 describe('Loop readiness check', () => {
   beforeEach(() => {
-    resetModelRouter();
+    resetRoleModelRouter();
     clearLoopEngineConfigCache();
   });
 
   afterEach(() => {
-    resetModelRouter();
+    resetRoleModelRouter();
     clearLoopEngineConfigCache();
   });
 

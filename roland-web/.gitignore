@@ -1,6 +1,7 @@
 ## P0 Final Bugfix — roland-web Recipe Mirror
 # @roland-core/dist, agents, recipes are build-time mirrors — never commit.
 # Rebuild with: npm run build:core (or install.sh / update.sh)
+# Audit #3 (v1.4.0): only index.js + package.json are tracked under @roland-core/.
 
 .next/
 /dist/

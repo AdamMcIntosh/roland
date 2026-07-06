@@ -117,7 +117,7 @@ return runLegacyPmTeam(opts); // src/legacy/pm-team/ — removal v1.6.0
 
 **[DEPRECATED] PM Team (legacy, opt-in):** Pure ClosedLoop is the default for Plan/Act (`lightweight-plan-act.ts`). Legacy PM Team runs only when `loop_engine.use_pm_team: true`, template `use_pm_team: true`, or `enablePmIntegration: true`. Hermes handles high-level PM duties in the recommended hybrid setup.
 
-**Model routing:** All loop components resolve models via `ModelRouter.getModel(role)` in `src/models/model-router.ts`. Switch OpenRouter ↔ Ollama by editing `config.yaml` `models` section only (see file comments). Startup prints a routing banner; dashboard Loop panel shows live role + phase routing and PM Integration status.
+**Model routing:** All loop components resolve models via `RoleModelRouter.getModel(role)` in `src/models/role-model-router.ts`. Switch OpenRouter ↔ Ollama by editing `config.yaml` `models` section only (see file comments). Startup prints a routing banner; dashboard Loop panel shows live role + phase routing and PM Integration status.
 
 **Entry points:** `roland team --loop-template`, MCP `roland_run_team` with `loop_template`, dashboard `POST /api/mission { loopTemplate }`.
 

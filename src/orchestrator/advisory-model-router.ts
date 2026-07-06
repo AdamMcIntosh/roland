@@ -1,5 +1,7 @@
 /**
- * Model Router — IDE Model Selection with Complexity Classification
+ * ## Final Audit Cleanup (v1.4.0)
+ *
+ * AdvisoryAdvisoryModelRouter — IDE model selection with complexity classification.
  *
  * Analyzes query complexity and recommends the best IDE model (Cursor, VS Code).
  * This is purely advisory — Roland returns the recommendation and the IDE picks
@@ -14,7 +16,7 @@ import { ComplexityClassifier } from './complexity-classifier.js';
 import { getGlobalQualityTracker } from './quality-tracker.js';
 
 // ============================================================================
-// Ollama health check cache (module-level, shared across all ModelRouter calls)
+// Ollama health check cache (module-level, shared across all AdvisoryModelRouter calls)
 // ============================================================================
 
 interface OllamaHealthCache {
@@ -49,7 +51,7 @@ export const MODEL_PRICING: Record<string, { input: number; output: number }> = 
   'auto':                { input: 0,    output: 0 },
 };
 
-export class ModelRouter {
+export class AdvisoryModelRouter {
   /**
    * Analyze query complexity and suggest an IDE model.
    */

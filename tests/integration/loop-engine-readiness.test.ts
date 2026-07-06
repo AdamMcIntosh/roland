@@ -14,7 +14,7 @@ import {
   readLoopPmSession,
   runLoopReadinessCheck,
 } from '../../src/loop-engine/index.js';
-import { ModelRouter, resetModelRouter } from '../../src/models/model-router.js';
+import { RoleModelRouter, resetRoleModelRouter } from '../../src/models/role-model-router.js';
 import { Blackboard } from '../../src/coordination/legacy-blackboard.js';
 import { clearLoopEngineConfigCache } from '../../src/loop-engine/loop-config.js';
 import type { CommandRunner } from '../../src/loop-engine/verification/index.js';
@@ -33,7 +33,7 @@ describe('Loop Engineering E2E readiness', () => {
     stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'roland-loop-ready-'));
     blackboard = new Blackboard(stateDir);
     clearLoopEngineConfigCache();
-    resetModelRouter();
+    resetRoleModelRouter();
     process.env.ROLAND_LOOP_TEST_MODE = '1';
     process.env.CURSOR_API_KEY = 'test-readiness-key';
   });
@@ -42,7 +42,7 @@ describe('Loop Engineering E2E readiness', () => {
     delete process.env.ROLAND_LOOP_TEST_MODE;
     delete process.env.CURSOR_API_KEY;
     clearLoopEngineConfigCache();
-    resetModelRouter();
+    resetRoleModelRouter();
     fs.rmSync(stateDir, { recursive: true, force: true });
   });
 
@@ -66,7 +66,7 @@ describe('Loop Engineering E2E readiness', () => {
 
     expect(loop.getPmIntegration().enabled).toBe(false);
 
-    const router = ModelRouter.fromConfig();
+    const router = RoleModelRouter.fromConfig();
     const planDispatch = router.resolveDispatchForPhase('plan', { log: false });
     const critiqueDispatch = router.resolveDispatchForPhase('critique', { log: false });
     expect(planDispatch.method).toBe('cursor_sdk');

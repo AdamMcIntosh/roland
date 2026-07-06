@@ -28,7 +28,7 @@ export interface PrFormatContext {
   testingNotes?: string;
   /** Optional one-liner for the Impact section (why this change matters). */
   impactNote?: string;
-  /** Active ModelRouter summary for loop missions. */
+  /** Active RoleModelRouter summary for loop missions. */
   modelRoutingNotes?: string;
 }
 

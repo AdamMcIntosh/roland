@@ -18,7 +18,7 @@ import { runTool } from './tools.js';
 import { buildClaudeToolCallingPrompt } from './prompts.js';
 import { parseClaudeResponseText } from '../schemas.js';
 import { toCursorModelId } from './model-routing.js';
-import { getModelRouter } from '../models/model-router.js';
+import { getRoleModelRouter } from '../models/role-model-router.js';
 import { AGENT_TIMEOUT_MS } from './constants.js';
 import {
   cleanupSdkSession,
@@ -176,7 +176,7 @@ async function runAsync(input: unknown): Promise<void> {
 
   const { agentYaml, state, taskContext, stepInput, tools, workflowSteps, fileBundle } = inputParsed.data;
   const agentName = agentYaml.name ?? 'unknown';
-  const dispatch = getModelRouter().resolveDispatch(agentName, {
+  const dispatch = getRoleModelRouter().resolveDispatch(agentName, {
     yamlModel: agentYaml.claude_model,
     log: true,
   });

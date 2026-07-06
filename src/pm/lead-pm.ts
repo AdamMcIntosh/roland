@@ -27,7 +27,7 @@ import { PROVIDER, type Lane, type ModelPolicy } from './model-policy.js';
 import { PMEventLog, type PMEvent, type PMEventAction } from './event-log.js';
 import { renderCursorLaunch, renderStandup } from './render.js';
 import { selectRelevantFiles } from '../utils/file-gatherer.js';
-import { ModelRouter } from '../orchestrator/model-router.js';
+import { AdvisoryModelRouter } from '../orchestrator/advisory-model-router.js';
 import { getGlobalTracker, type AdvancedCostTracker } from '../orchestrator/advanced-cost-tracker.js';
 import {
   AttentionItem,
@@ -251,7 +251,7 @@ export class LeadPM {
 
   /**
    * Attribute Cursor token usage to a task + engineer. Cost is computed via
-   * ModelRouter.estimateCost, which returns 0 for Cursor/subscription models —
+   * AdvisoryModelRouter.estimateCost, which returns 0 for Cursor/subscription models —
    * so this records *usage* (tokens/requests), not dollars, and never touches
    * the legacy OpenRouter budget.
    */
@@ -262,7 +262,7 @@ export class LeadPM {
     inputTokens: number;
     outputTokens: number;
   }): { taskUsage: TaskView['value']['usage']; teamUsage: TeamUsage } {
-    const cost = ModelRouter.estimateCost(input.model, input.inputTokens, input.outputTokens);
+    const cost = AdvisoryModelRouter.estimateCost(input.model, input.inputTokens, input.outputTokens);
     this.tracker.recordCost(
       input.model,
       PROVIDER,

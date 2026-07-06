@@ -11,7 +11,7 @@ import type { CommandBlackboard } from '../rco/command-blackboard.js';
 import type { LoopTemplate } from './loop-phases.js';
 import type { PhaseConfig } from './loop-phases.js';
 import { writeLoopPmSession } from './loop-pm-session.js';
-import { ModelRouter } from '../models/model-router.js';
+import { RoleModelRouter } from '../models/role-model-router.js';
 import { dispatchLoopPhaseAgent } from './loop-agent-dispatch.js';
 import type { LoopState } from './loop-state.js';
 import type { PhaseResult } from './phase-handlers/types.js';
@@ -22,7 +22,7 @@ export interface LightweightPlanActContext {
   template: LoopTemplate;
   blackboard: Blackboard;
   commandBoard?: CommandBlackboard;
-  modelRouter?: ModelRouter;
+  modelRouter?: RoleModelRouter;
   cwd?: string;
   isTestMode?: boolean;
 }
@@ -33,7 +33,7 @@ export async function runLightweightPlan(
   opts: LightweightPlanActContext,
   extras: { phaseConfig?: PhaseConfig; loopState?: LoopState } = {},
 ): Promise<PhaseResult> {
-  const router = opts.modelRouter ?? ModelRouter.fromConfig();
+  const router = opts.modelRouter ?? RoleModelRouter.fromConfig();
   const planDispatch = router.resolveDispatchForPhase('plan', { log: true });
 
   writeLoopPmSession(opts.stateDir, {
@@ -96,7 +96,7 @@ export async function runLightweightAct(
     loopState?: LoopState;
   } = {},
 ): Promise<PhaseResult> {
-  const router = opts.modelRouter ?? ModelRouter.fromConfig();
+  const router = opts.modelRouter ?? RoleModelRouter.fromConfig();
   const actDispatch = router.resolveDispatchForPhase('act', { log: true });
   const waveNumber = extras.waveNumber ?? 0;
 

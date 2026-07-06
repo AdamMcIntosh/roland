@@ -6,7 +6,7 @@
 
 import { McpToolError } from '../../utils/errors.js';
 import { ComplexityClassifier, classifyWithSemantic } from '../../orchestrator/complexity-classifier.js';
-import { ModelRouter } from '../../orchestrator/model-router.js';
+import { AdvisoryModelRouter } from '../../orchestrator/advisory-model-router.js';
 import { BudgetManager } from '../../utils/budget-manager.js';
 import type { McpToolContext, McpToolRegistrar } from './types.js';
 
@@ -95,7 +95,7 @@ function registerRouteModel(registrar: McpToolRegistrar, ctx: McpToolContext): v
 
       let routing;
       try {
-        routing = ModelRouter.routeByComplexity(query);
+        routing = AdvisoryModelRouter.routeByComplexity(query);
       } catch {
         routing = null;
       }
@@ -125,7 +125,7 @@ function registerRouteModel(registrar: McpToolRegistrar, ctx: McpToolContext): v
         }
       }
 
-      const estimatedCost = ModelRouter.estimateCost(
+      const estimatedCost = AdvisoryModelRouter.estimateCost(
         recommendedModel,
         analysis.tokenEstimate,
         analysis.tokenEstimate * 2,
@@ -181,7 +181,7 @@ function registerTrackCost(registrar: McpToolRegistrar, ctx: McpToolContext): vo
 
       let cost: number;
       try {
-        cost = ModelRouter.estimateCost(model, inputTokens, outputTokens);
+        cost = AdvisoryModelRouter.estimateCost(model, inputTokens, outputTokens);
       } catch {
         cost = 0;
       }
@@ -401,19 +401,19 @@ function registerSuggestMode(registrar: McpToolRegistrar): void {
           suggestedMode = 'quick';
           reasoning = 'Low complexity task — single agent can handle this efficiently.';
           agentChain = ['executor'];
-          estimatedCost = ModelRouter.estimateCost(analysis.suggestedModel, analysis.tokenEstimate, analysis.tokenEstimate);
+          estimatedCost = AdvisoryModelRouter.estimateCost(analysis.suggestedModel, analysis.tokenEstimate, analysis.tokenEstimate);
           break;
         case 'medium':
           suggestedMode = 'standard';
           reasoning = 'Moderate complexity — benefits from planning before execution.';
           agentChain = ['planner', 'executor', 'critic'];
-          estimatedCost = ModelRouter.estimateCost(analysis.suggestedModel, analysis.tokenEstimate * 3, analysis.tokenEstimate * 3);
+          estimatedCost = AdvisoryModelRouter.estimateCost(analysis.suggestedModel, analysis.tokenEstimate * 3, analysis.tokenEstimate * 3);
           break;
         case 'complex':
           suggestedMode = 'deep';
           reasoning = 'High complexity — requires multiple perspectives, review, and validation.';
           agentChain = ['planner', 'architect', 'executor', 'reviewer', 'critic'];
-          estimatedCost = ModelRouter.estimateCost(analysis.suggestedModel, analysis.tokenEstimate * 5, analysis.tokenEstimate * 5);
+          estimatedCost = AdvisoryModelRouter.estimateCost(analysis.suggestedModel, analysis.tokenEstimate * 5, analysis.tokenEstimate * 5);
           break;
         default:
           suggestedMode = 'standard';

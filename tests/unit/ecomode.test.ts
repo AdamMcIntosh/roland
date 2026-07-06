@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { ModelRouter, MODEL_PRICING } from '../../src/orchestrator/model-router.js';
+import { AdvisoryModelRouter, MODEL_PRICING } from '../../src/orchestrator/advisory-model-router.js';
 import { ComplexityClassifier } from '../../src/orchestrator/complexity-classifier.js';
 import { AdvancedCostTracker } from '../../src/orchestrator/advanced-cost-tracker.js';
 import { loadConfig } from '../../src/config/config-loader.js';
@@ -56,13 +56,13 @@ describe('Ecomode: Model Router', () => {
   });
 
   it('should recommend a model for a query', () => {
-    const result = ModelRouter.analyzeQueryComplexity('add a button to the form');
+    const result = AdvisoryModelRouter.analyzeQueryComplexity('add a button to the form');
     expect(result).toHaveProperty('complexity');
     expect(result).toHaveProperty('suggestedModel');
   });
 
   it('should route a query by complexity', () => {
-    const result = ModelRouter.routeByComplexity('simple task');
+    const result = AdvisoryModelRouter.routeByComplexity('simple task');
     expect(result.selected).toHaveProperty('model');
     expect(result).toHaveProperty('analysis');
   });

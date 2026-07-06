@@ -112,7 +112,7 @@ export function formatPmIntegrationLabel(status: PmIntegrationStatus): string {
     : 'Pure ClosedLoop (Roland @ Cursor + Loop Engine)';
 }
 
-/** Structured log lines for loop mission startup (used when ModelRouter summary is skipped). */
+/** Structured log lines for loop mission startup (used when RoleModelRouter summary is skipped). */
 export function logPmIntegrationMode(status: PmIntegrationStatus, templateName: string): void {
   const label = formatPmIntegrationLabel(status);
   console.error(`[Loop] PM Integration: ${label}`);

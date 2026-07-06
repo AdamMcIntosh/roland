@@ -9,7 +9,7 @@
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { McpToolError } from '../../utils/errors.js';
 import { logger } from '../../utils/logger.js';
-import { ModelRouter } from '../../orchestrator/model-router.js';
+import { AdvisoryModelRouter } from '../../orchestrator/advisory-model-router.js';
 import { generateDiff } from '../../utils/diff-engine.js';
 import { getDiffStreamServer } from '../diff-stream.js';
 import { analyzeScreenshot } from '../../utils/screenshot.js';
@@ -63,7 +63,7 @@ function registerHealthCheck(registrar: McpToolRegistrar, ctx: McpToolContext): 
 
       if (ctx.config.ollama?.enabled) {
         const ollamaCfg = ctx.config.ollama;
-        const health = await ModelRouter.checkOllamaHealth(ollamaCfg.base_url);
+        const health = await AdvisoryModelRouter.checkOllamaHealth(ollamaCfg.base_url);
         result.ollama = {
           enabled: true,
           available: health.available,

@@ -24,7 +24,7 @@ import { emitHermesHitlEvent } from './hitl-hermes.js';
 import { spawnBackground } from './supervisor.js';
 import type { LoopState } from '../loop-engine/index.js';
 import { readLoopPmSession } from '../loop-engine/index.js';
-import { ModelRouter } from '../models/model-router.js';
+import { RoleModelRouter } from '../models/role-model-router.js';
 import {
   ensureMissionProjectContext,
   resolveMcpProjectContext,
@@ -109,7 +109,7 @@ function syncLoopStateToRun(runState: RunStateWriter, loopState: LoopState, stat
     loopRetryCount: loopState.retryCount,
     loopStatus: loopState.status,
     loopPhaseHistory: recentHistory,
-    modelRouting: ModelRouter.fromConfig().serializeRoutingForState(),
+    modelRouting: RoleModelRouter.fromConfig().serializeRoutingForState(),
     pmIntegration: {
       enabled: pmSession?.executionPath === 'pm_team',
       reason: pmSession?.routingReason ?? 'pure ClosedLoop (no PM session)',

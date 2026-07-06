@@ -574,7 +574,7 @@ From the dashboard you can:
 - Browse loop history and the read-only template catalog
 - Copy `roland hitl-status` for CLI-side HITL queue inspection
 
-An **Advanced** panel (collapsed by default) provides a fallback mission launcher for phone-only Tailscale access when Hermes is unavailable. Model selection is not exposed — ModelRouter handles routing.
+An **Advanced** panel (collapsed by default) provides a fallback mission launcher for phone-only Tailscale access when Hermes is unavailable. Model selection is not exposed — RoleModelRouter handles routing.
 
 Example `/api/loop-templates` response (truncated):
 

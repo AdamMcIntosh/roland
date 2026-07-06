@@ -5,7 +5,7 @@
 /** How the loop should proceed after critique. */
 export type RetryDecision = 'proceed' | 'retry' | 'retry_focused' | 'escalate';
 
-/** Critique routing lane — maps to `critic` or `coding` roles via ModelRouter. */
+/** Critique routing lane — maps to `critic` or `coding` roles via RoleModelRouter. */
 export type CritiqueModel = 'critic' | 'coding';
 
 /** Normalize legacy lane keys (grok/composer) to canonical critique lanes. */

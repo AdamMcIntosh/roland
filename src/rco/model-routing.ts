@@ -1,12 +1,12 @@
 /**
  * Cursor SDK model routing for RCO agents.
  *
- * Delegates role resolution to ModelRouter (`src/models/model-router.ts`).
+ * Delegates role resolution to RoleModelRouter (`src/models/role-model-router.ts`).
  * Legacy PM Team dispatch and agentWorker both call `toCursorModelId()` here.
  *
  * Resolution order:
  *  1. Valid Cursor model id from agent YAML
- *  2. ModelRouter role → configured model (cursor provider uses id directly)
+ *  2. RoleModelRouter role → configured model (cursor provider uses id directly)
  *  3. Keyword mapping for OpenRouter/Ollama model strings → Cursor SDK id
  */
 
@@ -16,19 +16,19 @@ import {
   VALID_CURSOR_MODELS,
   isValidCursorModel,
 } from './cursor-models.js';
-import { getModelRouter, ModelRouter } from '../models/model-router.js';
+import { getRoleModelRouter, RoleModelRouter } from '../models/role-model-router.js';
 
 export { VALID_CURSOR_MODELS, isValidCursorModel } from './cursor-models.js';
 export { DEFAULT_PM_MODEL, DEFAULT_ENGINEER_MODEL } from './cursor-models.js';
 
 /**
  * Resolve agent name + optional YAML model to a Cursor SDK model id.
- * Loop Engineering uses ModelRouter directly; this bridges legacy PM Team paths.
+ * Loop Engineering uses RoleModelRouter directly; this bridges legacy PM Team paths.
  */
 export function toCursorModelId(model: string, agentName: string = ''): string {
   try {
-    const dispatch = getModelRouter().resolveDispatch(
-      agentName ? ModelRouter.roleForAgent(agentName) : 'coding',
+    const dispatch = getRoleModelRouter().resolveDispatch(
+      agentName ? RoleModelRouter.roleForAgent(agentName) : 'coding',
       { agentName, yamlModel: model, log: false },
     );
     if (dispatch.method === 'cursor_sdk') {
@@ -40,7 +40,7 @@ export function toCursorModelId(model: string, agentName: string = ''): string {
   }
 }
 
-/** Legacy fallback when ModelRouter config is unavailable. */
+/** Legacy fallback when RoleModelRouter config is unavailable. */
 function toCursorModelIdLegacy(model: string, agentName: string = ''): string {
   const m = model.toLowerCase().trim();
   const n = agentName.toLowerCase();
@@ -68,7 +68,7 @@ function toCursorModelIdLegacy(model: string, agentName: string = ''): string {
 /**
  * ## Final Legacy Cleanup + Model Router Integration Complete
  *
- * PM Team wave engine calls `toCursorModelId()` → ModelRouter.resolveSdkModelId().
- * Loop-template missions use ModelRouter.getModel() directly in ClosedLoop harness.
+ * PM Team wave engine calls `toCursorModelId()` → RoleModelRouter.resolveSdkModelId().
+ * Loop-template missions use RoleModelRouter.getModel() directly in ClosedLoop harness.
  */
 export {};

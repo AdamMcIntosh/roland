@@ -1,4 +1,6 @@
 /**
+ * ## Final Audit Cleanup (v1.4.0)
+ *
  * ## Assumptions
  * - Hermes is the primary PM / strategist; Roland ClosedLoop is the loop execution engine.
  * - [DEPRECATED] Legacy PM Team opt-in via enablePmIntegration, loop_engine.use_pm_team, or template use_pm_team.
@@ -37,7 +39,7 @@ import { PhaseIntentPoster } from './phase-intent-poster.js';
 import type { CommandRunner } from './verification/index.js';
 import { LoopMemory } from './loop-memory.js';
 import { LoopPmBridge } from './pm-integration.js';
-import { ModelRouter, initModelRouter, ModelRouterError } from '../models/model-router.js';
+import { RoleModelRouter, initRoleModelRouter, RoleModelRouterError } from '../models/role-model-router.js';
 import { loadLoopEngineConfig, resolveBetweenIterations } from './loop-config.js';
 import {
   summarizeVerificationConfig,
@@ -102,25 +104,25 @@ export class ClosedLoop {
   private readonly opts: ClosedLoopOptions;
   private readonly template: LoopTemplate;
   private readonly memory: LoopMemory;
-  private readonly modelRouter: ModelRouter;
+  private readonly modelRouter: RoleModelRouter;
   private readonly pmIntegration: PmIntegrationStatus;
 
   constructor(opts: ClosedLoopOptions) {
     this.opts = opts;
-    this.modelRouter = initModelRouter();
-    const validation = ModelRouter.validateOnStartup(this.modelRouter);
+    this.modelRouter = initRoleModelRouter();
+    const validation = RoleModelRouter.validateOnStartup(this.modelRouter);
     if (!validation.ok) {
-      throw new ModelRouterError(
+      throw new RoleModelRouterError(
         `ClosedLoop cannot start — missing model roles: ${validation.missing.join(', ')}. ` +
           'Configure models.pm, models.coding, models.critic, models.verifier in config.yaml.',
         validation.missing[0],
       );
     }
     for (const w of validation.warnings.slice(0, 3)) {
-      console.error(`[ModelRouter] Note: ${w}`);
+      console.error(`[RoleModelRouter] Note: ${w}`);
     }
     for (const w of validation.dispatchWarnings.slice(0, 5)) {
-      console.error(`[ModelRouter] Dispatch: ${w}`);
+      console.error(`[RoleModelRouter] Dispatch: ${w}`);
     }
     this.template = ClosedLoop.resolveTemplate(opts.template);
     this.pmIntegration = resolvePmIntegrationStatus(this.template, opts);

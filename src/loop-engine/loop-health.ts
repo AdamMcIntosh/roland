@@ -19,7 +19,7 @@ import {
   LOOP_HISTORY_FILE,
 } from './loop-observability.js';
 import { LoopTemplates } from './loop-templates.js';
-import { ModelRouter } from '../models/model-router.js';
+import { RoleModelRouter } from '../models/role-model-router.js';
 import { readLoopPmSession } from './loop-pm-session.js';
 import { resolvePmIntegrationStatus, formatPmIntegrationLabel } from './loop-pm-policy.js';
 
@@ -310,7 +310,7 @@ export function buildLoopHealthReport(stateDir: string): LoopHealthReport {
       }
     : null;
 
-  const router = ModelRouter.fromConfig();
+  const router = RoleModelRouter.fromConfig();
   const serialized = router.serializeRoutingForState();
   const roleRouting = {
     summary: serialized.summary,

@@ -56,7 +56,7 @@ roland team "Clear and specific goal" --loop-template standard-code-loop
 - Post-run reconstruction: \`roland mission-audit --last --format markdown\`.
 - Dashboard (\`npm run serve-dashboard\`) is a **read-only monitor** — launch missions via CLI.
 
-You have deep knowledge of Roland's architecture (ClosedLoop, ModelRouter, generic templates, HITL, dashboard, etc.).`;
+You have deep knowledge of Roland's architecture (ClosedLoop, RoleModelRouter, generic templates, HITL, dashboard, etc.).`;
 
 export interface LoopTemplateRecommendation {
   template: string;

@@ -18,7 +18,7 @@ import {
 import { createInitialLoopState } from '../../src/loop-engine/loop-state.js';
 import { Phase } from '../../src/loop-engine/loop-phases.js';
 import { Blackboard } from '../../src/coordination/legacy-blackboard.js';
-import { ModelRouter } from '../../src/models/model-router.js';
+import { RoleModelRouter } from '../../src/models/role-model-router.js';
 import type { BlackboardEntry } from '../../src/coordination/legacy-blackboard.js';
 
 function findCritiqueResultEntry(entries: BlackboardEntry[]): BlackboardEntry | undefined {
@@ -182,7 +182,7 @@ describe('critiqueModelLabel', () => {
   });
 
   it('does not include LLM provider or model IDs', () => {
-    const router = new ModelRouter({
+    const router = new RoleModelRouter({
       critic: { provider: 'openrouter', model: 'deepseek/deepseek-chat' },
       coding: { provider: 'openrouter', model: 'qwen/qwen3-coder-next' },
     });

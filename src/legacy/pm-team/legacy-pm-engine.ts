@@ -39,7 +39,7 @@ import {
   type MissionPlanningMode,
 } from '../../rco/mission-dag.js';
 import { loadAllAgents, resolveAgentsDir } from '../../rco/loadConfig.js';
-import { ModelRouter } from '../../models/model-router.js';
+import { RoleModelRouter } from '../../models/role-model-router.js';
 import type {
   TeamTask,
   TeamPlan,
@@ -610,14 +610,14 @@ export async function runLegacyPmTeam(opts: TeamOrchestratorOptions): Promise<Te
   const roster: AgentYaml[] = Array.from(rosterMap.values());
   console.error(`[Team] Roster: ${roster.length} agents from ${agentsDir}`);
 
-  // ── Model config banner (legacy PM path — routes via ModelRouter dispatch) ─
-  const legacyRouter = ModelRouter.fromConfig();
+  // ── Model config banner (legacy PM path — routes via RoleModelRouter dispatch) ─
+  const legacyRouter = RoleModelRouter.fromConfig();
   const pmDispatch = legacyRouter.resolveDispatch('pm', { agentName: 'lead-pm', log: false });
   const codingDispatch = legacyRouter.resolveDispatch('coding', { agentName: 'executor', log: false });
   const pmModelId = toCursorModelId(pmDispatch.model, 'lead-pm');
   const engineerModelId = toCursorModelId(codingDispatch.model, 'executor');
   console.error('[Team] ─────────────────────────────────────────────────────');
-  console.error('[Team] Legacy PM Team — ModelRouter dispatch');
+  console.error('[Team] Legacy PM Team — RoleModelRouter dispatch');
   console.error(`[Team]   Lead PM     → ${pmDispatch.method} ${pmDispatch.displayLabel} → SDK ${pmModelId}`);
   console.error(`[Team]   Engineers   → ${codingDispatch.method} ${codingDispatch.displayLabel} → SDK ${engineerModelId}`);
   console.error('[Team] ─────────────────────────────────────────────────────');

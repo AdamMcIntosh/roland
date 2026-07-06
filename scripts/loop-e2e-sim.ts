@@ -20,7 +20,7 @@ import {
   type LoopMemory,
 } from '../src/loop-engine/index.js';
 import type { ResolvedBetweenIterationsHook } from '../src/loop-engine/loop-template-resolution.js';
-import { ModelRouter, resetModelRouter } from '../src/models/model-router.js';
+import { RoleModelRouter, resetRoleModelRouter } from '../src/models/role-model-router.js';
 import { Blackboard } from '../src/coordination/legacy-blackboard.js';
 import { CommandBlackboard } from '../src/rco/command-blackboard.js';
 import { decideGitCommitApprovalCli } from '../src/rco/git-commit-approval-cli.js';
@@ -141,7 +141,7 @@ async function main(): Promise<void> {
 
   process.env.ROLAND_LOOP_TEST_MODE = '1';
   clearLoopEngineConfigCache();
-  resetModelRouter();
+  resetRoleModelRouter();
 
   let dashboardProc: ChildProcess | null = null;
   if (!noDashboard) {
@@ -152,12 +152,12 @@ async function main(): Promise<void> {
 
   const blackboard = new Blackboard(absState);
   const commandBoard = new CommandBlackboard(absState);
-  const goal = 'Add a brief module header comment to ModelRouter (simulation only — no repo edits)';
+  const goal = 'Add a brief module header comment to RoleModelRouter (simulation only — no repo edits)';
 
   console.error('\n[sim] ── ClosedLoop harness (Pure ClosedLoop + Cursor SDK defaults) ──');
   console.error(`[sim] template=${template} stateDir=${stateDir}`);
 
-  const router = ModelRouter.fromConfig();
+  const router = RoleModelRouter.fromConfig();
   const planDispatch = router.resolveDispatchForPhase('plan', { log: false });
   console.error(`[sim] dispatch plan → ${planDispatch.method} (${planDispatch.model ?? 'default'})`);
 

@@ -1,6 +1,8 @@
 /**
+ * ## Final Audit Cleanup (v1.4.0)
+ *
  * ## Assumptions
- * - Role-based routing for Loop Engineering — independent of orchestrator/model-router.ts (complexity tiers).
+ * - Role-based routing for Loop Engineering — independent of advisory-model-router.ts (complexity tiers).
  * - Default dispatch is Cursor SDK (`loop_engine.default_dispatch: cursor_sdk`); direct OpenRouter/Ollama when disabled.
  * - Dispatch decision tree (per role):
  *     1. SDK circuit open after SDK failures → direct provider chain
@@ -103,7 +105,7 @@ export interface ModelWithFallbackChain {
   chain: ResolvedModel[];
 }
 
-export interface ModelRouterValidation {
+export interface RoleModelRouterValidation {
   ok: boolean;
   missing: ModelRole[];
   warnings: string[];
@@ -113,11 +115,11 @@ export interface ModelRouterValidation {
   cursorSdkAvailable: boolean;
 }
 
-export class ModelRouterError extends Error {
+export class RoleModelRouterError extends Error {
   readonly role?: string;
   constructor(message: string, role?: string) {
     super(message);
-    this.name = 'ModelRouterError';
+    this.name = 'RoleModelRouterError';
     this.role = role;
   }
 }
@@ -394,31 +396,31 @@ function applyEnvOverrides(config: ModelsConfig): ModelsConfig {
 }
 
 // ============================================================================
-// ModelRouter
+// RoleModelRouter
 // ============================================================================
 
-let _instance: ModelRouter | null = null;
+let _instance: RoleModelRouter | null = null;
 
-export function getModelRouter(): ModelRouter {
+export function getRoleModelRouter(): RoleModelRouter {
   if (!_instance) {
-    _instance = ModelRouter.fromConfig();
+    _instance = RoleModelRouter.fromConfig();
   }
   return _instance;
 }
 
-export function initModelRouter(config?: ModelsConfig, defaultDispatch?: DefaultDispatchPolicy): ModelRouter {
-  _instance = new ModelRouter(
+export function initRoleModelRouter(config?: ModelsConfig, defaultDispatch?: DefaultDispatchPolicy): RoleModelRouter {
+  _instance = new RoleModelRouter(
     config ?? applyEnvOverrides(loadModelsConfigFromYaml()),
     defaultDispatch,
   );
   return _instance;
 }
 
-export function resetModelRouter(): void {
+export function resetRoleModelRouter(): void {
   _instance = null;
 }
 
-export class ModelRouter {
+export class RoleModelRouter {
   private readonly roleConfigs: Map<ModelRole, RoleModelSpec>;
   private readonly defaultDispatch: DefaultDispatchPolicy;
   private readonly degradedRoles = new Set<ModelRole>();
@@ -438,14 +440,14 @@ export class ModelRouter {
     this.defaultDispatch = defaultDispatch ?? loadDefaultDispatchPolicy();
   }
 
-  static fromConfig(configPath?: string): ModelRouter {
+  static fromConfig(configPath?: string): RoleModelRouter {
     try {
       const yamlConfig = loadModelsConfigFromYaml(configPath);
-      return new ModelRouter(applyEnvOverrides(yamlConfig));
+      return new RoleModelRouter(applyEnvOverrides(yamlConfig));
     } catch (err) {
       const hint = err instanceof Error ? err.message : String(err);
       const configHint = resolveConfigPath() ?? '(config.yaml not found in cwd or package dir)';
-      throw new ModelRouterError(
+      throw new RoleModelRouterError(
         `Failed to load model routing from ${configHint}. ${hint} ` +
           'Fix config.yaml `models` section or set ROLAND_MODEL_<ROLE> env vars. ' +
           'See config.yaml comments for OpenRouter vs Ollama examples.',
@@ -464,12 +466,12 @@ export class ModelRouter {
   }
 
   static roleForAgent(agentName: string): ModelRole {
-    return ModelRouter.normalizeRole(agentName);
+    return RoleModelRouter.normalizeRole(agentName);
   }
 
   /** Primary entry — resolve model + provider for a role (with degradation fallback). */
   getModel(role: ModelRole | string): ResolvedModel {
-    const canonical = typeof role === 'string' ? ModelRouter.normalizeRole(role) : role;
+    const canonical = typeof role === 'string' ? RoleModelRouter.normalizeRole(role) : role;
     const spec = this.getRoleSpec(canonical);
     const useFallback = Boolean(this.degradedRoles.has(canonical) && spec.fallback);
     const active = useFallback ? spec.fallback! : spec;
@@ -481,7 +483,7 @@ export class ModelRouter {
    * Use when displaying routing or wiring provider clients that need explicit fallbacks.
    */
   getModelWithFallback(role: ModelRole | string): ModelWithFallbackChain {
-    const canonical = typeof role === 'string' ? ModelRouter.normalizeRole(role) : role;
+    const canonical = typeof role === 'string' ? RoleModelRouter.normalizeRole(role) : role;
     const spec = this.getRoleSpec(canonical);
     const primary = resolveSpecToModel(canonical, spec, false);
     const chain: ResolvedModel[] = [primary];
@@ -500,8 +502,8 @@ export class ModelRouter {
   }
 
   /** Validate required loop roles — call at ClosedLoop / loop mission startup. */
-  static validateOnStartup(router?: ModelRouter): ModelRouterValidation {
-    const r = router ?? ModelRouter.fromConfig();
+  static validateOnStartup(router?: RoleModelRouter): RoleModelRouterValidation {
+    const r = router ?? RoleModelRouter.fromConfig();
     const missing: ModelRole[] = [];
     const warnings: string[] = [];
     const dispatchWarnings: string[] = [];
@@ -555,7 +557,7 @@ export class ModelRouter {
   private getRoleSpec(canonical: ModelRole): RoleModelSpec {
     const spec = this.roleConfigs.get(canonical) ?? DEFAULT_MODELS_CONFIG[canonical];
     if (!spec?.model?.trim()) {
-      throw new ModelRouterError(
+      throw new RoleModelRouterError(
         `No model configured for role "${canonical}". Add models.${canonical} to config.yaml or set ROLAND_MODEL_${canonical.toUpperCase()}.`,
         canonical,
       );
@@ -564,11 +566,11 @@ export class ModelRouter {
   }
 
   getModelForPhase(phase: string): ResolvedModel {
-    return this.getModel(ModelRouter.roleForPhase(phase));
+    return this.getModel(RoleModelRouter.roleForPhase(phase));
   }
 
   getModelForAgent(agentName: string): ResolvedModel {
-    return this.getModel(ModelRouter.roleForAgent(agentName));
+    return this.getModel(RoleModelRouter.roleForAgent(agentName));
   }
 
   getDefaultDispatch(): DefaultDispatchPolicy {
@@ -592,7 +594,7 @@ export class ModelRouter {
     role: ModelRole | string,
     opts: { agentName?: string; yamlModel?: string; phase?: string; log?: boolean } = {},
   ): ResolvedDispatch {
-    const canonical = typeof role === 'string' ? ModelRouter.normalizeRole(role) : role;
+    const canonical = typeof role === 'string' ? RoleModelRouter.normalizeRole(role) : role;
     const directModel = this.getModel(canonical);
     const method = this.pickDispatchMethod(canonical);
     const yaml = opts.yamlModel?.trim() ?? '';
@@ -639,7 +641,7 @@ export class ModelRouter {
     phase: string,
     opts: { agentName?: string; yamlModel?: string; log?: boolean } = {},
   ): ResolvedDispatch {
-    return this.resolveDispatch(ModelRouter.roleForPhase(phase), { ...opts, phase });
+    return this.resolveDispatch(RoleModelRouter.roleForPhase(phase), { ...opts, phase });
   }
 
   /** Log dispatch decision — call once per phase transition or agent spawn. */
@@ -652,7 +654,7 @@ export class ModelRouter {
         ? 'Dispatching via Cursor SDK'
         : `Direct provider (${dispatch.provider})`;
     console.error(
-      `[ModelRouter] role=${dispatch.role}${phaseTag} ${methodLabel} → ${dispatch.displayLabel}${fb}${sdkCircuit} (${dispatch.reason})`,
+      `[RoleModelRouter] role=${dispatch.role}${phaseTag} ${methodLabel} → ${dispatch.displayLabel}${fb}${sdkCircuit} (${dispatch.reason})`,
     );
   }
 
@@ -661,7 +663,7 @@ export class ModelRouter {
    * Chain: SDK failure → direct primary → recordFailure() for provider fallback.
    */
   recordSdkFailure(role: ModelRole | string, errorMessage: string): ResolvedDispatch {
-    const canonical = typeof role === 'string' ? ModelRouter.normalizeRole(role) : role;
+    const canonical = typeof role === 'string' ? RoleModelRouter.normalizeRole(role) : role;
     if (!this.isSdkFailure(errorMessage)) {
       return this.resolveDispatch(canonical, { log: false });
     }
@@ -669,7 +671,7 @@ export class ModelRouter {
     this.sdkDisabledRoles.add(canonical);
     this.lastSdkDisableReason = errorMessage.slice(0, 200);
     console.error(
-      `[ModelRouter] role=${canonical} SDK circuit OPEN — switching to direct provider: "${this.lastSdkDisableReason}"`,
+      `[RoleModelRouter] role=${canonical} SDK circuit OPEN — switching to direct provider: "${this.lastSdkDisableReason}"`,
     );
 
     const direct = this.resolveDispatch(canonical, { log: false });
@@ -729,7 +731,7 @@ export class ModelRouter {
    * Only triggers fallback on rate-limit / unavailable errors.
    */
   recordFailure(role: ModelRole | string, errorMessage: string): ResolvedModel {
-    const canonical = typeof role === 'string' ? ModelRouter.normalizeRole(role) : role;
+    const canonical = typeof role === 'string' ? RoleModelRouter.normalizeRole(role) : role;
     if (!this.isRateLimitOrUnavailable(errorMessage)) {
       return this.getModel(canonical);
     }
@@ -737,7 +739,7 @@ export class ModelRouter {
     const chain = this.getModelWithFallback(canonical);
     if (!chain.fallback) {
       console.error(
-        `[ModelRouter] role=${canonical} rate-limited but no fallback configured — retrying primary ${chain.primary.displayLabel}`,
+        `[RoleModelRouter] role=${canonical} rate-limited but no fallback configured — retrying primary ${chain.primary.displayLabel}`,
       );
       return chain.primary;
     }
@@ -747,7 +749,7 @@ export class ModelRouter {
     const resolved = this.getModel(canonical);
 
     console.error(
-      `[ModelRouter] role=${canonical} degraded — fallback ${resolved.displayLabel}: "${this.lastDegradeReason}"`,
+      `[RoleModelRouter] role=${canonical} degraded — fallback ${resolved.displayLabel}: "${this.lastDegradeReason}"`,
     );
     return resolved;
   }
@@ -780,7 +782,7 @@ export class ModelRouter {
 
   /** Multi-line table for logs and Mission Objectives. */
   formatRoutingBanner(): string[] {
-    const lines = ['[ModelRouter] Active role routing:'];
+    const lines = ['[RoleModelRouter] Active role routing:'];
     for (const role of ALL_ROLES) {
       const m = this.getModel(role);
       const tag = m.isFallback ? ' (fallback)' : '';
@@ -964,7 +966,7 @@ export class ModelRouter {
    * Returns SDK id when dispatch method is cursor_sdk; direct model string otherwise.
    */
   resolveSdkModelId(agentName: string, yamlModel?: string): string {
-    const dispatch = this.resolveDispatch(ModelRouter.roleForAgent(agentName), {
+    const dispatch = this.resolveDispatch(RoleModelRouter.roleForAgent(agentName), {
       agentName,
       yamlModel,
       log: false,

@@ -1,7 +1,9 @@
 /**
- * ModelRouter — role-based routing for Loop Engineering.
+ * ## Final Audit Cleanup (v1.4.0)
  *
- * Scoped run: npx vitest run tests/unit/model-router.test.ts
+ * RoleModelRouter — role-based routing for Loop Engineering.
+ *
+ * Scoped run: npx vitest run tests/unit/role-model-router.test.ts
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -9,26 +11,26 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import {
-  ModelRouter,
-  resetModelRouter,
+  RoleModelRouter,
+  resetRoleModelRouter,
   loadModelsConfigFromYaml,
   DEFAULT_MODELS_CONFIG,
-} from '../../src/models/model-router.js';
+} from '../../src/models/role-model-router.js';
 
-describe('ModelRouter', () => {
+describe('RoleModelRouter', () => {
   beforeEach(() => {
-    resetModelRouter();
+    resetRoleModelRouter();
   });
 
   afterEach(() => {
-    resetModelRouter();
+    resetRoleModelRouter();
     for (const key of Object.keys(process.env)) {
       if (key.startsWith('ROLAND_MODEL_')) delete process.env[key];
     }
   });
 
   it('resolves default OpenRouter models for core roles', () => {
-    const router = ModelRouter.fromConfig();
+    const router = RoleModelRouter.fromConfig();
     const pm = router.getModel('pm');
     expect(pm.provider).toBe('openrouter');
     expect(pm.model).toBe('grok-4.3');
@@ -42,16 +44,16 @@ describe('ModelRouter', () => {
   });
 
   it('normalizes agent names and legacy lane aliases to roles', () => {
-    expect(ModelRouter.normalizeRole('lead-pm')).toBe('pm');
-    expect(ModelRouter.normalizeRole('test-executor')).toBe('verifier');
-    expect(ModelRouter.normalizeRole('grok')).toBe('critic');
-    expect(ModelRouter.normalizeRole('composer')).toBe('coding');
-    expect(ModelRouter.roleForPhase('critique')).toBe('critic');
-    expect(ModelRouter.roleForAgent('sparrow')).toBe('coding');
+    expect(RoleModelRouter.normalizeRole('lead-pm')).toBe('pm');
+    expect(RoleModelRouter.normalizeRole('test-executor')).toBe('verifier');
+    expect(RoleModelRouter.normalizeRole('grok')).toBe('critic');
+    expect(RoleModelRouter.normalizeRole('composer')).toBe('coding');
+    expect(RoleModelRouter.roleForPhase('critique')).toBe('critic');
+    expect(RoleModelRouter.roleForAgent('sparrow')).toBe('coding');
   });
 
   it('falls back to secondary model on rate-limit errors', () => {
-    const router = new ModelRouter({
+    const router = new RoleModelRouter({
       critic: {
         provider: 'openrouter',
         model: 'deepseek/deepseek-chat',
@@ -69,7 +71,7 @@ describe('ModelRouter', () => {
   });
 
   it('does not fallback on non-rate-limit errors', () => {
-    const router = new ModelRouter({
+    const router = new RoleModelRouter({
       coding: {
         provider: 'openrouter',
         model: 'qwen/qwen3-coder-next',
@@ -86,7 +88,7 @@ describe('ModelRouter', () => {
     process.env.ROLAND_MODEL_CODING = 'qwen3.5-coder:14b';
     process.env.ROLAND_MODEL_CODING_PROVIDER = 'ollama';
 
-    const router = ModelRouter.fromConfig();
+    const router = RoleModelRouter.fromConfig();
     const coding = router.getModel('coding');
     expect(coding.provider).toBe('ollama');
     expect(coding.model).toBe('qwen3.5-coder:14b');
@@ -124,7 +126,7 @@ roland:
     expect(config.pm?.model).toBe('llama3.2:latest');
     expect(config.coding?.model).toBe('qwen3.5-coder:14b');
 
-    const router = new ModelRouter(config);
+    const router = new RoleModelRouter(config);
     expect(router.getModel('pm').displayLabel).toBe('llama3.2:latest@ollama');
     expect(router.getModel('coding').displayLabel).toBe('qwen3.5-coder:14b@ollama');
 
@@ -163,7 +165,7 @@ roland:
   });
 
   it('getModelWithFallback returns primary + fallback chain', () => {
-    const router = new ModelRouter({
+    const router = new RoleModelRouter({
       critic: {
         provider: 'openrouter',
         model: 'deepseek/deepseek-chat',
@@ -178,7 +180,7 @@ roland:
   });
 
   it('validateOnStartup passes when required roles resolve', () => {
-    const result = ModelRouter.validateOnStartup(new ModelRouter(DEFAULT_MODELS_CONFIG));
+    const result = RoleModelRouter.validateOnStartup(new RoleModelRouter(DEFAULT_MODELS_CONFIG));
     expect(result.ok).toBe(true);
     expect(result.missing).toHaveLength(0);
     expect(result.dispatchWarnings).toBeDefined();
@@ -186,7 +188,7 @@ roland:
   });
 
   it('formatRoutingSummary includes primary roles', () => {
-    const router = new ModelRouter(DEFAULT_MODELS_CONFIG);
+    const router = new RoleModelRouter(DEFAULT_MODELS_CONFIG);
     const summary = router.formatRoutingSummary();
     expect(summary).toContain('pm=');
     expect(summary).toContain('coding=');
@@ -194,7 +196,7 @@ roland:
   });
 
   it('formatStartupBanner includes template and core roles', () => {
-    const router = new ModelRouter(DEFAULT_MODELS_CONFIG);
+    const router = new RoleModelRouter(DEFAULT_MODELS_CONFIG);
     const lines = router.formatStartupBanner('closed-loop-harness', 'Pure ClosedLoop (default)');
     const joined = lines.join('\n');
     expect(joined).toContain('closed-loop-harness');
@@ -206,7 +208,7 @@ roland:
   });
 
   it('formatLoopRunConfigSummary includes PM mode and routing', () => {
-    const router = new ModelRouter(DEFAULT_MODELS_CONFIG);
+    const router = new RoleModelRouter(DEFAULT_MODELS_CONFIG);
     const lines = router.formatLoopRunConfigSummary({
       templateId: 'closed-loop-harness',
       pmEnabled: false,
@@ -222,7 +224,7 @@ roland:
 
   it('serializeRoutingForState includes phase models and dispatch', () => {
     process.env.CURSOR_API_KEY = 'test-key';
-    const router = new ModelRouter(DEFAULT_MODELS_CONFIG, 'cursor_sdk');
+    const router = new RoleModelRouter(DEFAULT_MODELS_CONFIG, 'cursor_sdk');
     const snap = router.serializeRoutingForState();
     expect(snap.summary).toContain('pm=');
     expect(snap.phaseModels.plan).toBeTruthy();
@@ -231,7 +233,7 @@ roland:
   });
 
   it('resolveSdkModelId maps roles to Cursor SDK ids', () => {
-    const router = new ModelRouter({
+    const router = new RoleModelRouter({
       pm: { provider: 'cursor', model: 'gpt-5.4-nano' },
       coding: { provider: 'cursor', model: 'composer-2.5' },
     });
@@ -240,7 +242,7 @@ roland:
   });
 
   it('resolveSdkModelId maps OpenRouter pm model to Cursor SDK', () => {
-    const router = new ModelRouter(DEFAULT_MODELS_CONFIG);
+    const router = new RoleModelRouter(DEFAULT_MODELS_CONFIG);
     const sdk = router.resolveSdkModelId('lead-pm');
     expect(typeof sdk).toBe('string');
     expect(sdk.length).toBeGreaterThan(0);

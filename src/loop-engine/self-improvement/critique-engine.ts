@@ -7,7 +7,7 @@
  * Does not invoke LLMs — deterministic analysis for loop reliability.
  */
 
-import { ModelRouter } from '../../models/model-router.js';
+import { RoleModelRouter } from '../../models/role-model-router.js';
 import { generateImprovementProposals } from './improvement-proposals.js';
 import { resolveRetryStrategy } from './retry-strategies.js';
 import type {
@@ -23,18 +23,18 @@ import { loopDegradationPolicy } from '../loop-resilience.js';
 export interface CritiqueEngineOptions {
   /** Override max retries (template maxRetries takes precedence at handler level). */
   maxRetries?: number;
-  modelRouter?: ModelRouter;
+  modelRouter?: RoleModelRouter;
 }
 
 const CODE_SPECIFIC_TYPES = new Set(['unit', 'lint', 'typecheck', 'integration', 'e2e', 'smoke']);
 
 export class CritiqueEngine {
   private readonly opts: CritiqueEngineOptions;
-  private readonly router: ModelRouter;
+  private readonly router: RoleModelRouter;
 
   constructor(opts: CritiqueEngineOptions = {}) {
     this.opts = opts;
-    this.router = opts.modelRouter ?? ModelRouter.fromConfig();
+    this.router = opts.modelRouter ?? RoleModelRouter.fromConfig();
   }
 
   critique(input: CritiqueInput): CritiqueOutput {

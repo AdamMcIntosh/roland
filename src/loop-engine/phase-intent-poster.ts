@@ -13,7 +13,7 @@ import type { Blackboard } from '../coordination/legacy-blackboard.js';
 import type { CommandBlackboard } from '../rco/command-blackboard.js';
 import type { Phase, PhaseConfig, SpawnConditions, SpecialistSpawnDefinition } from './loop-phases.js';
 import { Phase as P } from './loop-phases.js';
-import { ModelRouter } from '../models/model-router.js';
+import { RoleModelRouter } from '../models/role-model-router.js';
 import type { LoopSpawnPulse } from './loop-state.js';
 
 export interface SpawnRequest {
@@ -63,7 +63,7 @@ export interface PhaseIntentPosterOptions {
   blackboard: Blackboard;
   commandBoard?: CommandBlackboard;
   goal: string;
-  modelRouter?: ModelRouter;
+  modelRouter?: RoleModelRouter;
 
   /** Emit liveActivity spawn pulses to loop state / dashboard. */
   onSpawnPulse?: (pulse: LoopSpawnPulse) => void;
@@ -242,10 +242,10 @@ export function collapseToSpawnRequest(
 export class PhaseIntentPoster {
   private readonly opts: PhaseIntentPosterOptions;
   private readonly history: SpawnRequest[] = [];
-  private readonly router: ModelRouter;
+  private readonly router: RoleModelRouter;
   constructor(opts: PhaseIntentPosterOptions) {
     this.opts = opts;
-    this.router = opts.modelRouter ?? ModelRouter.fromConfig();
+    this.router = opts.modelRouter ?? RoleModelRouter.fromConfig();
   }
 
   /** Post specialist intents for a loop phase based on template config and defaults. */
@@ -328,7 +328,7 @@ export class PhaseIntentPoster {
   private recordSpawn(request: SpawnRequest): void {
     this.history.push(request);
     const agents = [request.primaryAgent, ...request.supportingAgents].join(', ');
-    const phaseRole = ModelRouter.roleForPhase(request.phase);
+    const phaseRole = RoleModelRouter.roleForPhase(request.phase);
     const phaseDispatch = this.router.resolveDispatch(phaseRole, {
       phase: request.phase,
       agentName: request.primaryAgent,

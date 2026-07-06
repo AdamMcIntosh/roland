@@ -8,7 +8,7 @@
  */
 
 import { ClosedLoop, LoopTemplates, readLoopPmSession, resolvePmIntegrationStatus, type ClosedLoopResult } from '../loop-engine/index.js';
-import { ModelRouter } from '../models/model-router.js';
+import { RoleModelRouter } from '../models/role-model-router.js';
 import { Blackboard } from '../coordination/legacy-blackboard.js';
 import { CommandBlackboard } from './command-blackboard.js';
 import { finalizeSynthesisOutput } from './mission-complete.js';
@@ -59,7 +59,7 @@ export async function runClosedLoopMission(opts: ClosedLoopMissionOptions): Prom
 
   const template = templates.get(templateName)!;
   const pmStatus = resolvePmIntegrationStatus(template, { enablePmIntegration: opts.enablePmIntegration });
-  const modelRouter = ModelRouter.fromConfig();
+  const modelRouter = RoleModelRouter.fromConfig();
 
   console.error('[Loop] ClosedLoop mission — Loop Engineering primary path');
 
@@ -70,7 +70,7 @@ export async function runClosedLoopMission(opts: ClosedLoopMissionOptions): Prom
   for (const role of ['pm', 'coding', 'critic', 'verifier'] as const) {
     const m = routingSnapshot.roles[role];
     if (m) {
-      commandBoard.appendBullet('Key Decisions', `[ModelRouter] ${role} → ${m.displayLabel}`);
+      commandBoard.appendBullet('Key Decisions', `[RoleModelRouter] ${role} → ${m.displayLabel}`);
     }
   }
 
@@ -234,7 +234,7 @@ function buildClosedLoopSynthesis(goal: string, result: ClosedLoopResult, stateD
     `- Specialist spawn intents: ${result.spawnCount}`,
     `- Phases completed: ${result.phasesCompleted}`,
     `- Loop directory: ${result.loopDir}`,
-    `- Model routing: ${ModelRouter.fromConfig().formatRoutingSummary()}`,
+    `- Model routing: ${RoleModelRouter.fromConfig().formatRoutingSummary()}`,
   );
 
   const pmSession = readLoopPmSession(stateDir);

@@ -11,7 +11,7 @@ import { McpToolError } from '../../utils/errors.js';
 import { logger } from '../../utils/logger.js';
 import type { ComplexityAnalysis } from '../../orchestrator/complexity-classifier.js';
 import { classifyWithSemantic } from '../../orchestrator/complexity-classifier.js';
-import { ModelRouter } from '../../orchestrator/model-router.js';
+import { AdvisoryModelRouter } from '../../orchestrator/advisory-model-router.js';
 import { classifyExecutionPath } from '../../rco/execution-path.js';
 import { resolveAgentsDir as resolveAgentsDirShared } from '../../rco/loadConfig.js';
 import { selectRelevantFiles, bundleFileContents, formatBundleAsMarkdown, DEFAULT_CONTEXT_GATHERING_CONFIG } from '../../utils/file-gatherer.js';
@@ -179,7 +179,7 @@ export function registerTriageTools(registrar: McpToolRegistrar, ctx: McpToolCon
 
       if (complexity.complexity === 'local' && ctx.config.ollama?.enabled) {
         const ollamaCfg = ctx.config.ollama;
-        const ollamaHealth = await ModelRouter.checkOllamaHealth(ollamaCfg.base_url);
+        const ollamaHealth = await AdvisoryModelRouter.checkOllamaHealth(ollamaCfg.base_url);
         if (ollamaHealth.available) {
           recommendation.provider = 'local';
           recommendation.ollama_model = ollamaCfg.model;

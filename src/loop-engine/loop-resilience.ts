@@ -1,9 +1,9 @@
 /**
- * Loop resilience — model degradation and rate-limit handling via ModelRouter roles.
+ * Loop resilience — model degradation and rate-limit handling via RoleModelRouter roles.
  */
 
 import type { CritiqueModel } from './self-improvement/types.js';
-import { ModelRouter } from '../models/model-router.js';
+import { RoleModelRouter } from '../models/role-model-router.js';
 
 /** Fallback lane when primary critique lane is rate-limited. */
 export function degradedCritiqueLane(current: CritiqueModel): CritiqueModel {
@@ -17,13 +17,13 @@ export interface DegradationState {
 }
 
 export class ModelDegradationPolicy {
-  private readonly router: ModelRouter;
+  private readonly router: RoleModelRouter;
   private degradedLanes = new Set<CritiqueModel>();
   private lastDegradedAt?: number;
   private reason?: string;
 
-  constructor(router?: ModelRouter) {
-    this.router = router ?? ModelRouter.fromConfig();
+  constructor(router?: RoleModelRouter) {
+    this.router = router ?? RoleModelRouter.fromConfig();
   }
 
   recordFailure(lane: CritiqueModel, errorMessage: string): CritiqueModel {
@@ -73,5 +73,5 @@ export function degradedCritiqueModel(current: CritiqueModel): CritiqueModel {
 
 /** Detect API rate-limit or model-unavailable errors from agent output or errors. */
 export function isRateLimitOrUnavailableError(message: string): boolean {
-  return ModelRouter.fromConfig().isRateLimitOrUnavailable(message);
+  return RoleModelRouter.fromConfig().isRateLimitOrUnavailable(message);
 }

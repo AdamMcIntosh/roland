@@ -13,7 +13,7 @@ import type { TeamPlan, TeamOrchestratorOptions, TeamTaskResult } from '../rco/t
 import type { LoopTemplate, Phase, PhaseConfig, PmTeamMode } from './loop-phases.js';
 import { Phase as P } from './loop-phases.js';
 import type { PhaseResult } from './phase-handlers/types.js';
-import { ModelRouter } from '../models/model-router.js';
+import { RoleModelRouter } from '../models/role-model-router.js';
 import { runLightweightAct, runLightweightPlan } from './lightweight-plan-act.js';
 import {
   readLoopPmSession,
@@ -41,7 +41,7 @@ export interface LoopPmBridgeOptions {
   isTestMode?: boolean;
   /** Forwarded to embedded PM Team runs (HITL, callbacks). */
   teamOpts?: Partial<TeamOrchestratorOptions>;
-  modelRouter?: ModelRouter;
+  modelRouter?: RoleModelRouter;
 }
 
 /** [DEPRECATED] Resolve legacy PM Team mode for a phase from phase config, template defaults, or never. */
@@ -108,12 +108,12 @@ export function shouldUsePmTeam(
  */
 export class LoopPmBridge {
   private readonly opts: LoopPmBridgeOptions;
-  private readonly router: ModelRouter;
+  private readonly router: RoleModelRouter;
   private readonly pmOptIn: boolean;
 
   constructor(opts: LoopPmBridgeOptions) {
     this.opts = opts;
-    this.router = opts.modelRouter ?? ModelRouter.fromConfig();
+    this.router = opts.modelRouter ?? RoleModelRouter.fromConfig();
     this.pmOptIn = true; // bridge only constructed when loop-level PM opt-in is active
     warnLegacyPmTeam('LoopPmBridge constructed');
   }

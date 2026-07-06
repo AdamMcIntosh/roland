@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { loadConfig, getConfig } from '../src/config/config-loader.js';
-import { ModelRouter } from '../src/orchestrator/model-router.js';
+import { AdvisoryModelRouter } from '../src/orchestrator/advisory-model-router.js';
 import { ComplexityClassifier } from '../src/orchestrator/complexity-classifier.js';
 import { AdvancedCostTracker } from '../src/orchestrator/advanced-cost-tracker.js';
 
@@ -27,7 +27,7 @@ describe('Integration: Config → Router → Cost Pipeline', () => {
     const analysis = ComplexityClassifier.analyzeQuery(query);
     expect(['local', 'simple']).toContain(analysis.complexity);
 
-    const result = ModelRouter.routeByComplexity(query);
+    const result = AdvisoryModelRouter.routeByComplexity(query);
     expect(result.selected.model).toBeDefined();
   });
 
@@ -37,7 +37,7 @@ describe('Integration: Config → Router → Cost Pipeline', () => {
     const analysis = ComplexityClassifier.analyzeQuery(query);
     expect(['simple', 'medium', 'complex']).toContain(analysis.complexity);
 
-    const result = ModelRouter.routeByComplexity(query);
+    const result = AdvisoryModelRouter.routeByComplexity(query);
     expect(result.selected.model).toBeDefined();
     expect(result.analysis).toBeDefined();
   });
@@ -51,7 +51,7 @@ describe('Integration: Config → Router → Cost Pipeline', () => {
     ];
 
     for (const { q, agent } of queries) {
-      const result = ModelRouter.routeByComplexity(q);
+      const result = AdvisoryModelRouter.routeByComplexity(q);
       tracker.recordCost(result.selected.model, 'ide', agent, 100, 50, 0.01);
     }
 

@@ -14,7 +14,7 @@ import type { AgentYaml } from '../rco/types.js';
 import { loadUnscAgents } from '../rco/unsc-agents.js';
 import { toCursorModelId } from '../rco/model-routing.js';
 import { isGreenfieldGoal } from '../rco/goal-scope.js';
-import { ModelRouter } from '../models/model-router.js';
+import { RoleModelRouter } from '../models/role-model-router.js';
 import {
   cleanupSdkSession,
   resolveSdkAgentLocalOptions,
@@ -37,7 +37,7 @@ export interface LoopAgentDispatchOptions {
   stateDir: string;
   blackboard: Blackboard;
   commandBoard?: CommandBlackboard;
-  modelRouter?: ModelRouter;
+  modelRouter?: RoleModelRouter;
   phaseConfig?: PhaseConfig;
   loopState?: LoopState;
   waveNumber?: number;
@@ -255,7 +255,7 @@ export async function dispatchLoopPhaseAgent(
     };
   }
 
-  const router = opts.modelRouter ?? ModelRouter.fromConfig();
+  const router = opts.modelRouter ?? RoleModelRouter.fromConfig();
   const dispatch = router.resolveDispatchForPhase(opts.phase, { log: true });
   const agentYaml = resolveAgentYaml(role);
   const taskContext = buildTaskContext(opts);

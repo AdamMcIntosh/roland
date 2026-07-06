@@ -1,12 +1,12 @@
 /**
  * Phase 3 unit tests: Cursor-native lane routing.
- * TaskRouter defaults bridge to Loop Engineering ModelRouter; explicit policy overrides still apply.
+ * TaskRouter defaults bridge to Loop Engineering RoleModelRouter; explicit policy overrides still apply.
  */
 
 import { describe, it, expect } from 'vitest';
 import { TaskRouter } from '../../src/pm/router.js';
 import { laneForEngineer, modelForLane, DEFAULT_MODEL_POLICY } from '../../src/pm/model-policy.js';
-import { ModelRouter, DEFAULT_MODELS_CONFIG } from '../../src/models/model-router.js';
+import { RoleModelRouter, DEFAULT_MODELS_CONFIG } from '../../src/models/role-model-router.js';
 
 describe('lane assignment', () => {
   it('maps personas to the expected lanes', () => {
@@ -38,10 +38,10 @@ describe('modelForLane', () => {
 describe('TaskRouter', () => {
   const legacyRouter = new TaskRouter({ policy: DEFAULT_MODEL_POLICY });
 
-  it('routes the Lead PM via ModelRouter when no explicit policy', () => {
+  it('routes the Lead PM via RoleModelRouter when no explicit policy', () => {
     const router = new TaskRouter();
     const d = router.route('orchestrate', 'lead-pm');
-    const expected = new ModelRouter(DEFAULT_MODELS_CONFIG).resolveSdkModelId('lead-pm');
+    const expected = new RoleModelRouter(DEFAULT_MODELS_CONFIG).resolveSdkModelId('lead-pm');
     expect(d.model).toBe(expected);
     expect(d.lane).toBe('pm');
     expect(d.provider).toBe('cursor');

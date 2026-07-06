@@ -129,7 +129,7 @@ export interface RunState {
     backoffMs: number;
     at: number;
   };
-  /** Active ModelRouter snapshot for dashboard loop panel. */
+  /** Active RoleModelRouter snapshot for dashboard loop panel. */
   modelRouting?: {
     summary: string;
     roles: Record<string, {

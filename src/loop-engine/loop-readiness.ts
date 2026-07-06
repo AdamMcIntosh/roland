@@ -1,17 +1,17 @@
 /**
  * ## Assumptions
  * - Loop Engineering readiness checks run before heavy template missions.
- * - Validates ModelRouter dispatch, templates, config, template lint, and optional SDK context.
+ * - Validates RoleModelRouter dispatch, templates, config, template lint, and optional SDK context.
  * - Does not invoke live LLM calls — config + structural checks only.
  */
 
 import fs from 'fs';
 import path from 'path';
 import {
-  ModelRouter,
-  resetModelRouter,
-  type ModelRouterValidation,
-} from '../models/model-router.js';
+  RoleModelRouter,
+  resetRoleModelRouter,
+  type RoleModelRouterValidation,
+} from '../models/role-model-router.js';
 import {
   LoopTemplates,
   lintAllLoopTemplates,
@@ -34,7 +34,7 @@ export interface LoopReadinessReport {
   ready: boolean;
   timestamp: number;
   checks: ReadinessCheck[];
-  validation: ModelRouterValidation;
+  validation: RoleModelRouterValidation;
   defaultTemplate: string | null;
   dispatchSummary: string;
   templateLint: TemplateLintIssue[];
@@ -47,7 +47,7 @@ function check(id: string, ok: boolean, message: string, severity: ReadinessSeve
 /** Run all Loop Engineering readiness checks (no network/LLM calls). */
 export function runLoopReadinessCheck(options: { configPath?: string } = {}): LoopReadinessReport {
   clearLoopEngineConfigCache();
-  resetModelRouter();
+  resetRoleModelRouter();
 
   const checks: ReadinessCheck[] = [];
   const loopCfg = loadLoopEngineConfig();
@@ -70,18 +70,18 @@ export function runLoopReadinessCheck(options: { configPath?: string } = {}): Lo
     check(
       'config_yaml',
       configFound,
-      configFound ? 'config.yaml found' : 'config.yaml not found — using ModelRouter defaults',
+      configFound ? 'config.yaml found' : 'config.yaml not found — using RoleModelRouter defaults',
       configFound ? 'info' : 'warn',
     ),
   );
 
-  let router: ModelRouter;
+  let router: RoleModelRouter;
   try {
-    router = ModelRouter.fromConfig(options.configPath);
-    checks.push(check('model_router', true, 'ModelRouter initialized'));
+    router = RoleModelRouter.fromConfig(options.configPath);
+    checks.push(check('model_router', true, 'RoleModelRouter initialized'));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    checks.push(check('model_router', false, `ModelRouter failed: ${msg}`));
+    checks.push(check('model_router', false, `RoleModelRouter failed: ${msg}`));
     return {
       ready: false,
       timestamp: Date.now(),
@@ -100,7 +100,7 @@ export function runLoopReadinessCheck(options: { configPath?: string } = {}): Lo
     };
   }
 
-  const validation = ModelRouter.validateOnStartup(router);
+  const validation = RoleModelRouter.validateOnStartup(router);
   checks.push(
     check(
       'required_roles',
