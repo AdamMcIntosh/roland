@@ -1,12 +1,12 @@
 # Onboarding — Roland in Cursor
 
-Welcome. Roland is a **production-grade closed-loop agent harness** for Cursor. The default workflow is **@roland in Cursor** (MCP triage) → **Direct** (small fixes in chat) or **Pure ClosedLoop** (`roland team` with loop templates).
+Welcome. Roland is a **production-grade closed-loop agent harness** for Cursor. The default workflow is **@roland in Cursor** (MCP triage) → **Direct** (small fixes in chat) or **Pure ClosedLoop** (`roland mission` with loop templates).
 
 | Surface | Role |
 |---------|------|
 | **@roland (Cursor MCP)** | Primary entry — triage, direct edits, team launch |
 | **Roland CLI** | Status & control — `roland status`, `roland live`, `roland hitl-status`, `roland board-status` |
-| **Roland ClosedLoop** | Loop execution — `roland team "…" --loop-template …` |
+| **Roland ClosedLoop** | Loop execution — `roland mission "…" --loop-template …` |
 | **Dashboard** | Optional adjunct — monitor/control when CLI is inconvenient (`npm run serve-dashboard`) |
 
 > **Hermes** (`roland chat`) is optional for terminal-only workflows — **not required in Cursor**.
@@ -24,7 +24,7 @@ Restart Cursor. Verify with:
 
 ```bash
 roland doctor
-roland --version    # expect 1.3.0+
+roland --version    # expect 1.4.0
 ```
 
 ## Your first session
@@ -33,7 +33,7 @@ roland --version    # expect 1.3.0+
 2. **Launch a loop** — when triage recommends Team:
 
 ```bash
-roland team "add rate limiting to the password reset endpoint" \
+roland mission "add rate limiting to the password reset endpoint" \
   --loop-template full-cycle-verified-loop
 ```
 
@@ -45,6 +45,7 @@ roland live
 roland hitl-status
 roland board-status --concise
 roland mission-summary
+roland mission-audit --last
 ```
 
 4. **Optional dashboard** (phone/Tailscale):
@@ -53,7 +54,21 @@ roland mission-summary
 npm run serve-dashboard    # http://127.0.0.1:8081
 ```
 
-## Architecture (post-P1)
+## Architecture (v1.4.0)
+
+```
+  @roland (Cursor) ──triage──► Direct (chat) | Team (CLI)
+                                    │
+                                    ▼
+                         roland mission + loop template
+                                    │
+                                    ▼
+                    ClosedLoop: Plan → Act → Verify → Critique
+                                    │
+                    ┌───────────────┼───────────────┐
+                    ▼               ▼               ▼
+            EvaluationGate   loop-metrics.json   blackboard.json
+```
 
 | Component | What it does |
 |-----------|--------------|
@@ -61,6 +76,7 @@ npm run serve-dashboard    # http://127.0.0.1:8081
 | **EvaluationGate** | Automated lint/unit/typecheck gates with confidence scoring |
 | **PhaseIntentPoster** | Posts phase intents to blackboard (does **not** spawn sub-agents on hot path) |
 | **Critique phase** | Rule-based structured critique (**no LLM**) — retry/escalate decisions |
+| **LoopObservability** | Phase timing in `.roland/loop-metrics.json`; surfaced in `mission-audit` |
 | **Coordination store** | Single locked blackboard at `.roland/blackboard.json` |
 | **MCP server** | Modular tools under `src/server/tools/` |
 
@@ -77,11 +93,13 @@ Per-project under `.roland/` (gitignored):
 - `blackboard.json` — locked coordination store (tasks, decisions, loop posts)
 - `command-blackboard.md` — human-readable mission summary
 - `loop-state.json` — active loop iteration state
+- `loop-metrics.json` — phase timing and success rates
 - `loop-memory.json` — reflection / confidence history
 - `hermes-hitl-events.jsonl` — HITL escalation events
 
 ## Learn more
 
 - **Closed-loop harness:** [docs/guides/closed-loop-harness.md](docs/guides/closed-loop-harness.md)
+- **Model routing & cost:** [docs/guides/model-routing-and-cost.md](docs/guides/model-routing-and-cost.md)
 - **Full README:** [README.md](README.md)
 - **Install:** [INSTALLATION.md](INSTALLATION.md)

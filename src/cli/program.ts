@@ -1,25 +1,16 @@
 /**
- * ## P2 Polish & Reach
+ * ## P3 Release & Stabilization
  *
  * Commander-based CLI router — consistent flag parsing, help text, and error messages.
  * Delegates command execution to dispatchCommand in index.ts.
  */
 
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { Command } from 'commander';
 import { dispatchCommand, printHelp, KNOWN_CMDS } from './dispatch.js';
-import { logger } from '../utils/logger.js';
+import { readPackageVersion } from '../utils/package-version.js';
 
 function readVersion(): string {
-  try {
-    const pkgPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'package.json');
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as { version: string };
-    return pkg.version;
-  } catch {
-    return '1.3.0';
-  }
+  return readPackageVersion(import.meta.url);
 }
 
 function normalizeArgv(argv: string[]): { cmd: string | undefined; rest: string[] } {

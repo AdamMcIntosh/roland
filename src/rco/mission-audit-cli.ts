@@ -1,13 +1,8 @@
 /**
- * ## P2 Polish & Reach
+ * ## P3 Release & Stabilization
  *
  * Unified mission audit — stitch loop history, HITL events, blackboard, state, and bg logs
  * into one chronological timeline for post-run reconstruction.
- *
- * Usage:
- *   roland mission-audit <runId>
- *   roland mission-audit --last
- *   roland mission-audit --last --format markdown --open
  */
 
 import fs from 'fs';
@@ -269,6 +264,28 @@ function formatTimestamp(ms: number): string {
   }
 }
 
+function formatPhaseTimingSection(metrics: LoopMetrics): string[] {
+  if (!metrics.phaseDurations.length) return [];
+  const lines = [
+    '## Phase Timing',
+    '',
+    '| Phase | Count | Avg (ms) | Total (ms) | Success | Failed |',
+    '|-------|------:|---------:|-----------:|--------:|-------:|',
+  ];
+  for (const p of metrics.phaseDurations) {
+    lines.push(
+      `| ${p.phase} | ${p.count} | ${p.avgMs} | ${p.totalMs} | ${p.successCount} | ${p.failureCount} |`,
+    );
+  }
+  lines.push(
+    '',
+    `- **Overall avg phase:** ${metrics.avgPhaseDurationMs}ms`,
+    `- **Success rate:** ${metrics.successRate}%`,
+    '',
+  );
+  return lines;
+}
+
 export function formatAuditMarkdown(report: MissionAuditReport): string {
   const lines: string[] = [
     `# Mission Audit — ${report.runId}`,
@@ -288,8 +305,10 @@ export function formatAuditMarkdown(report: MissionAuditReport): string {
       `- Status: ${report.metrics.status}`,
       `- Success rate: ${report.metrics.successRate}%`,
       `- Iteration: ${report.metrics.iteration}`,
+      `- Avg phase duration: ${report.metrics.avgPhaseDurationMs}ms`,
       '',
     );
+    lines.push(...formatPhaseTimingSection(report.metrics));
   }
 
   lines.push('## Timeline', '');
@@ -372,6 +391,12 @@ export function runMissionAuditCli(opts: MissionAuditCliOptions): number {
   }
 
   const format = opts.format ?? 'markdown';
+
+  if (report.metrics?.phaseDurations.length) {
+    console.error(
+      `[mission-audit] Phase timing: avg ${report.metrics.avgPhaseDurationMs}ms · ${report.metrics.phaseDurations.length} phase(s) tracked`,
+    );
+  }
 
   if (format === 'json') {
     console.log(JSON.stringify(report, null, 2));

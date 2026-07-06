@@ -27,6 +27,7 @@
 import fs from 'fs';
 import path from 'path';
 import { acquireLock } from './stateLock.js';
+import { writeUtf8File } from '../utils/safe-write.js';
 
 export const COMMAND_BLACKBOARD_FILE = 'command-blackboard.md';
 
@@ -120,7 +121,7 @@ export class CommandBlackboard {
       const release = acquireLock(this.lockFilePath);
       try {
         if (!fs.existsSync(this.filePath)) {
-          fs.writeFileSync(this.filePath, buildEmptyTemplate(), 'utf-8');
+          writeUtf8File(this.filePath, buildEmptyTemplate());
         }
       } finally {
         release();
@@ -143,7 +144,7 @@ export class CommandBlackboard {
 
   private writeContent(content: string): void {
     this.withLock(() => {
-      fs.writeFileSync(this.filePath, content, 'utf-8');
+      writeUtf8File(this.filePath, content);
     });
   }
 
@@ -191,7 +192,7 @@ export class CommandBlackboard {
   replaceSections(sections: Partial<Record<BlackboardSection, string[]>>): void {
     this.withLock(() => {
       const current = parseSections(fs.readFileSync(this.filePath, 'utf-8'));
-      fs.writeFileSync(this.filePath, renderSections({ ...current, ...sections }), 'utf-8');
+      writeUtf8File(this.filePath, renderSections({ ...current, ...sections }));
     });
   }
 
@@ -209,7 +210,7 @@ export class CommandBlackboard {
       const normalized = bullet.trim();
       if (list.some((b) => b.slice(0, 50) === normalized.slice(0, 50))) return;
       list.push(normalized);
-      fs.writeFileSync(this.filePath, renderSections(sections), 'utf-8');
+      writeUtf8File(this.filePath, renderSections(sections));
     });
   }
 
@@ -250,7 +251,7 @@ export class CommandBlackboard {
           (nextSection === -1 ? '' : logsBody.slice(insertAt));
       }
 
-      fs.writeFileSync(this.filePath, beforeLogs + logsBody, 'utf-8');
+      writeUtf8File(this.filePath, beforeLogs + logsBody);
     });
   }
 
@@ -260,7 +261,7 @@ export class CommandBlackboard {
       const content = fs.readFileSync(this.filePath, 'utf-8');
       const sections = parseSections(content);
       sections['Mission Graph'] = summary.trim() ? [summary.trim()] : ['_(no active graph)_'];
-      fs.writeFileSync(this.filePath, renderSections(sections), 'utf-8');
+      writeUtf8File(this.filePath, renderSections(sections));
     });
   }
 
@@ -279,7 +280,7 @@ export class CommandBlackboard {
       if (idx >= 0) status[idx] = bullet;
       else status.push(bullet);
       sections['Agent Status'] = status;
-      fs.writeFileSync(this.filePath, renderSections(sections), 'utf-8');
+      writeUtf8File(this.filePath, renderSections(sections));
     });
   }
 

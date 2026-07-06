@@ -5,7 +5,59 @@ All notable changes to Roland are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — Legacy External Agent Removal
+## [Unreleased]
+
+## [1.4.0] — 2026-07-06 — P3 Release & Stabilization
+
+Production-ready release consolidating P0–P3 audit roadmap work: trust & safety CI, honesty fixes, CLI polish, release automation, and documentation consistency.
+
+### Added — P0 Trust & Safety
+
+- **Real CI test gate** — `.github/workflows/test.yml` runs `npm run build` + `npm run test:run` on Ubuntu and macOS for every push/PR
+- **EvaluationGate** — automated lint/unit/typecheck gates with confidence scoring on the ClosedLoop hot path
+- **Locked coordination blackboard** — single rev-stamped store at `.roland/blackboard.json`
+
+### Added — P1 Consolidation & Honesty
+
+- **Pure ClosedLoop default** — `roland team` / `roland mission` with loop templates; legacy PM Team marked deprecated
+- **Rule-based critique phase** — structured retry/escalate without LLM on hot path
+- **PhaseIntentPoster** — records phase intents on blackboard (does not spawn sub-agents on ClosedLoop path)
+- **Legacy external agent removal** — Block integration, headless recipe runner, container sandbox removed
+- **@roland in Cursor** — self-contained MCP triage (no Hermes required)
+
+### Added — P2 Polish & Reach
+
+- **Commander CLI** — `roland mission`, `roland mission-audit`, consistent `--help` / `--version`
+- **Triage router** — intelligent Direct vs Team routing with loop template recommendations
+- **Mission audit** — unified post-run timeline (loop history, HITL, blackboard, bg logs)
+- **Clean PR conventions** — `roland pr-cleanup` for conventional titles/bodies
+- **Loop observability** — phase timing metrics in `.roland/loop-metrics.json` and execution history
+- **Maintenance loop** — housekeeping template for deps, CI, lint fixes
+
+### Added — P3 Release & Stabilization
+
+- **Version 1.4.0** — semver bump across CLI, MCP, and docs
+- **Pre-release checks** — `npm run pre-release-check` (version consistency, hot-path TODO scan)
+- **Enhanced release workflow** — test matrix, changelog extraction, GitHub Release, optional npm publish
+- **Safe state writes** — UTF-8 + ANSI sanitization utility for hot-path persistence
+- **Opt-in telemetry** — Sentry wired at CLI bootstrap (`RCO_TELEMETRY_CONSENT=1` or consent file)
+- **Model routing guide** — `docs/guides/model-routing-and-cost.md` (single source for cost targets)
+- **Doctor improvements** — Node 22+, git, and install checks
+- **`.npmignore`** — clean npm package surface
+
+### Changed
+
+- Help banner and README updated to v1.4.0 with Current Architecture diagram
+- MCP server version reads from `package.json` (was hardcoded `2.0.0`)
+- Example commands standardized on `roland mission` / `roland team`
+- ONBOARDING.md aligned with CLI-first + Pure ClosedLoop workflow
+
+### Fixed
+
+- Version consistency across help text, README, and package.json
+- Removed hot-path TODO markers from loop-engine coordinator (documented as legacy compat)
+
+## [Unreleased — archived] — Legacy External Agent Removal
 
 ### Removed
 
@@ -168,6 +220,7 @@ Initial production release with 10 phases complete: MCP server, agent system, 5 
 - **Minor** (1.X.0): New features, backward compatible
 - **Patch** (1.0.X): Bug fixes, minor improvements
 
+[1.4.0]: https://github.com/AdamMcIntosh/roland/releases/tag/v1.4.0
 [1.0.0]: https://github.com/AdamMcIntosh/roland/releases/tag/v1.0.0
 [2.0.0]: https://github.com/AdamMcIntosh/roland/releases/tag/v2.0.0
 [0.1.4]: https://github.com/AdamMcIntosh/roland/releases/tag/v0.1.4

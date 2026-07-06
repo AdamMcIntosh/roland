@@ -21,9 +21,10 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { loadConfig } from '../config/config-loader.js';
 import { logger } from '../utils/logger.js';
 import { McpServer } from './mcp-server.js';
+import { readPackageVersion } from '../utils/package-version.js';
 
 /** Roland MCP HTTP server metadata version (matches package). */
-export const MCP_HTTP_SERVER_VERSION = '2.0.0';
+export const MCP_HTTP_SERVER_VERSION = readPackageVersion(import.meta.url);
 
 export interface McpHttpOptions {
   /** Base path prefix, default `/mcp`. */

@@ -14,6 +14,7 @@ import type { Blackboard } from '../coordination/legacy-blackboard.js';
 import type { Phase } from './loop-phases.js';
 import type { LoopState, LoopRunStatus } from './loop-state.js';
 import type { PhaseResult } from './phase-handlers/types.js';
+import { writeUtf8Json } from '../utils/safe-write.js';
 
 export const LOOP_METRICS_FILE = 'loop-metrics.json';
 export const LOOP_HISTORY_FILE = 'loop-execution-history.json';
@@ -255,7 +256,7 @@ export class LoopObservability {
   persistMetrics(state: LoopState): LoopMetrics {
     const metrics = computeLoopMetrics(state);
     try {
-      fs.writeFileSync(this.metricsPath, JSON.stringify(metrics, null, 2), 'utf-8');
+      writeUtf8Json(this.metricsPath, metrics);
     } catch {
       // Non-fatal — metrics still returned to callers.
     }
@@ -305,7 +306,7 @@ export class LoopObservability {
         summary: summarizeHistory(history),
       };
       try {
-        fs.writeFileSync(this.historyPath, JSON.stringify(trimmed, null, 2), 'utf-8');
+        writeUtf8Json(this.historyPath, trimmed);
       } catch {
         // Best-effort summarization.
       }
@@ -316,7 +317,7 @@ export class LoopObservability {
     const history = this.readHistory();
     history.entries.push(entry);
     try {
-      fs.writeFileSync(this.historyPath, JSON.stringify(history, null, 2), 'utf-8');
+      writeUtf8Json(this.historyPath, history);
     } catch {
       // Non-fatal.
     }

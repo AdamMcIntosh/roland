@@ -33,6 +33,7 @@ import { ProjectContextManager } from './project-context.js';
 import { CoordinationManager } from '../coordination/index.js';
 import { LeadPM, type LeadPMOptions } from '../pm/lead-pm.js';
 import { QualityTracker, initializeQualityTracker } from '../orchestrator/quality-tracker.js';
+import { readPackageVersion } from '../utils/package-version.js';
 import { modelPolicyFromRouter } from '../pm/model-policy.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -201,7 +202,10 @@ export class McpServer {
     const registrar = createRegistrar({ tools: this.tools, toolDefinitions: this.toolDefinitions });
     registerAllTools(registrar, this.buildToolContext());
 
-    this.server = new Server({ name: 'roland', version: '2.0.0' }, { capabilities: { tools: {} } });
+    this.server = new Server(
+      { name: 'roland', version: readPackageVersion(import.meta.url) },
+      { capabilities: { tools: {} } },
+    );
 
     this.setupHandlers();
   }

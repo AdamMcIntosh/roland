@@ -798,11 +798,9 @@ export class LoopEngine {
 }
 
 /**
- * Maps team-orchestrator lifecycle events to loop phases.
- *
- * TODO: Legacy — to be removed after Loop Engineering pivot.
+ * Legacy coordinator mapping team-orchestrator lifecycle events to loop phases.
  * Loop-template missions use ClosedLoop.runFullLoop() instead of this coordinator.
- * Kept for backward compatibility with any external callers still wiring waves manually.
+ * Kept for backward compatibility with external callers still wiring waves manually.
  */
 export class LoopEngineCoordinator {
   constructor(

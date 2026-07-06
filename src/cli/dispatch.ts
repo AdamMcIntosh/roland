@@ -1,5 +1,5 @@
 /**
- * ## P2 Polish & Reach
+ * ## P3 Release & Stabilization
  *
  * CLI command dispatch — all subcommand handlers (used by Commander program).
  */
@@ -7,10 +7,12 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { buildCursorMcpServerEntry, buildGeneralMcpHttpEntry, runMcpServer } from '../server/mcp-server.js';
 import { runMcpHttpServer } from '../server/mcp-http.js';
 import { resolveRolandInstallRoot } from '../utils/project-root.js';
+import { readPackageVersion } from '../utils/package-version.js';
 import { logger } from '../utils/logger.js';
 import { Roster } from '../pm/roster.js';
 import { TeamRecipes } from '../pm/team-recipes.js';
@@ -160,6 +162,28 @@ function doctor(): void {
   const checks: Array<{ ok: boolean; label: string; hint?: string }> = [];
   const add = (ok: boolean, label: string, hint?: string) => checks.push({ ok, label, hint });
 
+  const version = readPackageVersion(DISPATCH_MODULE_URL);
+  add(true, `Roland version: ${version}`);
+
+  const nodeMajor = Number(process.version.slice(1).split('.')[0]);
+  add(nodeMajor >= 22, `Node.js ${process.version} (requires 22+)`, nodeMajor >= 22 ? undefined : 'Upgrade Node: https://nodejs.org/');
+
+  try {
+    execSync('git --version', { stdio: 'pipe' });
+    add(true, 'Git available');
+  } catch {
+    add(false, 'Git not found', 'Install git — required for team runs, watch mode, and PR tools.');
+  }
+
+  try {
+    const inGit = execSync('git rev-parse --is-inside-work-tree', { stdio: 'pipe', cwd: process.cwd() })
+      .toString()
+      .trim();
+    add(inGit === 'true', `Git repo at ${process.cwd()}`, inGit === 'true' ? undefined : 'Run from a git project directory for full Roland features.');
+  } catch {
+    add(false, `Git repo at ${process.cwd()}`, 'Not inside a git work tree.');
+  }
+
   const installRoot = resolveRolandInstallRoot(DISPATCH_MODULE_URL);
   const distDir = path.join(installRoot, 'dist');
   add(fs.existsSync(distDir), `Build present (${distDir})`, fs.existsSync(distDir) ? undefined : 'Run npm run build.');
@@ -251,7 +275,7 @@ function printHelp(): void {
   const ln = (s = '') => console.error(s);
 
   ln();
-  ln('  ' + b('🚀  Roland v1.3') + '  — Pure ClosedLoop Mission Harness');
+  ln('  ' + b(`🚀  Roland v${readPackageVersion(DISPATCH_MODULE_URL)}`) + '  — Pure ClosedLoop Mission Harness');
   ln();
   ln('  ' + b('MISSIONS') + '  ' + d('(primary execution path)'));
   ln(`    ${cy('roland')} ${b('team')} "goal"               Pure ClosedLoop mission ${d('(auto-selects template)')}`);
@@ -344,8 +368,8 @@ function printHelp(): void {
   ln(`    ${b('ROLAND_STATE_DIR')}           Persistence dir  ${d('(default: .roland under project)')}`);
   ln();
   ln('  ' + b('EXAMPLES'));
-  ln(`    ${d('# Run a team session')}`);
-  ln(`    roland "add rate limiting to the Express API"`);
+  ln(`    ${d('# Run a closed-loop mission')}`);
+  ln(`    roland mission "add rate limiting to the Express API"`);
   ln();
   ln(`    ${d('# Watch git and notify on phone via ntfy')}`);
   ln(`    roland watch --webhook https://ntfy.sh/my-alerts`);

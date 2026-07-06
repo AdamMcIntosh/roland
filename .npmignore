@@ -1,0 +1,48 @@
+# ## P3 Release & Stabilization — npm publish exclusions
+
+# Source (dist/ is the published artifact)
+src/
+tests/
+scripts/
+!scripts/roland-orchestrate.mjs
+
+# Development & CI
+.github/
+.cursor/
+.vscode/
+.idea/
+coverage/
+.cache/
+.hermes/
+
+# Docs not needed at runtime (README kept by npm default)
+docs/
+roland-web/
+extension/
+web/
+FlowForge/
+agents/
+recipes/
+*.md
+!README.md
+
+# Build/dev artifacts
+*.tsbuildinfo
+vitest.config.*
+eslint.config.*
+tsconfig.json
+.prettierrc*
+
+# Environment & local state
+.env*
+.roland/
+.omc/
+*.log
+
+# Lock files (consumers use their own)
+package-lock.json
+
+# Misc
+test_watch/
+*.bak
+*.pid

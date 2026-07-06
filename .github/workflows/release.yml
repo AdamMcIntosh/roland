@@ -1,4 +1,5 @@
-# Auto release on version tag. Builds npm-ready dist.
+# ## P3 Release & Stabilization
+# Auto release on version tag — test matrix, pre-release checks, GitHub Release, optional npm publish.
 name: Release
 
 on:
@@ -8,35 +9,106 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  test-matrix:
+    name: build + test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node 22
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '22'
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
+      - name: Pre-release checks
+        run: node scripts/pre-release-check.mjs
+
+      - name: Build
+        run: npm run build
+
+      - name: Run tests
+        run: npm run test:run
+
+  release:
+    needs: test-matrix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Pre-release checks
+        run: node scripts/pre-release-check.mjs
+
       - name: Build npm package (publish-ready)
         run: npm run build-npm
+
+      - name: Extract version from tag
+        id: meta
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          echo "version=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Release version: $TAG"
+
+      - name: Extract changelog section
+        id: changelog
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          SECTION=$(node -e "
+            const fs = require('fs');
+            const md = fs.readFileSync('CHANGELOG.md', 'utf-8');
+            const re = new RegExp('## \\\\[' + process.argv[1].replace(/\\./g, '\\\\.') + '\\\\][\\\\s\\\\S]*?(?=\\\\n## \\\\[|$)');
+            const m = md.match(re);
+            process.stdout.write(m ? m[0].trim() : 'See CHANGELOG.md for release notes.');
+          " "$VERSION")
+          {
+            echo 'body<<EOF'
+            echo "$SECTION"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
 
       - name: Upload npm dist artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dist-npm
-          path: dist/
+          name: dist-npm-${{ steps.meta.outputs.version }}
+          path: |
+            dist/
+            bin/
+            config.yaml
+            package.json
+            README.md
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           draft: false
-          generate_release_notes: true
+          generate_release_notes: false
+          body: ${{ steps.changelog.outputs.body }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to npm
+        if: ${{ secrets.NPM_TOKEN != '' }}
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

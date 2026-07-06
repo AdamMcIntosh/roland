@@ -6,9 +6,51 @@
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-green.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Current status (v1.3.0):** Closed-Loop Harness, EvaluationGate, loop memory, locked coordination blackboard, modular MCP tools, and clean PR formatting are production-ready. Critique phase is **rule-based (no LLM)**. `PhaseIntentPoster` records phase intents on the blackboard — it does not spawn sub-agents on the ClosedLoop hot path.
+**Current status (v1.4.0):** Closed-Loop Harness, EvaluationGate, loop memory, locked coordination blackboard, modular MCP tools, mission audit with phase timing, and clean PR formatting are production-ready. Critique phase is **rule-based (no LLM)**. `PhaseIntentPoster` records phase intents on the blackboard — it does not spawn sub-agents on the ClosedLoop hot path.
 
 ---
+
+## Current Architecture
+
+```mermaid
+flowchart TB
+  subgraph cursor["Cursor IDE"]
+    R["@roland MCP"]
+    T["triage → Direct | Team"]
+  end
+
+  subgraph cli["Roland CLI"]
+    M["roland mission / team"]
+    A["roland mission-audit"]
+    D["roland doctor · status · board-status"]
+  end
+
+  subgraph loop["ClosedLoop Harness"]
+    P["Plan → Act → Verify → Critique"]
+    G["EvaluationGate"]
+    O["LoopObservability · phase timing"]
+  end
+
+  subgraph state[".roland/ state"]
+    BB["blackboard.json"]
+    CB["command-blackboard.md"]
+    LM["loop-metrics.json"]
+  end
+
+  R --> T
+  T -->|small fix| R
+  T -->|mission| M
+  M --> P
+  P --> G
+  P --> O
+  O --> LM
+  P --> BB
+  M --> CB
+  A --> LM
+  D --> state
+```
+
+**Doc map:** [README.md](README.md) (entry) · [ONBOARDING.md](ONBOARDING.md) (setup) · [docs/guides/closed-loop-harness.md](docs/guides/closed-loop-harness.md) (deep dive) · [docs/guides/model-routing-and-cost.md](docs/guides/model-routing-and-cost.md) (cost & routing)
 
 ## What Roland Is
 
@@ -18,7 +60,7 @@ Roland is a multi-agent platform for **reliable, iterative software missions**:
 |-------|------|
 | **@roland (Cursor)** | PM, triage, direct edits — self-contained via MCP (no Hermes required) |
 | **Roland Closed-Loop Harness** | Loop execution engine — PACVRE iterations, gates, reflection ([guide](docs/guides/closed-loop-harness.md)) |
-| **Global CLI + MCP** | `roland team`, `roland mission`, `roland mission-audit`, Cursor MCP tools |
+| **Global CLI + MCP** | `roland mission`, `roland team`, `roland mission-audit`, Cursor MCP tools |
 | **Monitoring Dashboard** | Read-only monitor at `:8081` — loop/HITL panels (launch via CLI) |
 
 > **Hermes** (`roland chat` CLI) is optional for terminal-only workflows — **not required in Cursor**.
@@ -59,17 +101,17 @@ roland board-status --concise
 ### 2. Your first closed-loop mission
 
 ```bash
-roland team "add rate limiting to the password reset endpoint" \
+roland mission "add rate limiting to the password reset endpoint" \
   --loop-template full-cycle-verified-loop
 ```
 
 Other common templates:
 
 ```bash
-roland team "ship user profile settings" --loop-template feature-implementation-loop
-roland team "clean up recent slop in src/" --loop-template refactor-and-modernize-loop
-roland team "add MCP tool for triage" --loop-template mcp-extension-loop
-roland team "Fix small typo in README" --loop-template small-fix-loop
+roland mission "ship user profile settings" --loop-template feature-implementation-loop
+roland mission "clean up recent slop in src/" --loop-template refactor-and-modernize-loop
+roland mission "add MCP tool for triage" --loop-template mcp-extension-loop
+roland mission "Fix small typo in README" --loop-template small-fix-loop
 ```
 
 ### 3. Command center (dashboard — monitor & control)
@@ -213,9 +255,8 @@ Full guide: [docs/guides/pr-title-convention.md](docs/guides/pr-title-convention
 
 | Command | Purpose |
 |---------|---------|
-| `roland "goal"` | Shortcut for `roland team` |
-| `roland team "goal"` | PM team with live TUI |
-| `roland team "goal" --loop-template <id>` | Attach loop harness |
+| `roland mission "goal"` | Pure ClosedLoop mission (alias: `roland team`) |
+| `roland mission "goal" --loop-template <id>` | Attach loop harness |
 | `roland team "goal" --stream` | Agent output preview per task |
 | `roland team "goal" --background` | Detached run |
 | `roland team "goal" --simple-tui` | ASCII-only (SSH / Termius / iPhone) |
@@ -283,6 +324,7 @@ Details: [docs/guides/mini-pc-deployment.md](docs/guides/mini-pc-deployment.md) 
 | `blackboard.json` | Tasks, blockers, decisions |
 | `memory.md` | Cross-run project knowledge |
 | `run-state.json` | Live progress + loop phase |
+| `loop-metrics.json` | Phase timing and success rates |
 | `loops/<loop-id>/` | Loop memory, reflections, checkpoints |
 | `loops/<loop-id>/closed-loop-pr.json` | Formatted PR draft on completion |
 | `usage-history.json` | Token/cost estimates |
@@ -298,6 +340,7 @@ Details: [docs/guides/mini-pc-deployment.md](docs/guides/mini-pc-deployment.md) 
 | [docs/guides/pr-title-convention.md](docs/guides/pr-title-convention.md) | Clean PR titles, bodies, cleanup |
 | [docs/evolution/README.md](docs/evolution/README.md) | UNSC architecture and capabilities |
 | [docs/guides/mini-pc-deployment.md](docs/guides/mini-pc-deployment.md) | Headless, Tailscale, systemd |
+| [docs/guides/model-routing-and-cost.md](docs/guides/model-routing-and-cost.md) | Model routing, cost targets, telemetry |
 | [docs/guides/pm-workflow.md](docs/guides/pm-workflow.md) | Manual PM mode in Cursor |
 | [DAILY-USAGE.md](DAILY-USAGE.md) | Chat workflows, controls, troubleshooting |
 | [INSTALLATION.md](INSTALLATION.md) | MCP setup for Cursor / VS Code |
