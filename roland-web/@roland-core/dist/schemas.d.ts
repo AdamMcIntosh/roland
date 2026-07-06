@@ -56,15 +56,15 @@ export declare const PersistedStateSchema: z.ZodObject<{
         message: z.ZodString;
         ts: z.ZodNumber;
     }, "strip", z.ZodTypeAny, {
-        message: string;
         agent: string;
-        phase: string;
+        message: string;
         ts: number;
+        phase: string;
     }, {
-        message: string;
         agent: string;
-        phase: string;
+        message: string;
         ts: number;
+        phase: string;
     }>, "many">;
     startedAt: z.ZodNumber;
     updatedAt: z.ZodNumber;
@@ -72,31 +72,31 @@ export declare const PersistedStateSchema: z.ZodObject<{
     task: string;
     updatedAt: number;
     startedAt: number;
-    sessionId: string;
     recipe: string;
+    sessionId: string;
     currentStep: number;
     loopCount: number;
     outputs: Record<string, unknown>;
     agentLogs: {
-        message: string;
         agent: string;
-        phase: string;
+        message: string;
         ts: number;
+        phase: string;
     }[];
 }, {
     task: string;
     updatedAt: number;
     startedAt: number;
-    sessionId: string;
     recipe: string;
+    sessionId: string;
     currentStep: number;
     loopCount: number;
     outputs: Record<string, unknown>;
     agentLogs: {
-        message: string;
         agent: string;
-        phase: string;
+        message: string;
         ts: number;
+        phase: string;
     }[];
 }>;
 export type PersistedState = z.infer<typeof PersistedStateSchema>;
@@ -104,11 +104,11 @@ export declare const NotepadStorePayloadSchema: z.ZodObject<{
     key: z.ZodString;
     value: z.ZodUnion<[z.ZodRecord<z.ZodString, z.ZodUnknown>, z.ZodString]>;
 }, "strip", z.ZodTypeAny, {
-    value: string | Record<string, unknown>;
     key: string;
+    value: string | Record<string, unknown>;
 }, {
-    value: string | Record<string, unknown>;
     key: string;
+    value: string | Record<string, unknown>;
 }>;
 export declare const NotepadRetrievePayloadSchema: z.ZodObject<{
     key: z.ZodString;

@@ -1,10 +1,10 @@
 /**
- * ## Roland Execution Reliability Fix
+ * ## Project Context & Agent Dispatch Fix
  *
  * Dispatches Cursor SDK agents for Pure ClosedLoop Plan/Act phases.
- * Previously lightweight act was a no-op stub — missions completed without creating files.
+ * Includes role fallbacks when Sparrow / primary agents fail to respond.
  */
-import type { Blackboard } from '../rco/blackboard.js';
+import type { Blackboard } from '../coordination/legacy-blackboard.js';
 import type { CommandBlackboard } from '../rco/command-blackboard.js';
 import { ModelRouter } from '../models/model-router.js';
 import type { PhaseConfig } from './loop-phases.js';
@@ -33,13 +33,9 @@ export interface LoopAgentDispatchResult {
 /** Execute a loop Plan or Act phase agent via Cursor SDK (Pure ClosedLoop). */
 export declare function dispatchLoopPhaseAgent(opts: LoopAgentDispatchOptions): Promise<LoopAgentDispatchResult>;
 /**
- * ## Roland Execution Now Reliable
+ * ## Project Context Switching and Agent Dispatch Fixed
  *
- * Act phase dispatches Cursor SDK agents and validates filesystem changes afterward.
- * Test commands:
- *   npx vitest run tests/unit/act-validation.test.ts
- *   npx vitest run tests/unit/loop-agent-dispatch.test.ts
- * Greenfield E2E (requires CURSOR_API_KEY):
- *   roland team "create minimal Node.js + TS project with hello-world.ts" --loop-template full-cycle-verified-loop
+ * Act phase dispatches Cursor SDK agents with Sparrow/coding fallbacks and validates filesystem changes.
+ * Test: npx vitest run tests/unit/loop-agent-dispatch.test.ts tests/integration/mcp-mission-project-context.test.ts
  */
 //# sourceMappingURL=loop-agent-dispatch.d.ts.map

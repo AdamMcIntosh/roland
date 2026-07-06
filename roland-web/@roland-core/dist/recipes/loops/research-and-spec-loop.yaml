@@ -1,8 +1,8 @@
 name: research-and-spec-loop
+deprecated: true
+alias_of: research-and-plan-loop
 description: >
-  Research and specification loop — investigate a problem space, synthesize findings into an
-  actionable spec, validate completeness, critique gaps, and iterate until the spec is solid.
-  No code verification gates; critic validates synthesis quality.
+  [DEPRECATED — use research-and-plan-loop] Research and specification loop.
 phases:
   - phase: plan
     label: Plan investigation

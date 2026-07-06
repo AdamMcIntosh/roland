@@ -1,10 +1,9 @@
-# Deprecated — use research-and-spec-loop.
+# Deprecated — use research-and-plan-loop.
 name: research-synthesis-loop
 deprecated: true
-alias_of: research-and-spec-loop
+alias_of: research-and-plan-loop
 description: >
-  [Deprecated] Alias for research-and-spec-loop. Use --loop-template=research-and-spec-loop
-  for new missions.
+  [Deprecated] Alias for research-and-plan-loop.
 phases:
   - phase: plan
     label: Plan research

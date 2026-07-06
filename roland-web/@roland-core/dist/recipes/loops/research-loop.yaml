@@ -1,7 +1,8 @@
 name: research-loop
+deprecated: true
+alias_of: research-and-plan-loop
 description: >
-  Lightweight research loop — plan investigation, gather intel, validate findings, critique synthesis,
-  retry gaps. Shorter iteration budget than research-and-spec-loop; no formal spec exit conditions.
+  [DEPRECATED — use research-and-plan-loop] Lightweight research loop.
 phases:
   - phase: plan
     label: Plan research

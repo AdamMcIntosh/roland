@@ -1,4 +1,6 @@
 /**
+ * ## P1 Honesty & Consolidation
+ *
  * ## Assumptions
  * - Loaded from config.yaml `loop_engine` section only.
  * - `default_dispatch: cursor_sdk` is the Loop Engineering default unless overridden.
@@ -64,49 +66,52 @@ export declare const LoopEngineConfigSchema: z.ZodObject<{
             dry_run: z.ZodOptional<z.ZodBoolean>;
         }, "strip", z.ZodTypeAny, {
             type: import("./index.js").VerificationStrategyType;
-            weight?: number | undefined;
             command?: string | undefined;
             optional?: boolean | undefined;
+            weight?: number | undefined;
             timeout_ms?: number | undefined;
             dry_run?: boolean | undefined;
             min_confidence?: number | undefined;
             success_threshold?: number | undefined;
         }, {
             type: string;
-            weight?: number | undefined;
             command?: string | undefined;
             optional?: boolean | undefined;
+            weight?: number | undefined;
             timeout_ms?: number | undefined;
             dry_run?: boolean | undefined;
             min_confidence?: number | undefined;
             success_threshold?: number | undefined;
         }>, "many">>;
+        flaky_escape_threshold: z.ZodOptional<z.ZodNumber>;
     }, "strip", z.ZodTypeAny, {
         require_pass_before_critique?: boolean | undefined;
         min_confidence?: number | undefined;
         strategies?: {
             type: import("./index.js").VerificationStrategyType;
-            weight?: number | undefined;
             command?: string | undefined;
             optional?: boolean | undefined;
+            weight?: number | undefined;
             timeout_ms?: number | undefined;
             dry_run?: boolean | undefined;
             min_confidence?: number | undefined;
             success_threshold?: number | undefined;
         }[] | undefined;
+        flaky_escape_threshold?: number | undefined;
     }, {
         require_pass_before_critique?: boolean | undefined;
         min_confidence?: number | undefined;
         strategies?: {
             type: string;
-            weight?: number | undefined;
             command?: string | undefined;
             optional?: boolean | undefined;
+            weight?: number | undefined;
             timeout_ms?: number | undefined;
             dry_run?: boolean | undefined;
             min_confidence?: number | undefined;
             success_threshold?: number | undefined;
         }[] | undefined;
+        flaky_escape_threshold?: number | undefined;
     }>>;
     critique: z.ZodOptional<z.ZodObject<{
         max_retries: z.ZodOptional<z.ZodNumber>;
@@ -174,28 +179,6 @@ export declare const LoopEngineConfigSchema: z.ZodObject<{
             max_ms?: number | undefined;
         } | undefined;
     } | undefined;
-    critique?: {
-        max_retries?: number | undefined;
-        escalation_threshold?: number | undefined;
-        test_mode?: {
-            max_retries?: number | undefined;
-            escalation_threshold?: number | undefined;
-        } | undefined;
-    } | undefined;
-    verification?: {
-        require_pass_before_critique?: boolean | undefined;
-        min_confidence?: number | undefined;
-        strategies?: {
-            type: import("./index.js").VerificationStrategyType;
-            weight?: number | undefined;
-            command?: string | undefined;
-            optional?: boolean | undefined;
-            timeout_ms?: number | undefined;
-            dry_run?: boolean | undefined;
-            min_confidence?: number | undefined;
-            success_threshold?: number | undefined;
-        }[] | undefined;
-    } | undefined;
     default_template?: string | undefined;
     templates_dir?: string | undefined;
     timeout_ms?: number | undefined;
@@ -212,6 +195,29 @@ export declare const LoopEngineConfigSchema: z.ZodObject<{
         require_approval?: boolean | undefined;
         approval_timeout_ms?: number | undefined;
         auto_reject_on_timeout?: boolean | undefined;
+    } | undefined;
+    verification?: {
+        require_pass_before_critique?: boolean | undefined;
+        min_confidence?: number | undefined;
+        strategies?: {
+            type: import("./index.js").VerificationStrategyType;
+            command?: string | undefined;
+            optional?: boolean | undefined;
+            weight?: number | undefined;
+            timeout_ms?: number | undefined;
+            dry_run?: boolean | undefined;
+            min_confidence?: number | undefined;
+            success_threshold?: number | undefined;
+        }[] | undefined;
+        flaky_escape_threshold?: number | undefined;
+    } | undefined;
+    critique?: {
+        max_retries?: number | undefined;
+        escalation_threshold?: number | undefined;
+        test_mode?: {
+            max_retries?: number | undefined;
+            escalation_threshold?: number | undefined;
+        } | undefined;
     } | undefined;
     use_pm_team?: boolean | undefined;
     default_dispatch?: "cursor_sdk" | "direct" | undefined;
@@ -223,28 +229,6 @@ export declare const LoopEngineConfigSchema: z.ZodObject<{
             max_ms?: number | undefined;
         } | undefined;
     } | undefined;
-    critique?: {
-        max_retries?: number | undefined;
-        escalation_threshold?: number | undefined;
-        test_mode?: {
-            max_retries?: number | undefined;
-            escalation_threshold?: number | undefined;
-        } | undefined;
-    } | undefined;
-    verification?: {
-        require_pass_before_critique?: boolean | undefined;
-        min_confidence?: number | undefined;
-        strategies?: {
-            type: string;
-            weight?: number | undefined;
-            command?: string | undefined;
-            optional?: boolean | undefined;
-            timeout_ms?: number | undefined;
-            dry_run?: boolean | undefined;
-            min_confidence?: number | undefined;
-            success_threshold?: number | undefined;
-        }[] | undefined;
-    } | undefined;
     default_template?: string | undefined;
     templates_dir?: string | undefined;
     timeout_ms?: number | undefined;
@@ -262,6 +246,29 @@ export declare const LoopEngineConfigSchema: z.ZodObject<{
         approval_timeout_ms?: number | undefined;
         auto_reject_on_timeout?: boolean | undefined;
     } | undefined;
+    verification?: {
+        require_pass_before_critique?: boolean | undefined;
+        min_confidence?: number | undefined;
+        strategies?: {
+            type: string;
+            command?: string | undefined;
+            optional?: boolean | undefined;
+            weight?: number | undefined;
+            timeout_ms?: number | undefined;
+            dry_run?: boolean | undefined;
+            min_confidence?: number | undefined;
+            success_threshold?: number | undefined;
+        }[] | undefined;
+        flaky_escape_threshold?: number | undefined;
+    } | undefined;
+    critique?: {
+        max_retries?: number | undefined;
+        escalation_threshold?: number | undefined;
+        test_mode?: {
+            max_retries?: number | undefined;
+            escalation_threshold?: number | undefined;
+        } | undefined;
+    } | undefined;
     use_pm_team?: boolean | undefined;
     default_dispatch?: "cursor_sdk" | "direct" | undefined;
 }>;
@@ -269,6 +276,7 @@ export type LoopEngineConfig = z.infer<typeof LoopEngineConfigSchema> & {
     verification?: {
         require_pass_before_critique?: boolean;
         minConfidence?: number;
+        flakyEscapeThreshold?: number;
         strategies?: Array<{
             type: string;
             command?: string;
@@ -312,6 +320,7 @@ export interface CritiqueThresholds {
 export declare function resolveCritiqueThresholds(template: LoopTemplate, opts?: {
     isTestMode?: boolean;
 }): CritiqueThresholds;
+export declare function resolveFlakyEscapeThreshold(): number;
 export declare function loadLoopEngineConfig(): LoopEngineConfig;
 /** Resolve default dispatch policy — env overrides YAML. */
 export declare function loadDefaultDispatchPolicy(): 'cursor_sdk' | 'direct';

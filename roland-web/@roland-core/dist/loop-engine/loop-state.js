@@ -1,10 +1,14 @@
 /**
+ * ## P1 Final Consolidation (v1.4.0)
+ *
  * Loop state persistence — `.roland/loop-state.json`
  *
  * Survives supervisor restarts; read by dashboard via run-state loop fields.
+ * Writes use stateLock + safe-write (writeUtf8Json) for UTF-8 persistence.
  */
 import fs from 'fs';
 import path from 'path';
+import { acquireLock, readStateUnlocked, writeStateUnlocked } from '../rco/stateLock.js';
 export const LOOP_STATE_FILE = 'loop-state.json';
 export function createInitialLoopState(templateId, goal, firstPhase) {
     const now = Date.now();
@@ -66,6 +70,9 @@ export class LoopStateStore {
                 ? { ...this.state.pendingGitCommitApproval }
                 : undefined,
             spawnActivityHistory: this.state.spawnActivityHistory?.map((s) => ({ ...s })),
+            flakyVerification: this.state.flakyVerification
+                ? { ...this.state.flakyVerification }
+                : undefined,
         };
     }
     transitionTo(phase) {
@@ -160,9 +167,20 @@ export class LoopStateStore {
     getRecentSpawns() {
         return this.state.spawnActivityHistory?.map((s) => ({ ...s })) ?? [];
     }
+    setFlakyVerification(flaky) {
+        this.state.flakyVerification = flaky;
+        this.state.updatedAt = Date.now();
+        this.flush();
+    }
     flush() {
         try {
-            fs.writeFileSync(this.filePath, JSON.stringify(this.state, null, 2), 'utf-8');
+            const release = acquireLock(this.filePath);
+            try {
+                writeStateUnlocked(this.filePath, this.state);
+            }
+            finally {
+                release();
+            }
         }
         catch {
             // Non-fatal — in-memory state still drives the current run.
@@ -170,12 +188,16 @@ export class LoopStateStore {
     }
 }
 export function readLoopState(stateDir) {
+    const filePath = path.join(stateDir, LOOP_STATE_FILE);
+    const release = acquireLock(filePath);
     try {
-        const raw = fs.readFileSync(path.join(stateDir, LOOP_STATE_FILE), 'utf-8');
-        return JSON.parse(raw);
+        return readStateUnlocked(filePath);
     }
     catch {
         return null;
+    }
+    finally {
+        release();
     }
 }
 //# sourceMappingURL=loop-state.js.map

@@ -1,7 +1,15 @@
 /**
- * Phase 4: Opt-in telemetry via Sentry (errors and sessions).
+ * ## P3 Release & Stabilization
+ *
+ * Opt-in telemetry via Sentry (errors and sessions).
  * Initialized only when user has consented.
- * DSN is a placeholder; set SENTRY_DSN or RCO_SENTRY_DSN for real reporting.
+ *
+ * Enable via:
+ *   - `RCO_TELEMETRY_CONSENT=1` or `RCO_CONSENT=yes`
+ *   - Consent file: `~/.rco/telemetry-consent.json` (or project-scoped `.rco/`)
+ *   - DSN: `SENTRY_DSN` or `RCO_SENTRY_DSN` (placeholder used if unset)
+ *
+ * See `config.yaml` telemetry section and docs/guides/model-routing-and-cost.md.
  */
 import * as Sentry from '@sentry/node';
 import fs from 'fs';

@@ -8,7 +8,7 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { Blackboard } from './blackboard.js';
+import { Blackboard } from '../coordination/legacy-blackboard.js';
 import { CommandBlackboard, UNSC_CALLSIGNS, } from './command-blackboard.js';
 import { readRunGoal, isRunActive } from './hitl.js';
 import { buildHitlStatusReport, formatHermesHitlSummary } from './hitl-hermes.js';

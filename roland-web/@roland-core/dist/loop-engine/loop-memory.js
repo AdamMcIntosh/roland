@@ -8,6 +8,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { writeUtf8File, writeUtf8Json, appendUtf8Line } from '../utils/safe-write.js';
 export const LOOPS_ROOT = 'loops';
 export const LOOP_STATE_JSON = 'state.json';
 export const LOOP_REFLECTION_MD = 'reflection.md';
@@ -119,7 +120,7 @@ export class LoopMemory {
     saveCheckpoint(iteration, loopState) {
         const file = path.join(this.loopDir, LOOP_CHECKPOINTS_DIR, `iteration-${iteration}.json`);
         try {
-            fs.writeFileSync(file, JSON.stringify(loopState, null, 2), 'utf-8');
+            writeUtf8Json(file, loopState);
         }
         catch {
             // Non-fatal.
@@ -127,7 +128,7 @@ export class LoopMemory {
     }
     writeArtifact(name, content) {
         try {
-            fs.writeFileSync(path.join(this.loopDir, LOOP_ARTIFACTS_DIR, name), content, 'utf-8');
+            writeUtf8File(path.join(this.loopDir, LOOP_ARTIFACTS_DIR, name), content);
         }
         catch {
             // Non-fatal.
@@ -169,10 +170,10 @@ export class LoopMemory {
         const file = path.join(this.loopDir, LOOP_REFLECTION_MD);
         try {
             if (fs.existsSync(file)) {
-                fs.appendFileSync(file, block, 'utf-8');
+                appendUtf8Line(file, block.trimStart());
             }
             else {
-                fs.writeFileSync(file, `# Loop Reflections\n\nGoal: ${this.opts.goal}\nTemplate: ${this.opts.templateId}\n${block}`, 'utf-8');
+                writeUtf8File(file, `# Loop Reflections\n\nGoal: ${this.opts.goal}\nTemplate: ${this.opts.templateId}\n${block}`);
             }
         }
         catch {
@@ -185,7 +186,7 @@ export class LoopMemory {
     }
     flush(state = this.diskState) {
         try {
-            fs.writeFileSync(path.join(this.loopDir, LOOP_STATE_JSON), JSON.stringify(state, null, 2), 'utf-8');
+            writeUtf8Json(path.join(this.loopDir, LOOP_STATE_JSON), state);
         }
         catch {
             // Non-fatal — in-memory state still drives the run.

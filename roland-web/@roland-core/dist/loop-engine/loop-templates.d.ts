@@ -8,8 +8,8 @@
 import { z } from 'zod';
 import type { LoopTemplate } from './loop-phases.js';
 import { Phase } from './loop-phases.js';
-/** Canonical generic templates — readiness gate expects these to exist. */
-export declare const CORE_GENERIC_TEMPLATES: readonly ["standard-code-loop", "feature-implementation-loop", "refactor-and-modernize-loop", "research-and-spec-loop", "mcp-extension-loop", "full-cycle-verified-loop"];
+/** Canonical generic templates — readiness gate expects these to exist (7 templates). */
+export declare const CORE_GENERIC_TEMPLATES: readonly ["small-fix-loop", "standard-code-loop", "feature-implementation-loop", "refactor-and-modernize-loop", "research-and-plan-loop", "full-cycle-verified-loop", "maintenance-loop"];
 /** Backward-compatible aliases when alias_of is not in YAML. */
 export declare const TEMPLATE_ALIASES: Record<string, string>;
 export declare const LoopTemplateSchema: z.ZodObject<{
@@ -32,19 +32,19 @@ export declare const LoopTemplateSchema: z.ZodObject<{
             min_confidence: z.ZodOptional<z.ZodNumber>;
             dry_run: z.ZodOptional<z.ZodBoolean>;
         }, "strip", z.ZodTypeAny, {
-            type: "lint" | "unit" | "integration" | "smoke" | "e2e" | "typecheck";
-            weight?: number | undefined;
+            type: "unit" | "integration" | "smoke" | "e2e" | "lint" | "typecheck";
             command?: string | undefined;
             optional?: boolean | undefined;
+            weight?: number | undefined;
             timeout_ms?: number | undefined;
             dry_run?: boolean | undefined;
             min_confidence?: number | undefined;
             success_threshold?: number | undefined;
         }, {
-            type: "lint" | "unit" | "integration" | "smoke" | "e2e" | "typecheck";
-            weight?: number | undefined;
+            type: "unit" | "integration" | "smoke" | "e2e" | "lint" | "typecheck";
             command?: string | undefined;
             optional?: boolean | undefined;
+            weight?: number | undefined;
             timeout_ms?: number | undefined;
             dry_run?: boolean | undefined;
             min_confidence?: number | undefined;
@@ -185,33 +185,7 @@ export declare const LoopTemplateSchema: z.ZodObject<{
         }>, "many">>;
     }, "strip", z.ZodTypeAny, {
         phase: Phase;
-        after?: {
-            command?: string | undefined;
-            optional?: boolean | undefined;
-            action?: "run-tests" | "git-commit" | "critique-only" | undefined;
-            timeout_ms?: number | undefined;
-            dry_run?: boolean | undefined;
-            exit_on_failure?: boolean | undefined;
-            message_template?: string | undefined;
-            include_files?: string[] | undefined;
-            auto_stage?: boolean | undefined;
-            require_approval?: boolean | undefined;
-            approval_timeout_ms?: number | undefined;
-            auto_reject_on_timeout?: boolean | undefined;
-        } | undefined;
         agent?: string | undefined;
-        pm_team?: "never" | "auto" | "always" | undefined;
-        verification?: ("lint" | "unit" | "integration" | "smoke" | "e2e" | "typecheck" | {
-            type: "lint" | "unit" | "integration" | "smoke" | "e2e" | "typecheck";
-            weight?: number | undefined;
-            command?: string | undefined;
-            optional?: boolean | undefined;
-            timeout_ms?: number | undefined;
-            dry_run?: boolean | undefined;
-            min_confidence?: number | undefined;
-            success_threshold?: number | undefined;
-        })[] | undefined;
-        label?: string | undefined;
         optional?: boolean | undefined;
         between_iterations?: {
             command?: string | undefined;
@@ -227,6 +201,32 @@ export declare const LoopTemplateSchema: z.ZodObject<{
             approval_timeout_ms?: number | undefined;
             auto_reject_on_timeout?: boolean | undefined;
         } | undefined;
+        verification?: ("unit" | "integration" | "smoke" | "e2e" | "lint" | "typecheck" | {
+            type: "unit" | "integration" | "smoke" | "e2e" | "lint" | "typecheck";
+            command?: string | undefined;
+            optional?: boolean | undefined;
+            weight?: number | undefined;
+            timeout_ms?: number | undefined;
+            dry_run?: boolean | undefined;
+            min_confidence?: number | undefined;
+            success_threshold?: number | undefined;
+        })[] | undefined;
+        label?: string | undefined;
+        after?: {
+            command?: string | undefined;
+            optional?: boolean | undefined;
+            action?: "run-tests" | "git-commit" | "critique-only" | undefined;
+            timeout_ms?: number | undefined;
+            dry_run?: boolean | undefined;
+            exit_on_failure?: boolean | undefined;
+            message_template?: string | undefined;
+            include_files?: string[] | undefined;
+            auto_stage?: boolean | undefined;
+            require_approval?: boolean | undefined;
+            approval_timeout_ms?: number | undefined;
+            auto_reject_on_timeout?: boolean | undefined;
+        } | undefined;
+        pm_team?: "never" | "auto" | "always" | undefined;
         specialist_spawns?: {
             role: string;
             optional?: boolean | undefined;
@@ -243,33 +243,7 @@ export declare const LoopTemplateSchema: z.ZodObject<{
         }[] | undefined;
     }, {
         phase: string;
-        after?: {
-            command?: string | undefined;
-            optional?: boolean | undefined;
-            action?: "run-tests" | "git-commit" | "critique-only" | undefined;
-            timeout_ms?: number | undefined;
-            dry_run?: boolean | undefined;
-            exit_on_failure?: boolean | undefined;
-            message_template?: string | undefined;
-            include_files?: string[] | undefined;
-            auto_stage?: boolean | undefined;
-            require_approval?: boolean | undefined;
-            approval_timeout_ms?: number | undefined;
-            auto_reject_on_timeout?: boolean | undefined;
-        } | undefined;
         agent?: string | undefined;
-        pm_team?: "never" | "auto" | "always" | undefined;
-        verification?: ("lint" | "unit" | "integration" | "smoke" | "e2e" | "typecheck" | {
-            type: "lint" | "unit" | "integration" | "smoke" | "e2e" | "typecheck";
-            weight?: number | undefined;
-            command?: string | undefined;
-            optional?: boolean | undefined;
-            timeout_ms?: number | undefined;
-            dry_run?: boolean | undefined;
-            min_confidence?: number | undefined;
-            success_threshold?: number | undefined;
-        })[] | undefined;
-        label?: string | undefined;
         optional?: boolean | undefined;
         between_iterations?: {
             command?: string | undefined;
@@ -285,6 +259,32 @@ export declare const LoopTemplateSchema: z.ZodObject<{
             approval_timeout_ms?: number | undefined;
             auto_reject_on_timeout?: boolean | undefined;
         } | undefined;
+        verification?: ("unit" | "integration" | "smoke" | "e2e" | "lint" | "typecheck" | {
+            type: "unit" | "integration" | "smoke" | "e2e" | "lint" | "typecheck";
+            command?: string | undefined;
+            optional?: boolean | undefined;
+            weight?: number | undefined;
+            timeout_ms?: number | undefined;
+            dry_run?: boolean | undefined;
+            min_confidence?: number | undefined;
+            success_threshold?: number | undefined;
+        })[] | undefined;
+        label?: string | undefined;
+        after?: {
+            command?: string | undefined;
+            optional?: boolean | undefined;
+            action?: "run-tests" | "git-commit" | "critique-only" | undefined;
+            timeout_ms?: number | undefined;
+            dry_run?: boolean | undefined;
+            exit_on_failure?: boolean | undefined;
+            message_template?: string | undefined;
+            include_files?: string[] | undefined;
+            auto_stage?: boolean | undefined;
+            require_approval?: boolean | undefined;
+            approval_timeout_ms?: number | undefined;
+            auto_reject_on_timeout?: boolean | undefined;
+        } | undefined;
+        pm_team?: "never" | "auto" | "always" | undefined;
         specialist_spawns?: {
             role: string;
             optional?: boolean | undefined;
@@ -360,53 +360,28 @@ export declare const LoopTemplateSchema: z.ZodObject<{
     }, "strip", z.ZodTypeAny, {
         type: "all_gates_pass" | "confidence_streak" | "command_success";
         id?: string | undefined;
+        description?: string | undefined;
         command?: string | undefined;
         minConfidence?: number | undefined;
-        description?: string | undefined;
         consecutiveIterations?: number | undefined;
     }, {
         type: "all_gates_pass" | "confidence_streak" | "command_success";
         id?: string | undefined;
+        description?: string | undefined;
         command?: string | undefined;
         minConfidence?: number | undefined;
-        description?: string | undefined;
         consecutiveIterations?: number | undefined;
     }>, "many">>;
+    parameters: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
     pm_plan: z.ZodOptional<z.ZodEnum<["auto", "always", "never"]>>;
     pm_act: z.ZodOptional<z.ZodEnum<["auto", "always", "never"]>>;
     use_pm_team: z.ZodOptional<z.ZodBoolean>;
 }, "strip", z.ZodTypeAny, {
-    name: string;
     description: string;
+    name: string;
     phases: {
         phase: Phase;
-        after?: {
-            command?: string | undefined;
-            optional?: boolean | undefined;
-            action?: "run-tests" | "git-commit" | "critique-only" | undefined;
-            timeout_ms?: number | undefined;
-            dry_run?: boolean | undefined;
-            exit_on_failure?: boolean | undefined;
-            message_template?: string | undefined;
-            include_files?: string[] | undefined;
-            auto_stage?: boolean | undefined;
-            require_approval?: boolean | undefined;
-            approval_timeout_ms?: number | undefined;
-            auto_reject_on_timeout?: boolean | undefined;
-        } | undefined;
         agent?: string | undefined;
-        pm_team?: "never" | "auto" | "always" | undefined;
-        verification?: ("lint" | "unit" | "integration" | "smoke" | "e2e" | "typecheck" | {
-            type: "lint" | "unit" | "integration" | "smoke" | "e2e" | "typecheck";
-            weight?: number | undefined;
-            command?: string | undefined;
-            optional?: boolean | undefined;
-            timeout_ms?: number | undefined;
-            dry_run?: boolean | undefined;
-            min_confidence?: number | undefined;
-            success_threshold?: number | undefined;
-        })[] | undefined;
-        label?: string | undefined;
         optional?: boolean | undefined;
         between_iterations?: {
             command?: string | undefined;
@@ -422,6 +397,32 @@ export declare const LoopTemplateSchema: z.ZodObject<{
             approval_timeout_ms?: number | undefined;
             auto_reject_on_timeout?: boolean | undefined;
         } | undefined;
+        verification?: ("unit" | "integration" | "smoke" | "e2e" | "lint" | "typecheck" | {
+            type: "unit" | "integration" | "smoke" | "e2e" | "lint" | "typecheck";
+            command?: string | undefined;
+            optional?: boolean | undefined;
+            weight?: number | undefined;
+            timeout_ms?: number | undefined;
+            dry_run?: boolean | undefined;
+            min_confidence?: number | undefined;
+            success_threshold?: number | undefined;
+        })[] | undefined;
+        label?: string | undefined;
+        after?: {
+            command?: string | undefined;
+            optional?: boolean | undefined;
+            action?: "run-tests" | "git-commit" | "critique-only" | undefined;
+            timeout_ms?: number | undefined;
+            dry_run?: boolean | undefined;
+            exit_on_failure?: boolean | undefined;
+            message_template?: string | undefined;
+            include_files?: string[] | undefined;
+            auto_stage?: boolean | undefined;
+            require_approval?: boolean | undefined;
+            approval_timeout_ms?: number | undefined;
+            auto_reject_on_timeout?: boolean | undefined;
+        } | undefined;
+        pm_team?: "never" | "auto" | "always" | undefined;
         specialist_spawns?: {
             role: string;
             optional?: boolean | undefined;
@@ -467,44 +468,19 @@ export declare const LoopTemplateSchema: z.ZodObject<{
     exit_conditions?: {
         type: "all_gates_pass" | "confidence_streak" | "command_success";
         id?: string | undefined;
+        description?: string | undefined;
         command?: string | undefined;
         minConfidence?: number | undefined;
-        description?: string | undefined;
         consecutiveIterations?: number | undefined;
     }[] | undefined;
+    parameters?: Record<string, unknown> | undefined;
     pm_plan?: "never" | "auto" | "always" | undefined;
     pm_act?: "never" | "auto" | "always" | undefined;
 }, {
     name: string;
     phases: {
         phase: string;
-        after?: {
-            command?: string | undefined;
-            optional?: boolean | undefined;
-            action?: "run-tests" | "git-commit" | "critique-only" | undefined;
-            timeout_ms?: number | undefined;
-            dry_run?: boolean | undefined;
-            exit_on_failure?: boolean | undefined;
-            message_template?: string | undefined;
-            include_files?: string[] | undefined;
-            auto_stage?: boolean | undefined;
-            require_approval?: boolean | undefined;
-            approval_timeout_ms?: number | undefined;
-            auto_reject_on_timeout?: boolean | undefined;
-        } | undefined;
         agent?: string | undefined;
-        pm_team?: "never" | "auto" | "always" | undefined;
-        verification?: ("lint" | "unit" | "integration" | "smoke" | "e2e" | "typecheck" | {
-            type: "lint" | "unit" | "integration" | "smoke" | "e2e" | "typecheck";
-            weight?: number | undefined;
-            command?: string | undefined;
-            optional?: boolean | undefined;
-            timeout_ms?: number | undefined;
-            dry_run?: boolean | undefined;
-            min_confidence?: number | undefined;
-            success_threshold?: number | undefined;
-        })[] | undefined;
-        label?: string | undefined;
         optional?: boolean | undefined;
         between_iterations?: {
             command?: string | undefined;
@@ -520,6 +496,32 @@ export declare const LoopTemplateSchema: z.ZodObject<{
             approval_timeout_ms?: number | undefined;
             auto_reject_on_timeout?: boolean | undefined;
         } | undefined;
+        verification?: ("unit" | "integration" | "smoke" | "e2e" | "lint" | "typecheck" | {
+            type: "unit" | "integration" | "smoke" | "e2e" | "lint" | "typecheck";
+            command?: string | undefined;
+            optional?: boolean | undefined;
+            weight?: number | undefined;
+            timeout_ms?: number | undefined;
+            dry_run?: boolean | undefined;
+            min_confidence?: number | undefined;
+            success_threshold?: number | undefined;
+        })[] | undefined;
+        label?: string | undefined;
+        after?: {
+            command?: string | undefined;
+            optional?: boolean | undefined;
+            action?: "run-tests" | "git-commit" | "critique-only" | undefined;
+            timeout_ms?: number | undefined;
+            dry_run?: boolean | undefined;
+            exit_on_failure?: boolean | undefined;
+            message_template?: string | undefined;
+            include_files?: string[] | undefined;
+            auto_stage?: boolean | undefined;
+            require_approval?: boolean | undefined;
+            approval_timeout_ms?: number | undefined;
+            auto_reject_on_timeout?: boolean | undefined;
+        } | undefined;
+        pm_team?: "never" | "auto" | "always" | undefined;
         specialist_spawns?: {
             role: string;
             optional?: boolean | undefined;
@@ -535,6 +537,7 @@ export declare const LoopTemplateSchema: z.ZodObject<{
             } | undefined;
         }[] | undefined;
     }[];
+    description?: string | undefined;
     timeout_ms?: number | undefined;
     between_iterations?: string | {
         command?: string | undefined;
@@ -555,7 +558,6 @@ export declare const LoopTemplateSchema: z.ZodObject<{
     use_pm_team?: boolean | undefined;
     maxRetries?: number | undefined;
     escalationThreshold?: number | undefined;
-    description?: string | undefined;
     deprecated?: boolean | undefined;
     alias_of?: string | undefined;
     maxIterations?: number | undefined;
@@ -566,11 +568,12 @@ export declare const LoopTemplateSchema: z.ZodObject<{
     exit_conditions?: {
         type: "all_gates_pass" | "confidence_streak" | "command_success";
         id?: string | undefined;
+        description?: string | undefined;
         command?: string | undefined;
         minConfidence?: number | undefined;
-        description?: string | undefined;
         consecutiveIterations?: number | undefined;
     }[] | undefined;
+    parameters?: Record<string, unknown> | undefined;
     pm_plan?: "never" | "auto" | "always" | undefined;
     pm_act?: "never" | "auto" | "always" | undefined;
 }>;

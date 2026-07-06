@@ -1,9 +1,5 @@
 /**
- * ## Roland Execution Reliability Fix
- *
- * ## Evaluation Gate & Blocker Fix
- *
- * ## MCP Project Context Fix
+ * ## Project Context & Agent Dispatch Fix
  *
  * Mission state isolation — per-project cleanup, archival, and stale-file hygiene.
  *
@@ -12,6 +8,7 @@
  */
 import fs from 'fs';
 import path from 'path';
+import { applyMcpProjectEnv, chdirToProject } from '../utils/mcp-project-context.js';
 import { LOOP_CHECKPOINT_FILE } from '../loop-engine/loop-checkpoint.js';
 import { LOOP_STATE_FILE } from '../loop-engine/loop-state.js';
 import { cleanupBoardsForNewMission } from './board-cleanup.js';
@@ -74,9 +71,10 @@ export function resetHitlStateForNewMission(stateDir, log = noopLog) {
  */
 export function prepareMissionStart(stateDir, goal, options = {}, log = noopLog) {
     if (options.projectRoot) {
-        process.env['ROLAND_PROJECT_ROOT'] = path.resolve(options.projectRoot);
-        process.env['ROLAND_ROOT'] = process.env['ROLAND_PROJECT_ROOT'];
-        process.env['ROLAND_STATE_DIR'] = path.resolve(stateDir);
+        const projectRoot = path.resolve(options.projectRoot);
+        const resolvedStateDir = path.resolve(stateDir);
+        applyMcpProjectEnv({ projectRoot, stateDir: resolvedStateDir });
+        chdirToProject({ projectRoot, stateDir: resolvedStateDir });
     }
     const result = cleanupPreviousRuns(stateDir, goal, {
         dryRun: options.dryRun,
@@ -395,11 +393,9 @@ export function buildSupervisorStartDiagnostics(stateDir, context) {
     };
 }
 /**
- * ## Roland Execution Now Reliable
+ * ## Project Context Switching and Agent Dispatch Fixed
  *
- * Mission state isolation — sanitize stale PIDs, archive prior meta, reset loop/HITL on new missions.
- * Test commands:
- *   npx vitest run tests/unit/mission-state.test.ts
- *   npx vitest run tests/unit/mcp-project-context.test.ts
+ * prepareMissionStart pins ROLAND_PROJECT_ROOT, ROLAND_STATE_DIR, and chdirs workers.
+ * Test: npx vitest run tests/unit/mission-state.test.ts tests/integration/mcp-mission-project-context.test.ts
  */
 //# sourceMappingURL=mission-state.js.map

@@ -1,8 +1,17 @@
 /**
- * CritiqueEngine — rule-based structured critique from verification + phase history.
+
+ * ## P1 Honesty & Consolidation
+
  *
- * Selects critique lane (critic vs coding) and resolves model via ModelRouter.
- * Does not invoke LLMs directly — deterministic analysis for loop reliability.
+
+ * CritiqueEngine — rule-based structured critique from verification + phase history.
+
+ *
+
+ * Selects critique lane (critic vs coding) for routing metadata only.
+
+ * Does not invoke LLMs — deterministic analysis for loop reliability.
+
  */
 import { ModelRouter } from '../../models/model-router.js';
 import { generateImprovementProposals } from './improvement-proposals.js';
@@ -29,9 +38,9 @@ export class CritiqueEngine {
         const retryResult = resolveRetryStrategy(enriched);
         const preferredLane = selectCritiqueLane(enriched, issues);
         const lane = loopDegradationPolicy.selectLane(preferredLane);
-        const dispatch = this.router.resolveDispatch(lane, { phase: 'critique', log: true });
-        console.error(`[Loop][critique] role=${lane} dispatch=${dispatch.method} model=${dispatch.displayLabel} ` +
-            `fallback=${dispatch.isFallback} decision=${retryResult.decision} retry=${input.retryCount}/${maxRetries} ` +
+        const dispatch = this.router.resolveDispatch(lane, { phase: 'critique', log: false });
+        console.error(`[Loop][critique] rule-based structured critique (no LLM) lane=${lane} ` +
+            `routing=${dispatch.method} decision=${retryResult.decision} retry=${input.retryCount}/${maxRetries} ` +
             `escalationThreshold=${escalationThreshold} reason="${retryResult.reason}"`);
         const summary = buildSummary(enriched, retryResult.decision, retryResult.reason);
         return {
@@ -113,7 +122,9 @@ function collectSuggestions(input) {
     return suggestions;
 }
 /**
+
  * Critic role for high-level / multi-failure critique; coding role for localized code issues.
+
  */
 function selectCritiqueLane(input, issues) {
     if (input.hadBlockers)

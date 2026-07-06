@@ -1,8 +1,12 @@
+## P0 Final Bugfix — roland-web Recipe Mirror
+# @roland-core/dist, agents, recipes are build-time mirrors — never commit.
+# Rebuild with: npm run build:core (or install.sh / update.sh)
+
 .next/
 /dist/
-!@roland-core/dist/
-!@roland-core/agents/
-!@roland-core/recipes/
+@roland-core/dist/
+@roland-core/agents/
+@roland-core/recipes/
 node_modules/
 *.db
 *.db-journal
@@ -17,6 +21,3 @@ projects/
 
 # Roland run state — runtime files, may contain goal/output text
 .roland/
-
-# @roland-core/dist, agents, recipes are committed so install.sh needs no root-level build.
-# Rebuild locally with: npm run build:core

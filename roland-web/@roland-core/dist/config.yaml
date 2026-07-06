@@ -205,3 +205,11 @@ context_gathering:
 diff_stream:
   enabled: true
   port: 8089
+
+# Opt-in telemetry — Sentry error/session reporting (disabled by default)
+# Enable: RCO_TELEMETRY_CONSENT=1 or ~/.rco/telemetry-consent.json
+# DSN: SENTRY_DSN or RCO_SENTRY_DSN
+telemetry:
+  enabled: false
+  consent_required: true
+  traces_sample_rate: 0.1

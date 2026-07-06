@@ -9,9 +9,10 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { Blackboard } from './blackboard.js';
+import { Blackboard } from '../coordination/legacy-blackboard.js';
 import { isGoalRelevant, tokenize } from './command-blackboard.js';
 import { readMissionMetaFile } from './mission-state.js';
+import { appendUtf8Line, writeUtf8Json } from '../utils/safe-write.js';
 import { HitlQueue, isRunActive, readRunGoal } from './hitl.js';
 import { readRunState } from './run-state.js';
 import { readLoopState } from '../loop-engine/loop-state.js';
@@ -101,7 +102,7 @@ export function emitHermesHitlEvent(stateDir, partial) {
         ...partial,
     };
     fs.mkdirSync(stateDir, { recursive: true });
-    fs.appendFileSync(eventsFilePath(stateDir), JSON.stringify(event) + '\n', 'utf-8');
+    appendUtf8Line(eventsFilePath(stateDir), JSON.stringify(event));
     emitHitlHermesListeners(stateDir, event);
     return event;
 }
@@ -270,7 +271,7 @@ export function emitHermesMissionComplete(stateDir, report) {
         return existing;
     }
     fs.mkdirSync(stateDir, { recursive: true });
-    fs.writeFileSync(completionFilePath(stateDir), JSON.stringify(report, null, 2), 'utf-8');
+    writeUtf8Json(completionFilePath(stateDir), report);
     emitHermesHitlEvent(stateDir, {
         kind: 'mission-complete',
         blockerDescription: report.summary,

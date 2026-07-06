@@ -7,7 +7,7 @@
  * `.roland/command-blackboard.md` so prior [pending]/[done] tasks do not pollute
  * planning prompts or worker context.
  */
-import { Blackboard } from './blackboard.js';
+import { Blackboard } from '../coordination/legacy-blackboard.js';
 import { CommandBlackboard } from './command-blackboard.js';
 export interface BoardCleanupOptions {
     /** When true, report actions without writing files. */

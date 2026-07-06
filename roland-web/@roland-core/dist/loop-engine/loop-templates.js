@@ -13,20 +13,25 @@ import { z } from 'zod';
 import { isPhase } from './loop-phases.js';
 import { loadLoopEngineConfig } from './loop-config.js';
 import { summarizeVerificationConfig, summarizeBetweenIterationsConfig, listPhaseAfterHooks, } from './loop-template-resolution.js';
-/** Canonical generic templates — readiness gate expects these to exist. */
+/** Canonical generic templates — readiness gate expects these to exist (7 templates). */
 export const CORE_GENERIC_TEMPLATES = [
+    'small-fix-loop',
     'standard-code-loop',
     'feature-implementation-loop',
     'refactor-and-modernize-loop',
-    'research-and-spec-loop',
-    'mcp-extension-loop',
+    'research-and-plan-loop',
     'full-cycle-verified-loop',
+    'maintenance-loop',
 ];
 /** Backward-compatible aliases when alias_of is not in YAML. */
 export const TEMPLATE_ALIASES = {
     'closed-loop-harness': 'full-cycle-verified-loop',
     'code-quality-loop': 'refactor-and-modernize-loop',
-    'research-synthesis-loop': 'research-and-spec-loop',
+    'research-synthesis-loop': 'research-and-plan-loop',
+    'research-and-spec-loop': 'research-and-plan-loop',
+    'mcp-extension-loop': 'feature-implementation-loop',
+    'minimal-3-phase': 'small-fix-loop',
+    'research-loop': 'research-and-plan-loop',
 };
 const LEGACY_AGENT_NAMES = new Set([
     'lead-pm',
@@ -125,6 +130,7 @@ export const LoopTemplateSchema = z.object({
     reflection: z.boolean().optional(),
     min_confidence: z.number().min(0).max(1).optional(),
     exit_conditions: z.array(ExitConditionSchema).optional(),
+    parameters: z.record(z.unknown()).optional(),
     pm_plan: z.enum(['auto', 'always', 'never']).optional(), // [DEPRECATED] legacy PM Team
     pm_act: z.enum(['auto', 'always', 'never']).optional(), // [DEPRECATED] legacy PM Team
     use_pm_team: z.boolean().optional(), // [DEPRECATED] advanced/legacy opt-in

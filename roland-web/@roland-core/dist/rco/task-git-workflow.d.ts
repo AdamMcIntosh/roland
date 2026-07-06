@@ -4,7 +4,7 @@
  * Runs automatically from team-orchestrator on executor (coding-lane) tasks.
  * Respects `.roland/config.json` and env vars; fails gracefully with [GIT] logs.
  */
-import type { Blackboard } from './blackboard.js';
+import type { Blackboard } from '../coordination/legacy-blackboard.js';
 import type { CommandBlackboard } from './command-blackboard.js';
 import type { TeamTask } from './team-orchestrator.js';
 export type TaskGitPhase = 'branch_created' | 'committed' | 'pushed' | 'pr_opened' | 'skipped' | 'failed';

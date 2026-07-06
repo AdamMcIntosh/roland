@@ -33,6 +33,7 @@ export class LoopEngine {
     runner;
     cwd;
     liveContext;
+    isTestMode;
     lastEvaluation;
     constructor(opts) {
         const firstPhase = opts.template.phases[0]?.phase ?? P.Plan;
@@ -54,6 +55,7 @@ export class LoopEngine {
         this.runner = opts.runner;
         this.cwd = opts.cwd ?? process.cwd();
         this.liveContext = opts.liveContext;
+        this.isTestMode = Boolean(opts.isTestMode || process.env.ROLAND_LOOP_TEST_MODE === '1');
         this.observability = new LoopObservability(opts.stateDir, opts.blackboard);
         this.critiqueThresholds = resolveCritiqueThresholds(opts.template, {
             isTestMode: opts.isTestMode,
@@ -503,6 +505,7 @@ export class LoopEngine {
                 phaseConfig,
                 maxRetries: this.critiqueThresholds.maxRetries,
                 escalationThreshold: this.critiqueThresholds.escalationThreshold,
+                isTestMode: this.isTestMode,
                 reportLiveActivity: (activity) => this.setLiveActivity(activity),
             });
         }
@@ -524,6 +527,9 @@ export class LoopEngine {
         });
         if (phase === P.Verify && result.evaluation) {
             this.lastEvaluation = result.evaluation;
+        }
+        if (result.flakyVerification) {
+            this.store.setFlakyVerification(result.flakyVerification);
         }
         const durationMs = Date.now() - phaseStartedAt;
         this.observability.recordPhaseComplete(phase, ctx.iteration, result, durationMs, this.template.name, {
@@ -591,11 +597,9 @@ export class LoopEngine {
     }
 }
 /**
- * Maps team-orchestrator lifecycle events to loop phases.
- *
- * TODO: Legacy — to be removed after Loop Engineering pivot.
+ * Legacy coordinator mapping team-orchestrator lifecycle events to loop phases.
  * Loop-template missions use ClosedLoop.runFullLoop() instead of this coordinator.
- * Kept for backward compatibility with any external callers still wiring waves manually.
+ * Kept for backward compatibility with external callers still wiring waves manually.
  */
 export class LoopEngineCoordinator {
     engine;

@@ -34,7 +34,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { readRunState } from './run-state.js';
 import { sanitizeStaleMissionState } from './mission-state.js';
-import { applyMcpProjectEnv, chdirToProject, deriveProjectRootFromStateDir, resolveMcpProjectContext, } from '../utils/mcp-project-context.js';
+import { deriveProjectRootFromStateDir, ensureMissionProjectContext, resolveMcpProjectContext, resolveMissionProjectRootFromState, } from '../utils/mcp-project-context.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MAX_RESTARTS = 3;
 const RESTART_DELAY_MS = 30_000; // 30 s × attempt number
@@ -131,10 +131,13 @@ export function bgStatus(stateDir, json = false) {
     }
     catch { /* no hitl state — fine */ }
     if (json) {
+        const projectRoot = resolveMissionProjectRootFromState(stateDir);
         console.log(JSON.stringify({
             running: alive,
             pid: rec.pid,
             goal: rec.goal,
+            projectRoot,
+            stateDir,
             startedAt: rec.startedAt,
             elapsedMs: elapsed,
             restarts: rec.restarts,
@@ -175,6 +178,8 @@ export function bgStatus(stateDir, json = false) {
     w();
     row('Status', `${statusIcon}${phaseStr}`);
     row('Goal', goalSnip + (rec.goal.length > cols - 20 ? '…' : ''));
+    row('Project', dim(resolveMissionProjectRootFromState(stateDir)));
+    row('State', dim(stateDir));
     row('PID', String(rec.pid) + (alive ? '' : dim(' (stale)')));
     row('Started', `${new Date(rec.startedAt).toLocaleTimeString()}  ${dim('(' + fmtElapsed(elapsed) + ' ago)')}`);
     if (runState && runState.totalTasks > 0) {
@@ -447,9 +452,11 @@ async function supervisorWorkerMain(argv) {
     // argv[0] = '--background-worker', argv[1] = goal, argv[2+] = team args
     const goal = argv[1] ?? '';
     const teamArgs = argv.slice(2);
-    const ctx = resolveMcpProjectContext({ state_dir: process.env['ROLAND_STATE_DIR'] ?? '.roland' });
-    applyMcpProjectEnv(ctx);
-    chdirToProject(ctx);
+    const ctx = resolveMcpProjectContext({
+        project_root: process.env['ROLAND_PROJECT_ROOT'],
+        state_dir: process.env['ROLAND_STATE_DIR'] ?? '.roland',
+    });
+    ensureMissionProjectContext(ctx);
     const stateDir = ctx.stateDir;
     // Inject --notify when ROLAND_NOTIFY=1 is set globally but --notify wasn't passed
     const needsNotify = (process.env.ROLAND_NOTIFY === '1' || process.env.ROLAND_NOTIFY === 'true') &&

@@ -45,7 +45,7 @@ function readClosedLoopPr(stateDir) {
         return null;
     }
 }
-/** Parse SpecialistSpawner blackboard posts into dashboard-friendly rows. */
+/** Parse PhaseIntentPoster blackboard posts into dashboard-friendly rows. */
 function extractSpecialistSpawns(entries) {
     const spawns = [];
     for (const entry of entries) {

@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
- * ## CLI-First + Hermes Monitoring Shift
+ * ## P2 Polish & Reach
  *
  * RCO Team CLI — Pure ClosedLoop mission launcher (primary execution path).
- * Monitor with: roland hitl-status · roland board-status --concise · roland mission-summary
+ * Default: auto-select loop template (small-fix-loop / standard templates).
+ * Legacy PM Team: opt-in via --legacy-pm or --use-pm-team.
  *
- * ## Dashboard De-emphasized — CLI + Hermes Hybrid Complete
+ * Monitor with: roland hitl-status · roland board-status --concise · roland mission-summary
  */
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -20,7 +21,8 @@ import { emitHermesHitlEvent } from './hitl-hermes.js';
 import { spawnBackground } from './supervisor.js';
 import { readLoopPmSession } from '../loop-engine/index.js';
 import { ModelRouter } from '../models/model-router.js';
-import { applyMcpProjectEnv, resolveMcpProjectContext, } from '../utils/mcp-project-context.js';
+import { ensureMissionProjectContext, resolveMcpProjectContext, } from '../utils/mcp-project-context.js';
+import { recommendLoopTemplate } from './triage-router.js';
 import { prepareMissionStart, resetLoopArtifactsForNewMission, sanitizeStaleMissionState, } from './mission-state.js';
 // ── Terminal helpers ──────────────────────────────────────────────────────────
 const COLS = Math.min(process.stderr.columns ?? 80, 100);
@@ -137,9 +139,21 @@ function cleanState(stateDir) {
         err(`  ${c.dim('🧹 --clean: nothing to remove in ' + stateDir)}`);
     }
 }
+/**
+ * Resolve loop template for `roland team` — Pure ClosedLoop by default.
+ * Returns undefined only when --legacy-pm / --use-pm-team opts into legacy PM waves.
+ */
+export function resolveTeamLoopTemplate(opts) {
+    if (opts.legacyPm)
+        return undefined;
+    const explicit = opts.loopTemplate?.trim();
+    if (explicit)
+        return explicit;
+    return recommendLoopTemplate(opts.goal).template;
+}
 export function parseTeamArgs(argv) {
     // Strip leading 'team' subcommand when forwarded from the roland binary
-    const args = argv[0] === 'team' ? argv.slice(1) : argv;
+    const args = argv[0] === 'team' || argv[0] === 'mission' ? argv.slice(1) : argv;
     let goal = '';
     let stateDir = '.roland';
     let quiet = false;
@@ -155,6 +169,7 @@ export function parseTeamArgs(argv) {
     let webhookUrl;
     let agentsDir;
     let loopTemplate;
+    let legacyPm = false;
     for (let i = 0; i < args.length; i++) {
         const a = args[i];
         if ((a === '--task' || a === '-t') && args[i + 1]) {
@@ -222,12 +237,16 @@ export function parseTeamArgs(argv) {
             loopTemplate = args[++i];
             continue;
         }
+        if (a === '--legacy-pm' || a === '--use-pm-team') {
+            legacyPm = true;
+            continue;
+        }
         if (!a.startsWith('-') && !goal) {
             goal = a;
             continue;
         }
     }
-    return { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel, loopTemplate };
+    return { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel, loopTemplate, legacyPm };
 }
 // ── Web-mode helpers ──────────────────────────────────────────────────────────
 /** Strip ANSI escape sequences from a string. */
@@ -272,10 +291,21 @@ function firstSentences(body, maxChars = 200) {
 // ── Main CLI logic (exported so index.ts can delegate without re-running main) ─
 export async function runTeamCli(argv) {
     const parsed = parseTeamArgs(argv);
-    let { goal, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel, loopTemplate } = parsed;
+    let { goal, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel, legacyPm } = parsed;
     const ctx = resolveMcpProjectContext({ state_dir: parsed.stateDir });
-    applyMcpProjectEnv(ctx);
+    ensureMissionProjectContext(ctx);
     const stateDir = ctx.stateDir;
+    const loopTemplate = resolveTeamLoopTemplate({
+        goal,
+        loopTemplate: parsed.loopTemplate,
+        legacyPm,
+    });
+    if (goal && loopTemplate && !parsed.loopTemplate) {
+        err(`  ${c.dim('[Loop]')} Auto-selected template: ${c.cyan(loopTemplate)} ${c.dim('(Pure ClosedLoop)')}`);
+    }
+    else if (goal && legacyPm) {
+        err(`  ${c.yellow('[Legacy]')} PM Team mode — use only when legacy waves are required`);
+    }
     if (!goal) {
         err(c.bold('Roland — PM Team Mode'));
         err('');
@@ -303,7 +333,9 @@ export async function runTeamCli(argv) {
         err('    --web                   Streaming terminal-style output for web/chat — live progress, no ANSI');
         err('    --sequential            One agent at a time  ' + c.dim('(safe mode for unstable connections; overrides ROLAND_SEQUENTIAL=1)'));
         err('    --parallel              Force parallel even if ROLAND_SEQUENTIAL=1  ' + c.dim('(parallel is the default)'));
-        err('    --loop-template <id>    Attach a loop template (e.g. standard-code-loop)  ' + c.dim('(Loop Engineering)'));
+        err('    --loop-template <id>    Loop template (auto-selected when omitted)  ' + c.dim('(Pure ClosedLoop default)'));
+        err('    --legacy-pm             [DEPRECATED] Legacy PM Team waves instead of ClosedLoop');
+        err('    --use-pm-team           Alias for --legacy-pm');
         err('');
         process.exit(1);
     }
@@ -932,6 +964,15 @@ export async function runTeamCli(argv) {
     // Synthesis (with ### 🎖 Mission Complete footer) is the definitive end of output.
     console.log(result.synthesis);
 }
+/*
+ * ## P0 Items Complete — Roland More Production Ready
+ *
+ * Default usage:
+ *   roland team "Fix typo in README"              → auto small-fix-loop (Pure ClosedLoop)
+ *   roland team "Add OAuth provider"              → auto feature-implementation-loop
+ *   roland team "goal" --loop-template <id>       → explicit override
+ *   roland team "goal" --legacy-pm                → [DEPRECATED] legacy PM waves
+ */
 // ── Standalone entry — guarded so importing this module from index.ts is safe ──
 async function main() {
     await runTeamCli(process.argv.slice(2));

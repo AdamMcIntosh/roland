@@ -14,7 +14,7 @@ export { LoopPmBridge, resolvePmTeamMode, shouldUsePmTeam, } from './pm-integrat
 export { resolvePmIntegrationStatus, isLoopPmTeamEnabled, logPmIntegrationMode, formatPmIntegrationLabel, } from './loop-pm-policy.js';
 export { DEPRECATED_LEGACY_PM_TAG, HERMES_PM_RECOMMENDATION, LEGACY_PM_TEAM_WARNING, warnLegacyPmTeam, warnGlobalUsePmTeamIfNeeded, } from './pm-deprecation.js';
 export { EvaluationGate, evaluationResultToLoopState, } from './evaluation-gate.js';
-export { SpecialistSpawner, PHASE_SPECIALIST_DEFAULTS, ON_DEMAND_SPECIALISTS, evaluateSpawnConditions, interpolateSpawnPrompt, resolvePhaseSpawns, collapseToSpawnRequest, } from './specialist-spawner.js';
+export { PhaseIntentPoster, PhaseIntentPoster as SpecialistSpawner, PHASE_SPECIALIST_DEFAULTS, ON_DEMAND_SPECIALISTS, evaluateSpawnConditions, interpolateSpawnPrompt, resolvePhaseSpawns, collapseToSpawnRequest, } from './phase-intent-poster.js';
 export { LoopObservability, computeLoopMetrics, summarizeHistory, LOOP_METRICS_FILE, LOOP_HISTORY_FILE, HISTORY_SUMMARIZE_AT, } from './loop-observability.js';
 export { saveLoopCheckpoint, readLoopCheckpoint, clearLoopCheckpoint, tryRecoverLoopState, LOOP_CHECKPOINT_FILE, } from './loop-checkpoint.js';
 export { isRateLimitOrUnavailableError, degradedCritiqueModel, loopDegradationPolicy, ModelDegradationPolicy, } from './loop-resilience.js';

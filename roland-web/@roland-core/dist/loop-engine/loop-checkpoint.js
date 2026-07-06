@@ -5,6 +5,7 @@
  */
 import fs from 'fs';
 import path from 'path';
+import { writeUtf8Json } from '../utils/safe-write.js';
 import { readLoopState } from './loop-state.js';
 export const LOOP_CHECKPOINT_FILE = 'loop-checkpoint.json';
 function checkpointPath(stateDir) {
@@ -27,7 +28,7 @@ export function saveLoopCheckpoint(stateDir, phase, state, opts = {}) {
         supervisorRestart: opts.supervisorRestart,
     };
     try {
-        fs.writeFileSync(checkpointPath(stateDir), JSON.stringify(checkpoint, null, 2), 'utf-8');
+        writeUtf8Json(checkpointPath(stateDir), checkpoint);
         console.error(`[Loop][checkpoint] saved phase=${phase} iter=${state.iteration} retry=${state.retryCount}`);
     }
     catch {

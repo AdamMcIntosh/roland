@@ -1,8 +1,10 @@
 /**
- * CommandBlackboard — UNSC-style structured mission state for Roland orchestration.
+ * ## P1 Honesty & Consolidation
  *
- * Evolves `.roland/memory.md` into a human-readable battlespace picture while
- * preserving machine-readable `blackboard.json` for the PM team orchestrator.
+ * CommandBlackboard — human-readable mission state for Roland orchestration.
+ *
+ * Evolves `.roland/memory.md` into a battlespace picture while
+ * machine-readable tasks live in `.roland/blackboard.json` (coordination store).
  *
  * File: `.roland/command-blackboard.md`
  *
@@ -23,6 +25,8 @@
  */
 import fs from 'fs';
 import path from 'path';
+import { acquireLock } from './stateLock.js';
+import { writeUtf8File } from '../utils/safe-write.js';
 export const COMMAND_BLACKBOARD_FILE = 'command-blackboard.md';
 export const BLACKBOARD_SECTIONS = [
     'Mission Objectives',
@@ -68,23 +72,51 @@ const SECTION_ALIASES = {
 const AGENT_LOG_HEADER_RE = /^### (Roland|Sparrow|Vanguard|Oracle|Sentinel|Forge|Specter)$/m;
 export class CommandBlackboard {
     filePath;
+    /** Companion lock file — stateLock expects a .json path. */
+    lockFilePath;
     constructor(stateDir = '.roland') {
         fs.mkdirSync(stateDir, { recursive: true });
         this.filePath = path.join(stateDir, COMMAND_BLACKBOARD_FILE);
+        this.lockFilePath = path.join(stateDir, 'command-blackboard.lock.json');
         if (!fs.existsSync(this.filePath)) {
-            fs.writeFileSync(this.filePath, buildEmptyTemplate(), 'utf-8');
+            const release = acquireLock(this.lockFilePath);
+            try {
+                if (!fs.existsSync(this.filePath)) {
+                    writeUtf8File(this.filePath, buildEmptyTemplate());
+                }
+            }
+            finally {
+                release();
+            }
         }
+    }
+    withLock(fn) {
+        const release = acquireLock(this.lockFilePath);
+        try {
+            return fn();
+        }
+        finally {
+            release();
+        }
+    }
+    readContent() {
+        return this.withLock(() => fs.readFileSync(this.filePath, 'utf-8'));
+    }
+    writeContent(content) {
+        this.withLock(() => {
+            writeUtf8File(this.filePath, content);
+        });
     }
     /** Full markdown snapshot for prompt injection. */
     snapshot(maxChars = 4_000) {
-        const raw = fs.readFileSync(this.filePath, 'utf-8');
+        const raw = this.readContent();
         if (raw.length <= maxChars)
             return raw;
         return raw.slice(0, maxChars) + '\n\n…(truncated — full board at `.roland/command-blackboard.md`)';
     }
     /** Keyword-scored excerpt for planning prompts (mirrors ProjectMemory.smartSnapshot). */
     smartSnapshot(goal, maxChars = 3_000) {
-        const sections = parseSections(fs.readFileSync(this.filePath, 'utf-8'));
+        const sections = parseSections(this.readContent());
         const tokens = tokenize(goal);
         const scored = [];
         for (const [section, bullets] of Object.entries(sections)) {
@@ -117,60 +149,72 @@ export class CommandBlackboard {
     }
     /** Replace section bullets in one write (used by board cleanup). */
     replaceSections(sections) {
-        const current = parseSections(fs.readFileSync(this.filePath, 'utf-8'));
-        fs.writeFileSync(this.filePath, renderSections({ ...current, ...sections }), 'utf-8');
+        this.withLock(() => {
+            const current = parseSections(fs.readFileSync(this.filePath, 'utf-8'));
+            writeUtf8File(this.filePath, renderSections({ ...current, ...sections }));
+        });
     }
     /** Read parsed sections for programmatic cleanup. */
     readSections() {
-        return parseSections(fs.readFileSync(this.filePath, 'utf-8'));
+        return parseSections(this.readContent());
     }
     /** Append a bullet to any section. */
     appendBullet(section, bullet) {
-        const content = fs.readFileSync(this.filePath, 'utf-8');
-        const sections = parseSections(content);
-        const list = sections[section] ?? [];
-        const normalized = bullet.trim();
-        if (list.some((b) => b.slice(0, 50) === normalized.slice(0, 50)))
-            return;
-        list.push(normalized);
-        fs.writeFileSync(this.filePath, renderSections(sections), 'utf-8');
+        this.withLock(() => {
+            const content = fs.readFileSync(this.filePath, 'utf-8');
+            const sections = parseSections(content);
+            const list = sections[section] ?? [];
+            const normalized = bullet.trim();
+            if (list.some((b) => b.slice(0, 50) === normalized.slice(0, 50)))
+                return;
+            list.push(normalized);
+            writeUtf8File(this.filePath, renderSections(sections));
+        });
     }
     /** Append timestamped entry to a callsign's Agent Log subsection. */
     appendAgentLog(callsign, entry) {
         const ts = new Date().toISOString();
         const line = `[${ts}] ${entry.trim()}`;
-        const content = fs.readFileSync(this.filePath, 'utf-8');
         const logHeader = `### ${callsign}`;
+        const content = this.readContent();
         const logsIdx = content.indexOf('## Agent Logs');
         if (logsIdx === -1) {
             this.appendBullet('Agent Logs', `${logHeader}\n- ${line}`);
             return;
         }
-        const beforeLogs = content.slice(0, logsIdx);
-        let logsBody = content.slice(logsIdx);
-        const headerPos = logsBody.indexOf(logHeader);
-        if (headerPos === -1) {
-            logsBody += `\n${logHeader}\n- ${line}\n`;
-        }
-        else {
-            const afterHeader = logsBody.slice(headerPos + logHeader.length);
-            const nextSection = afterHeader.search(/\n### /);
-            const insertAt = nextSection === -1
-                ? logsBody.length
-                : headerPos + logHeader.length + nextSection;
-            logsBody =
-                logsBody.slice(0, insertAt).trimEnd() +
-                    `\n- ${line}\n` +
-                    (nextSection === -1 ? '' : logsBody.slice(insertAt));
-        }
-        fs.writeFileSync(this.filePath, beforeLogs + logsBody, 'utf-8');
+        this.withLock(() => {
+            const lockedContent = fs.readFileSync(this.filePath, 'utf-8');
+            const lockedLogsIdx = lockedContent.indexOf('## Agent Logs');
+            if (lockedLogsIdx === -1)
+                return;
+            const beforeLogs = lockedContent.slice(0, lockedLogsIdx);
+            let logsBody = lockedContent.slice(lockedLogsIdx);
+            const headerPos = logsBody.indexOf(logHeader);
+            if (headerPos === -1) {
+                logsBody += `\n${logHeader}\n- ${line}\n`;
+            }
+            else {
+                const afterHeader = logsBody.slice(headerPos + logHeader.length);
+                const nextSection = afterHeader.search(/\n### /);
+                const insertAt = nextSection === -1
+                    ? logsBody.length
+                    : headerPos + logHeader.length + nextSection;
+                logsBody =
+                    logsBody.slice(0, insertAt).trimEnd() +
+                        `\n- ${line}\n` +
+                        (nextSection === -1 ? '' : logsBody.slice(insertAt));
+            }
+            writeUtf8File(this.filePath, beforeLogs + logsBody);
+        });
     }
     /** Replace Mission Graph section with current DAG summary (single bullet). */
     setMissionGraph(summary) {
-        const content = fs.readFileSync(this.filePath, 'utf-8');
-        const sections = parseSections(content);
-        sections['Mission Graph'] = summary.trim() ? [summary.trim()] : ['_(no active graph)_'];
-        fs.writeFileSync(this.filePath, renderSections(sections), 'utf-8');
+        this.withLock(() => {
+            const content = fs.readFileSync(this.filePath, 'utf-8');
+            const sections = parseSections(content);
+            sections['Mission Graph'] = summary.trim() ? [summary.trim()] : ['_(no active graph)_'];
+            writeUtf8File(this.filePath, renderSections(sections));
+        });
     }
     /** Update Agent Status table row for a callsign. */
     setAgentStatus(entry) {
@@ -178,16 +222,18 @@ export class CommandBlackboard {
         const task = entry.currentTaskId ? ` task:${entry.currentTaskId}` : '';
         const note = entry.note ? ` — ${entry.note}` : '';
         const bullet = `**${entry.callsign}**: ${entry.state}${task} (updated ${ts})${note}`;
-        const content = fs.readFileSync(this.filePath, 'utf-8');
-        const sections = parseSections(content);
-        const status = sections['Agent Status'] ?? [];
-        const idx = status.findIndex((b) => b.includes(`**${entry.callsign}**`));
-        if (idx >= 0)
-            status[idx] = bullet;
-        else
-            status.push(bullet);
-        sections['Agent Status'] = status;
-        fs.writeFileSync(this.filePath, renderSections(sections), 'utf-8');
+        this.withLock(() => {
+            const content = fs.readFileSync(this.filePath, 'utf-8');
+            const sections = parseSections(content);
+            const status = sections['Agent Status'] ?? [];
+            const idx = status.findIndex((b) => b.includes(`**${entry.callsign}**`));
+            if (idx >= 0)
+                status[idx] = bullet;
+            else
+                status.push(bullet);
+            sections['Agent Status'] = status;
+            writeUtf8File(this.filePath, renderSections(sections));
+        });
     }
     /** Parse ## Memory Extract block from synthesis output (Roland PM phase). */
     extractAndMerge(extractBlock) {

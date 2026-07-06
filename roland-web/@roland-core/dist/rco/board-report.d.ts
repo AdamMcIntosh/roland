@@ -6,7 +6,7 @@
  *
  * ## Dashboard Demoted — CLI + Hermes Primary Complete
  */
-import { type BlackboardEntry, type EntryStatus, type EntryType } from './blackboard.js';
+import { type BlackboardEntry, type EntryStatus, type EntryType } from '../coordination/legacy-blackboard.js';
 import { type AgentState, type Callsign } from './command-blackboard.js';
 import { type MissionDagSnapshot } from './mission-dag.js';
 export interface BoardStatusCounts {

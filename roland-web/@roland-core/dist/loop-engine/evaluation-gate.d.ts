@@ -9,7 +9,7 @@
  * - Manual review defaults to pass in unattended mode unless `manualReviewApproved` is set false.
  * - Confidence is a weighted pass ratio across required gates (0–1); optional gates do not reduce confidence below 0.5 when skipped.
  */
-import type { Blackboard } from '../rco/blackboard.js';
+import type { Blackboard } from '../coordination/legacy-blackboard.js';
 import { type CommandRunner } from './verification/index.js';
 import type { VerificationResult, VerificationStrategyType } from './verification/verify-result.js';
 import type { VerificationStrategyConfig } from './verification/verification-strategies.js';

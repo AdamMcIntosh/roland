@@ -9,6 +9,7 @@
  */
 import fs from 'fs';
 import path from 'path';
+import { writeUtf8Json } from '../utils/safe-write.js';
 export const LOOP_METRICS_FILE = 'loop-metrics.json';
 export const LOOP_HISTORY_FILE = 'loop-execution-history.json';
 /** Summarize blackboard history when entry count exceeds this threshold. */
@@ -164,7 +165,7 @@ export class LoopObservability {
     persistMetrics(state) {
         const metrics = computeLoopMetrics(state);
         try {
-            fs.writeFileSync(this.metricsPath, JSON.stringify(metrics, null, 2), 'utf-8');
+            writeUtf8Json(this.metricsPath, metrics);
         }
         catch {
             // Non-fatal — metrics still returned to callers.
@@ -210,7 +211,7 @@ export class LoopObservability {
                 summary: summarizeHistory(history),
             };
             try {
-                fs.writeFileSync(this.historyPath, JSON.stringify(trimmed, null, 2), 'utf-8');
+                writeUtf8Json(this.historyPath, trimmed);
             }
             catch {
                 // Best-effort summarization.
@@ -221,7 +222,7 @@ export class LoopObservability {
         const history = this.readHistory();
         history.entries.push(entry);
         try {
-            fs.writeFileSync(this.historyPath, JSON.stringify(history, null, 2), 'utf-8');
+            writeUtf8Json(this.historyPath, history);
         }
         catch {
             // Non-fatal.

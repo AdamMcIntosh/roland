@@ -4,19 +4,19 @@
  * - [DEPRECATED] Legacy PM Team opt-in via enablePmIntegration, loop_engine.use_pm_team, or template use_pm_team.
  * - ClosedLoop is the production entry point; LoopEngine remains the phase execution core.
  * - EvaluationGate replaces direct TestExecutor calls in the verify phase.
- * - SpecialistSpawner fires on every phase transition via LoopHooks.
+ * - PhaseIntentPoster fires on every phase transition via LoopHooks.
  * - LoopMemory persists reflections, exit tracking, and artifacts under `.roland/loops/<loop-id>/`.
  * - PR titles/descriptions are generated on loop completion via pr-format.ts.
  * - Checkpoint/recovery delegates to LoopEngine (loop-checkpoint.json + loop-state.json).
  */
-import type { Blackboard } from '../rco/blackboard.js';
+import type { Blackboard } from '../coordination/legacy-blackboard.js';
 import type { CommandBlackboard } from '../rco/command-blackboard.js';
 import { type FormattedPr } from '../rco/pr-format.js';
 import type { LoopTemplate } from './loop-phases.js';
 import { LoopEngine, type LoopHooks, type LoopRunResult } from './loop-engine.js';
 import type { LoopState, LoopRunStatus } from './loop-state.js';
 import type { CustomCriterion } from './evaluation-gate.js';
-import { SpecialistSpawner } from './specialist-spawner.js';
+import { PhaseIntentPoster } from './phase-intent-poster.js';
 import type { CommandRunner } from './verification/index.js';
 import { LoopMemory } from './loop-memory.js';
 import { type PmIntegrationStatus } from './loop-pm-policy.js';
@@ -80,7 +80,7 @@ export declare class ClosedLoop {
     getState(): LoopState;
     getTemplate(): LoopTemplate;
     getEngine(): LoopEngine;
-    getSpawner(): SpecialistSpawner;
+    getSpawner(): PhaseIntentPoster;
     getMemory(): LoopMemory;
     /** Build PR title/body from goal + loop outcome without persisting. */
     formatPr(state?: LoopState, status?: LoopRunStatus): FormattedPr;

@@ -1,8 +1,17 @@
 /**
- * CritiqueEngine — rule-based structured critique from verification + phase history.
+
+ * ## P1 Honesty & Consolidation
+
  *
- * Selects critique lane (critic vs coding) and resolves model via ModelRouter.
- * Does not invoke LLMs directly — deterministic analysis for loop reliability.
+
+ * CritiqueEngine — rule-based structured critique from verification + phase history.
+
+ *
+
+ * Selects critique lane (critic vs coding) for routing metadata only.
+
+ * Does not invoke LLMs — deterministic analysis for loop reliability.
+
  */
 import { ModelRouter } from '../../models/model-router.js';
 import type { CritiqueInput, CritiqueOutput, LoopCritiqueSnapshot } from './types.js';

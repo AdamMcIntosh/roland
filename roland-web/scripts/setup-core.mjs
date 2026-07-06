@@ -1,11 +1,14 @@
 /**
+ * ## P0 Final Bugfix — roland-web Recipe Mirror
+ *
  * Syncs the compiled Roland dist into @roland-core so the roland binary
  * and its required assets are available after `npm install`.
+ * Mirrors are gitignored — always rebuilt from canonical repo root trees.
  *
  * Run this after building the parent Roland package:
  *   cd .. && npm run build && cd roland-web && node scripts/setup-core.mjs
  */
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -17,6 +20,10 @@ function sync(src, dest) {
   if (!existsSync(src)) {
     console.error(`✗  Missing: ${src} — run 'npm run build' in the repo root first`);
     process.exit(1);
+  }
+  // Wipe stale mirror so deleted/renamed templates (e.g. research-and-spec-loop) do not linger.
+  if (existsSync(dest)) {
+    rmSync(dest, { recursive: true, force: true });
   }
   mkdirSync(dest, { recursive: true });
   cpSync(src, dest, { recursive: true, force: true });

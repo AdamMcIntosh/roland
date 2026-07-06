@@ -15,19 +15,19 @@ export declare const AgentYamlSchema: z.ZodObject<{
     name: string;
     provider?: string | undefined;
     model?: string | undefined;
-    temperature?: number | undefined;
     role_prompt?: string | undefined;
     recommended_model?: string | undefined;
     claude_model?: string | undefined;
+    temperature?: number | undefined;
     tools?: string[] | undefined;
 }, {
     name: string;
     provider?: string | undefined;
     model?: string | undefined;
-    temperature?: number | undefined;
     role_prompt?: string | undefined;
     recommended_model?: string | undefined;
     claude_model?: string | undefined;
+    temperature?: number | undefined;
     tools?: string[] | undefined;
 }>;
 export type AgentYaml = z.infer<typeof AgentYamlSchema>;
@@ -147,11 +147,11 @@ export declare const RcoRecipeSchema: z.ZodObject<{
             final_output?: boolean | undefined;
         }[];
     };
+    description?: string | undefined;
     options?: {
         cache_messages?: boolean | undefined;
         eco_mode?: boolean | undefined;
     } | undefined;
-    description?: string | undefined;
     subagents?: {
         name: string;
         agentRef: string;
@@ -169,11 +169,11 @@ export declare const RcoRecipeSchema: z.ZodObject<{
             final_output?: boolean | undefined;
         }[];
     };
+    description?: string | undefined;
     options?: {
         cache_messages?: boolean | undefined;
         eco_mode?: boolean | undefined;
     } | undefined;
-    description?: string | undefined;
     execution_mode?: "autonomous-loop" | "parallel-swarm" | "linear" | "adaptive-swarm" | "collab-mode" | undefined;
     max_loops?: number | undefined;
     subagents?: {
@@ -323,19 +323,19 @@ export declare const WorkerInputSchema: z.ZodObject<{
         name: string;
         provider?: string | undefined;
         model?: string | undefined;
-        temperature?: number | undefined;
         role_prompt?: string | undefined;
         recommended_model?: string | undefined;
         claude_model?: string | undefined;
+        temperature?: number | undefined;
         tools?: string[] | undefined;
     }, {
         name: string;
         provider?: string | undefined;
         model?: string | undefined;
-        temperature?: number | undefined;
         role_prompt?: string | undefined;
         recommended_model?: string | undefined;
         claude_model?: string | undefined;
+        temperature?: number | undefined;
         tools?: string[] | undefined;
     }>;
     state: z.ZodRecord<z.ZodString, z.ZodUnknown>;
@@ -387,17 +387,17 @@ export declare const WorkerInputSchema: z.ZodObject<{
     }>>;
 }, "strip", z.ZodTypeAny, {
     type: "run";
-    state: Record<string, unknown>;
     agentYaml: {
         name: string;
         provider?: string | undefined;
         model?: string | undefined;
-        temperature?: number | undefined;
         role_prompt?: string | undefined;
         recommended_model?: string | undefined;
         claude_model?: string | undefined;
+        temperature?: number | undefined;
         tools?: string[] | undefined;
     };
+    state: Record<string, unknown>;
     taskContext: string;
     tools?: string[] | undefined;
     stepInput?: string | undefined;
@@ -416,17 +416,17 @@ export declare const WorkerInputSchema: z.ZodObject<{
     } | undefined;
 }, {
     type: "run";
-    state: Record<string, unknown>;
     agentYaml: {
         name: string;
         provider?: string | undefined;
         model?: string | undefined;
-        temperature?: number | undefined;
         role_prompt?: string | undefined;
         recommended_model?: string | undefined;
         claude_model?: string | undefined;
+        temperature?: number | undefined;
         tools?: string[] | undefined;
     };
+    state: Record<string, unknown>;
     taskContext: string;
     tools?: string[] | undefined;
     stepInput?: string | undefined;

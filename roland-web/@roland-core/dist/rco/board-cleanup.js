@@ -7,7 +7,7 @@
  * `.roland/command-blackboard.md` so prior [pending]/[done] tasks do not pollute
  * planning prompts or worker context.
  */
-import { Blackboard } from './blackboard.js';
+import { Blackboard } from '../coordination/legacy-blackboard.js';
 import { CommandBlackboard, UNSC_CALLSIGNS, isGoalRelevant, tokenize, } from './command-blackboard.js';
 const STALE_TASK_STATUS_RE = /\[(done|complete|cancelled|archived)\]/i;
 const STALE_PENDING_RE = /\[pending\]/i;

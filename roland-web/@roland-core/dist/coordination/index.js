@@ -21,6 +21,7 @@ export class CoordinationManager {
 }
 export { Blackboard } from './blackboard.js';
 export { MessageBus } from './message-bus.js';
+export { Blackboard as LegacyBlackboard, } from './legacy-blackboard.js';
 export * from './types.js';
 export { blackboardFile, busFile, coordDir, projectRoot } from './paths.js';
 //# sourceMappingURL=index.js.map

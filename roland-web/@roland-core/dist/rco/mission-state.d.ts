@@ -1,9 +1,5 @@
 /**
- * ## Roland Execution Reliability Fix
- *
- * ## Evaluation Gate & Blocker Fix
- *
- * ## MCP Project Context Fix
+ * ## Project Context & Agent Dispatch Fix
  *
  * Mission state isolation — per-project cleanup, archival, and stale-file hygiene.
  *
@@ -138,11 +134,9 @@ export interface SupervisorStartDiagnostics {
 /** Operator-actionable context when background supervisor fails to start. */
 export declare function buildSupervisorStartDiagnostics(stateDir: string, context?: string): SupervisorStartDiagnostics;
 /**
- * ## Roland Execution Now Reliable
+ * ## Project Context Switching and Agent Dispatch Fixed
  *
- * Mission state isolation — sanitize stale PIDs, archive prior meta, reset loop/HITL on new missions.
- * Test commands:
- *   npx vitest run tests/unit/mission-state.test.ts
- *   npx vitest run tests/unit/mcp-project-context.test.ts
+ * prepareMissionStart pins ROLAND_PROJECT_ROOT, ROLAND_STATE_DIR, and chdirs workers.
+ * Test: npx vitest run tests/unit/mission-state.test.ts tests/integration/mcp-mission-project-context.test.ts
  */
 //# sourceMappingURL=mission-state.d.ts.map

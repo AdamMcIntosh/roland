@@ -8,7 +8,7 @@
  */
 import { ClosedLoop, LoopTemplates, readLoopPmSession, resolvePmIntegrationStatus } from '../loop-engine/index.js';
 import { ModelRouter } from '../models/model-router.js';
-import { Blackboard } from './blackboard.js';
+import { Blackboard } from '../coordination/legacy-blackboard.js';
 import { CommandBlackboard } from './command-blackboard.js';
 import { finalizeSynthesisOutput } from './mission-complete.js';
 import { buildRunUsage, saveRunUsage } from './usage-tracker.js';

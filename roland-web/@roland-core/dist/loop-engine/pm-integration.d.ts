@@ -1,4 +1,4 @@
-import type { Blackboard } from '../rco/blackboard.js';
+import type { Blackboard } from '../coordination/legacy-blackboard.js';
 import type { CommandBlackboard } from '../rco/command-blackboard.js';
 import type { TeamOrchestratorOptions } from '../rco/team-orchestrator.js';
 import type { LoopTemplate, Phase, PhaseConfig, PmTeamMode } from './loop-phases.js';

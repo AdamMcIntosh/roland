@@ -26,23 +26,23 @@ export declare const BlackboardEntrySchema: z.ZodObject<{
     createdAt: z.ZodNumber;
     updatedAt: z.ZodNumber;
 }, "strip", z.ZodTypeAny, {
-    type: "status" | "task" | "decision" | "artifact" | "blocker" | "fact";
     key: string;
-    author: string;
+    type: "status" | "decision" | "fact" | "task" | "artifact" | "blocker";
     tags: string[];
+    author: string;
     rev: number;
     createdAt: number;
     updatedAt: number;
+    status?: "in_progress" | "open" | "blocked" | "in_review" | "done" | "archived" | undefined;
     value?: unknown;
-    status?: "done" | "blocked" | "in_progress" | "archived" | "open" | "in_review" | undefined;
 }, {
-    type: "status" | "task" | "decision" | "artifact" | "blocker" | "fact";
     key: string;
+    type: "status" | "decision" | "fact" | "task" | "artifact" | "blocker";
     author: string;
     createdAt: number;
     updatedAt: number;
+    status?: "in_progress" | "open" | "blocked" | "in_review" | "done" | "archived" | undefined;
     value?: unknown;
-    status?: "done" | "blocked" | "in_progress" | "archived" | "open" | "in_review" | undefined;
     tags?: string[] | undefined;
     rev?: number | undefined;
 }>;
@@ -60,19 +60,19 @@ export declare const BlackboardPostInputSchema: z.ZodObject<{
     /** If set and the existing entry's rev differs, the post is rejected. */
     expectedRev: z.ZodOptional<z.ZodNumber>;
 }, "strip", z.ZodTypeAny, {
-    type: "status" | "task" | "decision" | "artifact" | "blocker" | "fact";
     key: string;
+    type: "status" | "decision" | "fact" | "task" | "artifact" | "blocker";
     author: string;
+    status?: "in_progress" | "open" | "blocked" | "in_review" | "done" | "archived" | undefined;
     value?: unknown;
-    status?: "done" | "blocked" | "in_progress" | "archived" | "open" | "in_review" | undefined;
     tags?: string[] | undefined;
     expectedRev?: number | undefined;
 }, {
-    type: "status" | "task" | "decision" | "artifact" | "blocker" | "fact";
     key: string;
+    type: "status" | "decision" | "fact" | "task" | "artifact" | "blocker";
     author: string;
+    status?: "in_progress" | "open" | "blocked" | "in_review" | "done" | "archived" | undefined;
     value?: unknown;
-    status?: "done" | "blocked" | "in_progress" | "archived" | "open" | "in_review" | undefined;
     tags?: string[] | undefined;
     expectedRev?: number | undefined;
 }>;
@@ -86,47 +86,47 @@ export declare const BlackboardPatchInputSchema: z.ZodObject<{
         tags: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
         status: z.ZodOptional<z.ZodEnum<["open", "in_progress", "blocked", "in_review", "done", "archived"]>>;
     }, "strip", z.ZodTypeAny, {
+        status?: "in_progress" | "open" | "blocked" | "in_review" | "done" | "archived" | undefined;
         value?: unknown;
-        type?: "status" | "task" | "decision" | "artifact" | "blocker" | "fact" | undefined;
-        status?: "done" | "blocked" | "in_progress" | "archived" | "open" | "in_review" | undefined;
+        type?: "status" | "decision" | "fact" | "task" | "artifact" | "blocker" | undefined;
         tags?: string[] | undefined;
     }, {
+        status?: "in_progress" | "open" | "blocked" | "in_review" | "done" | "archived" | undefined;
         value?: unknown;
-        type?: "status" | "task" | "decision" | "artifact" | "blocker" | "fact" | undefined;
-        status?: "done" | "blocked" | "in_progress" | "archived" | "open" | "in_review" | undefined;
+        type?: "status" | "decision" | "fact" | "task" | "artifact" | "blocker" | undefined;
         tags?: string[] | undefined;
     }>, {
+        status?: "in_progress" | "open" | "blocked" | "in_review" | "done" | "archived" | undefined;
         value?: unknown;
-        type?: "status" | "task" | "decision" | "artifact" | "blocker" | "fact" | undefined;
-        status?: "done" | "blocked" | "in_progress" | "archived" | "open" | "in_review" | undefined;
+        type?: "status" | "decision" | "fact" | "task" | "artifact" | "blocker" | undefined;
         tags?: string[] | undefined;
     }, {
+        status?: "in_progress" | "open" | "blocked" | "in_review" | "done" | "archived" | undefined;
         value?: unknown;
-        type?: "status" | "task" | "decision" | "artifact" | "blocker" | "fact" | undefined;
-        status?: "done" | "blocked" | "in_progress" | "archived" | "open" | "in_review" | undefined;
+        type?: "status" | "decision" | "fact" | "task" | "artifact" | "blocker" | undefined;
         tags?: string[] | undefined;
     }>;
     author: z.ZodString;
     expectedRev: z.ZodOptional<z.ZodNumber>;
 }, "strip", z.ZodTypeAny, {
     key: string;
+    author: string;
     changes: {
+        status?: "in_progress" | "open" | "blocked" | "in_review" | "done" | "archived" | undefined;
         value?: unknown;
-        type?: "status" | "task" | "decision" | "artifact" | "blocker" | "fact" | undefined;
-        status?: "done" | "blocked" | "in_progress" | "archived" | "open" | "in_review" | undefined;
+        type?: "status" | "decision" | "fact" | "task" | "artifact" | "blocker" | undefined;
         tags?: string[] | undefined;
     };
-    author: string;
     expectedRev?: number | undefined;
 }, {
     key: string;
+    author: string;
     changes: {
+        status?: "in_progress" | "open" | "blocked" | "in_review" | "done" | "archived" | undefined;
         value?: unknown;
-        type?: "status" | "task" | "decision" | "artifact" | "blocker" | "fact" | undefined;
-        status?: "done" | "blocked" | "in_progress" | "archived" | "open" | "in_review" | undefined;
+        type?: "status" | "decision" | "fact" | "task" | "artifact" | "blocker" | undefined;
         tags?: string[] | undefined;
     };
-    author: string;
     expectedRev?: number | undefined;
 }>;
 export type BlackboardPatchInput = z.infer<typeof BlackboardPatchInputSchema>;
@@ -145,20 +145,20 @@ export declare const BlackboardQuerySchema: z.ZodObject<{
     limit: z.ZodDefault<z.ZodNumber>;
 }, "strip", z.ZodTypeAny, {
     limit: number;
-    type?: "status" | "task" | "decision" | "artifact" | "blocker" | "fact" | undefined;
-    status?: "done" | "blocked" | "in_progress" | "archived" | "open" | "in_review" | undefined;
+    status?: "in_progress" | "open" | "blocked" | "in_review" | "done" | "archived" | undefined;
     key?: string | undefined;
-    author?: string | undefined;
+    type?: "status" | "decision" | "fact" | "task" | "artifact" | "blocker" | undefined;
     tags?: string[] | undefined;
+    author?: string | undefined;
     since?: number | undefined;
     includeArchived?: boolean | undefined;
 }, {
+    status?: "in_progress" | "open" | "blocked" | "in_review" | "done" | "archived" | undefined;
     limit?: number | undefined;
-    type?: "status" | "task" | "decision" | "artifact" | "blocker" | "fact" | undefined;
-    status?: "done" | "blocked" | "in_progress" | "archived" | "open" | "in_review" | undefined;
     key?: string | undefined;
-    author?: string | undefined;
+    type?: "status" | "decision" | "fact" | "task" | "artifact" | "blocker" | undefined;
     tags?: string[] | undefined;
+    author?: string | undefined;
     since?: number | undefined;
     includeArchived?: boolean | undefined;
 }>;
@@ -183,17 +183,17 @@ export declare const MessageSchema: z.ZodObject<{
     to: string;
     from: string;
     id: string;
-    ts: number;
-    body: string;
     topic: string;
+    body: string;
+    ts: number;
     deliveredTo: string[];
     replyTo?: string | undefined;
 }, {
     to: string;
     from: string;
     id: string;
-    ts: number;
     body: string;
+    ts: number;
     topic?: string | undefined;
     replyTo?: string | undefined;
     deliveredTo?: string[] | undefined;

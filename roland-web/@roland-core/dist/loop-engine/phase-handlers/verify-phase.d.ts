@@ -1,4 +1,6 @@
 /**
+ * ## P1 Honesty & Consolidation
+ *
  * ## Evaluation Gate & Blocker Fix
  *
  * Verify phase — runs EvaluationGate and surfaces structured results to loop state.

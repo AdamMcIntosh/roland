@@ -1,8 +1,10 @@
 /**
- * CommandBlackboard — UNSC-style structured mission state for Roland orchestration.
+ * ## P1 Honesty & Consolidation
  *
- * Evolves `.roland/memory.md` into a human-readable battlespace picture while
- * preserving machine-readable `blackboard.json` for the PM team orchestrator.
+ * CommandBlackboard — human-readable mission state for Roland orchestration.
+ *
+ * Evolves `.roland/memory.md` into a battlespace picture while
+ * machine-readable tasks live in `.roland/blackboard.json` (coordination store).
  *
  * File: `.roland/command-blackboard.md`
  *
@@ -54,7 +56,12 @@ export interface AgentStatusEntry {
 declare const AGENT_LOG_HEADER_RE: RegExp;
 export declare class CommandBlackboard {
     private readonly filePath;
+    /** Companion lock file — stateLock expects a .json path. */
+    private readonly lockFilePath;
     constructor(stateDir?: string);
+    private withLock;
+    private readContent;
+    private writeContent;
     /** Full markdown snapshot for prompt injection. */
     snapshot(maxChars?: number): string;
     /** Keyword-scored excerpt for planning prompts (mirrors ProjectMemory.smartSnapshot). */

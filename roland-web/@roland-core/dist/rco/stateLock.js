@@ -3,6 +3,7 @@
  */
 import fs from 'fs';
 import path from 'path';
+import { writeUtf8Json } from '../utils/safe-write.js';
 function ensureDir(filePath) {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
 }
@@ -49,6 +50,6 @@ export function readStateUnlocked(stateFilePath) {
 }
 export function writeStateUnlocked(stateFilePath, state) {
     ensureDir(stateFilePath);
-    fs.writeFileSync(stateFilePath, JSON.stringify(state, null, 2), 'utf-8');
+    writeUtf8Json(stateFilePath, state);
 }
 //# sourceMappingURL=stateLock.js.map

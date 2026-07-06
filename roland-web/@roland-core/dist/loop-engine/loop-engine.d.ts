@@ -7,7 +7,7 @@
  *   2. `run()` — alias for `runFullLoop()` (backward compatible).
  *   3. Coordinator-driven — team-orchestrator calls lifecycle hooks per wave.
  */
-import type { Blackboard } from '../rco/blackboard.js';
+import type { Blackboard } from '../coordination/legacy-blackboard.js';
 import type { CommandBlackboard } from '../rco/command-blackboard.js';
 import type { LoopTemplate, Phase, PhaseConfig } from './loop-phases.js';
 import { type LoopState, type LoopRunStatus, type LoopSpawnPulse } from './loop-state.js';
@@ -77,6 +77,7 @@ export declare class LoopEngine {
     private readonly runner?;
     private readonly cwd;
     private readonly liveContext?;
+    private readonly isTestMode;
     private lastEvaluation?;
     constructor(opts: LoopEngineOptions);
     getState(): LoopState;
@@ -122,11 +123,9 @@ export declare class LoopEngine {
     private setLiveActivity;
 }
 /**
- * Maps team-orchestrator lifecycle events to loop phases.
- *
- * TODO: Legacy — to be removed after Loop Engineering pivot.
+ * Legacy coordinator mapping team-orchestrator lifecycle events to loop phases.
  * Loop-template missions use ClosedLoop.runFullLoop() instead of this coordinator.
- * Kept for backward compatibility with any external callers still wiring waves manually.
+ * Kept for backward compatibility with external callers still wiring waves manually.
  */
 export declare class LoopEngineCoordinator {
     private readonly engine;

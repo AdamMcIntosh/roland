@@ -1,8 +1,8 @@
 name: mcp-extension-loop
+deprecated: true
+alias_of: feature-implementation-loop
 description: >
-  MCP / server extension loop — plan API surface, implement handlers, verify with unit and
-  integration smoke gates. Configure smoke/integration commands in loop_engine.verification.strategies
-  for your project's test harness.
+  [DEPRECATED — use feature-implementation-loop] MCP / server extension loop.
 kickoff: >
   Start the MCP extension loop. Goal: new tools or handlers are implemented, typed, tested, and
   integration-smoke verified. Configure verification commands in config.yaml for your stack.

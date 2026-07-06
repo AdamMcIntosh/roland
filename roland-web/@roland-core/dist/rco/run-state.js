@@ -9,6 +9,7 @@
 import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
+import { writeUtf8Json } from '../utils/safe-write.js';
 export const RUN_STATE_FILE = 'run-state.json';
 // ── Writer (used by team-cli / orchestrator callbacks) ────────────────────────
 export class RunStateWriter {
@@ -210,7 +211,7 @@ export class RunStateWriter {
         this.state.completedTasks = this.state.tasks.filter((t) => t.status === 'done' || t.status === 'blocked' || t.status === 'error').length;
         this.state.updatedAt = Date.now();
         try {
-            fs.writeFileSync(this.filePath, JSON.stringify(this.state, null, 2), 'utf-8');
+            writeUtf8Json(this.filePath, this.state);
         }
         catch {
             // Non-fatal — TUI still works from in-memory state.

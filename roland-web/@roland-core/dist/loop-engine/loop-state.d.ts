@@ -1,7 +1,10 @@
 /**
+ * ## P1 Final Consolidation (v1.4.0)
+ *
  * Loop state persistence — `.roland/loop-state.json`
  *
  * Survives supervisor restarts; read by dashboard via run-state loop fields.
+ * Writes use stateLock + safe-write (writeUtf8Json) for UTF-8 persistence.
  */
 import type { LoopCritiqueSnapshot } from './self-improvement/types.js';
 import type { Phase } from './loop-phases.js';
@@ -87,6 +90,8 @@ export interface LoopState {
     pendingGitCommitApproval?: LoopGitCommitApprovalSnapshot;
     /** Recent specialist spawn pulses for dashboard history. */
     spawnActivityHistory?: LoopSpawnPulse[];
+    /** Consecutive identical verification failure tracking for flaky escape hatch. */
+    flakyVerification?: import('./flaky-verification.js').FlakyVerificationState;
 }
 export interface LoopSpawnPulse {
     role: string;
@@ -156,6 +161,7 @@ export declare class LoopStateStore {
     setPendingGitCommitApproval(snapshot: LoopGitCommitApprovalSnapshot | undefined): void;
     appendSpawnPulse(pulse: LoopSpawnPulse, maxHistory?: number): void;
     getRecentSpawns(): LoopSpawnPulse[];
+    setFlakyVerification(flaky: import('./flaky-verification.js').FlakyVerificationState | undefined): void;
     private flush;
 }
 export declare function readLoopState(stateDir: string): LoopState | null;

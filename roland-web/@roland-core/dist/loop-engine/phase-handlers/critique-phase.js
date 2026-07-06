@@ -1,26 +1,32 @@
 /**
- * Critique phase — analyzes verification results and phase history, decides retry/escalate.
+
+ * ## P1 Honesty & Consolidation
+
  *
- * Model routing via ModelRouter:
- *   - critic role: high-level / multi-area failures, blockers, architecture
- *   - coding role: code-specific failures (unit, lint, typecheck)
+
+ * Critique phase — analyzes verification results and phase history, decides retry/escalate.
+
+ *
+
+ * Rule-based structured critique (no LLM). Lane metadata (critic vs coding) is retained
+
+ * for routing context only — not presented as an invoked model.
+
  */
-import { ModelRouter } from '../../models/model-router.js';
 import { Phase } from '../loop-phases.js';
 import { CritiqueEngine, } from '../self-improvement/critique-engine.js';
 import { DEFAULT_ESCALATION_THRESHOLD } from '../self-improvement/escalation.js';
 export class CritiquePhaseHandler {
     phase = Phase.Critique;
     engine;
-    router;
     constructor(opts = {}) {
-        this.router = opts.modelRouter ?? ModelRouter.fromConfig();
-        this.engine = new CritiqueEngine({ ...opts, modelRouter: this.router });
+        this.engine = new CritiqueEngine(opts);
     }
     async execute(ctx) {
         const maxRetries = ctx.maxRetries ?? 3;
         const escalationThreshold = ctx.escalationThreshold ?? DEFAULT_ESCALATION_THRESHOLD;
-        console.error(`[Loop][critique] thresholds maxRetries=${maxRetries} escalationThreshold=${escalationThreshold} ` +
+        console.error(`[Loop][critique] rule-based structured critique (no LLM) thresholds ` +
+            `maxRetries=${maxRetries} escalationThreshold=${escalationThreshold} ` +
             `retryCount=${ctx.state.retryCount} iteration=${ctx.iteration}`);
         let critique;
         try {
@@ -52,7 +58,9 @@ export class CritiquePhaseHandler {
         }
         catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            console.error('[Loop][critique] Critique engine error — defensive fallback', { error: message });
+            console.error('[Loop][critique] rule-based structured critique (no LLM) — defensive fallback', {
+                error: message,
+            });
             critique = {
                 strengths: [],
                 issues: [`Critique engine error: ${message}`],
@@ -66,13 +74,13 @@ export class CritiquePhaseHandler {
             };
         }
         const decisionLabel = critique.retryDecision.toUpperCase();
-        const modelLabel = critiqueModelLabel(critique.model, this.router);
+        const modeLabel = critiqueModeLabel(critique.model);
         ctx.blackboard.post({
             type: 'result',
             title: `Loop: Critique phase (iteration ${ctx.iteration})`,
             content: [
                 critique.summary,
-                `Decision: ${decisionLabel} · Model: ${modelLabel}`,
+                `Decision: ${decisionLabel} · ${modeLabel}`,
                 critique.strengths.length ? `Strengths: ${critique.strengths.join('; ')}` : '',
                 critique.issues.length ? `Issues: ${critique.issues.join('; ')}` : '',
                 critique.suggestions.length ? `Suggestions: ${critique.suggestions.join('; ')}` : '',
@@ -96,8 +104,7 @@ export class CritiquePhaseHandler {
             relatedIds: [],
         });
         ctx.commandBoard?.appendBullet('Key Decisions', `[CRITIQUE] ${decisionLabel} — ${critique.summary.slice(0, 160)}`);
-        ctx.commandBoard?.appendBullet('Open Intel', `[CRITIQUE] role=${critique.model} dispatch=${this.router.resolveDispatch(critique.model, { log: false }).method} ` +
-            `model=${critiqueModelLabel(critique.model, this.router)} ` +
+        ctx.commandBoard?.appendBullet('Open Intel', `[CRITIQUE] rule-based structured critique (no LLM) ${modeLabel} ` +
             `decision=${critique.retryDecision} retry=${ctx.state.retryCount}/${maxRetries} ` +
             `escalationThreshold=${escalationThreshold} issues=${critique.issues.length}`);
         const shouldEscalate = critique.retryDecision === 'escalate';
@@ -112,12 +119,12 @@ export class CritiquePhaseHandler {
         };
     }
 }
-function critiqueModelLabel(lane, router) {
-    const dispatch = router.resolveDispatch(lane, { phase: 'critique', log: false });
+/** Honest display label — rule-based critique with lane metadata for routing context. */
+export function critiqueModelLabel(lane) {
     const laneDesc = lane === 'critic' ? 'high-level' : 'code-specific';
-    const base = dispatch.method === 'cursor_sdk'
-        ? `${dispatch.sdkModelId ?? dispatch.model}@cursor_sdk`
-        : `${dispatch.directModel.model}@${dispatch.directModel.provider}`;
-    return `${base} (${laneDesc})`;
+    return `rule-based structured critique (no LLM) · lane=${lane} (${laneDesc})`;
+}
+function critiqueModeLabel(lane) {
+    return critiqueModelLabel(lane);
 }
 //# sourceMappingURL=critique-phase.js.map
