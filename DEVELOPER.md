@@ -42,7 +42,8 @@ src/
   index.ts              ← MCP server entry + CLI dispatcher (serve | mcp-config | doctor | pm-log | team | pause | resume | unblock | inject | replan | abort | bg-status | bg-logs | bg-stop)
   rco/
     team-cli.ts         ← `roland team "<goal>"` — renders progress, delegates to team-orchestrator
-    team-orchestrator.ts← PM control loop OR routes loop templates → loop-orchestrator → ClosedLoop
+    team-orchestrator.ts← Thin router (~120 lines): ClosedLoop OR legacy PM (`--legacy-pm`)
+    legacy/pm-team/     ← [DEPRECATED] PM wave/DAG engine — removal target **v1.6.0**
     loop-orchestrator.ts← ClosedLoop routing when `--loop-template` is set (Loop Engineering pivot)
     pm-prompts.ts       ← All three Lead PM prompts (planning, review, synthesis)
     prompts.ts          ← Worker agent prompt builder
@@ -58,7 +59,7 @@ src/
     types.ts            ← Core interfaces (TeamTask, AgentYaml, …)
   server/
     mcp-server.ts       ← MCP tool definitions + agent/recipe catalogue
-    mcp-http.ts         ← Streamable HTTP transport (/mcp, Hermes integration)
+    mcp-http.ts         ← Streamable HTTP transport (/mcp, Hermes) — binds 127.0.0.1 by default; bearer auth on 0.0.0.0
   pm/
     model-policy.ts     ← laneForEngineer() → 'pm' | 'reasoning' | 'coding' | 'light'
 agents/                 ← 45 YAML persona files (copied to dist/agents/ on build)
@@ -109,7 +110,7 @@ roland team "add profile settings page" --loop-template feature-implementation-l
 if (hasLoopTemplate(opts.loopTemplate)) {
   return runClosedLoopMission(opts); // ClosedLoop — primary path
 }
-// else legacy PM plan → waves → synthesis
+return runLegacyPmTeam(opts); // src/legacy/pm-team/ — removal v1.6.0
 ```
 
 **ClosedLoop owns:** EvaluationGate (verify), LoopMemory, reflection, exit conditions, SpecialistSpawner, checkpoint/recovery, and PR formatting (`closed-loop-pr.json`).
@@ -577,7 +578,8 @@ roland abort                          # stop after current wave completes
 | What | Where |
 |------|-------|
 | CLI entry point | `src/index.ts` |
-| PM team execution | `src/rco/team-orchestrator.ts` |
+| PM team execution (legacy) | `src/legacy/pm-team/legacy-pm-engine.ts` |
+| Team router | `src/rco/team-orchestrator.ts` |
 | Loop orchestrator (ClosedLoop) | `src/rco/loop-orchestrator.ts` |
 | PM prompts | `src/rco/pm-prompts.ts` |
 | Worker prompts | `src/rco/prompts.ts` |

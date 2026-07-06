@@ -42,11 +42,12 @@ describe('Generic loop templates', () => {
     expect(templates.resolveName('standard-code-loop')).toBe('standard-code-loop');
   });
 
-  it('keeps deprecated YAML entries loadable for in-flight runs', () => {
-    const legacy = templates.get('closed-loop-harness');
-    expect(legacy?.name).toBe('closed-loop-harness');
-    expect(legacy?.deprecated).toBe(true);
-    expect(legacy?.aliasOf).toBe('full-cycle-verified-loop');
+  it('resolves deprecated alias names to canonical templates via TEMPLATE_ALIASES', () => {
+    const resolved = templates.get('closed-loop-harness');
+    expect(resolved?.name).toBe('full-cycle-verified-loop');
+    const minimal = templates.get('minimal-3-phase');
+    expect(minimal?.name).toBe('minimal-3-phase');
+    expect(minimal?.deprecated).toBe(true);
   });
 
   it('TEMPLATE_ALIASES covers deprecated names', () => {
@@ -103,10 +104,10 @@ describe('Generic loop templates', () => {
     expect(tpl.exitConditions?.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('mcp-extension-loop resolves to feature-implementation-loop', () => {
+  it('mcp-extension-loop resolves to feature-implementation-loop via alias map', () => {
     expect(templates.resolveName('mcp-extension-loop')).toBe('feature-implementation-loop');
-    const legacy = templates.get('mcp-extension-loop');
-    expect(legacy?.deprecated).toBe(true);
+    const resolved = templates.get('mcp-extension-loop');
+    expect(resolved?.name).toBe('feature-implementation-loop');
   });
 
   it('maintenance-loop has lint and typecheck gates', () => {

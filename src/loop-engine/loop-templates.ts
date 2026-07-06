@@ -157,6 +157,7 @@ export const LoopTemplateSchema = z.object({
   reflection: z.boolean().optional(),
   min_confidence: z.number().min(0).max(1).optional(),
   exit_conditions: z.array(ExitConditionSchema).optional(),
+  parameters: z.record(z.unknown()).optional(),
   pm_plan: z.enum(['auto', 'always', 'never']).optional(), // [DEPRECATED] legacy PM Team
   pm_act: z.enum(['auto', 'always', 'never']).optional(),   // [DEPRECATED] legacy PM Team
   use_pm_team: z.boolean().optional(),                      // [DEPRECATED] advanced/legacy opt-in

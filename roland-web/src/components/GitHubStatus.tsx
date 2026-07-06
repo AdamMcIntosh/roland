@@ -155,9 +155,11 @@ export function GitHubStatus() {
 
         <button
           onClick={() => setShowBrowser(true)}
-          className="btn-sm btn-primary"
+          disabled
+          title="Import disabled — dashboard frozen (v1.4.0). Clone locally and add project path."
+          className="btn-sm opacity-50 cursor-not-allowed"
         >
-          + Import repo
+          + Import repo (frozen)
         </button>
 
         <button

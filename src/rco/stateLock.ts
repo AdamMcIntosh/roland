@@ -4,6 +4,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { writeUtf8Json } from '../utils/safe-write.js';
 
 function ensureDir(filePath: string): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -50,5 +51,5 @@ export function readStateUnlocked<T>(stateFilePath: string): T | null {
 
 export function writeStateUnlocked(stateFilePath: string, state: unknown): void {
   ensureDir(stateFilePath);
-  fs.writeFileSync(stateFilePath, JSON.stringify(state, null, 2), 'utf-8');
+  writeUtf8Json(stateFilePath, state);
 }

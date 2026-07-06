@@ -1,6 +1,7 @@
 /**
- * MCP Server Implementation (v2)
+ * ## P0 Security & Context Fixes (v1.4.0)
  *
+ * MCP Server Implementation (v2) *
  * Roland MCP Server — exposes cost routing, analytics, budget management,
  * and recipe execution as MCP tools for IDE agents (VS Code, Cursor, etc.).
  *
@@ -22,8 +23,8 @@ import { AdvancedCostTracker, getGlobalTracker } from '../orchestrator/advanced-
 import { BudgetManager } from '../utils/budget-manager.js';
 import { RecipeSessionManager } from './recipe-session.js';
 import {
-  applyMcpProjectEnv,
   resolveMcpProjectContext,
+  withProjectContext,
   type McpProjectContext,
 } from '../utils/mcp-project-context.js';
 import { configureSdkProcessLimits } from '../utils/sdk-lifecycle.js';
@@ -117,12 +118,20 @@ export function buildCursorMcpServerEntry(options?: {
 }
 
 /** Build HTTP MCP client config for Hermes and other Streamable HTTP clients. */
-export function buildGeneralMcpHttpEntry(baseUrl = 'http://127.0.0.1:8081/mcp'): Record<string, unknown> {
+export function buildGeneralMcpHttpEntry(
+  baseUrl = 'http://127.0.0.1:8081/mcp',
+  options?: { token?: string },
+): Record<string, unknown> {
   const url = baseUrl.replace(/\/$/, '');
-  return {
+  const token = options?.token ?? process.env.ROLAND_MCP_TOKEN?.trim();
+  const entry: Record<string, unknown> = {
     url,
     transport: 'streamable-http',
   };
+  if (token) {
+    entry.headers = { Authorization: `Bearer ${token}` };
+  }
+  return entry;
 }
 
 function sleep(ms: number): Promise<void> { return new Promise((r) => setTimeout(r, ms)); }
@@ -241,10 +250,7 @@ export class McpServer {
 
       try {
         logger.debug(`🔧 CallTool request: ${toolName}`);
-        const toolHandler = this.tools.get(toolName);
-        if (!toolHandler) throw new McpToolError(toolName, 'Tool not found');
-
-        const result = await toolHandler(args);
+        const result = await this.callTool(toolName, args);
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
         };
@@ -369,10 +375,16 @@ export class McpServer {
   getConfig(): AppConfig { return this.config; }
   getServer(): Server { return this.server; }
 
+  /** Invoke a tool with project-context scoping (same path as MCP CallTool). */
+  async callTool(name: string, args: Record<string, unknown> = {}): Promise<unknown> {
+    const toolHandler = this.tools.get(name);
+    if (!toolHandler) throw new McpToolError(name, 'Tool not found');
+    const projectCtx = resolveMcpProjectContext(args);
+    return withProjectContext(projectCtx, () => toolHandler(args));
+  }
+
   private resolveToolProjectContext(args: Record<string, unknown>): McpProjectContext {
-    const ctx = resolveMcpProjectContext(args);
-    applyMcpProjectEnv(ctx);
-    return ctx;
+    return resolveMcpProjectContext(args);
   }
 
   private scopedCoordination(args: Record<string, unknown>): CoordinationManager {

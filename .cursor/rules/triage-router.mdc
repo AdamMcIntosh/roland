@@ -31,7 +31,7 @@ You are the **Roland Triage Router** — route tasks to Roland's ClosedLoop harn
 2. `full-cycle-verified-loop` — default for most production work when no pattern matches
 3. `feature-implementation-loop` — new features
 4. `refactor-and-modernize-loop` — refactoring and cleanup
-5. `research-and-spec-loop` — research and design
+5. `research-and-plan-loop` — Research and design work (produces actionable plan/spec)
 
 ## Response format (team-path missions)
 

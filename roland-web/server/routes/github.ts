@@ -127,9 +127,18 @@ githubRouter.get('/repos', async (req, res) => {
   }
 });
 
-// ── Clone + register ──────────────────────────────────────────────────────────
+// ── Clone + register (FROZEN v1.4.0 — use CLI + local project registration) ───
 
-githubRouter.post('/clone', async (req, res) => {
+githubRouter.post('/clone', (_req, res) => {
+  res.status(410).json({
+    error: 'GitHub clone/import is disabled — dashboard development frozen (v1.4.0). Clone locally and register the project path via CLI or `roland mission-audit`.',
+    frozen: true,
+    docs: 'Use `roland team` and `roland mission-audit` from the repo root.',
+  });
+});
+
+// Legacy handler retained for reference — removal target v1.6.0
+githubRouter.post('/clone/_legacy', async (req, res) => {
   const { owner, repo } = (req.body ?? {}) as { owner?: string; repo?: string };
   if (!owner?.trim() || !repo?.trim()) {
     res.status(400).json({ error: 'owner and repo required' });

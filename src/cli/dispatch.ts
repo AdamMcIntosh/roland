@@ -1,4 +1,6 @@
 /**
+ * ## P0 Security & Context Fixes (v1.4.0)
+ *
  * ## P3 Release & Stabilization
  *
  * CLI command dispatch — all subcommand handlers (used by Commander program).
@@ -36,7 +38,7 @@ async function serve(rest: string[]): Promise<void> {
     const portIdx = rest.indexOf('--port');
     const hostIdx = rest.indexOf('--host');
     const port = portIdx >= 0 ? Number(rest[portIdx + 1]) || 8081 : 8081;
-    const host = hostIdx >= 0 ? rest[hostIdx + 1] : '0.0.0.0';
+    const host = hostIdx >= 0 ? rest[hostIdx + 1] : '127.0.0.1';
     await runMcpHttpServer({ host, port });
     return;
   }
@@ -47,7 +49,7 @@ async function mcpHttp(rest: string[]): Promise<void> {
   const portIdx = rest.indexOf('--port');
   const hostIdx = rest.indexOf('--host');
   const port = portIdx >= 0 ? Number(rest[portIdx + 1]) || 8081 : 8081;
-  const host = hostIdx >= 0 ? rest[hostIdx + 1] : '0.0.0.0';
+  const host = hostIdx >= 0 ? rest[hostIdx + 1] : '127.0.0.1';
   await runMcpHttpServer({ host, port });
 }
 
@@ -352,7 +354,7 @@ function printHelp(): void {
   ln(`    ${cy('roland')} doctor              Diagnose your Roland install`);
   ln(`    ${cy('roland')} pm-log              Print the PM event timeline`);
   ln(`    ${cy('roland')} mcp-config          Print Cursor MCP config (--general for HTTP)`);
-  ln(`    ${cy('roland')} mcp [--port N]      Streamable HTTP MCP on 0.0.0.0 (Hermes-ready)`);
+  ln(`    ${cy('roland')} mcp [--port N]      Streamable HTTP MCP on 127.0.0.1 (use --host 0.0.0.0 for LAN)`);
   ln(`    ${cy('roland')} serve [--mcp]       Stdio MCP (default) or HTTP with --mcp`);
   ln();
   ln('  ' + b('ENVIRONMENT'));
@@ -366,6 +368,9 @@ function printHelp(): void {
   ln(`    ${b('ROLAND_PROJECT_ROOT')}        Target project when cwd is not the repo`);
   ln(`    ${b('ROLAND_ROOT')}                Alias for ROLAND_PROJECT_ROOT`);
   ln(`    ${b('ROLAND_STATE_DIR')}           Persistence dir  ${d('(default: .roland under project)')}`);
+  ln(`    ${b('ROLAND_MCP_TOKEN')}           Bearer token for HTTP MCP (required with --host 0.0.0.0)`);
+  ln(`    ${b('ROLAND_MCP_HOST')}            HTTP MCP bind override  ${d('(default: 127.0.0.1)')}`);
+  ln(`    ${b('ROLAND_MCP_PORT')}            HTTP MCP port  ${d('(default: 8081)')}`);
   ln();
   ln('  ' + b('EXAMPLES'));
   ln(`    ${d('# Run a closed-loop mission')}`);

@@ -4,6 +4,7 @@ import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ChatInterface } from '@/components/ChatInterface';
 import { GitHubConnect } from '@/components/GitHubConnect';
+import { DashboardFreezeBanner } from '@/components/DashboardFreezeBanner';
 import { useApiKey } from '@/lib/ApiKeyContext';
 import { apiFetch } from '@/lib/api';
 
@@ -63,6 +64,7 @@ export default function ProjectPage({
       </header>
 
       <main className="flex-1 p-6 flex flex-col max-w-5xl mx-auto w-full">
+        <DashboardFreezeBanner />
         {/* ChatInterface notifies us when a branch is created so the header can show PR button */}
         <ChatInterface
           projectId={projectId}

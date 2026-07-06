@@ -160,14 +160,18 @@ Roland also exposes a **Streamable HTTP** MCP endpoint for tools like Hermes, in
 # With dashboard (default — MCP enabled on port 8081):
 npm run serve-dashboard
 
-# Standalone HTTP MCP only:
+# Standalone HTTP MCP only (localhost default):
+roland mcp --port 8081
+
+# LAN / Tailscale (requires ROLAND_MCP_TOKEN):
+export ROLAND_MCP_TOKEN="your-secret-token"
 roland mcp --host 0.0.0.0 --port 8081
 
 # Discovery + health:
 curl http://127.0.0.1:8081/mcp
 curl http://127.0.0.1:8081/mcp/health
 
-# Hermes:
+# Hermes (local):
 hermes mcp add roland --url http://127.0.0.1:8081/mcp
 
 # Print HTTP client config (Cursor stdio unchanged):
@@ -184,17 +188,15 @@ Templates live in `recipes/loops/`. Attach with `--loop-template <name>`. Verifi
 
 | Template | When to use | Max iter | Key gates |
 |----------|-------------|----------|-----------|
-| **small-fix-loop** | Hotfixes, typos, minor changes — fast; unit tests optional | 3 | lint, typecheck, smoke |
-| **full-cycle-verified-loop** | Production missions — reflection, exit conditions, PR formatting | 10 | lint, unit, typecheck |
+| **standard-code-loop** | Default canonical loop | 5 | unit, lint, typecheck |
+| **small-fix-loop** | Hotfixes, typos, minor changes | 3 | lint, typecheck, smoke |
+| **full-cycle-verified-loop** | Production missions — reflection, exit conditions, PR | 10 | lint, unit, typecheck |
 | **feature-implementation-loop** | Ship a feature with integration + smoke | 8 | unit, integration, smoke |
-| **refactor-and-modernize-loop** | Refactor / de-sloppify without behavior change | 4 | lint, unit, typecheck |
-| **research-and-spec-loop** | Research → actionable spec | 3 | critic validation |
-| **mcp-extension-loop** | MCP tools / server handlers | 6 | unit, smoke, integration |
-| **standard-code-loop** | Default canonical loop (default template) | 5 | unit, lint, typecheck |
-| **research-loop** | Lightweight investigation | 3 | critic validation |
-| **minimal-3-phase** | E2E reference (plan, act, verify only) | 1 | unit |
+| **refactor-and-modernize-loop** | Refactor without behavior change | 4 | lint, unit, typecheck |
+| **research-and-plan-loop** | Research → plan/spec (parameterized) | 3 | critic validation |
+| **maintenance-loop** | Dependency / hygiene updates | 3 | lint, typecheck |
 
-Deprecated aliases still work: `closed-loop-harness`, `code-quality-loop`, `research-synthesis-loop`.
+Deprecated aliases still resolve via `TEMPLATE_ALIASES`: `closed-loop-harness`, `code-quality-loop`, `research-loop`, `research-and-spec-loop`, `research-synthesis-loop`, `mcp-extension-loop`, `minimal-3-phase` (E2E harness only).
 
 Full guide: [docs/guides/closed-loop-harness.md](docs/guides/closed-loop-harness.md)
 

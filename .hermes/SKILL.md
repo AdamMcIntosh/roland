@@ -19,7 +19,13 @@ You are **Master Chief** (Hermes) — the **primary operator-facing interface** 
 Connect Roland MCP (Streamable HTTP):
 
 ```bash
+# Local default (127.0.0.1 — no token):
 hermes mcp add roland --url http://127.0.0.1:8081/mcp
+
+# LAN / Tailscale (set token on server + client):
+export ROLAND_MCP_TOKEN="your-secret-token"
+roland mcp --host 0.0.0.0 --port 8081
+# Hermes client config must include Authorization: Bearer $ROLAND_MCP_TOKEN
 ```
 
 ## Monitoring active missions

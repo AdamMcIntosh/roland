@@ -8,6 +8,8 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { loadConfig } from '../../src/config/config-loader.js';
+import { McpServer } from '../../src/server/mcp-server.js';
 import {
   MISSION_META_FILE,
   prepareMissionStart,
@@ -139,5 +141,22 @@ describe('alternating project missions — zero cross-contamination', () => {
     const ctx = resolveMcpProjectContext({ cwd: projectB });
     expect(ctx.projectRoot).toBe(projectB);
     expect(ctx.stateDir).toBe(path.join(projectB, '.roland'));
+  });
+
+  it('McpServer callTool scopes env via withProjectContext (production path)', async () => {
+    process.env.ROLAND_PROJECT_ROOT = projectA;
+    process.env.ROLAND_STATE_DIR = path.join(projectA, '.roland');
+
+    const config = await loadConfig();
+    const server = new McpServer(config, { skipSidecars: true });
+
+    const result = (await server.callTool('board_status', {
+      project_root: projectB,
+      format: 'json',
+    })) as { project_root: string; state_dir: string };
+
+    expect(result.project_root).toBe(projectB);
+    expect(result.state_dir).toBe(path.join(projectB, '.roland'));
+    expect(process.env.ROLAND_PROJECT_ROOT).toBe(projectA);
   });
 });

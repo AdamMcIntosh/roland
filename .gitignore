@@ -57,7 +57,11 @@ coverage/
 # IDE specific settings
 .vscode/settings.json
 
-# Runtime
+# Roland-web: @roland-core is synced from repo root at build time (see roland-web/scripts/setup-core.mjs)
+roland-web/@roland-core/recipes/
+roland-web/@roland-core/dist/
+roland-web/@roland-core/agents/
+
 *.log
 *.pid
 run.stdout

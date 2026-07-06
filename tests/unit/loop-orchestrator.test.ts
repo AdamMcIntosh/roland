@@ -85,14 +85,14 @@ describe('loop-orchestrator', () => {
     expect(hasLoopTemplate('feature-implementation-loop')).toBe(true);
   });
 
-  it('runClosedLoopMission runs closed-loop-harness end-to-end with PR and loop state', async () => {
+  it('runClosedLoopMission runs full-cycle-verified-loop end-to-end with PR and loop state', async () => {
     const goal = 'Route through ClosedLoop harness for loop orchestrator test';
     const runState = new RunStateWriter(tmpDir, goal);
 
     const result = await runClosedLoopMission({
       goal,
       stateDir: tmpDir,
-      loopTemplate: 'closed-loop-harness',
+      loopTemplate: 'full-cycle-verified-loop',
       loopRunner: passRunner,
       onLoopStateChange: (s) => syncLoopStateToRun(runState, s),
     });
@@ -106,11 +106,11 @@ describe('loop-orchestrator', () => {
     expect(fs.existsSync(path.join(tmpDir, CLOSED_LOOP_PR_FILE))).toBe(true);
 
     const loopState = readLoopState(tmpDir);
-    expect(loopState?.templateId).toBe('closed-loop-harness');
+    expect(loopState?.templateId).toBe('full-cycle-verified-loop');
     expect(loopState?.status).toBe('completed');
 
     const persistedRun = readRunState(tmpDir);
-    expect(persistedRun?.loopTemplateId).toBe('closed-loop-harness');
+    expect(persistedRun?.loopTemplateId).toBe('full-cycle-verified-loop');
     expect(persistedRun?.loopStatus).toBe('completed');
   });
 

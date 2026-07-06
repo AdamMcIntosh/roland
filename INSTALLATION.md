@@ -146,14 +146,17 @@ Roland exposes a **Streamable HTTP** MCP endpoint alongside the Cursor stdio ser
 ### Start the HTTP endpoint
 
 ```bash
-# Bundled with dashboard (default on port 8081):
-npm run serve-dashboard
+# Local (default — binds 127.0.0.1 only):
+roland mcp --port 8081
 
-# Standalone:
+# LAN / Tailscale (requires bearer token):
+export ROLAND_MCP_TOKEN="your-secret-token"
 roland mcp --host 0.0.0.0 --port 8081
 # or:
 roland serve --mcp --host 0.0.0.0 --port 8081
 ```
+
+Clients must send `Authorization: Bearer $ROLAND_MCP_TOKEN` when the server binds to `0.0.0.0` or when `ROLAND_MCP_TOKEN` is set.
 
 ### Verify
 

@@ -3,6 +3,20 @@ description: >
   Research and planning loop — investigate a problem space, synthesize findings into an
   actionable plan or spec, validate completeness, critique gaps, and iterate until solid.
   No code verification gates; critic validates synthesis quality.
+  Parameterized via aliases: research-loop (lightweight, maxIterations 2),
+  research-and-spec-loop / research-synthesis-loop (spec-focused, same phases).
+parameters:
+  mode:
+    enum: [lightweight, standard, spec]
+    default: standard
+    description: >
+      lightweight — quick investigation (use alias research-loop);
+      standard — full plan loop (default);
+      spec — actionable spec emphasis (use alias research-and-spec-loop).
+  max_iterations:
+    type: integer
+    default: 3
+    description: Override via template config; lightweight alias uses 2.
 phases:
   - phase: plan
     label: Plan investigation

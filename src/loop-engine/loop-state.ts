@@ -1,10 +1,10 @@
 /**
- * ## P1 Honesty & Consolidation
+ * ## P1 Final Consolidation (v1.4.0)
  *
  * Loop state persistence — `.roland/loop-state.json`
  *
  * Survives supervisor restarts; read by dashboard via run-state loop fields.
- * Writes use the shared stateLock scheme (same as coordination store).
+ * Writes use stateLock + safe-write (writeUtf8Json) for UTF-8 persistence.
  */
 
 import fs from 'fs';

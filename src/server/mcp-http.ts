@@ -1,4 +1,6 @@
 /**
+ * ## P0 Security & Context Fixes (v1.4.0)
+ *
  * ## MCP Server Implementation
  *
  * General-purpose HTTP MCP transport for Roland.
@@ -31,6 +33,50 @@ export interface McpHttpOptions {
   basePath?: string;
   /** Public URL shown in discovery (default derived from host/port). */
   publicUrl?: string;
+  /** Bind address — used to decide whether bearer auth is required. */
+  bindHost?: string;
+}
+
+/** True when the server listens on all interfaces (LAN / Tailscale). */
+export function isPublicMcpBind(host: string): boolean {
+  const h = host.trim().toLowerCase();
+  return h === '0.0.0.0' || h === '::' || h === '[::]';
+}
+
+/** Bearer token required on public bind or when ROLAND_MCP_TOKEN is set. */
+export function mcpHttpRequiresToken(host: string): boolean {
+  return isPublicMcpBind(host) || Boolean(process.env.ROLAND_MCP_TOKEN?.trim());
+}
+
+function extractBearerToken(req: IncomingMessage): string | undefined {
+  const auth = req.headers.authorization;
+  if (typeof auth === 'string' && auth.toLowerCase().startsWith('bearer ')) {
+    const token = auth.slice(7).trim();
+    return token || undefined;
+  }
+  return undefined;
+}
+
+export type McpHttpAuthResult =
+  | { ok: true }
+  | { ok: false; status: 401; message: string };
+
+/** Validate Authorization bearer token when auth is required for this bind. */
+export function authorizeMcpHttpRequest(req: IncomingMessage, bindHost: string): McpHttpAuthResult {
+  if (!mcpHttpRequiresToken(bindHost)) return { ok: true };
+  const expected = process.env.ROLAND_MCP_TOKEN?.trim();
+  if (!expected) {
+    return {
+      ok: false,
+      status: 401,
+      message: 'Unauthorized: set ROLAND_MCP_TOKEN when binding to 0.0.0.0',
+    };
+  }
+  const token = extractBearerToken(req);
+  if (!token || token !== expected) {
+    return { ok: false, status: 401, message: 'Unauthorized: missing or invalid bearer token' };
+  }
+  return { ok: true };
 }
 
 export interface McpHttpDiscovery {
@@ -68,7 +114,7 @@ function writeJson(res: ServerResponse, status: number, body: unknown): void {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, mcp-session-id, Mcp-Session-Id');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, mcp-session-id, Mcp-Session-Id');
   res.end(JSON.stringify(body, null, 2));
 }
 
@@ -143,21 +189,29 @@ export async function handleMcpHttpRequest(
   req: IncomingMessage,
   res: ServerResponse,
   parsedBody?: unknown,
+  options: McpHttpOptions = {},
 ): Promise<void> {
   const method = (req.method ?? 'GET').toUpperCase();
+  const bindHost = options.bindHost ?? '127.0.0.1';
 
   if (method === 'OPTIONS') {
     res.statusCode = 204;
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, mcp-session-id, Mcp-Session-Id');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization, mcp-session-id, Mcp-Session-Id');
     res.end();
+    return;
+  }
+
+  const auth = authorizeMcpHttpRequest(req, bindHost);
+  if (!auth.ok) {
+    writeJson(res, auth.status, { error: auth.message });
     return;
   }
 
   // Plain GET → discovery JSON (success criteria: curl http://localhost:8081/mcp)
   if (method === 'GET' && !isMcpProtocolRequest(req)) {
-    writeJson(res, 200, await buildMcpDiscovery());
+    writeJson(res, 200, await buildMcpDiscovery(options));
     return;
   }
 
@@ -242,15 +296,21 @@ export async function runMcpHttpServer(options: {
   basePath?: string;
 } = {}): Promise<import('node:http').Server> {
   const http = await import('node:http');
-  const host = options.host ?? process.env.ROLAND_MCP_HOST ?? '0.0.0.0';
+  const host = options.host ?? process.env.ROLAND_MCP_HOST ?? '127.0.0.1';
   const port = options.port ?? Number(process.env.ROLAND_MCP_PORT ?? 8081);
   const basePath = options.basePath ?? '/mcp';
+  const httpOptions: McpHttpOptions = { basePath, bindHost: host };
 
   const server = http.createServer(async (req, res) => {
     const urlPath = (req.url ?? '/').split('?')[0];
     const match = matchMcpHttpPath(urlPath, basePath) ?? matchMcpHttpPath(urlPath, '/api/mcp');
 
     if (match === 'health') {
+      const auth = authorizeMcpHttpRequest(req, host);
+      if (!auth.ok) {
+        writeJson(res, auth.status, { error: auth.message });
+        return;
+      }
       writeJson(res, 200, await buildMcpHealth());
       return;
     }
@@ -260,7 +320,7 @@ export async function runMcpHttpServer(options: {
       if ((req.method ?? 'GET').toUpperCase() === 'POST') {
         body = await readJsonBody(req);
       }
-      await handleMcpHttpRequest(req, res, body);
+      await handleMcpHttpRequest(req, res, body, httpOptions);
       return;
     }
 
@@ -281,7 +341,14 @@ export async function runMcpHttpServer(options: {
   console.log(`  Health    : http://${displayHost}:${port}${basePath}/health`);
   console.log(`  Alias     : http://${displayHost}:${port}/api/mcp`);
   console.log(`  Bind      : ${host}:${port}`);
+  if (mcpHttpRequiresToken(host)) {
+    const tokenSet = Boolean(process.env.ROLAND_MCP_TOKEN?.trim());
+    console.log(`  Auth      : Bearer token ${tokenSet ? 'required (ROLAND_MCP_TOKEN set)' : 'REQUIRED — set ROLAND_MCP_TOKEN'}`);
+  } else {
+    console.log(`  Auth      : none (localhost bind; set ROLAND_MCP_TOKEN to require token)`);
+  }
   console.log(`\n  Hermes    : hermes mcp add roland --url http://${displayHost}:${port}${basePath}`);
+  console.log(`  LAN       : roland mcp --host 0.0.0.0 --port ${port}  (+ ROLAND_MCP_TOKEN)`);
   console.log(`  Cursor    : roland mcp-config --write  (stdio — unchanged)\n`);
 
   return server;
@@ -303,14 +370,22 @@ function readJsonBody(req: IncomingMessage): Promise<unknown> {
 }
 
 /** Build Hermes / general HTTP MCP client config snippet. */
-export function buildGeneralMcpClientConfig(baseUrl: string): Record<string, unknown> {
+export function buildGeneralMcpClientConfig(
+  baseUrl: string,
+  options?: { token?: string },
+): Record<string, unknown> {
   const url = baseUrl.replace(/\/$/, '');
+  const token = options?.token ?? process.env.ROLAND_MCP_TOKEN?.trim();
+  const entry: Record<string, unknown> = {
+    url,
+    transport: 'streamable-http',
+  };
+  if (token) {
+    entry.headers = { Authorization: `Bearer ${token}` };
+  }
   return {
     mcpServers: {
-      roland: {
-        url,
-        transport: 'streamable-http',
-      },
+      roland: entry,
     },
   };
 }

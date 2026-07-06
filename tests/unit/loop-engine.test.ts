@@ -228,9 +228,9 @@ describe('LoopEngine — minimal-3-phase E2E', () => {
 
   it('loads all three bundled loop templates with verify steps', () => {
     const names = templates.list().map((t) => t.name);
-    expect(names).toContain('minimal-3-phase');
     expect(names).toContain('standard-code-loop');
-    expect(names).toContain('research-loop');
+    expect(names).toContain('research-and-plan-loop');
+    expect(templates.resolveName('research-loop')).toBe('research-and-plan-loop');
 
     const standard = templates.get('standard-code-loop');
     const verifyPhase = standard?.phases.find((p) => p.phase === Phase.Verify);

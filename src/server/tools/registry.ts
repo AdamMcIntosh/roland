@@ -1,4 +1,6 @@
 /**
+ * ## P0 Security & Context Fixes (v1.4.0)
+ *
  * ## P1 Honesty & Consolidation
  *
  * Tool registration helpers and utility tools (health_check, preview_changes, analyze_screenshot).
@@ -11,6 +13,7 @@ import { ModelRouter } from '../../orchestrator/model-router.js';
 import { generateDiff } from '../../utils/diff-engine.js';
 import { getDiffStreamServer } from '../diff-stream.js';
 import { analyzeScreenshot } from '../../utils/screenshot.js';
+import { readPackageVersion } from '../../utils/package-version.js';
 import fs from 'fs';
 import path from 'path';
 import type { McpToolContext, McpToolRegistrar, McpToolRegistry } from './types.js';
@@ -52,7 +55,7 @@ function registerHealthCheck(registrar: McpToolRegistrar, ctx: McpToolContext): 
     async () => {
       const result: Record<string, unknown> = {
         status: 'healthy',
-        version: '2.0.0',
+        version: readPackageVersion(import.meta.url),
         timestamp: new Date().toISOString(),
         uptime: process.uptime(),
         tools: ctx.getTools(),

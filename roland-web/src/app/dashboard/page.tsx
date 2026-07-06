@@ -2,6 +2,7 @@
 
 import { ProjectList } from '@/components/ProjectList';
 import { GitHubStatus } from '@/components/GitHubStatus';
+import { DashboardFreezeBanner } from '@/components/DashboardFreezeBanner';
 import { useApiKey, PM_MODELS, ENGINEER_MODELS, modelLabel } from '@/lib/ApiKeyContext';
 
 function ModelBadge({ label, value }: { label: string; value: string }) {
@@ -48,7 +49,9 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* GitHub connection bar */}
+        <DashboardFreezeBanner />
+
+        {/* GitHub connection bar — read-only status; clone/import frozen */}
         <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 mb-6 flex items-center justify-between gap-4 shadow-sm">
           <span className="text-sm text-gray-500 font-medium">GitHub</span>
           <GitHubStatus />

@@ -18,7 +18,7 @@ import {
   type CommandRunner,
 } from '../../src/loop-engine/index.js';
 import { Blackboard } from '../../src/coordination/legacy-blackboard.js';
-import { clearLoopEngineConfigCache, resolveBetweenIterations } from '../../src/loop-engine/loop-config.js';
+import { clearLoopEngineConfigCache } from '../../src/loop-engine/loop-config.js';
 
 const passRunner: CommandRunner = async () => ({
   exitCode: 0,
@@ -43,19 +43,19 @@ describe('ClosedLoop harness', () => {
     fs.rmSync(stateDir, { recursive: true, force: true });
   });
 
-  it('runs closed-loop-harness template through verify with evaluation gate', async () => {
+  it('runs full-cycle-verified-loop (alias closed-loop-harness) through verify with evaluation gate', async () => {
     const templates = new LoopTemplates();
-    const template = templates.get('closed-loop-harness');
+    const template = templates.get('full-cycle-verified-loop');
     expect(template).toBeDefined();
     expect(template!.exitConditions?.length).toBeGreaterThan(0);
-    expect(resolveBetweenIterations(template!)).toBeDefined();
+    expect(template!.betweenIterations).toBeDefined();
     expect(template!.reflection).toBe(true);
 
     const goal = 'Improve loop-engine evaluation gates and confidence scoring';
     const loop = new ClosedLoop({
       stateDir,
       goal,
-      template: 'closed-loop-harness',
+      template: 'full-cycle-verified-loop',
       blackboard,
       runner: passRunner,
       isTestMode: true,

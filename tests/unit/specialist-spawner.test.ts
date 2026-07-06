@@ -96,7 +96,7 @@ describe('Loop template YAML spawns', () => {
     expect(summary).toContain('test-author');
   });
 
-  it('research-and-spec-loop defines researcher and oracle spawns', () => {
+  it('research-and-plan-loop (via alias) defines researcher and oracle spawns', () => {
     const tpl = templates.get('research-and-spec-loop')!;
     const act = tpl.phases.find((p) => p.phase === 'act');
     expect(act?.specialistSpawns?.map((s) => s.role)).toEqual(
