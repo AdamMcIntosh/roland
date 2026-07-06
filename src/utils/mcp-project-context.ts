@@ -1,10 +1,10 @@
 /**
- * ## Project Context & Agent Dispatch Fix
+ * ## P0 Trust & Safety Fixes
  *
  * Resolves project root + `.roland` state directory for MCP-triggered runs
  * (Hermes HTTP, Cursor stdio) and background team missions.
  *
- * Priority:
+ * Priority (explicit args always win over stale env):
  *   1. explicit `project_root` / `cwd` arg
  *   2. explicit `state_dir` arg → derive project root (ignores stale env)
  *   3. ROLAND_PROJECT_ROOT / ROLAND_ROOT env
@@ -110,6 +110,21 @@ export function resolveMissionProjectRootFromState(stateDir: string): string {
   return deriveProjectRootFromStateDir(stateDir);
 }
 
+const ROLAND_ENV_KEYS = ['ROLAND_PROJECT_ROOT', 'ROLAND_ROOT', 'ROLAND_STATE_DIR'] as const;
+
+/** Build env overrides for a project context without mutating process.env. */
+export function scopedProjectEnv(
+  ctx: McpProjectContext,
+  base: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  return {
+    ...base,
+    ROLAND_PROJECT_ROOT: ctx.projectRoot,
+    ROLAND_ROOT: ctx.projectRoot,
+    ROLAND_STATE_DIR: ctx.stateDir,
+  };
+}
+
 /**
  * Pin Roland env vars to a project context (does not chdir — safe for shared MCP servers).
  */
@@ -118,6 +133,27 @@ export function applyMcpProjectEnv(ctx: McpProjectContext): McpProjectContext {
   process.env['ROLAND_ROOT'] = ctx.projectRoot;
   process.env['ROLAND_STATE_DIR'] = ctx.stateDir;
   return ctx;
+}
+
+/** Run fn under a project context; restores prior env after fn completes. */
+export async function withProjectContext<T>(
+  ctx: McpProjectContext,
+  fn: (ctx: McpProjectContext) => T | Promise<T>,
+): Promise<T> {
+  const prior: Record<string, string | undefined> = {};
+  for (const key of ROLAND_ENV_KEYS) {
+    prior[key] = process.env[key];
+  }
+  applyMcpProjectEnv(ctx);
+  try {
+    return await fn(ctx);
+  } finally {
+    for (const key of ROLAND_ENV_KEYS) {
+      const val = prior[key];
+      if (val === undefined) delete process.env[key];
+      else process.env[key] = val;
+    }
+  }
 }
 
 /** Isolated worker processes may chdir after env is set. */
@@ -159,5 +195,9 @@ export function ensureMissionProjectContext(ctx: McpProjectContext): string {
  * Isolation: cleanupPreviousRuns + sanitizeStaleMissionState on mission start;
  * roland_run_team passes --clean; team-orchestrator archives stale board entries.
  *
- * Test: npx vitest run tests/unit/mcp-project-context.test.ts tests/integration/mcp-mission-project-context.test.ts
+ * Test: npx vitest run tests/unit/mcp-project-context.test.ts tests/integration/mcp-mission-project-context.test.ts tests/integration/project-context-alternating-missions.test.ts
+ *
+ * ## P0 Items Complete — Roland More Production Ready
+ * - scopedProjectEnv / withProjectContext reduce global env mutation
+ * - explicit project_root/cwd always wins over stale ROLAND_STATE_DIR
  */

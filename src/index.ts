@@ -288,7 +288,7 @@ function printHelp(): void {
   ln();
   ln('  ' + b('DIRECT COMMANDS'));
   ln(`    ${cy('roland')} ${b('"goal"')}                      Run a PM team on a goal ${d('(shortcut)')}`);
-  ln(`    ${cy('roland')} ${b('team')} "goal"               Run Pure ClosedLoop mission (CLI primary)`);
+  ln(`    ${cy('roland')} ${b('team')} "goal"               Pure ClosedLoop mission (auto-selects template)`);
   ln(`    ${cy('roland')} ${b('watch')}                      Watch git commits, auto-run on change`);
   ln(`    ${cy('roland')} ${b('pr')} [number]               Review (and optionally fix) a GitHub PR`);
   ln(`    ${cy('roland')} ${b('status')} [--json]              Unified snapshot ${d('(board + HITL + supervisor)')}`);
@@ -313,6 +313,8 @@ function printHelp(): void {
   ln('  ' + b('TEAM FLAGS'));
   ln(`    ${b('--stream')}, -s              Print task output snippets as each agent completes`);
   ln(`    ${b('--sequential')}              One agent at a time  ${d('(safe mode for unstable connections)')}`);
+  ln(`    ${b('--loop-template')} <id>       Override auto-selected loop template`);
+  ln(`    ${b('--legacy-pm')}, ${b('--use-pm-team')}  [DEPRECATED] Legacy PM Team waves`);
   ln();
   ln('  ' + b('WATCH FLAGS'));
   ln(`    ${b('--task')} "description"       Fixed goal instead of commit message`);

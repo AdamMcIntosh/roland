@@ -70,7 +70,11 @@ describe('loop-orchestrator', () => {
   afterEach(() => {
     delete process.env.ROLAND_LOOP_TEST_MODE;
     clearLoopEngineConfigCache();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      /* Windows may hold temp handles briefly — ignore EBUSY on cleanup */
+    }
   });
 
   it('hasLoopTemplate returns true only for non-empty template ids', () => {

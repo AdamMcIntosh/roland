@@ -85,7 +85,7 @@ describe('Loop Engineering E2E readiness', () => {
     expect(spawnPosts.some((e) => String(e.content).includes('cursor_sdk') || String(e.content).includes('SDK'))).toBe(true);
   });
 
-  it('PM-Enhanced template completes with dispatch logging on PM bridge path', async () => {
+  it('PM-Enhanced template completes with dispatch logging when enablePmIntegration is true', async () => {
     const goal =
       'Implement OAuth integration across auth module with multi-file changes and integration tests';
     const loop = new ClosedLoop({
@@ -96,6 +96,7 @@ describe('Loop Engineering E2E readiness', () => {
       runner: passRunner,
       isTestMode: true,
       skipBackoff: true,
+      enablePmIntegration: true,
     });
 
     expect(loop.getPmIntegration().enabled).toBe(true);

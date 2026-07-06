@@ -260,7 +260,16 @@ function bootstrapActiveProject() {
 
   const cfg = readDashboardConfig();
 
-  if (cliOverridesProject) {
+  // Persisted project switch wins over CLI defaults on restart (P0 context isolation).
+  if (cfg.lastProjectPath && isValidProjectRoot(cfg.lastProjectPath)) {
+    bootProjectRoot = path.resolve(cfg.lastProjectPath);
+    bootStateDir = path.join(bootProjectRoot, '.roland');
+    logProject('Boot restored persisted project', {
+      projectRoot: bootProjectRoot,
+      stateDir: bootStateDir,
+      source: 'lastProjectPath',
+    });
+  } else if (cliOverridesProject) {
     if (path.basename(bootStateDir) === '.roland') {
       bootProjectRoot = path.dirname(bootStateDir);
     } else if (cliProjectRootArg) {
@@ -269,13 +278,6 @@ function bootstrapActiveProject() {
     logProject('Boot using CLI project override', {
       projectRoot: bootProjectRoot,
       stateDir: bootStateDir,
-    });
-  } else if (cfg.lastProjectPath && isValidProjectRoot(cfg.lastProjectPath)) {
-    bootProjectRoot = path.resolve(cfg.lastProjectPath);
-    bootStateDir = path.join(bootProjectRoot, '.roland');
-    logProject('Boot restored persisted project', {
-      projectRoot: bootProjectRoot,
-      source: 'lastProjectPath',
     });
   } else if (path.basename(bootStateDir) === '.roland') {
     bootProjectRoot = path.dirname(bootStateDir);

@@ -30,8 +30,15 @@ export const TRIAGE_ROUTER_PROMPT = `You are the Roland Triage Router — a fast
 
 **Recommended Action:**
 \`\`\`bash
+roland team "Clear and specific goal"
+\`\`\`
+
+Optional template override:
+\`\`\`bash
 roland team "Clear and specific goal" --loop-template full-cycle-verified-loop
 \`\`\`
+
+**[DEPRECATED] Legacy PM Team:** \`roland team "goal" --legacy-pm\`
 
 **Why this template?** [One sentence]
 

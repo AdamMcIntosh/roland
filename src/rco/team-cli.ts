@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
- * ## CLI-First + Hermes Monitoring Shift
+ * ## P0 Trust & Safety Fixes
  *
  * RCO Team CLI — Pure ClosedLoop mission launcher (primary execution path).
- * Monitor with: roland hitl-status · roland board-status --concise · roland mission-summary
+ * Default: auto-select loop template (small-fix-loop / standard templates).
+ * Legacy PM Team: opt-in via --legacy-pm or --use-pm-team.
  *
- * ## Dashboard De-emphasized — CLI + Hermes Hybrid Complete
+ * Monitor with: roland hitl-status · roland board-status --concise · roland mission-summary
  */
 
 import { fileURLToPath } from 'url';
@@ -28,6 +29,7 @@ import {
   ensureMissionProjectContext,
   resolveMcpProjectContext,
 } from '../utils/mcp-project-context.js';
+import { recommendLoopTemplate } from './triage-router.js';
 import {
   prepareMissionStart,
   resetLoopArtifactsForNewMission,
@@ -177,6 +179,22 @@ export interface TeamCliArgs {
   agentsDir?: string;
   parallel: boolean;
   loopTemplate?: string;
+  legacyPm: boolean;
+}
+
+/**
+ * Resolve loop template for `roland team` — Pure ClosedLoop by default.
+ * Returns undefined only when --legacy-pm / --use-pm-team opts into legacy PM waves.
+ */
+export function resolveTeamLoopTemplate(opts: {
+  goal: string;
+  loopTemplate?: string;
+  legacyPm?: boolean;
+}): string | undefined {
+  if (opts.legacyPm) return undefined;
+  const explicit = opts.loopTemplate?.trim();
+  if (explicit) return explicit;
+  return recommendLoopTemplate(opts.goal).template;
 }
 
 export function parseTeamArgs(argv: string[]): TeamCliArgs {
@@ -198,6 +216,7 @@ export function parseTeamArgs(argv: string[]): TeamCliArgs {
   let webhookUrl: string | undefined;
   let agentsDir: string | undefined;
   let loopTemplate: string | undefined;
+  let legacyPm = false;
 
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -217,10 +236,11 @@ export function parseTeamArgs(argv: string[]): TeamCliArgs {
     if (a === '--sequential')                           { parallel = false; continue; }
     if (a === '--webhook' && args[i + 1])                { webhookUrl = args[++i]; notify = true; continue; }
     if (a === '--loop-template' && args[i + 1])          { loopTemplate = args[++i]; continue; }
+    if (a === '--legacy-pm' || a === '--use-pm-team')    { legacyPm = true; continue; }
     if (!a.startsWith('-') && !goal)                     { goal = a; continue; }
   }
 
-  return { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel, loopTemplate };
+  return { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel, loopTemplate, legacyPm };
 }
 
 // ── Web-mode helpers ──────────────────────────────────────────────────────────
@@ -265,11 +285,23 @@ function firstSentences(body: string, maxChars = 200): string {
 
 export async function runTeamCli(argv: string[]): Promise<void> {
   const parsed = parseTeamArgs(argv);
-  let { goal, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel, loopTemplate } = parsed;
+  let { goal, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel, legacyPm } = parsed;
 
   const ctx = resolveMcpProjectContext({ state_dir: parsed.stateDir });
   ensureMissionProjectContext(ctx);
   const stateDir = ctx.stateDir;
+
+  const loopTemplate = resolveTeamLoopTemplate({
+    goal,
+    loopTemplate: parsed.loopTemplate,
+    legacyPm,
+  });
+
+  if (goal && loopTemplate && !parsed.loopTemplate) {
+    err(`  ${c.dim('[Loop]')} Auto-selected template: ${c.cyan(loopTemplate)} ${c.dim('(Pure ClosedLoop)')}`);
+  } else if (goal && legacyPm) {
+    err(`  ${c.yellow('[Legacy]')} PM Team mode — use only when legacy waves are required`);
+  }
 
   if (!goal) {
     err(c.bold('Roland — PM Team Mode'));
@@ -298,7 +330,9 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     err('    --web                   Streaming terminal-style output for web/chat — live progress, no ANSI');
     err('    --sequential            One agent at a time  ' + c.dim('(safe mode for unstable connections; overrides ROLAND_SEQUENTIAL=1)'));
     err('    --parallel              Force parallel even if ROLAND_SEQUENTIAL=1  ' + c.dim('(parallel is the default)'));
-    err('    --loop-template <id>    Attach a loop template (e.g. standard-code-loop)  ' + c.dim('(Loop Engineering)'));
+    err('    --loop-template <id>    Loop template (auto-selected when omitted)  ' + c.dim('(Pure ClosedLoop default)'));
+    err('    --legacy-pm             [DEPRECATED] Legacy PM Team waves instead of ClosedLoop');
+    err('    --use-pm-team           Alias for --legacy-pm');
     err('');
     process.exit(1);
   }
@@ -977,6 +1011,16 @@ export async function runTeamCli(argv: string[]): Promise<void> {
   // Synthesis (with ### 🎖 Mission Complete footer) is the definitive end of output.
   console.log(result.synthesis);
 }
+
+/*
+ * ## P0 Items Complete — Roland More Production Ready
+ *
+ * Default usage:
+ *   roland team "Fix typo in README"              → auto small-fix-loop (Pure ClosedLoop)
+ *   roland team "Add OAuth provider"              → auto feature-implementation-loop
+ *   roland team "goal" --loop-template <id>       → explicit override
+ *   roland team "goal" --legacy-pm                → [DEPRECATED] legacy PM waves
+ */
 
 // ── Standalone entry — guarded so importing this module from index.ts is safe ──
 

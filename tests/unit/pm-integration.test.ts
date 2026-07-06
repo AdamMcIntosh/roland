@@ -84,15 +84,16 @@ describe('LoopPmBridge session', () => {
 
   it('uses PM Team for complex goals when template has use_pm_team opt-in', async () => {
     const templates = new LoopTemplates();
-    const template = templates.get('feature-implementation-loop');
-    expect(template?.usePmTeam).toBe(true);
+    const base = templates.get('feature-implementation-loop')!;
+    expect(base.usePmTeam).toBe(false);
 
+    const template = { ...base, usePmTeam: true };
     const goal =
       'Implement user profile settings page with API integration, multi-file UI components, and full test coverage';
     const bridge = new LoopPmBridge({
       stateDir,
       goal,
-      template: template!,
+      template,
       blackboard,
       isTestMode: true,
     });
@@ -129,7 +130,7 @@ describe('LoopPmBridge session', () => {
     });
 
     const planResult = await bridge.runPlanning(1);
-    expect(planResult.summary).toMatch(/pure ClosedLoop|lightweight/i);
+    expect(planResult.success).toBe(true);
 
     const session = readLoopPmSession(stateDir);
     expect(session?.executionPath).toBe('lightweight');
@@ -172,7 +173,7 @@ describe('ClosedLoop with PM integration', () => {
     expect(session?.executionPath).toBe('lightweight');
   });
 
-  it('feature-implementation-loop completes with PM session when use_pm_team opt-in', async () => {
+  it('feature-implementation-loop completes with PM session when enablePmIntegration is true', async () => {
     const { ClosedLoop } = await import('../../src/loop-engine/closed-loop.js');
     const goal =
       'Ship OAuth callback handling with integration tests across auth module and API routes';
@@ -184,6 +185,7 @@ describe('ClosedLoop with PM integration', () => {
       runner: passRunner,
       isTestMode: true,
       skipBackoff: true,
+      enablePmIntegration: true,
     });
 
     const result = await loop.run();

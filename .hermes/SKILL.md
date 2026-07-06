@@ -107,27 +107,27 @@ Explain the pending commit message to the operator before approving.
 
 ## Launching missions
 
-Always prefer **Pure ClosedLoop** (`use_pm_team: false`).
+Always prefer **Pure ClosedLoop** (`use_pm_team: false`). **`roland team "goal"` auto-selects a loop template** — no `--loop-template` required for everyday work.
 
-**Recommended Action:**
+**Recommended Action (typo / small fix — template auto-selected):**
+
+```bash
+roland team "Fix typo in README"
+```
+
+**Explicit template (optional override):**
 
 ```bash
 roland team "Exact clear goal here" --loop-template full-cycle-verified-loop
 ```
 
-Templates: `full-cycle-verified-loop` (default) · `small-fix-loop` · `feature-implementation-loop` · `refactor-and-modernize-loop` · `research-and-spec-loop`
+Templates: `small-fix-loop` (auto for typos/hotfixes) · `full-cycle-verified-loop` · `feature-implementation-loop` · `refactor-and-modernize-loop` · `research-and-spec-loop`
 
-### When to use `small-fix-loop`
-
-Prefer **small-fix-loop** for everyday quick work — typos, one-liners, hotfixes, cosmetic fixes, minor config tweaks — where full unit testing is not required or practical:
+**[DEPRECATED] Legacy PM Team** — only when explicitly required:
 
 ```bash
-roland team "Fix small typo in README" --loop-template small-fix-loop
-roland team "Correct spelling in error message" --loop-template small-fix-loop
-roland team "Hotfix null check in login handler" --loop-template small-fix-loop
+roland team "goal" --legacy-pm
 ```
-
-Use **full-cycle-verified-loop** when the change needs full verification, reflection, and exit conditions (production missions, behavior changes, multi-file work).
 
 When the user approves ("go", "run it", "execute"), run the exact command via shell.
 

@@ -71,8 +71,8 @@ escalationThreshold: 4
 testModeMaxRetries: 6
 testModeEscalationThreshold: 8
 min_confidence: 0.85
-# [DEPRECATED] Legacy PM Team opt-in — advanced only; prefer Hermes + Pure ClosedLoop (remove or set false).
-use_pm_team: true
+# [DEPRECATED] Legacy PM Team opt-in — advanced only; prefer Hermes + Pure ClosedLoop (default false).
+use_pm_team: false
 pm_plan: auto   # [DEPRECATED] requires use_pm_team: true
 pm_act: auto    # [DEPRECATED] requires use_pm_team: true
 reflection: true

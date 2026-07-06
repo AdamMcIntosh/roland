@@ -36,6 +36,7 @@ import { BudgetManager } from '../utils/budget-manager.js';
 import { RecipeSessionManager, ParsedRecipe, SubagentDef, RecipeStepDef } from './recipe-session.js';
 import { generateDiff } from '../utils/diff-engine.js';
 import { gitStatus, gitDiff, gitLog, gitCommit } from '../utils/git-tools.js';
+import { resolveTeamLoopTemplate } from '../rco/team-cli.js';
 import { spawnBackground } from '../rco/supervisor.js';
 import { randomUUID } from 'crypto';
 import {
@@ -3618,7 +3619,7 @@ What would you like to work on?`;
     // ── roland_run_team ───────────────────────────────────────────────────────
     this.registerTool(
       'roland_run_team',
-      'Launch a background PM team run for goals on the **Team** execution path. Use when work needs multi-file changes, Sparrow + Vanguard test orchestration, Command Blackboard tracking, wave synthesis, or > 30–45 min effort. Pass `project_root` (or `cwd`) when triggering from Hermes in a repo other than the MCP server cwd. Pass `loop_template` (e.g. closed-loop-harness, feature-implementation-loop) to route through **ClosedLoop** instead of legacy PM waves. Also use when the operator forces team mode via --force-team, "force team", "full team", "run as team", or "spawn team" (no confirmation needed — launch immediately). Do NOT use for single-file edits, Q&A, or quick fixes unless force-team was explicitly requested. Trade-off: team runs add PM overhead but provide parallel callsigns, blocker surfacing, and Mission Complete synthesis. Returns immediately; track with pm_standup() or get_team_context().',
+      'Launch a background Pure ClosedLoop mission for goals on the **Team** execution path. Default: auto-selects a loop template (e.g. small-fix-loop for typos). Pass `project_root` (or `cwd`) when triggering from Hermes in a repo other than the MCP server cwd. Pass `loop_template` to override auto-selection. Use `legacy_pm: true` only for [DEPRECATED] legacy PM waves. Also use when the operator forces team mode via --force-team. Do NOT use for single-file edits, Q&A, or quick fixes unless force-team was explicitly requested. Returns immediately; track with pm_standup() or get_team_context().',
       async (args: Record<string, unknown>) => {
         const goal = args.goal as string;
         if (!goal || typeof goal !== 'string' || !goal.trim()) {
@@ -3628,7 +3629,13 @@ What would you like to work on?`;
         const ctx = this.resolveToolProjectContext(args);
         const { projectRoot, stateDir: resolvedStateDir } = ctx;
 
-        const loopTemplate = typeof args.loop_template === 'string' ? args.loop_template.trim() : '';
+        const legacyPm = args.legacy_pm === true || args.use_pm_team === true;
+        const explicitTemplate = typeof args.loop_template === 'string' ? args.loop_template.trim() : '';
+        const loopTemplate = resolveTeamLoopTemplate({
+          goal: goal.trim(),
+          loopTemplate: explicitTemplate || undefined,
+          legacyPm,
+        }) ?? '';
         const teamArgv = [
           'team',
           goal.trim(),
@@ -3640,6 +3647,7 @@ What would you like to work on?`;
           resolvedStateDir,
         ];
         if (loopTemplate) teamArgv.push('--loop-template', loopTemplate);
+        else if (legacyPm) teamArgv.push('--legacy-pm');
 
         process.env['ROLAND_TRIGGERED_VIA'] = 'mcp';
 
@@ -3696,7 +3704,15 @@ What would you like to work on?`;
           ...McpServer.PROJECT_CONTEXT_SCHEMA,
           loop_template: {
             type: 'string',
-            description: 'Optional loop template id (e.g. closed-loop-harness, feature-implementation-loop). Routes through ClosedLoop harness — not legacy PM waves.',
+            description: 'Optional loop template override. When omitted, auto-selects Pure ClosedLoop template from goal (e.g. small-fix-loop for typos).',
+          },
+          legacy_pm: {
+            type: 'boolean',
+            description: '[DEPRECATED] Opt into legacy PM Team waves instead of Pure ClosedLoop.',
+          },
+          use_pm_team: {
+            type: 'boolean',
+            description: 'Alias for legacy_pm.',
           },
         },
         required: ['goal'],

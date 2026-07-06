@@ -9,6 +9,7 @@ import {
   ensureMissionProjectContext,
   resolveMcpProjectContext,
   resolveMissionProjectRoot,
+  scopedProjectEnv,
 } from '../../src/utils/mcp-project-context.js';
 
 describe('mcp-project-context', () => {
@@ -57,6 +58,17 @@ describe('mcp-project-context', () => {
     const project = path.join(tmpDir, 'app');
     const stateDir = path.join(project, '.roland');
     expect(deriveProjectRootFromStateDir(stateDir)).toBe(project);
+  });
+
+  it('scopedProjectEnv builds overrides without mutating process.env', () => {
+    const project = path.join(tmpDir, 'scoped-env');
+    const stateDir = path.join(project, '.roland');
+    fs.mkdirSync(stateDir, { recursive: true });
+    delete process.env.ROLAND_PROJECT_ROOT;
+
+    const scoped = scopedProjectEnv({ projectRoot: project, stateDir });
+    expect(scoped.ROLAND_PROJECT_ROOT).toBe(project);
+    expect(process.env.ROLAND_PROJECT_ROOT).toBeUndefined();
   });
 
   it('applyMcpProjectEnv pins env without requiring chdir', () => {

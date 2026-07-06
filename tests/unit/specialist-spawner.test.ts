@@ -106,7 +106,7 @@ describe('Loop template YAML spawns', () => {
     const feature = templates.listDetailed().find((t) => t.name === 'feature-implementation-loop');
     expect(feature?.hasCustomSpawns).toBe(true);
     expect(feature?.spawnSummary).toContain('test-author');
-    expect(feature?.executionModes.usePmTeam).toBe(true);
+    expect(feature?.executionModes.usePmTeam).toBe(false);
   });
 
   it('emits onSpawnPulse when specialists are recorded', () => {

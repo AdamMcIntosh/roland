@@ -81,9 +81,9 @@ describe('Generic loop templates', () => {
     expect(act?.specialistSpawns?.some((s) => s.role === 'coding')).toBe(true);
   });
 
-  it('feature-implementation-loop has PM opt-in fields', () => {
+  it('feature-implementation-loop defaults to Pure ClosedLoop (use_pm_team false)', () => {
     const tpl = templates.get('feature-implementation-loop')!;
-    expect(tpl.usePmTeam).toBe(true);
+    expect(tpl.usePmTeam).toBe(false);
     const verify = tpl.phases.find((p) => p.phase === 'verify');
     expect(verify?.verification?.length).toBeGreaterThanOrEqual(3);
     expect(tpl.betweenIterations).toBeDefined();

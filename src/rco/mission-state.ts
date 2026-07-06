@@ -9,7 +9,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { chdirToProject } from '../utils/mcp-project-context.js';
+import { applyMcpProjectEnv, chdirToProject } from '../utils/mcp-project-context.js';
 import { LOOP_CHECKPOINT_FILE } from '../loop-engine/loop-checkpoint.js';
 import { LOOP_STATE_FILE } from '../loop-engine/loop-state.js';
 import { cleanupBoardsForNewMission } from './board-cleanup.js';
@@ -149,10 +149,9 @@ export function prepareMissionStart(
 ): CleanupPreviousRunsResult {
   if (options.projectRoot) {
     const projectRoot = path.resolve(options.projectRoot);
-    process.env['ROLAND_PROJECT_ROOT'] = projectRoot;
-    process.env['ROLAND_ROOT'] = projectRoot;
-    process.env['ROLAND_STATE_DIR'] = path.resolve(stateDir);
-    chdirToProject({ projectRoot, stateDir: path.resolve(stateDir) });
+    const resolvedStateDir = path.resolve(stateDir);
+    applyMcpProjectEnv({ projectRoot, stateDir: resolvedStateDir });
+    chdirToProject({ projectRoot, stateDir: resolvedStateDir });
   }
 
   const result = cleanupPreviousRuns(
