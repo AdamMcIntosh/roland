@@ -23,6 +23,9 @@ if (hasConsent()) {
 }
 
 runProgram(process.argv.slice(2)).catch((err) => {
-  logger.error('❌ Fatal error:', err);
+  // logger.error treats its second arg as structured context (Errors stringify to {}),
+  // so print the error itself separately to keep the message and stack visible.
+  logger.error('Fatal error:');
+  console.error(err);
   process.exit(1);
 });

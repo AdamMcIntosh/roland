@@ -22,8 +22,11 @@ if (fs.existsSync(configSrc)) {
 }
 
 // Copy agents directory (preserve subdirs e.g. agents/unsc/)
+// Wipe the destination first so files deleted from source don't linger in dist
+// (stale templates otherwise resurface in template listings and the loop engine).
 const agentsSrc = path.join(__dirname, '..', 'agents');
 const agentsDest = path.join(distDir, 'agents');
+fs.rmSync(agentsDest, { recursive: true, force: true });
 if (fs.existsSync(agentsSrc)) {
   const agentPattern = agentsSrc.replace(/\\/g, '/') + '/**/*.yaml';
   const agentFiles = globSync(agentPattern);
@@ -44,6 +47,7 @@ if (fs.existsSync(agentsSrc)) {
 // Copy recipes directory (preserve subdirs e.g. recipes/rco/)
 const recipesSrc = path.join(__dirname, '..', 'recipes');
 const recipesDest = path.join(distDir, 'recipes');
+fs.rmSync(recipesDest, { recursive: true, force: true });
 if (fs.existsSync(recipesSrc)) {
   const recipePattern = recipesSrc.replace(/\\/g, '/') + '/**/*.yaml';
   const recipeFiles = globSync(recipePattern);

@@ -128,8 +128,8 @@ export async function runClosedLoopMission(opts: ClosedLoopMissionOptions): Prom
     },
   });
 
-  onSynthesizing?.();
   const result = await closedLoop.run({ hadBlockers: false });
+  onSynthesizing?.();
 
   const pmSession = readLoopPmSession(stateDir);
   const plan: TeamPlan = {

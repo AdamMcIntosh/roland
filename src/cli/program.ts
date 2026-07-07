@@ -31,7 +31,7 @@ function normalizeArgv(argv: string[]): { cmd: string | undefined; rest: string[
   return { cmd, rest };
 }
 
-function buildProgram(): Command {
+export function buildProgram(): Command {
   const program = new Command();
 
   program
@@ -46,11 +46,13 @@ function buildProgram(): Command {
     .alias('mission')
     .description('Run a Pure ClosedLoop mission (auto-selects loop template)')
     .option('--loop-template <id>', 'Override auto-selected loop template')
-    .option('--background, --detach, -b', 'Run detached in background')
+    .option('-b, --background', 'Run detached in background')
+    .option('--detach', 'Alias for --background')
     .option('--state-dir <dir>', 'Persistence directory', '.roland')
-    .option('--notify, -n', 'Desktop notification on complete')
-    .option('--quiet, -q', 'Suppress progress output')
-    .option('--legacy-pm, --use-pm-team', '[DEPRECATED] Legacy PM Team waves')
+    .option('-n, --notify', 'Desktop notification on complete')
+    .option('-q, --quiet', 'Suppress progress output')
+    .option('--legacy-pm', '[DEPRECATED] Legacy PM Team waves')
+    .option('--use-pm-team', 'Alias for --legacy-pm')
     .action(async (goalParts: string[], opts, cmdObj) => {
       const rest = [...goalParts, ...collectOptionArgs(cmdObj)];
       await dispatchCommand('team', rest);
@@ -86,10 +88,10 @@ function collectOptionArgs(cmd: Command): string[] {
   const o = cmd.opts() as Record<string, unknown>;
   if (o.stateDir && o.stateDir !== '.roland') out.push('--state-dir', String(o.stateDir));
   if (o.loopTemplate) out.push('--loop-template', String(o.loopTemplate));
-  if (o.background) out.push('--background');
+  if (o.background || o.detach) out.push('--background');
   if (o.notify) out.push('--notify');
   if (o.quiet) out.push('--quiet');
-  if (o.legacyPm) out.push('--legacy-pm');
+  if (o.legacyPm || o.usePmTeam) out.push('--legacy-pm');
   return out;
 }
 
@@ -118,7 +120,7 @@ export async function runProgram(argv: string[]): Promise<void> {
 
   if (usesCommanderMission) {
     const program = buildProgram();
-    await program.parseAsync(['node', 'roland', ...argv], { from: 'user' });
+    await program.parseAsync(argv, { from: 'user' });
     return;
   }
 

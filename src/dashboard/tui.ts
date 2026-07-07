@@ -77,6 +77,16 @@ const SPINNERS = ['◐', '◓', '◑', '◒'];
 
 const STATUS_STEPS: RunStatus[] = ['planning', 'running', 'reviewing', 'synthesizing', 'done'];
 
+/** ClosedLoop phase pipeline (retry/escalate render at the critique slot). */
+const LOOP_STEPS = ['plan', 'act', 'verify', 'critique', 'observe', 'reflect'] as const;
+
+function loopStepIndex(phase: string | undefined): number {
+  if (!phase) return 0;
+  if (phase === 'retry' || phase === 'escalate') return LOOP_STEPS.indexOf('critique');
+  const idx = (LOOP_STEPS as readonly string[]).indexOf(phase);
+  return idx >= 0 ? idx : 0;
+}
+
 // ── TUI Renderer ─────────────────────────────────────────────────────────────
 
 export class TuiRenderer {
@@ -314,16 +324,29 @@ export class TuiRenderer {
     lines.push(div);
 
     // ── Status pipeline ──────────────────────────────────────────────────────
-    const curIdx = STATUS_STEPS.indexOf(state.status);
-    const pipeline = STATUS_STEPS.map((s, i) => {
-      if (i < curIdx)  return g('●') + ' ' + d(s);
-      if (i === curIdx) {
-        const icon = (s === 'done') ? g('●') : (s === 'error' ? r('●') : cy(this.spinner()));
-        return icon + ' ' + b(s);
-      }
-      return d('○') + ' ' + d(s);
-    }).join(d('  ──  '));
-    lines.push(row(' ' + pipeline));
+    // ClosedLoop runs show the PACVRE phase pipeline; legacy PM runs show waves.
+    const isClosedLoop = Boolean(state.loopTemplateId || state.loopPhase);
+    if (isClosedLoop && state.status !== 'done' && state.status !== 'error') {
+      const li = loopStepIndex(state.loopPhase);
+      const pipeline = LOOP_STEPS.map((s, i) => {
+        if (i < li)  return g('●') + ' ' + d(s);
+        if (i === li) return cy(this.spinner()) + ' ' + b(state.loopPhase ?? s);
+        return d('○') + ' ' + d(s);
+      }).join(d('  ──  '));
+      const iterLabel = state.loopIteration ? d(`  iter ${state.loopIteration}`) : '';
+      lines.push(row(' ' + pipeline + iterLabel));
+    } else {
+      const curIdx = STATUS_STEPS.indexOf(state.status);
+      const pipeline = STATUS_STEPS.map((s, i) => {
+        if (i < curIdx)  return g('●') + ' ' + d(s);
+        if (i === curIdx) {
+          const icon = (s === 'done') ? g('●') : (s === 'error' ? r('●') : cy(this.spinner()));
+          return icon + ' ' + b(s);
+        }
+        return d('○') + ' ' + d(s);
+      }).join(d('  ──  '));
+      lines.push(row(' ' + pipeline));
+    }
     lines.push(div);
 
     // ── Wave + progress bar ───────────────────────────────────────────────────
@@ -374,7 +397,9 @@ export class TuiRenderer {
       lines.push(row(this.taskRow(task, now, C)));
     }
     if (state.tasks.length === 0) {
-      lines.push(row(d('  (planning…)')));
+      lines.push(row(isClosedLoop
+        ? d(`  ClosedLoop harness · ${state.loopTemplateId ?? 'auto template'}`)
+        : d('  (planning…)')));
     }
     lines.push(div);
 
@@ -385,6 +410,11 @@ export class TuiRenderer {
         const taskElapsed = at.startedAt ? elapsed(now - at.startedAt) : '';
         lines.push(row(` ${mg('▶')} ${b(at.agent)} ${d('·')} ${cy(at.title.slice(0, C - 20))} ${d(taskElapsed)}`));
       }
+    } else if (isClosedLoop && state.status !== 'done' && state.status !== 'error') {
+      const live = state.liveActivity;
+      const phaseLabel = state.loopPhase ? `${state.loopPhase} phase` : 'running';
+      const activityLabel = live?.label ? ` ${d('·')} ${d(live.label.slice(0, C - 30))}` : '';
+      lines.push(row(` ${cy(this.spinner())} ${b(phaseLabel)}${activityLabel}`));
     } else if (state.status === 'reviewing') {
       lines.push(row(` ${cy(this.spinner())} ${b('[DEPRECATED] Lead PM')} ${d('reviewing wave results…')}`));
     } else if (state.status === 'synthesizing') {

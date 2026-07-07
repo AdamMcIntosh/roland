@@ -160,8 +160,14 @@ function mcpConfig(write: boolean, rest: string[]): void {
   console.log(`✅ Merged the "roland" MCP server into ${CURSOR_CONFIG}. Restart Cursor to activate.`);
 }
 
-function doctor(): void {
-  const checks: Array<{ ok: boolean; label: string; hint?: string }> = [];
+export interface DoctorCheck {
+  ok: boolean;
+  label: string;
+  hint?: string;
+}
+
+export function collectDoctorChecks(): DoctorCheck[] {
+  const checks: DoctorCheck[] = [];
   const add = (ok: boolean, label: string, hint?: string) => checks.push({ ok, label, hint });
 
   const version = readPackageVersion(DISPATCH_MODULE_URL);
@@ -240,6 +246,18 @@ function doctor(): void {
   const sdkCheck = checkCursorSdkRuntime(installRoot);
   add(sdkCheck.ok, sdkCheck.label, sdkCheck.hint);
 
+  // CURSOR_API_KEY — missions refuse to start without it
+  const apiKey = process.env.CURSOR_API_KEY?.trim();
+  add(
+    Boolean(apiKey),
+    apiKey
+      ? `CURSOR_API_KEY set (${apiKey.slice(0, 4)}…${apiKey.slice(-4)})`
+      : 'CURSOR_API_KEY is not set — missions will refuse to start',
+    apiKey
+      ? undefined
+      : 'Set it in your shell profile ($PROFILE / .zshrc): export CURSOR_API_KEY=your_key_here — get a key at https://cursor.com/settings → API Keys.',
+  );
+
   // SDK shell-exec cleanup tuning (optional env overrides)
   const settleMs = process.env.ROLAND_SDK_SETTLE_MS ?? '3500 (default)';
   const heavySettleMs = process.env.ROLAND_SDK_HEAVY_SETTLE_MS ?? '8000 (default)';
@@ -254,6 +272,11 @@ function doctor(): void {
     'Raise settle if you see [shell-exec] Close event warnings during team runs.',
   );
 
+  return checks;
+}
+
+function doctor(): void {
+  const checks = collectDoctorChecks();
   for (const c of checks) {
     console.log(`${c.ok ? '✅' : '❌'} ${c.label}`);
     if (!c.ok && c.hint) console.log(`   → ${c.hint}`);
@@ -351,6 +374,7 @@ function printHelp(): void {
   ln(`    ${cy('roland')} ${b('reject-commit')} [id]         Reject pending git-commit (loop HITL)`);
   ln();
   ln('  ' + b('UTILITY COMMANDS'));
+  ln(`    ${cy('roland')} ${b('templates')} [--json]         List loop templates ${d('(description, gates, exit conditions)')}`);
   ln(`    ${cy('roland')} doctor              Diagnose your Roland install`);
   ln(`    ${cy('roland')} pm-log              Print the PM event timeline`);
   ln(`    ${cy('roland')} mcp-config          Print Cursor MCP config (--general for HTTP)`);
@@ -394,7 +418,7 @@ function printHelp(): void {
 // ── Known subcommands (used for bare-goal shortcut detection) ─────────────────
 
 const KNOWN_CMDS = new Set([
-  'serve', 'mcp', 'mcp-config', 'doctor', 'pm-log',
+  'serve', 'mcp', 'mcp-config', 'doctor', 'pm-log', 'templates',
   'team', 'mission', 'run', 'goal', 'start', 'status', 'live', 'watch', 'pr', 'chat',
   'pause', 'resume', 'unblock', 'inject', 'replan', 'abort', 'hitl-status',
   'hitl-events', 'mission-summary', 'mission-audit',
@@ -434,6 +458,12 @@ export async function dispatchCommand(cmd: string | undefined, rest: string[]): 
       case 'doctor':
         doctor();
         break;
+      case 'templates': {
+        const { runTemplatesCli } = await import('../rco/templates-cli.js');
+        const code = runTemplatesCli(['templates', ...rest]);
+        if (code !== 0) process.exit(code);
+        break;
+      }
       case 'pm-log': {
         const idx = rest.indexOf('--limit');
         const limit = idx >= 0 ? Number(rest[idx + 1]) || 50 : 50;
