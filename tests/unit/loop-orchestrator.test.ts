@@ -60,6 +60,7 @@ function syncLoopStateToRun(
 
 describe('loop-orchestrator', () => {
   let tmpDir: string;
+  const origCwd = process.cwd();
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'roland-loop-orchestrator-'));
@@ -68,6 +69,10 @@ describe('loop-orchestrator', () => {
   });
 
   afterEach(() => {
+    // runTeam chdirs into the mission project root (inside tmpDir). Restore cwd
+    // before deleting tmpDir, or the process is left with a dead cwd on POSIX
+    // and later tests fail with ENOENT uv_cwd.
+    process.chdir(origCwd);
     delete process.env.ROLAND_LOOP_TEST_MODE;
     clearLoopEngineConfigCache();
     try {

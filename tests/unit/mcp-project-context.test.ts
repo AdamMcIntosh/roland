@@ -15,9 +15,12 @@ import {
 describe('mcp-project-context', () => {
   let tmpDir: string;
   const envBackup: Record<string, string | undefined> = {};
+  const origCwd = process.cwd();
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'roland-mcp-ctx-'));
+    // realpathSync: macOS tmpdir is a symlink (/var -> /private/var), and
+    // process.cwd() after chdir returns the resolved path.
+    tmpDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'roland-mcp-ctx-')));
     for (const key of ['ROLAND_PROJECT_ROOT', 'ROLAND_ROOT', 'ROLAND_STATE_DIR']) {
       envBackup[key] = process.env[key];
       delete process.env[key];
@@ -25,6 +28,7 @@ describe('mcp-project-context', () => {
   });
 
   afterEach(() => {
+    process.chdir(origCwd);
     fs.rmSync(tmpDir, { recursive: true, force: true });
     for (const [key, val] of Object.entries(envBackup)) {
       if (val === undefined) delete process.env[key];

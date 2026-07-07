@@ -38,7 +38,9 @@ describe('MCP mission project context', () => {
 
   beforeEach(async () => {
     spawnMock.mockClear();
-    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'roland-mcp-mission-'));
+    // realpathSync: macOS tmpdir is a symlink (/var -> /private/var), and
+    // process.cwd() after chdir returns the resolved path.
+    tmpRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'roland-mcp-mission-')));
     staleProject = path.join(tmpRoot, 'test-hybrid-2');
     targetProject = path.join(tmpRoot, 'linux-utils');
 
