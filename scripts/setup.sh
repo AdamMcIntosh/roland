@@ -9,10 +9,11 @@
 
 set -euo pipefail
 
-VERSION="0.1.5"
+VERSION="0.1.6"
 ROLAND_REPO="https://github.com/AdamMcIntosh/roland.git"
 ROLAND_DIR="$HOME/.roland/roland"
 ROLAND_CONFIG="$HOME/.roland/config.yaml"
+ROLAND_ENV="$HOME/.roland/.env"
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 
@@ -79,10 +80,42 @@ if ! command -v git &>/dev/null; then
 fi
 ok "Git $(git --version | head -c 20)"
 
-# ── OpenRouter API key ────────────────────────────────────────────────────────
+# ── Cursor API key (required for missions) ───────────────────────────────────
 
-step "OpenRouter API Key"
-printf "  ${CYAN}Roland uses OpenRouter for model routing. Get a key at https://openrouter.ai/${RESET}\n"
+step "Cursor API Key (required)"
+printf "  ${CYAN}Agent execution (roland team / roland mission) requires a Cursor API key.${RESET}\n"
+printf "  ${CYAN}Get one at https://cursor.com/settings → API Keys${RESET}\n"
+
+CURSOR_KEY="${CURSOR_API_KEY:-}"
+if [ -n "$CURSOR_KEY" ]; then
+  ok "Using CURSOR_API_KEY from environment"
+else
+  printf "  Enter your CURSOR_API_KEY (or press Enter to skip): "
+  read -rs CURSOR_KEY </dev/tty || CURSOR_KEY=""
+  printf "\n"
+  if [ -z "$CURSOR_KEY" ]; then
+    warn "No Cursor key provided — missions will fail until you run: roland init"
+  else
+    ok "Cursor API key captured"
+  fi
+fi
+
+if [ -n "$CURSOR_KEY" ]; then
+  mkdir -p "$HOME/.roland"
+  if [ -f "$ROLAND_ENV" ] && grep -q "^CURSOR_API_KEY=" "$ROLAND_ENV" 2>/dev/null; then
+    sed -i.bak "s|^CURSOR_API_KEY=.*|CURSOR_API_KEY=$CURSOR_KEY|" "$ROLAND_ENV"
+    rm -f "${ROLAND_ENV}.bak"
+  else
+    printf 'CURSOR_API_KEY=%s\n' "$CURSOR_KEY" >> "$ROLAND_ENV"
+  fi
+  chmod 600 "$ROLAND_ENV" 2>/dev/null || true
+  ok "Saved to $ROLAND_ENV (loaded automatically by roland)"
+fi
+
+# ── OpenRouter API key (optional) ─────────────────────────────────────────────
+
+step "OpenRouter API Key (optional)"
+printf "  ${CYAN}Optional — cost tracking and model routing metadata. Get a key at https://openrouter.ai/${RESET}\n"
 
 API_KEY=""
 ATTEMPTS=0
@@ -230,14 +263,18 @@ printf "\n"
 printf "${BOLD}What was set up:${RESET}\n"
 printf "  • Roland cloned/updated at ${CYAN}%s${RESET}\n" "$ROLAND_DIR"
 printf "  • Current project initialised with agent configs and MCP settings\n"
+if [ -n "$CURSOR_KEY" ]; then
+  printf "  • Cursor API key saved to ${CYAN}%s${RESET}\n" "$ROLAND_ENV"
+else
+  printf "  ${YELLOW}• No Cursor API key — run 'roland init' before your first mission${RESET}\n"
+fi
 if [ -n "$API_KEY" ]; then
   printf "  • OpenRouter API key saved to ${CYAN}%s${RESET}\n" "$ROLAND_CONFIG"
 fi
 printf "\n"
 printf "${BOLD}Next steps:${RESET}\n"
 printf "  1. Open this project in Cursor or VS Code\n"
-printf "  2. Verify: ask your IDE agent to \"Use the health_check tool\"\n"
-printf "     You should get: ${GREEN}status: healthy${RESET}\n"
+printf "  2. Verify the install: ${CYAN}roland doctor${RESET} (checks CURSOR_API_KEY, build, MCP)\n"
 printf "  3. Run a team mission for multi-step work:\n"
 printf "     ${CYAN}roland team \"your goal\" --loop-template full-cycle-verified-loop${RESET}\n"
 printf "\n"

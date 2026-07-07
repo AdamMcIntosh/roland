@@ -125,7 +125,7 @@ Explain the pending commit message to the operator before approving.
 
 ## Launching missions
 
-Always prefer **Pure ClosedLoop** (`use_pm_team: false`). **`roland team "goal"` auto-selects a loop template** — no `--loop-template` required for everyday work.
+All missions run through **Pure ClosedLoop** (v1.6.0 removed the legacy PM Team — there is no `--legacy-pm` flag). **`roland team "goal"` auto-selects a loop template** — no `--loop-template` required for everyday work.
 
 **Recommended Action (typo / small fix — template auto-selected):**
 
@@ -141,11 +141,21 @@ roland team "Exact clear goal here" --loop-template full-cycle-verified-loop
 
 Templates: `small-fix-loop` (auto for typos/hotfixes) · `full-cycle-verified-loop` · `feature-implementation-loop` · `refactor-and-modernize-loop` · `research-and-spec-loop`
 
-**[DEPRECATED] Legacy PM Team** — only when explicitly required:
+Browse the catalog with `roland templates` (`--json` for structured output).
 
-```bash
-roland team "goal" --legacy-pm
-```
+### Launch flags (v1.6.0)
+
+| Flag | Effect |
+|---|---|
+| `--budget <usd>` | Hard mission cost ceiling — loop stops before exceeding it |
+| `--auto-stash` | Stash uncommitted changes before the run (restored guidance printed at exit) |
+| `--force` | Run despite a dirty worktree (skips the guard — use sparingly) |
+| `--clean` | Archive prior mission state + reset loop artifacts before starting |
+
+**Dirty-worktree guard:** missions refuse to start when the target repo has
+uncommitted changes. If a launch fails with `DirtyWorktreeError`, report the
+listed files to the operator and offer: commit the changes, re-run with
+`--auto-stash`, or (with explicit operator approval) `--force`.
 
 When the user approves ("go", "run it", "execute"), run the exact command via shell.
 

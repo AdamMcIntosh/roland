@@ -26,19 +26,6 @@ Set `provider: ollama` per role in `config.yaml` and enable `ollama.enabled: tru
 
 ---
 
-## PM Team (Cursor-native — legacy opt-in)
-
-When `use_pm_team: true` or non-loop team runs, routing uses **Cursor subscription models** (not OpenRouter):
-
-| Lane | Default | Used for |
-|------|---------|----------|
-| Lead PM | gpt-5.4-nano | Orchestration, planning |
-| Engineers | composer-2.5 | Implementation, tests, docs |
-
-Configure under `pm:` in `config.yaml`.
-
----
-
 ## Complexity tiers (recipe / triage routing)
 
 | Tier | Models | Typical use |

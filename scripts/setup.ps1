@@ -4,8 +4,9 @@
     One-command setup for Roland Code Orchestrator (Windows PowerShell)
 
 .DESCRIPTION
-    Checks environment, prompts for OpenRouter API key,
-    clones/builds Roland, and initialises the current project.
+    Checks environment, prompts for the required Cursor API key (and an
+    optional OpenRouter key), clones/builds Roland, and initialises the
+    current project.
 
 .EXAMPLE
     # Remote one-liner:
@@ -17,10 +18,11 @@
 
 $ErrorActionPreference = "Stop"
 
-$Version     = "0.1.5"
+$Version     = "0.1.6"
 $RolandRepo  = "https://github.com/AdamMcIntosh/roland.git"
 $RolandDir   = Join-Path $env:USERPROFILE ".roland\roland"
 $RolandConfig = Join-Path $env:USERPROFILE ".roland\config.yaml"
+$RolandEnv   = Join-Path $env:USERPROFILE ".roland\.env"
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -72,10 +74,44 @@ if (-not $gitPath) {
 }
 Write-Ok "Git $(git --version)"
 
-# ── OpenRouter API key ───────────────────────────────────────────────────────
+# ── Cursor API key (required for missions) ──────────────────────────────────
 
-Write-Step "OpenRouter API Key"
-Write-Host "  Roland uses OpenRouter for model routing. Get a key at https://openrouter.ai/" -ForegroundColor Cyan
+Write-Step "Cursor API Key (required)"
+Write-Host "  Agent execution (roland team / roland mission) requires a Cursor API key." -ForegroundColor Cyan
+Write-Host "  Get one at https://cursor.com/settings -> API Keys" -ForegroundColor Cyan
+
+$CursorKey = $env:CURSOR_API_KEY
+if (-not [string]::IsNullOrWhiteSpace($CursorKey)) {
+    Write-Ok "Using CURSOR_API_KEY from environment"
+} else {
+    $CursorKey = Read-Host "  Enter your CURSOR_API_KEY (or press Enter to skip)"
+    if ([string]::IsNullOrWhiteSpace($CursorKey)) {
+        Write-Warn "No Cursor key provided — missions will fail until you run: roland init"
+        $CursorKey = ""
+    } else {
+        Write-Ok "Cursor API key captured"
+    }
+}
+
+if ($CursorKey) {
+    $rolandEnvDir = Split-Path $RolandEnv -Parent
+    if (-not (Test-Path $rolandEnvDir)) {
+        New-Item -ItemType Directory -Path $rolandEnvDir -Force | Out-Null
+    }
+    if ((Test-Path $RolandEnv) -and ((Get-Content $RolandEnv -Raw) -match '(?m)^CURSOR_API_KEY=')) {
+        $envContent = Get-Content $RolandEnv -Raw
+        $envContent = $envContent -replace '(?m)^CURSOR_API_KEY=.*', "CURSOR_API_KEY=$CursorKey"
+        Set-Content -Path $RolandEnv -Value $envContent -NoNewline
+    } else {
+        Add-Content -Path $RolandEnv -Value "CURSOR_API_KEY=$CursorKey"
+    }
+    Write-Ok "Saved to $RolandEnv (loaded automatically by roland)"
+}
+
+# ── OpenRouter API key (optional) ────────────────────────────────────────────
+
+Write-Step "OpenRouter API Key (optional)"
+Write-Host "  Optional — cost tracking and model routing metadata. Get a key at https://openrouter.ai/" -ForegroundColor Cyan
 
 $ApiKey = ""
 $Attempts = 0
@@ -234,14 +270,18 @@ Write-Host "What was set up:" -NoNewline
 Write-Host ""
 Write-Host "  • Roland cloned/updated at " -NoNewline; Write-Host $RolandDir -ForegroundColor Cyan
 Write-Host "  • Current project initialised with agent configs and MCP settings"
+if ($CursorKey) {
+    Write-Host "  • Cursor API key saved to " -NoNewline; Write-Host $RolandEnv -ForegroundColor Cyan
+} else {
+    Write-Warn "No Cursor API key — run 'roland init' before your first mission"
+}
 if ($ApiKey) {
     Write-Host "  • OpenRouter API key saved to " -NoNewline; Write-Host $RolandConfig -ForegroundColor Cyan
 }
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor White
 Write-Host "  1. Open this project in Cursor or VS Code"
-Write-Host "  2. Verify: ask your IDE agent to `"Use the health_check tool`""
-Write-Host "     You should get: " -NoNewline; Write-Host "status: healthy" -ForegroundColor Green
+Write-Host "  2. Verify the install: " -NoNewline; Write-Host "roland doctor" -ForegroundColor Cyan
 Write-Host "  3. Run a team mission for multi-step work:"
 Write-Host "     roland team `"your goal`" --loop-template full-cycle-verified-loop" -ForegroundColor Cyan
 Write-Host ""
