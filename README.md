@@ -6,7 +6,7 @@
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-green.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Current status (v1.4.0):** Closed-Loop Harness, EvaluationGate, loop memory, locked coordination blackboard, modular MCP tools, mission audit with phase timing, and clean PR formatting are production-ready. Critique phase is **rule-based (no LLM)**. `PhaseIntentPoster` records phase intents on the blackboard — it does not spawn sub-agents on the ClosedLoop hot path.
+**Current status (v1.6.0):** Legacy PM Team removed — Pure ClosedLoop only. Closed-Loop Harness, EvaluationGate, dirty-worktree guard, mission budget ceilings, `roland init` onboarding, loop memory, locked coordination blackboard, modular MCP tools, mission audit with phase timing, and clean PR formatting are production-ready. Critique phase is **rule-based (no LLM)**. `PhaseIntentPoster` records phase intents on the blackboard — it does not spawn sub-agents on the ClosedLoop hot path.
 
 ---
 
@@ -80,23 +80,58 @@ Inspired by [loops.elorm.xyz](https://loops.elorm.xyz) patterns: self-paced iter
 
 ---
 
-## Quick Start
+## Quick Start (New Users)
 
-**Prerequisites:** Node.js 22+, [`CURSOR_API_KEY`](https://cursor.com/settings), a git project directory.
+**Prerequisites:** Node.js 22+, git, a [Cursor API key](https://cursor.com/settings), a git project directory.
 
-### 1. Install
+### Option A — Global install (recommended)
+
+```bash
+git clone https://github.com/AdamMcIntosh/roland.git
+cd roland
+bash scripts/install-global.sh          # macOS/Linux
+# pwsh scripts/install-global.ps1     # Windows
+
+roland init                             # interactive: API key, MCP, telemetry
+roland doctor --fresh-check             # full install + loop readiness
+cd /path/to/your/project
+roland team "your first mission" --loop-template small-fix-loop
+```
+
+### Option B — Development link
 
 ```bash
 git clone https://github.com/AdamMcIntosh/roland.git
 cd roland
 npm ci && npm run build && npm link
 
-export CURSOR_API_KEY=your_key_here    # add to ~/.bashrc or ~/.zshrc
+roland init                             # creates ~/.roland/.env
+roland doctor --fix                     # MCP config + .roland/ scaffold
 
 cd /path/to/your/project
-roland doctor
+roland doctor --fresh-check
 roland board-status --concise
 ```
+
+### Environment variables
+
+Roland loads `~/.roland/.env` and project `.env` automatically (existing shell vars win):
+
+```bash
+# ~/.roland/.env
+CURSOR_API_KEY=your_key_here
+```
+
+Or set in your shell profile — PowerShell `$PROFILE` on Windows, `.zshrc` / `.bashrc` on macOS/Linux.
+
+### Before your first mission
+
+- **Clean git worktree** — Roland refuses missions when you have uncommitted changes (use `--auto-stash` or `--force` to override).
+- **`roland doctor --fresh-check`** — validates build, MCP, SDK, loop templates, and API key.
+
+---
+
+## Quick Start (Legacy)
 
 ### 2. Your first closed-loop mission
 
@@ -199,6 +234,49 @@ Templates live in `recipes/loops/`. Attach with `--loop-template <name>`. Verifi
 Deprecated aliases still resolve via `TEMPLATE_ALIASES`: `closed-loop-harness`, `code-quality-loop`, `research-loop`, `research-and-spec-loop`, `research-synthesis-loop`, `mcp-extension-loop`, `minimal-3-phase` (E2E harness only).
 
 Full guide: [docs/guides/closed-loop-harness.md](docs/guides/closed-loop-harness.md)
+
+List templates with one-line guidance: `roland templates` (triage auto-selects when `--loop-template` is omitted).
+
+---
+
+## Cost visibility & budget
+
+Every mission records usage to `.roland/usage-history.json` and prints a **Cost Summary** in the Mission Complete footer (est. cost, tokens, duration, models).
+
+```yaml
+# config.yaml
+budget:
+  mission_budget_usd: 5.00
+  daily_budget_usd: 25.00
+  estimated_per_iteration_cost_usd: 0.75
+  enforce_hard_ceiling: true
+```
+
+```bash
+roland team "large refactor" --budget 3.00   # CLI override (USD)
+```
+
+The loop engine stops gracefully before exceeding the ceiling. See [docs/guides/model-routing-and-cost.md](docs/guides/model-routing-and-cost.md).
+
+---
+
+## State hygiene & `--clean`
+
+- New missions archive prior blackboard/audit to `.roland/missions/<id>/`
+- `roland team "goal" --clean` — archive stale state + reset loop artifacts (keeps `memory.md`, `usage-history.json`)
+- `.roland-sim/` is for E2E/sim runs — gitignored by default (`roland init` adds entries)
+
+---
+
+## Troubleshooting
+
+**[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** — top failure modes with diagnosis commands:
+
+1. Mission stalls mid-phase  
+2. HITL blocker → `roland unblock`  
+3. Connection drop / resume from checkpoint  
+4. Verification loops (flaky detector)  
+5. Stale state → `--clean`
 
 ---
 

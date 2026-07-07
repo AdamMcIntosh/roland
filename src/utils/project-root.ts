@@ -15,6 +15,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { loadEnvFiles } from './env-loader.js';
 
 function readPackageName(dir: string): string | undefined {
   const pkgPath = path.join(dir, 'package.json');
@@ -105,6 +106,9 @@ export function bootstrapRolandEnv(opts?: {
     Boolean(process.env.ROLAND_ROOT?.trim());
 
   const projectRoot = resolveProjectRoot(cwd);
+
+  // Load ~/.roland/.env and project .env before any command reads process.env.
+  loadEnvFiles({ projectRoot: hasProjectOverride ? projectRoot : cwd });
 
   if (!hasProjectOverride) {
     process.env.ROLAND_PROJECT_ROOT = projectRoot;

@@ -52,7 +52,8 @@ import {
   resolvePmIntegrationStatus,
   type PmIntegrationStatus,
 } from './loop-pm-policy.js';
-import type { TeamOrchestratorOptions } from '../rco/team-orchestrator.js';
+import type { TeamOrchestratorOptions } from '../rco/team-types.js';
+import type { MissionBudgetGuard } from '../rco/mission-budget.js';
 
 export const CLOSED_LOOP_PR_FILE = 'closed-loop-pr.json';
 
@@ -81,8 +82,9 @@ export interface ClosedLoopOptions {
   hooks?: LoopHooks;
   /** [DEPRECATED] Explicit opt-in for legacy PM Team (overrides config/template). When false, pure ClosedLoop only. */
   enablePmIntegration?: boolean;
-  /** Forwarded to embedded [DEPRECATED] legacy PM Team runs (HITL, wave callbacks). */
+  /** Forwarded to embedded loop runs (HITL, wave callbacks). */
   teamOpts?: Partial<TeamOrchestratorOptions>;
+  budgetGuard?: MissionBudgetGuard;
 }
 
 export interface ClosedLoopResult extends LoopRunResult {
@@ -178,6 +180,7 @@ export class ClosedLoop {
         process.env.ROLAND_ROOT?.trim() ??
         process.cwd(),
       isTestMode: opts.isTestMode,
+      runId: opts.runId,
     };
 
     const pmBridge = pmEnabled
@@ -188,8 +191,8 @@ export class ClosedLoop {
           blackboard: opts.blackboard,
           commandBoard: opts.commandBoard,
           isTestMode: opts.isTestMode,
-          teamOpts: opts.teamOpts,
           modelRouter: this.modelRouter,
+          runId: opts.runId,
         })
       : undefined;
 
@@ -233,6 +236,8 @@ export class ClosedLoop {
         dispatchMethod: loopCfg.defaultDispatch ?? 'cursor_sdk',
         executionMode: pmEnabled ? 'PM-Enhanced' : 'Pure ClosedLoop',
       },
+      budgetGuard: opts.budgetGuard,
+      runId: opts.runId,
     });
 
     console.error(

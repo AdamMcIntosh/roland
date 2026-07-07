@@ -9,17 +9,19 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { buildCursorMcpServerEntry, buildGeneralMcpHttpEntry, runMcpServer } from '../server/mcp-server.js';
 import { runMcpHttpServer } from '../server/mcp-http.js';
 import { resolveRolandInstallRoot } from '../utils/project-root.js';
 import { readPackageVersion } from '../utils/package-version.js';
 import { logger } from '../utils/logger.js';
-import { Roster } from '../pm/roster.js';
-import { TeamRecipes } from '../pm/team-recipes.js';
 import { PMEventLog } from '../pm/event-log.js';
 import { renderTimeline } from '../pm/render.js';
+import {
+  collectDoctorChecks as collectDoctorChecksImpl,
+  runDoctorCli,
+  type DoctorCheck,
+} from './doctor-cli.js';
 
 const DISPATCH_MODULE_URL = import.meta.url;
 
@@ -53,67 +55,10 @@ async function mcpHttp(rest: string[]): Promise<void> {
   await runMcpHttpServer({ host, port });
 }
 
-/** Verify @cursor/sdk is installable for `roland team` / orchestrate on this platform. */
-function checkCursorSdkRuntime(installRoot: string): { ok: boolean; label: string; hint?: string } {
-  const platform = process.platform;
-  const arch = process.arch;
-  const abi = process.versions.modules;
-  const sdkPkgPath = path.join(installRoot, 'node_modules', '@cursor', 'sdk', 'package.json');
-  const sdkDist = path.join(installRoot, 'node_modules', '@cursor', 'sdk', 'dist');
+export type { DoctorCheck };
 
-  if (!fs.existsSync(sdkPkgPath)) {
-    return {
-      ok: false,
-      label: `@cursor/sdk (${platform}/${arch}, Node ABI ${abi})`,
-      hint: 'Run `npm ci` from the Roland install root.',
-    };
-  }
-
-  let sdkMeta: { optionalDependencies?: Record<string, string> } = {};
-  try {
-    sdkMeta = JSON.parse(fs.readFileSync(sdkPkgPath, 'utf-8')) as typeof sdkMeta;
-  } catch {
-    // Fall through to dist-only check.
-  }
-
-  const platformPkgName = `@cursor/sdk-${platform}-${arch}`;
-  if (sdkMeta.optionalDependencies?.[platformPkgName]) {
-    const platformDir = path.join(installRoot, 'node_modules', '@cursor', `sdk-${platform}-${arch}`);
-    const platformOk = fs.existsSync(path.join(platformDir, 'package.json'));
-    return {
-      ok: platformOk,
-      label: `@cursor/sdk platform package (${platformPkgName})`,
-      hint: platformOk ? undefined : `Run \`npm ci\` from repo root to install ${platformPkgName}.`,
-    };
-  }
-
-  // Legacy @cursor/sdk releases shipped npm sqlite3 native bindings.
-  const sqliteRoot = path.join(installRoot, 'node_modules', 'sqlite3');
-  if (fs.existsSync(path.join(sqliteRoot, 'package.json'))) {
-    const sqliteBinding = path.join(
-      sqliteRoot,
-      'lib',
-      'binding',
-      `node-v${abi}-${platform}-${arch}`,
-      'node_sqlite3.node',
-    );
-    const sqliteRelease = path.join(sqliteRoot, 'build', 'Release', 'node_sqlite3.node');
-    const sqliteOk = fs.existsSync(sqliteBinding) || fs.existsSync(sqliteRelease);
-    return {
-      ok: sqliteOk,
-      label: `@cursor/sdk sqlite3 binding (${platform}/${arch}, Node ABI ${abi})`,
-      hint: sqliteOk
-        ? undefined
-        : 'Install VS "Desktop development with C++", then `npm rebuild sqlite3`. See docs/guides/mini-pc-deployment.md.',
-    };
-  }
-
-  const distOk = fs.existsSync(sdkDist);
-  return {
-    ok: distOk,
-    label: `@cursor/sdk (${platform}/${arch}, Node ABI ${abi})`,
-    hint: distOk ? undefined : 'Run `npm ci` from the Roland install root.',
-  };
+export function collectDoctorChecks(): DoctorCheck[] {
+  return collectDoctorChecksImpl(DISPATCH_MODULE_URL);
 }
 
 function mcpConfig(write: boolean, rest: string[]): void {
@@ -158,132 +103,6 @@ function mcpConfig(write: boolean, rest: string[]): void {
   fs.mkdirSync(path.dirname(CURSOR_CONFIG), { recursive: true });
   fs.writeFileSync(CURSOR_CONFIG, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
   console.log(`✅ Merged the "roland" MCP server into ${CURSOR_CONFIG}. Restart Cursor to activate.`);
-}
-
-export interface DoctorCheck {
-  ok: boolean;
-  label: string;
-  hint?: string;
-}
-
-export function collectDoctorChecks(): DoctorCheck[] {
-  const checks: DoctorCheck[] = [];
-  const add = (ok: boolean, label: string, hint?: string) => checks.push({ ok, label, hint });
-
-  const version = readPackageVersion(DISPATCH_MODULE_URL);
-  add(true, `Roland version: ${version}`);
-
-  const nodeMajor = Number(process.version.slice(1).split('.')[0]);
-  add(nodeMajor >= 22, `Node.js ${process.version} (requires 22+)`, nodeMajor >= 22 ? undefined : 'Upgrade Node: https://nodejs.org/');
-
-  try {
-    execSync('git --version', { stdio: 'pipe' });
-    add(true, 'Git available');
-  } catch {
-    add(false, 'Git not found', 'Install git — required for team runs, watch mode, and PR tools.');
-  }
-
-  try {
-    const inGit = execSync('git rev-parse --is-inside-work-tree', { stdio: 'pipe', cwd: process.cwd() })
-      .toString()
-      .trim();
-    add(inGit === 'true', `Git repo at ${process.cwd()}`, inGit === 'true' ? undefined : 'Run from a git project directory for full Roland features.');
-  } catch {
-    add(false, `Git repo at ${process.cwd()}`, 'Not inside a git work tree.');
-  }
-
-  const installRoot = resolveRolandInstallRoot(DISPATCH_MODULE_URL);
-  const distDir = path.join(installRoot, 'dist');
-  add(fs.existsSync(distDir), `Build present (${distDir})`, fs.existsSync(distDir) ? undefined : 'Run npm run build.');
-  const mcpEntry = path.join(distDir, 'server', 'mcp-server.js');
-  add(fs.existsSync(mcpEntry), `MCP server entry (${mcpEntry})`, fs.existsSync(mcpEntry) ? undefined : 'Run npm run build.');
-  const binEntry = path.join(installRoot, 'bin', 'roland.js');
-  add(fs.existsSync(binEntry), `Global CLI shim (${binEntry})`, fs.existsSync(binEntry) ? undefined : 'Missing bin/roland.js — reinstall or npm link from repo.');
-  add(true, `Install root: ${installRoot}`);
-  add(true, `Project root: ${process.env.ROLAND_PROJECT_ROOT ?? process.cwd()}`);
-
-  // agents/
-  const agentsDir = Roster.resolveAgentsDir();
-  const agentCount = (() => {
-    try {
-      return fs.readdirSync(agentsDir).filter((f) => f.endsWith('.yaml')).length;
-    } catch {
-      return 0;
-    }
-  })();
-  add(agentCount > 0, `Engineer personas: ${agentCount} in ${agentsDir}`, agentCount === 0 ? 'Run npm run build to copy agents/.' : undefined);
-
-  // recipes/teams/
-  const teamsDir = TeamRecipes.resolveTeamsDir();
-  const recipeCount = new TeamRecipes(teamsDir).list().length;
-  add(recipeCount > 0, `Team recipes: ${recipeCount} in ${teamsDir}`, recipeCount === 0 ? 'Run npm run build to copy recipes/.' : undefined);
-
-  // ~/.cursor/mcp.json has roland
-  let hasEntry = false;
-  try {
-    const cfg = JSON.parse(fs.readFileSync(CURSOR_CONFIG, 'utf-8'));
-    hasEntry = Boolean(cfg?.mcpServers?.roland);
-  } catch {
-    hasEntry = false;
-  }
-  add(hasEntry, `Cursor MCP entry in ${CURSOR_CONFIG}`, hasEntry ? undefined : 'Run `roland mcp-config --write`.');
-
-  // .roland write access in cwd
-  let canWrite = false;
-  try {
-    const dir = path.join(process.cwd(), '.roland');
-    fs.mkdirSync(dir, { recursive: true });
-    const probe = path.join(dir, '.doctor-probe');
-    fs.writeFileSync(probe, 'ok');
-    fs.rmSync(probe);
-    canWrite = true;
-  } catch {
-    canWrite = false;
-  }
-  add(canWrite, `Writable .roland/ in ${process.cwd()}`, canWrite ? undefined : 'Check directory permissions.');
-
-  // @cursor/sdk runtime (orchestrate + team mode)
-  const sdkCheck = checkCursorSdkRuntime(installRoot);
-  add(sdkCheck.ok, sdkCheck.label, sdkCheck.hint);
-
-  // CURSOR_API_KEY — missions refuse to start without it
-  const apiKey = process.env.CURSOR_API_KEY?.trim();
-  add(
-    Boolean(apiKey),
-    apiKey
-      ? `CURSOR_API_KEY set (${apiKey.slice(0, 4)}…${apiKey.slice(-4)})`
-      : 'CURSOR_API_KEY is not set — missions will refuse to start',
-    apiKey
-      ? undefined
-      : 'Set it in your shell profile ($PROFILE / .zshrc): export CURSOR_API_KEY=your_key_here — get a key at https://cursor.com/settings → API Keys.',
-  );
-
-  // SDK shell-exec cleanup tuning (optional env overrides)
-  const settleMs = process.env.ROLAND_SDK_SETTLE_MS ?? '3500 (default)';
-  const heavySettleMs = process.env.ROLAND_SDK_HEAVY_SETTLE_MS ?? '8000 (default)';
-  const terminalWaitMs = process.env.ROLAND_SDK_TERMINAL_WAIT_MS ?? '30000 (default)';
-  add(
-    true,
-    `SDK cleanup: ROLAND_SDK_SETTLE_MS=${settleMs}, ROLAND_SDK_HEAVY_SETTLE_MS=${heavySettleMs}`,
-  );
-  add(
-    true,
-    `SDK cleanup: ROLAND_SDK_TERMINAL_WAIT_MS=${terminalWaitMs}`,
-    'Raise settle if you see [shell-exec] Close event warnings during team runs.',
-  );
-
-  return checks;
-}
-
-function doctor(): void {
-  const checks = collectDoctorChecks();
-  for (const c of checks) {
-    console.log(`${c.ok ? '✅' : '❌'} ${c.label}`);
-    if (!c.ok && c.hint) console.log(`   → ${c.hint}`);
-  }
-  const failed = checks.filter((c) => !c.ok).length;
-  console.log(`\n${checks.length - failed}/${checks.length} checks passed.`);
-  if (failed > 0) process.exit(1);
 }
 
 function pmLog(limit: number): void {
@@ -339,7 +158,10 @@ function printHelp(): void {
   ln(`    ${b('--stream')}, -s              Print task output snippets as each agent completes`);
   ln(`    ${b('--sequential')}              One agent at a time  ${d('(safe mode for unstable connections)')}`);
   ln(`    ${b('--loop-template')} <id>       Override auto-selected loop template`);
-  ln(`    ${b('--legacy-pm')}, ${b('--use-pm-team')}  [DEPRECATED] Legacy PM Team waves`);
+  ln(`    ${b('--force')}                     Skip dirty-worktree guard ${d('(data-loss risk)')}`);
+  ln(`    ${b('--auto-stash')}                Stash changes before mission ${d('(pop after — foreground)')}`);
+  ln(`    ${b('--budget')} <usd>              Per-mission cost ceiling override`);
+  ln(`    ${b('--clean')}, -c                 Archive stale state before starting`);
   ln();
   ln('  ' + b('WATCH FLAGS'));
   ln(`    ${b('--task')} "description"       Fixed goal instead of commit message`);
@@ -374,8 +196,9 @@ function printHelp(): void {
   ln(`    ${cy('roland')} ${b('reject-commit')} [id]         Reject pending git-commit (loop HITL)`);
   ln();
   ln('  ' + b('UTILITY COMMANDS'));
+  ln(`    ${cy('roland')} ${b('init')} [--yes]              Interactive first-run setup (keys, MCP, telemetry)`);
+  ln(`    ${cy('roland')} doctor [--fresh-check] [--fix]  Diagnose install; fix safe issues`);
   ln(`    ${cy('roland')} ${b('templates')} [--json]         List loop templates ${d('(description, gates, exit conditions)')}`);
-  ln(`    ${cy('roland')} doctor              Diagnose your Roland install`);
   ln(`    ${cy('roland')} pm-log              Print the PM event timeline`);
   ln(`    ${cy('roland')} mcp-config          Print Cursor MCP config (--general for HTTP)`);
   ln(`    ${cy('roland')} mcp [--port N]      Streamable HTTP MCP on 127.0.0.1 (use --host 0.0.0.0 for LAN)`);
@@ -386,7 +209,7 @@ function printHelp(): void {
   ln(`    ${b('ROLAND_SIMPLE_TUI=1')}        Simple ASCII output  ${d('(mobile SSH, Termius, limited terminals)')}`);
   ln(`    ${b('ROLAND_SEQUENTIAL=1')}        Sequential safe mode  ${d('(one agent at a time; use --sequential flag per-run)')}`);
   ln(`    ${b('ROLAND_WEB=1')}               Clean ANSI-free output for web/chat UI  ${d('(same as --web flag)')}`);
-  ln(`    ${b('CURSOR_API_KEY')}             Required for agent execution`);
+  ln(`    ${b('CURSOR_API_KEY')}             Required for agent execution ${d('(or ~/.roland/.env)')}`);
   ln(`    ${b('ROLAND_AGENT_TIMEOUT_MS')}    Agent timeout  ${d('(default: 25 min)')}`);
   ln(`    ${b('ROLAND_AGENT_RETRIES')}       Max retries per agent  ${d('(default: 5)')}`);
   ln(`    ${b('ROLAND_PROJECT_ROOT')}        Target project when cwd is not the repo`);
@@ -418,7 +241,7 @@ function printHelp(): void {
 // ── Known subcommands (used for bare-goal shortcut detection) ─────────────────
 
 const KNOWN_CMDS = new Set([
-  'serve', 'mcp', 'mcp-config', 'doctor', 'pm-log', 'templates',
+  'serve', 'mcp', 'mcp-config', 'doctor', 'init', 'pm-log', 'templates',
   'team', 'mission', 'run', 'goal', 'start', 'status', 'live', 'watch', 'pr', 'chat',
   'pause', 'resume', 'unblock', 'inject', 'replan', 'abort', 'hitl-status',
   'hitl-events', 'mission-summary', 'mission-audit',
@@ -455,9 +278,17 @@ export async function dispatchCommand(cmd: string | undefined, rest: string[]): 
       case 'mcp-config':
         mcpConfig(rest.includes('--write'), rest);
         break;
-      case 'doctor':
-        doctor();
+      case 'doctor': {
+        const code = runDoctorCli(DISPATCH_MODULE_URL, rest);
+        if (code !== 0) process.exit(code);
         break;
+      }
+      case 'init': {
+        const { runInitCli } = await import('./init-cli.js');
+        const code = await runInitCli(rest);
+        if (code !== 0) process.exit(code);
+        break;
+      }
       case 'templates': {
         const { runTemplatesCli } = await import('../rco/templates-cli.js');
         const code = runTemplatesCli(['templates', ...rest]);

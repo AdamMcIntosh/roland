@@ -36,6 +36,7 @@ import { runBetweenIterations } from './between-iterations.js';
 import { evaluateExitConditions } from './exit-conditions.js';
 import type { CommandRunner } from './verification/index.js';
 import type { EvaluationGateResult } from './evaluation-gate.js';
+import type { MissionBudgetGuard } from '../rco/mission-budget.js';
 
 export interface LoopHooks {
   onPhaseStart?: (phase: Phase, iteration: number) => void;
@@ -76,6 +77,9 @@ export interface LoopEngineOptions {
     dispatchMethod?: string;
     executionMode?: string;
   };
+  /** Mission cost ceiling — stops loop gracefully before exceeding limit. */
+  budgetGuard?: MissionBudgetGuard;
+  runId?: string;
 }
 
 export interface LoopRunResult {
@@ -84,6 +88,8 @@ export interface LoopRunResult {
   phasesCompleted: number;
   iterationsRun: number;
   timedOut?: boolean;
+  budgetExceeded?: boolean;
+  budgetMessage?: string;
 }
 
 export class LoopEngine {
@@ -100,6 +106,8 @@ export class LoopEngine {
   private readonly timeoutMs: number;
   private readonly loopStartedAt: number;
   private readonly loopMemory?: LoopMemory;
+  private readonly budgetGuard?: MissionBudgetGuard;
+  private readonly runId?: string;
   private readonly runner?: CommandRunner;
   private readonly cwd: string;
   private readonly liveContext?: LoopEngineOptions['liveContext'];
@@ -140,6 +148,8 @@ export class LoopEngine {
       cfg.timeoutMs ??
       1_800_000;
     this.loopStartedAt = Date.now();
+    this.budgetGuard = opts.budgetGuard;
+    this.runId = opts.runId;
 
     if (opts.recoverOnStart !== false) {
       const recovery = tryRecoverLoopState(opts.stateDir);
@@ -241,6 +251,26 @@ export class LoopEngine {
       }
 
       iterationsRun++;
+
+      if (this.budgetGuard) {
+        const budgetCheck = this.budgetGuard.checkBeforeIteration(iter);
+        if (!budgetCheck.allowed) {
+          console.error(`[Loop][engine] ${budgetCheck.reason ?? 'Budget ceiling reached'}`);
+          this.store.setStatus('completed');
+          this.emitState();
+          this.observability.persistMetrics(this.store.get());
+          this.observability.postHistoryToBlackboard(this.store.get());
+          this.hooks.onLoopComplete?.(this.store.get(), 'completed');
+          return {
+            status: 'completed',
+            state: this.store.get(),
+            phasesCompleted,
+            iterationsRun,
+            budgetExceeded: true,
+            budgetMessage: budgetCheck.reason,
+          };
+        }
+      }
 
       console.error(
         `[Loop][engine] iteration ${iter}/${maxIter} retryCount=${this.store.get().retryCount}`,

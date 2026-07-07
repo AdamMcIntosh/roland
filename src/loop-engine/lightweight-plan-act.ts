@@ -25,6 +25,7 @@ export interface LightweightPlanActContext {
   modelRouter?: RoleModelRouter;
   cwd?: string;
   isTestMode?: boolean;
+  runId?: string;
 }
 
 /** Lightweight Plan — scopes iteration; optional SDK dispatch when not in test mode. */
@@ -57,6 +58,7 @@ export async function runLightweightPlan(
     modelRouter: router,
     phaseConfig: extras.phaseConfig,
     loopState: extras.loopState,
+    runId: opts.runId,
     isTestMode: opts.isTestMode,
     cwd: opts.cwd,
   });
@@ -120,6 +122,7 @@ export async function runLightweightAct(
     waveNumber,
     isTestMode: opts.isTestMode,
     cwd: opts.cwd,
+    runId: opts.runId,
   });
 
   opts.blackboard.post({

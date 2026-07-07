@@ -1,5 +1,8 @@
 /**
- * Loop PM policy — pure ClosedLoop default, explicit PM opt-in.
+ * Loop PM policy — Pure ClosedLoop only (legacy PM Team removed v1.6.0).
+ *
+ * PM integration is permanently disabled: template opt-in flags, phase
+ * overrides, and enablePmIntegration are all ignored.
  *
  * Scoped run: npx vitest run tests/unit/loop-pm-policy.test.ts
  */
@@ -20,20 +23,16 @@ const minimalTemplate: LoopTemplate = {
   phases: [{ phase: 'plan' }, { phase: 'act' }, { phase: 'verify' }],
 };
 
-const autoTemplate: LoopTemplate = {
+const legacyOptInTemplate: LoopTemplate = {
   name: 'feature-implementation-loop',
   description: 'test',
   phases: [{ phase: 'plan' }, { phase: 'act' }, { phase: 'verify' }],
-  pmPlan: 'auto',
-  pmAct: 'auto',
-};
-
-const optInTemplate: LoopTemplate = {
-  ...autoTemplate,
+  pmPlan: 'always',
+  pmAct: 'always',
   usePmTeam: true,
 };
 
-describe('loop-pm-policy', () => {
+describe('loop-pm-policy (Pure ClosedLoop only)', () => {
   beforeEach(() => {
     clearLoopEngineConfigCache();
     delete process.env.ROLAND_LOOP_PM;
@@ -44,48 +43,43 @@ describe('loop-pm-policy', () => {
     delete process.env.ROLAND_LOOP_PM;
   });
 
-  it('defaults to pure ClosedLoop when no PM opt-in', () => {
-    const status = resolvePmIntegrationStatus(autoTemplate);
+  it('defaults to pure ClosedLoop', () => {
+    const status = resolvePmIntegrationStatus(minimalTemplate);
     expect(status.enabled).toBe(false);
-    expect(isLoopPmTeamEnabled(autoTemplate)).toBe(false);
+    expect(status.source).toBe('disabled');
+    expect(isLoopPmTeamEnabled(minimalTemplate)).toBe(false);
   });
 
-  it('enables PM when template use_pm_team is true', () => {
-    const status = resolvePmIntegrationStatus(optInTemplate);
-    expect(status.enabled).toBe(true);
-    expect(status.source).toBe('opt-in');
+  it('ignores legacy template opt-in flags (use_pm_team, pm_plan/pm_act: always)', () => {
+    const status = resolvePmIntegrationStatus(legacyOptInTemplate);
+    expect(status.enabled).toBe(false);
+    expect(status.source).toBe('disabled');
+    expect(isLoopPmTeamEnabled(legacyOptInTemplate)).toBe(false);
   });
 
-  it('shouldUsePmTeam auto requires pmOptIn', () => {
-    const without = shouldUsePmTeam('Big multi-file refactor across services', 'auto', { pmOptIn: false });
-    expect(without.usePm).toBe(false);
-
-    const withOptIn = shouldUsePmTeam('Big multi-file refactor across services', 'auto', { pmOptIn: true });
-    expect(withOptIn.usePm).toBe(true);
-  });
-
-  it('minimal template stays pure ClosedLoop', () => {
-    expect(resolvePmIntegrationStatus(minimalTemplate).enabled).toBe(false);
-  });
-
-  it('enablePmIntegration=true forces PM on', () => {
+  it('ignores enablePmIntegration override', () => {
     expect(
       resolvePmIntegrationStatus(minimalTemplate, { enablePmIntegration: true }).enabled,
-    ).toBe(true);
+    ).toBe(false);
+    expect(
+      resolvePmIntegrationStatus(legacyOptInTemplate, { enablePmIntegration: true }).enabled,
+    ).toBe(false);
   });
 
-  it('formatPmIntegrationLabel reflects Pure ClosedLoop default', () => {
-    expect(formatPmIntegrationLabel({ enabled: false, reason: '', source: 'disabled' })).toContain(
-      'Pure ClosedLoop',
-    );
-    expect(formatPmIntegrationLabel({ enabled: true, reason: '', source: 'opt-in' })).toContain(
-      '[DEPRECATED]',
-    );
+  it('shouldUsePmTeam never routes to PM Team', () => {
+    expect(shouldUsePmTeam('Big multi-file refactor across services', 'always').usePm).toBe(false);
+    expect(shouldUsePmTeam('Fix typo in README', 'auto').usePm).toBe(false);
+    expect(shouldUsePmTeam('Anything', 'never').usePm).toBe(false);
   });
 
-  it('opt-in reason includes [DEPRECATED] tag', () => {
-    const status = resolvePmIntegrationStatus(optInTemplate);
-    expect(status.reason).toContain('[DEPRECATED]');
-    expect(status.reason).toContain('use_pm_team');
+  it('formatPmIntegrationLabel always reports Pure ClosedLoop', () => {
+    const status = resolvePmIntegrationStatus(legacyOptInTemplate);
+    expect(formatPmIntegrationLabel(status)).toContain('Pure ClosedLoop');
+    expect(formatPmIntegrationLabel(status)).not.toContain('[DEPRECATED]');
+  });
+
+  it('status reason explains the lightweight path', () => {
+    const status = resolvePmIntegrationStatus(legacyOptInTemplate);
+    expect(status.reason).toContain('Pure ClosedLoop');
   });
 });

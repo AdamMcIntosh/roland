@@ -5,6 +5,8 @@
  */
 
 import { HARDENING_BLOCKER_PATTERNS, isMinimalGoal } from './goal-scope.js';
+import type { RunUsageRecord } from './usage-tracker.js';
+import { formatCostSummaryMarkdown } from './usage-tracker.js';
 
 export interface MissionCompleteContext {
   goal: string;
@@ -13,6 +15,11 @@ export interface MissionCompleteContext {
   taskCount: number;
   /** When true, use abbreviated footer and strip verbose synthesis sections. */
   minimalGoal?: boolean;
+  /** Per-run usage — rendered in Mission Complete footer when present. */
+  usage?: RunUsageRecord | null;
+  /** Set when mission stopped due to budget ceiling. */
+  budgetExceeded?: boolean;
+  budgetMessage?: string;
 }
 
 const MISSION_COMPLETE_HEADING = /###\s+(🎖\s+)?(UNSC\s+)?Mission Complete/i;
@@ -197,14 +204,18 @@ export function formatMissionCompleteFooter(ctx: MissionCompleteContext, nextSte
   const waveLabel = ctx.wavesRun === 1 ? '1 wave' : `${ctx.wavesRun} waves`;
   const minimal = ctx.minimalGoal ?? isMinimalGoal(ctx.goal);
 
-  const statusLine =
-    ctx.blockersEncountered > 0
+  const statusLine = ctx.budgetExceeded
+    ? `**Budget limit reached.** Mission stopped gracefully before exceeding the cost ceiling. ${ctx.budgetMessage ?? ''}`.trim()
+    : ctx.blockersEncountered > 0
       ? `**Handoff issued.** ${taskLabel} across ${waveLabel}. **${ctx.blockersEncountered} blocker(s)** — see 🔴 Release Blockers above.`
       : minimal
         ? `**Done.** ${taskLabel} across ${waveLabel}. Change ready for review.`
         : `**All objectives met.** ${taskLabel} across ${waveLabel}. Handoff ready for review.`;
 
   const stepsContent = nextSteps?.trim() ? nextSteps.trim() : buildDefaultNextSteps({ ...ctx, minimalGoal: minimal });
+  const costBlock = ctx.usage && ctx.usage.totalTokens + ctx.usage.totalCostUsd > 0
+    ? ['', formatCostSummaryMarkdown(ctx.usage), ''].join('\n')
+    : '';
 
   if (minimal) {
     return [
@@ -213,7 +224,7 @@ export function formatMissionCompleteFooter(ctx: MissionCompleteContext, nextSte
       '### 🎖 Mission Complete',
       '',
       statusLine,
-      '',
+      costBlock,
       '#### Next Steps',
       '',
       stepsContent,
@@ -228,7 +239,7 @@ export function formatMissionCompleteFooter(ctx: MissionCompleteContext, nextSte
     '### 🎖 Mission Complete',
     '',
     statusLine,
-    '',
+    costBlock,
     '#### Next Steps',
     '',
     stepsContent,

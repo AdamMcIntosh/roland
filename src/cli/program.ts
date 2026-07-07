@@ -51,8 +51,8 @@ export function buildProgram(): Command {
     .option('--state-dir <dir>', 'Persistence directory', '.roland')
     .option('-n, --notify', 'Desktop notification on complete')
     .option('-q, --quiet', 'Suppress progress output')
-    .option('--legacy-pm', '[DEPRECATED] Legacy PM Team waves')
-    .option('--use-pm-team', 'Alias for --legacy-pm')
+    .option('--budget <usd>', 'Per-mission cost ceiling (USD)')
+    .option('-c, --clean', 'Archive stale state before starting')
     .action(async (goalParts: string[], opts, cmdObj) => {
       const rest = [...goalParts, ...collectOptionArgs(cmdObj)];
       await dispatchCommand('team', rest);
@@ -91,7 +91,8 @@ function collectOptionArgs(cmd: Command): string[] {
   if (o.background || o.detach) out.push('--background');
   if (o.notify) out.push('--notify');
   if (o.quiet) out.push('--quiet');
-  if (o.legacyPm || o.usePmTeam) out.push('--legacy-pm');
+  if (o.budget) out.push('--budget', String(o.budget));
+  if (o.clean) out.push('--clean');
   return out;
 }
 

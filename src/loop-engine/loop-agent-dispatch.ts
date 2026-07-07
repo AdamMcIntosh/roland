@@ -13,6 +13,8 @@ import { parseWorkerSignals } from '../rco/worker-signals.js';
 import type { AgentYaml } from '../rco/types.js';
 import { loadUnscAgents } from '../rco/unsc-agents.js';
 import { toCursorModelId } from '../rco/model-routing.js';
+import { buildTaskUsage } from '../rco/usage-tracker.js';
+import { recordMissionUsage } from '../rco/mission-usage-collector.js';
 import { isGreenfieldGoal } from '../rco/goal-scope.js';
 import { RoleModelRouter } from '../models/role-model-router.js';
 import {
@@ -43,6 +45,8 @@ export interface LoopAgentDispatchOptions {
   waveNumber?: number;
   isTestMode?: boolean;
   cwd?: string;
+  /** Mission run id for usage aggregation. */
+  runId?: string;
 }
 
 export interface LoopAgentDispatchResult {
@@ -279,7 +283,28 @@ export async function dispatchLoopPhaseAgent(
       actBaseline = captureWorkspaceBaseline(cwd);
     }
 
+    const callStart = Date.now();
     const { output, agentRole: effectiveRole } = await callSdkAgentWithFallbacks(role, prompt, cwd);
+    const callDuration = Date.now() - callStart;
+    const modelId = dispatch.displayLabel || toCursorModelId('', effectiveRole);
+
+    if (opts.runId) {
+      recordMissionUsage(
+        opts.stateDir,
+        opts.runId,
+        buildTaskUsage(
+          `loop-${opts.phase}-iter-${opts.iteration}`,
+          `Loop ${opts.phase} (iter ${opts.iteration})`,
+          effectiveRole,
+          modelId,
+          prompt.length,
+          output.length,
+          callDuration,
+          dispatch.method,
+        ),
+      );
+    }
+
     const signals = parseWorkerSignals(output);
     let hadBlocker = signals.blockers.length > 0;
 

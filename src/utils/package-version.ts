@@ -29,5 +29,5 @@ export function readPackageVersion(fromUrl?: string): string {
   } catch {
     // fall through
   }
-  return '1.4.0';
+  return '1.6.0';
 }

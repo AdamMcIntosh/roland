@@ -154,3 +154,103 @@ export function loadUsageHistory(stateDir: string): RunUsageRecord[] {
     return [];
   }
 }
+
+// ── Summaries ─────────────────────────────────────────────────────────────────
+
+export interface UsageHistorySummary {
+  runs: number;
+  totalTokens: number;
+  totalCostUsd: number;
+  lastRunAt: number | null;
+}
+
+/** Aggregate usage-history.json for dashboard / CLI summaries. */
+export function summarizeUsageHistory(stateDir: string): UsageHistorySummary {
+  const history = loadUsageHistory(stateDir);
+  return {
+    runs: history.length,
+    totalTokens: history.reduce((s, r) => s + r.totalTokens, 0),
+    totalCostUsd: history.reduce((s, r) => s + r.totalCostUsd, 0),
+    lastRunAt: history.length > 0 ? history[history.length - 1]!.timestamp : null,
+  };
+}
+
+function formatDurationMs(ms: number): string {
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+  const mins = Math.floor(ms / 60_000);
+  const secs = Math.round((ms % 60_000) / 1000);
+  return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+}
+
+/** Markdown block for Mission Complete footer cost section. */
+export function formatCostSummaryMarkdown(record: RunUsageRecord): string {
+  const models = [...new Set(record.tasks.map((t) => t.model).filter(Boolean))];
+  const modelLine =
+    models.length > 0
+      ? models.slice(0, 5).join(', ') + (models.length > 5 ? ` (+${models.length - 5} more)` : '')
+      : '_(estimated from phase durations)_';
+
+  return [
+    '#### Cost Summary',
+    '',
+    `| Metric | Value |`,
+    `|--------|-------|`,
+    `| **Est. cost** | ~$${record.totalCostUsd.toFixed(4)} |`,
+    `| **Tokens** | ~${record.totalTokens.toLocaleString()} (${record.totalInputTokens.toLocaleString()} in / ${record.totalOutputTokens.toLocaleString()} out) |`,
+    `| **Duration** | ${formatDurationMs(record.durationMs)} |`,
+    `| **Agent calls** | ${record.tasks.length} |`,
+    `| **Models** | ${modelLine} |`,
+    '',
+    '_Costs are estimated from token heuristics — see `.roland/usage-history.json` for details._',
+  ].join('\n');
+}
+
+/** Map loop phase names to RoleModelRouter roles for usage estimation. */
+const PHASE_ROLE_MAP: Record<string, string> = {
+  plan: 'pm',
+  act: 'coding',
+  verify: 'verifier',
+  critique: 'critic',
+  retry: 'coding',
+  escalate: 'pm',
+  observe: 'pm',
+  reflect: 'critic',
+};
+
+/**
+ * Estimate per-phase usage when SDK dispatch did not record char counts
+ * (critique, verify shell, etc.).
+ */
+export function estimateUsageFromPhaseHistory(
+  phaseHistory: Array<{
+    phase: string;
+    startedAt: number;
+    completedAt?: number;
+    success?: boolean;
+  }>,
+  resolveModel: (role: string) => string,
+): TaskUsageRecord[] {
+  const tasks: TaskUsageRecord[] = [];
+  let idx = 0;
+  for (const t of phaseHistory) {
+    if (!t.completedAt) continue;
+    const durationMs = t.completedAt - t.startedAt;
+    const role = PHASE_ROLE_MAP[t.phase.toLowerCase()] ?? 'coding';
+    const model = resolveModel(role);
+    const inputChars = 6_000;
+    const outputChars = Math.max(500, Math.round((durationMs / 1000) * 180));
+    tasks.push(
+      buildTaskUsage(
+        `phase-${t.phase}-${idx++}`,
+        `Loop phase: ${t.phase}`,
+        role,
+        model,
+        inputChars,
+        outputChars,
+        durationMs,
+        'cursor_sdk',
+      ),
+    );
+  }
+  return tasks;
+}

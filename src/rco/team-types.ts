@@ -1,15 +1,13 @@
 /**
- * ## P1 Final Consolidation (v1.4.0)
- *
- * Shared types for legacy PM Team engine and thin team router.
- * Removal target: v1.6.0 (see src/legacy/pm-team/index.ts).
+ * Shared types for team orchestration (ClosedLoop missions).
  */
 
-import type { ReviewTask } from '../../rco/pm-prompts.js';
-import type { MissionPlanningMode } from '../../rco/mission-dag.js';
-import type { LoopHooks } from '../../loop-engine/index.js';
-import type { HitlQueue } from '../../rco/hitl.js';
-import type { TaskGitInfo } from '../../rco/task-git-workflow.js';
+import type { ReviewTask } from './pm-prompts.js';
+import type { MissionPlanningMode } from './mission-dag.js';
+import type { LoopHooks } from '../loop-engine/index.js';
+import type { HitlQueue } from './hitl.js';
+import type { TaskGitInfo } from './task-git-workflow.js';
+import type { MissionBudgetGuard } from './mission-budget.js';
 
 export interface TeamTask extends ReviewTask {}
 
@@ -53,7 +51,7 @@ export interface TeamOrchestratorOptions {
   onWaveStart?: (waveNumber: number, tasks: TeamTask[]) => void;
   onTaskStart?: (taskId: string, agent: string, title: string, git?: TaskGitInfo) => void;
   onTaskComplete?: (taskId: string, agent: string, output: string, hadBlocker: boolean, git?: TaskGitInfo) => void;
-  onWaveComplete?: (waveNumber: number, decision: import('../../rco/pm-prompts.js').ReviewDecision) => void;
+  onWaveComplete?: (waveNumber: number, decision: import('./pm-prompts.js').ReviewDecision) => void;
   onWaveReview?: (waveNumber: number) => void;
   onTasksSpawned?: (tasks: TeamTask[]) => void;
   onSynthesizing?: () => void;
@@ -69,10 +67,13 @@ export interface TeamOrchestratorOptions {
   quiet?: boolean;
   loopTemplate?: string;
   onLoopStateChange?: LoopHooks['onStateChange'];
-  loopRunner?: import('../../loop-engine/verification/index.js').CommandRunner;
-  pmSlice?: 'plan-only' | 'waves-only';
-  existingPlan?: TeamPlan;
+  loopRunner?: import('../loop-engine/verification/index.js').CommandRunner;
   loopEmbedded?: boolean;
   loopIteration?: number;
   enablePmIntegration?: boolean;
+  /** CLI `--budget` override (USD). */
+  missionBudgetUsd?: number;
+  /** Runtime budget guard (created by loop-orchestrator when ceiling is configured). */
+  budgetGuard?: MissionBudgetGuard;
+  runId?: string;
 }
