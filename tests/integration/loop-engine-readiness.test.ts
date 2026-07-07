@@ -85,7 +85,7 @@ describe('Loop Engineering E2E readiness', () => {
     expect(spawnPosts.some((e) => String(e.content).includes('cursor_sdk') || String(e.content).includes('SDK'))).toBe(true);
   });
 
-  it('PM-Enhanced template completes with dispatch logging when enablePmIntegration is true', async () => {
+  it('feature template runs Pure ClosedLoop even when enablePmIntegration is requested (legacy PM removed)', async () => {
     const goal =
       'Implement OAuth integration across auth module with multi-file changes and integration tests';
     const loop = new ClosedLoop({
@@ -99,14 +99,14 @@ describe('Loop Engineering E2E readiness', () => {
       enablePmIntegration: true,
     });
 
-    expect(loop.getPmIntegration().enabled).toBe(true);
+    expect(loop.getPmIntegration().enabled).toBe(false);
 
     const result = await loop.run();
     expect(result.status).toBe('completed');
+    expect(result.pmIntegration.enabled).toBe(false);
 
     const session = readLoopPmSession(stateDir);
-    expect(session?.executionPath).toBe('pm_team');
-    expect(session?.wavesRun).toBeGreaterThan(0);
+    expect(session?.executionPath).toBe('lightweight');
 
     const phaseHistory = result.state.phaseHistory.map((p) => p.phase);
     expect(phaseHistory).toContain(Phase.Plan);

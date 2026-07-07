@@ -52,9 +52,10 @@ describe('CLI program', () => {
     expect(dispatchMock.mock.calls[0][1]).toContain('--background');
   });
 
-  it('maps --use-pm-team to --legacy-pm', async () => {
-    await runProgram(['team', 'goal', '--use-pm-team']);
-    expect(dispatchMock.mock.calls[0][1]).toContain('--legacy-pm');
+  it('maps --budget to team-cli argv', async () => {
+    await runProgram(['team', 'goal', '--budget', '4']);
+    expect(dispatchMock.mock.calls[0][1]).toContain('--budget');
+    expect(dispatchMock.mock.calls[0][1]).toContain('4');
   });
 
   it('treats a bare goal as a team mission', async () => {

@@ -1,5 +1,8 @@
 /**
- * PM Integration into ClosedLoop — routing and session persistence.
+ * Loop PM bridge — lightweight Plan/Act only (legacy PM Team removed v1.6.0).
+ *
+ * The LoopPmBridge always uses the lightweight path; resolvePmTeamMode and
+ * shouldUsePmTeam are compatibility shims that permanently opt out.
  *
  * Scoped run: npm run test:run -- tests/unit/pm-integration.test.ts
  */
@@ -10,7 +13,6 @@ import path from 'path';
 import os from 'os';
 import {
   LoopPmBridge,
-  LOOP_PM_SESSION_FILE,
   readLoopPmSession,
   resolvePmTeamMode,
   shouldUsePmTeam,
@@ -26,42 +28,29 @@ const passRunner: CommandRunner = async () => ({
   stderr: '',
 });
 
-describe('PM integration routing', () => {
-  it('resolvePmTeamMode prefers phase override over template default', () => {
+describe('PM integration routing (removed — always lightweight)', () => {
+  it('resolvePmTeamMode always returns never, ignoring phase and template config', () => {
     const template = {
       name: 't',
       description: '',
       phases: [],
-      pmPlan: 'never' as const,
-      pmAct: 'auto' as const,
+      pmPlan: 'always' as const,
+      pmAct: 'always' as const,
+      usePmTeam: true,
     };
-    expect(resolvePmTeamMode(Phase.Plan, { phase: Phase.Plan, pmTeam: 'always' }, template)).toBe('always');
-    expect(resolvePmTeamMode(Phase.Act, undefined, template)).toBe('auto');
+    expect(resolvePmTeamMode(Phase.Plan, { phase: Phase.Plan, pmTeam: 'always' }, template)).toBe('never');
+    expect(resolvePmTeamMode(Phase.Act, undefined, template)).toBe('never');
   });
 
-  it('shouldUsePmTeam routes complex goals to PM Team when pmOptIn is true', () => {
+  it('shouldUsePmTeam never opts in, regardless of goal complexity or mode', () => {
     const complex = shouldUsePmTeam(
       'Refactor the authentication module across multiple services with integration tests and architecture review',
-      'auto',
-      { pmOptIn: true },
-    );
-    expect(complex.usePm).toBe(true);
-
-    const simple = shouldUsePmTeam('Fix typo in README', 'auto', { pmOptIn: true });
-    expect(simple.usePm).toBe(false);
-  });
-
-  it('shouldUsePmTeam auto without pmOptIn stays lightweight', () => {
-    const complex = shouldUsePmTeam(
-      'Refactor the authentication module across multiple services',
-      'auto',
-      { pmOptIn: false },
+      'always',
     );
     expect(complex.usePm).toBe(false);
-  });
+    expect(complex.reason).toContain('lightweight');
 
-  it('shouldUsePmTeam respects always and never modes', () => {
-    expect(shouldUsePmTeam('Fix typo', 'always').usePm).toBe(true);
+    expect(shouldUsePmTeam('Fix typo in README', 'auto').usePm).toBe(false);
     expect(shouldUsePmTeam('Big refactor', 'never').usePm).toBe(false);
   });
 });
@@ -82,10 +71,9 @@ describe('LoopPmBridge session', () => {
     fs.rmSync(stateDir, { recursive: true, force: true });
   });
 
-  it('uses PM Team for complex goals when template has use_pm_team opt-in', async () => {
+  it('uses lightweight path even for complex goals on legacy opt-in templates', async () => {
     const templates = new LoopTemplates();
     const base = templates.get('feature-implementation-loop')!;
-    expect(base.usePmTeam).toBe(false);
 
     const template = { ...base, usePmTeam: true };
     const goal =
@@ -98,25 +86,17 @@ describe('LoopPmBridge session', () => {
       isTestMode: true,
     });
 
-    const planResult = await bridge.runPlanning(1, template!.phases.find((p) => p.phase === Phase.Plan));
+    const planResult = await bridge.runPlanning(1, template.phases.find((p) => p.phase === Phase.Plan));
     expect(planResult.success).toBe(true);
-    expect(planResult.summary).toContain('PM Team');
 
     const session = readLoopPmSession(stateDir);
-    expect(session?.executionPath).toBe('pm_team');
-    expect(session?.plan?.tasks.length).toBeGreaterThan(0);
-    expect(fs.existsSync(path.join(stateDir, LOOP_PM_SESSION_FILE))).toBe(true);
+    expect(session?.executionPath).toBe('lightweight');
 
-    const actResult = await bridge.runAct(1, template!.phases.find((p) => p.phase === Phase.Act));
+    const actResult = await bridge.runAct(1, template.phases.find((p) => p.phase === Phase.Act));
     expect(actResult.success).toBe(true);
-    expect(actResult.summary).toContain('PM Team act');
-
-    const afterAct = readLoopPmSession(stateDir);
-    expect(afterAct?.wavesRun).toBeGreaterThan(0);
   });
 
   it('uses lightweight path for simple goals on minimal template', async () => {
-    process.env.ROLAND_LOOP_PM = 'never';
     const templates = new LoopTemplates();
     const template = templates.get('minimal-3-phase');
     expect(template).toBeDefined();
@@ -137,7 +117,7 @@ describe('LoopPmBridge session', () => {
   });
 });
 
-describe('ClosedLoop with PM integration', () => {
+describe('ClosedLoop PM integration (always disabled)', () => {
   let stateDir: string;
   let blackboard: Blackboard;
 
@@ -173,7 +153,7 @@ describe('ClosedLoop with PM integration', () => {
     expect(session?.executionPath).toBe('lightweight');
   });
 
-  it('feature-implementation-loop completes with PM session when enablePmIntegration is true', async () => {
+  it('enablePmIntegration=true is ignored — mission still completes on the lightweight path', async () => {
     const { ClosedLoop } = await import('../../src/loop-engine/closed-loop.js');
     const goal =
       'Ship OAuth callback handling with integration tests across auth module and API routes';
@@ -188,11 +168,12 @@ describe('ClosedLoop with PM integration', () => {
       enablePmIntegration: true,
     });
 
+    expect(loop.getPmIntegration().enabled).toBe(false);
     const result = await loop.run();
     expect(result.status).toBe('completed');
+    expect(result.pmIntegration.enabled).toBe(false);
 
     const session = readLoopPmSession(stateDir);
-    expect(session?.executionPath).toBe('pm_team');
-    expect(session?.wavesRun).toBeGreaterThan(0);
+    expect(session?.executionPath).toBe('lightweight');
   });
 });

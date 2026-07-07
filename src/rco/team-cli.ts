@@ -4,7 +4,6 @@
  *
  * RCO Team CLI — Pure ClosedLoop mission launcher (primary execution path).
  * Default: auto-select loop template (small-fix-loop / standard templates).
- * Legacy PM Team: opt-in via --legacy-pm or --use-pm-team.
  *
  * Monitor with: roland hitl-status · roland board-status --concise · roland mission-summary
  */
@@ -30,11 +29,20 @@ import {
   resolveMcpProjectContext,
 } from '../utils/mcp-project-context.js';
 import { recommendLoopTemplate } from './triage-router.js';
+import { loadNotificationsYaml, shouldAutoNotifyForTemplate } from './notifications-config.js';
+import { LoopTemplates } from '../loop-engine/index.js';
 import {
   prepareMissionStart,
   resetLoopArtifactsForNewMission,
   sanitizeStaleMissionState,
+  deepCleanMissionState,
 } from './mission-state.js';
+import {
+  assertCleanWorktree,
+  DirtyWorktreeError,
+  isWorktreeDirty,
+  popAutoStash,
+} from '../utils/worktree-guard.js';
 
 // ── Terminal helpers ──────────────────────────────────────────────────────────
 
@@ -145,17 +153,12 @@ function syncLoopStateToRun(runState: RunStateWriter, loopState: LoopState, stat
 }
 
 function cleanState(stateDir: string): void {
-  const targets = ['blackboard.json', 'messages.json'];
-  const removed: string[] = [];
-  for (const name of targets) {
-    const p = path.join(stateDir, name);
-    if (fs.existsSync(p)) { fs.rmSync(p); removed.push(name); }
-  }
-  if (resetLoopArtifactsForNewMission(stateDir)) {
-    removed.push('loop-state.json', 'loop-checkpoint.json');
-  }
-  if (removed.length > 0) {
-    err(`  ${c.yellow('🧹')} Cleaned stale state: ${removed.join(', ')} ${c.dim('(memory.md preserved)')}`);
+  const { archived, removed } = deepCleanMissionState(stateDir);
+  const parts: string[] = [];
+  if (archived.length > 0) parts.push(`archived: ${archived.join(', ')}`);
+  if (removed.length > 0) parts.push(`removed: ${removed.join(', ')}`);
+  if (parts.length > 0) {
+    err(`  ${c.yellow('🧹')} --clean: ${parts.join(' · ')} ${c.dim('(memory.md + usage-history preserved)')}`);
   } else {
     err(`  ${c.dim('🧹 --clean: nothing to remove in ' + stateDir)}`);
   }
@@ -179,19 +182,18 @@ export interface TeamCliArgs {
   agentsDir?: string;
   parallel: boolean;
   loopTemplate?: string;
-  legacyPm: boolean;
+  forceWorktree: boolean;
+  autoStash: boolean;
+  missionBudgetUsd?: number;
 }
 
 /**
  * Resolve loop template for `roland team` — Pure ClosedLoop by default.
- * Returns undefined only when --legacy-pm / --use-pm-team opts into legacy PM waves.
  */
 export function resolveTeamLoopTemplate(opts: {
   goal: string;
   loopTemplate?: string;
-  legacyPm?: boolean;
 }): string | undefined {
-  if (opts.legacyPm) return undefined;
   const explicit = opts.loopTemplate?.trim();
   if (explicit) return explicit;
   return recommendLoopTemplate(opts.goal).template;
@@ -216,7 +218,9 @@ export function parseTeamArgs(argv: string[]): TeamCliArgs {
   let webhookUrl: string | undefined;
   let agentsDir: string | undefined;
   let loopTemplate: string | undefined;
-  let legacyPm = false;
+  let forceWorktree = false;
+  let autoStash = false;
+  let missionBudgetUsd: number | undefined;
 
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -236,11 +240,17 @@ export function parseTeamArgs(argv: string[]): TeamCliArgs {
     if (a === '--sequential')                           { parallel = false; continue; }
     if (a === '--webhook' && args[i + 1])                { webhookUrl = args[++i]; notify = true; continue; }
     if (a === '--loop-template' && args[i + 1])          { loopTemplate = args[++i]; continue; }
-    if (a === '--legacy-pm' || a === '--use-pm-team')    { legacyPm = true; continue; }
+    if (a === '--budget' && args[i + 1]) {
+      const parsed = parseFloat(args[++i]);
+      if (!Number.isNaN(parsed) && parsed > 0) missionBudgetUsd = parsed;
+      continue;
+    }
+    if (a === '--force')                                  { forceWorktree = true; continue; }
+    if (a === '--auto-stash')                             { autoStash = true; continue; }
     if (!a.startsWith('-') && !goal)                     { goal = a; continue; }
   }
 
-  return { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel, loopTemplate, legacyPm };
+  return { goal, stateDir, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel, loopTemplate, forceWorktree, autoStash, missionBudgetUsd };
 }
 
 // ── Web-mode helpers ──────────────────────────────────────────────────────────
@@ -285,22 +295,42 @@ function firstSentences(body: string, maxChars = 200): string {
 
 export async function runTeamCli(argv: string[]): Promise<void> {
   const parsed = parseTeamArgs(argv);
-  let { goal, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel, legacyPm } = parsed;
+  let { goal, quiet, stream, noTui, simpleTui, notify, clean, background, noImprove, web, webhookUrl, agentsDir, parallel, forceWorktree, autoStash, missionBudgetUsd } = parsed;
 
   const ctx = resolveMcpProjectContext({ state_dir: parsed.stateDir });
   ensureMissionProjectContext(ctx);
   const stateDir = ctx.stateDir;
 
+  let autoStashRepo: string | null = null;
+  let didAutoStash = false;
+
+  const restoreAutoStash = (): void => {
+    if (!didAutoStash || !autoStashRepo || background) return;
+    try {
+      if (popAutoStash(autoStashRepo)) {
+        err(`  ${c.green('📦')} Restored stashed changes (git stash pop)`);
+      }
+    } catch {
+      err(`  ${c.yellow('⚠️')}  Could not auto-restore stash — run: git stash pop`);
+    }
+  };
+
   const loopTemplate = resolveTeamLoopTemplate({
     goal,
     loopTemplate: parsed.loopTemplate,
-    legacyPm,
   });
+
+  const notifyCfg = loadNotificationsYaml();
+  if (!notify && !webhookUrl && process.env.ROLAND_NOTIFY !== '1') {
+    const tpl = loopTemplate ? new LoopTemplates().get(loopTemplate) : undefined;
+    if (shouldAutoNotifyForTemplate(loopTemplate, tpl?.maxIterations)) {
+      notify = true;
+      err(`  ${c.dim('[Notify]')} Desktop notifications enabled (estimated mission > ${notifyCfg.long_mission_threshold_minutes ?? 3} min)`);
+    }
+  }
 
   if (goal && loopTemplate && !parsed.loopTemplate) {
     err(`  ${c.dim('[Loop]')} Auto-selected template: ${c.cyan(loopTemplate)} ${c.dim('(Pure ClosedLoop)')}`);
-  } else if (goal && legacyPm) {
-    err(`  ${c.yellow('[Legacy]')} PM Team mode — use only when legacy waves are required`);
   }
 
   if (!goal) {
@@ -324,36 +354,76 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     err('    --no-tui                Use scrolling log instead of live dashboard');
     err('    --notify                Send desktop notification on complete/error');
     err('    --webhook <url>         POST to URL on complete/error (ntfy.sh, Slack, Discord…)');
-    err('    --clean, -c             Delete stale blackboard + messages before starting  ' + c.dim('(preserves memory.md)'));
+    err('    --clean, -c             Archive stale state + reset loop artifacts  ' + c.dim('(preserves memory.md, usage-history)'));
+    err('    --budget <usd>          Per-mission cost ceiling (overrides config.yaml)');
     err('    --background, --detach  Spawn detached; logs to .roland/logs/  ' + c.dim('(roland bg-status to check)'));
     err('    --no-improve            Skip the self-improvement retrospective phase');
     err('    --web                   Streaming terminal-style output for web/chat — live progress, no ANSI');
     err('    --sequential            One agent at a time  ' + c.dim('(safe mode for unstable connections; overrides ROLAND_SEQUENTIAL=1)'));
     err('    --parallel              Force parallel even if ROLAND_SEQUENTIAL=1  ' + c.dim('(parallel is the default)'));
     err('    --loop-template <id>    Loop template (auto-selected when omitted)  ' + c.dim('(Pure ClosedLoop default)'));
-    err('    --legacy-pm             [DEPRECATED] Legacy PM Team waves instead of ClosedLoop');
-    err('    --use-pm-team           Alias for --legacy-pm');
+    err('    --force                 Skip dirty-worktree guard (data-loss risk)');
+    err('    --auto-stash            Stash uncommitted changes before mission (pop after — foreground)');
     err('');
     process.exit(1);
   }
 
-  // ── CURSOR_API_KEY early check ──────────────────────────────────────────────
+  // ── CURSOR_API_KEY early check (before side effects like stash) ─────────────
   if (!process.env.CURSOR_API_KEY) {
     if (web) {
-      process.stdout.write('❌ Roland failed — CURSOR_API_KEY is not set.\n\nGet your key at https://cursor.com/settings → API Keys, then set it in your environment.\n');
+      process.stdout.write('❌ Roland failed — CURSOR_API_KEY is not set.\n\nGet your key at https://cursor.com/settings → API Keys, then run: roland init\n');
     } else {
       err('');
       err(`  ${c.bold('❌  CURSOR_API_KEY is not set')}`);
       err('');
-      err('  Agent execution requires a Cursor API key. Add to your shell profile:');
-      err('');
-      err(`    ${c.cyan('export CURSOR_API_KEY=your_key_here')}    ${c.dim('# .zshrc / .bashrc / PowerShell $PROFILE')}`);
+      if (process.platform === 'win32') {
+        err('  Add to PowerShell profile ($PROFILE) or ~/.roland/.env:');
+        err('');
+        err(`    ${c.cyan('$env:CURSOR_API_KEY = "your_key_here"')}`);
+        err(`    ${c.cyan('[System.Environment]::SetEnvironmentVariable("CURSOR_API_KEY","your_key","User")')}`);
+      } else {
+        err('  Add to your shell profile or ~/.roland/.env:');
+        err('');
+        err(`    ${c.cyan('export CURSOR_API_KEY=your_key_here')}    ${c.dim('# .zshrc / .bashrc')}`);
+      }
       err('');
       err('  Get your key at: https://cursor.com/settings → API Keys');
-      err(`  Or diagnose your install: ${c.cyan('roland doctor')}`);
+      err(`  Or run: ${c.cyan('roland init')}  ${c.dim('|')}  ${c.cyan('roland doctor --fix')}`);
       err('');
     }
     process.exit(1);
+  }
+
+  try {
+  // ── Dirty worktree guard (before any repo mutation) ─────────────────────────
+  if (goal) {
+    try {
+      const guard = assertCleanWorktree(ctx.projectRoot, {
+        force: forceWorktree,
+        autoStash,
+        stashReason: `roland: auto-stash before mission — ${goal.slice(0, 60)}`,
+      });
+      if (guard.stashed) {
+        didAutoStash = true;
+        autoStashRepo = guard.repoRoot;
+        err(`  ${c.yellow('📦')} Auto-stashed uncommitted changes`);
+        if (background) {
+          err(`  ${c.yellow('⚠️')}  Background mode: run ${c.cyan('git stash pop')} when the mission completes`);
+        }
+      } else if (forceWorktree && isWorktreeDirty(ctx.projectRoot)) {
+        err(`  ${c.yellow('⚠️')}  --force: proceeding with dirty worktree (data-loss risk)`);
+      }
+    } catch (guardErr) {
+      if (guardErr instanceof DirtyWorktreeError) {
+        if (web) {
+          process.stdout.write(guardErr.message.replace(/\x1b\[[0-9;]*m/g, '') + '\n');
+        } else {
+          process.stderr.write(guardErr.message + '\n');
+        }
+        process.exit(1);
+      }
+      throw guardErr;
+    }
   }
 
   // ── Background / detach mode ───────────────────────────────────────────────
@@ -398,6 +468,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
         noImprove: true,
         sequential: !parallel, interactive: false,
         loopTemplate,
+    missionBudgetUsd,
         onLoopStateChange: (s) => syncLoopStateToRun(runState, s, stateDir),
 
         onPlanReady: (tasks) => {
@@ -564,6 +635,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
         goal, stateDir, agentsDir, hitlQueue,
         noImprove, sequential: !parallel, interactive: false, quiet: true,
         loopTemplate,
+    missionBudgetUsd,
         onLoopStateChange: (s) => syncLoopStateToRun(runState, s, stateDir),
         onPlanReady:    (tasks)         => { runState.planReady(tasks); },
         onWaveStart:    (w, tasks)      => { runState.waveStart(w, tasks.map((t) => t.id)); },
@@ -691,6 +763,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
         hitlQueue,
         noImprove, sequential: !parallel, interactive: false,
         loopTemplate,
+    missionBudgetUsd,
         onLoopStateChange: (s) => {
           syncLoopStateToRun(runState, s, stateDir);
           tui.update(runState.get());
@@ -813,6 +886,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     sequential: !parallel,
     interactive: Boolean((process.stderr as NodeJS.WriteStream).isTTY) && !noImprove,
     loopTemplate,
+    missionBudgetUsd,
     onLoopStateChange: (s) => syncLoopStateToRun(runState, s, stateDir),
     onBlockerDetected: (taskId, agent, description, waveNumber) => {
       emitHermesBlocker(stateDir, agent, description, waveNumber);
@@ -1010,6 +1084,9 @@ export async function runTeamCli(argv: string[]): Promise<void> {
 
   // Synthesis (with ### 🎖 Mission Complete footer) is the definitive end of output.
   console.log(result.synthesis);
+  } finally {
+    restoreAutoStash();
+  }
 }
 
 /*
@@ -1019,7 +1096,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
  *   roland team "Fix typo in README"              → auto small-fix-loop (Pure ClosedLoop)
  *   roland team "Add OAuth provider"              → auto feature-implementation-loop
  *   roland team "goal" --loop-template <id>       → explicit override
- *   roland team "goal" --legacy-pm                → [DEPRECATED] legacy PM waves
+ *   roland team "goal" --budget 3.50              → explicit per-mission cost ceiling
  */
 
 // ── Standalone entry — guarded so importing this module from index.ts is safe ──

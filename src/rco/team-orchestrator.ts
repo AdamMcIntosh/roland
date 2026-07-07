@@ -1,11 +1,7 @@
 /**
- * ## P1 Final Consolidation (v1.4.0)
+ * ## P1 Final Consolidation (v1.6.0)
  *
- * Thin team router — delegates to ClosedLoop (default) or legacy PM engine (`--legacy-pm`).
- *
- * - Loop-template missions → `runClosedLoopMission()` (Pure ClosedLoop)
- * - Legacy PM Team → `src/legacy/pm-team/` (removal target: v1.6.0)
- * - ClosedLoop PM embed slices → `runLegacyPmTeam()` via `pmSlice` / `loopEmbedded`
+ * Thin team router — delegates all missions to ClosedLoop (Pure ClosedLoop default).
  */
 
 import path from 'path';
@@ -17,8 +13,8 @@ import {
   ensureMissionProjectContext,
   resolveMissionProjectRoot,
 } from '../utils/mcp-project-context.js';
+import { recommendLoopTemplate } from './triage-router.js';
 import { hasLoopTemplate, runClosedLoopMission } from './loop-orchestrator.js';
-import { runLegacyPmTeam, LEGACY_PM_REMOVAL_VERSION } from '../legacy/pm-team/index.js';
 
 configureSdkProcessLimits();
 
@@ -29,11 +25,9 @@ export type {
   TeamResult,
   CircuitBreakInfo,
   TeamOrchestratorOptions,
-} from '../legacy/pm-team/types.js';
+} from './team-types.js';
 
-export { LEGACY_PM_REMOVAL_VERSION };
-
-import type { TeamOrchestratorOptions, TeamResult } from '../legacy/pm-team/types.js';
+import type { TeamOrchestratorOptions, TeamResult } from './team-types.js';
 
 /** Suppress [Team] progress logs — used for --quiet runs (synthesis-only output). */
 function muteConsoleError(): () => void {
@@ -42,21 +36,27 @@ function muteConsoleError(): () => void {
   return () => { console.error = prev; };
 }
 
+function resolveLoopTemplate(opts: TeamOrchestratorOptions): string {
+  const explicit = opts.loopTemplate?.trim();
+  if (explicit) return explicit;
+  return recommendLoopTemplate(opts.goal).template;
+}
+
 /**
- * Run a team mission — routes to ClosedLoop when `loopTemplate` is set,
- * otherwise legacy PM waves (or PM embed slices when `loopEmbedded`).
+ * Run a team mission — always routes through ClosedLoop with an auto-selected template when omitted.
  */
 export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult> {
   const {
     goal,
     stateDir = '.roland',
     quiet = false,
-    loopTemplate,
     loopEmbedded,
   } = opts;
 
   const restoreStderr = quiet ? createShellExecStderrFilter() : undefined;
   const restoreLog = quiet ? muteConsoleError() : undefined;
+
+  const loopTemplate = resolveLoopTemplate(opts);
 
   try {
     const resolvedStateDir = path.resolve(stateDir);
@@ -80,7 +80,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
           boardResult.commandBoard.objectivesArchived.length > 0
         ))
       ) {
-        const label = hasLoopTemplate(loopTemplate) ? '[Loop]' : '[Team]';
+        const label = '[Loop]';
         console.error(`${label} Mission start hygiene — prior state archived`);
         if (boardResult) {
           for (const line of formatCleanupReport(boardResult).split('\n').slice(1, 4)) {
@@ -93,9 +93,7 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
       }
     }
 
-    const result = hasLoopTemplate(loopTemplate)
-      ? await runClosedLoopMission(opts)
-      : await runLegacyPmTeam(opts);
+    const result = await runClosedLoopMission({ ...opts, loopTemplate });
 
     if (!opts.loopEmbedded) {
       try {
@@ -122,9 +120,4 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
   }
 }
 
-/**
- * ## P1 Consolidation Complete
- *
- * team-orchestrator.ts reduced to thin router (~120 lines).
- * Legacy PM bulk lives in src/legacy/pm-team/ (removal: v1.6.0).
- */
+export { hasLoopTemplate };

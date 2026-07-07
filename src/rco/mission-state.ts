@@ -19,6 +19,16 @@ export const MISSION_META_FILE = 'mission-meta.json';
 export const SUPERVISOR_PID_FILE = 'supervisor.pid';
 export const RUN_STATE_FILE = 'run-state.json';
 export const MISSION_ARCHIVE_FILE = 'mission-archive.jsonl';
+export const PM_EVENTS_FILE = 'pm-events.log';
+export const MISSIONS_ARCHIVE_DIR = 'missions';
+
+const STALE_LOOP_ARTIFACTS = [
+  'loop-metrics.json',
+  'loop-execution-history.json',
+  'hermes-hitl-events.jsonl',
+  'closed-loop-pr.json',
+  'loop-pm-session.json',
+];
 
 const ACTIVE_RUN_STATUSES = new Set(['planning', 'running', 'reviewing', 'synthesizing']);
 const RUN_STALE_MS = 600_000;
@@ -169,6 +179,66 @@ export function prepareMissionStart(
   );
 
   return result;
+}
+
+/** Archive interleaved state files into missions/{runId}/ before a new run. */
+export function archiveMissionStateFiles(
+  stateDir: string,
+  runId: string,
+  log: StateLogger = noopLog,
+): string[] {
+  const archived: string[] = [];
+  const destDir = path.join(stateDir, MISSIONS_ARCHIVE_DIR, runId);
+  const sources = [
+    'blackboard.json',
+    'messages.json',
+    PM_EVENTS_FILE,
+    'command-blackboard.md',
+    ...STALE_LOOP_ARTIFACTS,
+  ];
+
+  for (const name of sources) {
+    const src = path.join(stateDir, name);
+    try {
+      if (fs.existsSync(src)) {
+        fs.mkdirSync(destDir, { recursive: true });
+        fs.renameSync(src, path.join(destDir, name));
+        archived.push(name);
+        log('Archived mission state file', { stateDir, runId, file: name });
+      }
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  return archived;
+}
+
+/** Expanded clean for `--clean` — archives then removes loop artifacts. Preserves memory.md and usage-history.json. */
+export function deepCleanMissionState(
+  stateDir: string,
+  log: StateLogger = noopLog,
+): { archived: string[]; removed: string[] } {
+  const runId = `clean-${Date.now().toString(36)}`;
+  const archived = archiveMissionStateFiles(stateDir, runId, log);
+  const removed: string[] = [];
+
+  if (resetLoopArtifactsForNewMission(stateDir, log)) {
+    removed.push('loop-state.json', 'loop-checkpoint.json');
+  }
+  resetHitlStateForNewMission(stateDir, log);
+
+  for (const name of STALE_LOOP_ARTIFACTS) {
+    const p = path.join(stateDir, name);
+    try {
+      if (fs.existsSync(p)) {
+        fs.rmSync(p, { force: true });
+        removed.push(name);
+      }
+    } catch { /* ignore */ }
+  }
+
+  return { archived, removed };
 }
 
 function noopLog(): void { /* */ }
@@ -423,6 +493,15 @@ export function cleanupPreviousRuns(
   let loopArtifactsReset = false;
   if (!options.dryRun && options.resetLoopArtifacts !== false) {
     loopArtifactsReset = resetLoopArtifactsForNewMission(stateDir, log);
+  }
+
+  if (!options.dryRun) {
+    const priorMeta = readMissionMetaFile(stateDir);
+    const archiveId = priorMeta?.id ?? `mission-${Date.now().toString(36)}`;
+    const archivedFiles = archiveMissionStateFiles(stateDir, String(archiveId), log);
+    if (archivedFiles.length > 0) {
+      log('Archived prior mission state files', { stateDir, archiveId, files: archivedFiles });
+    }
   }
 
   let hitlReset = false;

@@ -24,7 +24,7 @@ Restart Cursor. Verify with:
 
 ```bash
 roland doctor
-roland --version    # expect 1.4.0
+roland --version    # expect 1.6.0
 ```
 
 ## Your first session
@@ -54,7 +54,7 @@ roland mission-audit --last
 npm run serve-dashboard    # http://127.0.0.1:8081
 ```
 
-## Architecture (v1.4.0)
+## Architecture (v1.6.0)
 
 ```
   @roland (Cursor) ──triage──► Direct (chat) | Team (CLI)
@@ -80,8 +80,6 @@ npm run serve-dashboard    # http://127.0.0.1:8081
 | **Coordination store** | Single locked blackboard at `.roland/blackboard.json` |
 | **MCP server** | Modular tools under `src/server/tools/` |
 
-> [DEPRECATED] In-loop PM Team (`use_pm_team: true`) is legacy opt-in only.
-
 ## The mindset
 
 > **Triage first. Direct for small fixes. Pure ClosedLoop for missions. CLI shows the battlespace.**
@@ -96,6 +94,32 @@ Per-project under `.roland/` (gitignored):
 - `loop-metrics.json` — phase timing and success rates
 - `loop-memory.json` — reflection / confidence history
 - `hermes-hitl-events.jsonl` — HITL escalation events
+- `usage-history.json` — per-run cost/token estimates
+- `missions/<id>/` — archived blackboard/audit from prior runs
+
+## Cost & budget
+
+Mission cost is estimated per run and printed in the **Mission Complete** footer. Configure ceilings in `config.yaml`:
+
+```yaml
+budget:
+  mission_budget_usd: 5.00
+  daily_budget_usd: 25.00
+  estimated_per_iteration_cost_usd: 0.75
+  enforce_hard_ceiling: true
+```
+
+CLI override: `roland team "goal" --budget 2.50`
+
+## State hygiene
+
+- Each new mission archives prior blackboard/audit into `.roland/missions/<id>/`
+- `roland team "goal" --clean` — full archive + loop artifact reset (preserves `memory.md` and `usage-history.json`)
+- Add `.roland/` and `.roland-sim/` to `.gitignore` (`roland init` does this automatically)
+
+## Troubleshooting
+
+See **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** — mission stalls, HITL blockers, connection drops, verification loops, stale state.
 
 ## Learn more
 

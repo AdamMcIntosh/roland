@@ -15,6 +15,22 @@ import { loadLoopEngineConfig } from '../loop-engine/loop-config.js';
 import { resolveVerificationStrategies } from '../loop-engine/loop-template-resolution.js';
 import type { ExitConditionConfig, LoopTemplate } from '../loop-engine/loop-phases.js';
 import { Phase } from '../loop-engine/loop-phases.js';
+import { recommendLoopTemplate } from './triage-router.js';
+
+const TEMPLATE_RECOMMENDATIONS: Record<string, string> = {
+  'small-fix-loop': 'Use for typos, hotfixes, single-file tweaks (< 30 min).',
+  'standard-code-loop': 'Default for most coding — plan → act → verify → critique.',
+  'feature-implementation-loop': 'New features needing integration/smoke gates.',
+  'refactor-and-modernize-loop': 'Multi-file refactors, cleanup, modernization.',
+  'research-and-plan-loop': 'Research/spec only — produces actionable plan, minimal code.',
+  'full-cycle-verified-loop': 'High-stakes changes — heavy verification + reflection.',
+  'maintenance-loop': 'Deps, CI, lint hygiene, chores.',
+  'minimal-3-phase': 'Smoke test / harness validation only.',
+};
+
+function recommendationFor(name: string): string {
+  return TEMPLATE_RECOMMENDATIONS[name] ?? 'General ClosedLoop mission.';
+}
 
 export interface TemplateVerificationGate {
   type: string;
@@ -37,6 +53,7 @@ export interface TemplateExitConditionEntry {
 export interface TemplateCatalogEntry {
   name: string;
   description: string;
+  recommendation: string;
   maxIterations: number | null;
   verificationGates: TemplateVerificationGate[];
   exitConditions: TemplateExitConditionEntry[];
@@ -108,6 +125,7 @@ function toCatalogEntry(template: LoopTemplate): TemplateCatalogEntry {
   return {
     name: template.name,
     description: template.description.trim(),
+    recommendation: recommendationFor(template.name),
     maxIterations: template.maxIterations ?? null,
     verificationGates: extractVerificationGates(template),
     exitConditions: extractExitConditions(template),
@@ -157,6 +175,8 @@ function formatHumanCatalog(catalog: TemplatesCatalog): string {
   lines.push('');
   lines.push(`  ${b('Loop Templates')}  ${d(`(${coreCount} core · ${catalog.templates.length} total)`)}`);
   lines.push(`  ${d('Default:')} ${catalog.defaultTemplate}`);
+  const triageHint = recommendLoopTemplate('implement a feature').template;
+  lines.push(`  ${d('Triage auto-picks:')} ${triageHint} ${d('(roland team without --loop-template)')}`);
   lines.push('');
 
   for (const tpl of catalog.templates) {
@@ -171,6 +191,7 @@ function formatHumanCatalog(catalog: TemplatesCatalog): string {
       const desc = tpl.description.replace(/\s+/g, ' ').trim();
       lines.push(`    ${desc.length > 100 ? `${desc.slice(0, 97)}…` : desc}`);
     }
+    lines.push(`    ${d('Use when:')} ${tpl.recommendation}`);
     lines.push(
       `    ${d('Max iterations:')} ${tpl.maxIterations ?? y('not set (engine default: 1)')}`,
     );

@@ -165,6 +165,11 @@ budget:
   budget_degradation_threshold: 0.8               # Switch to free models at 80%
   monthly_budget: 85                              # Monthly budget in USD
   billing_cycle_day: 1                            # Day of month to auto-reset spending
+  # Per-mission cost ceiling (ClosedLoop missions)
+  mission_budget_usd: 5.00                        # Default USD cap per `roland team` run
+  daily_budget_usd: 25.00                         # Optional daily cap across all runs
+  estimated_per_iteration_cost_usd: 0.75          # Used when computing maxIterations × cost ceiling
+  enforce_hard_ceiling: true                      # Stop mission gracefully before exceeding limit
   free_model_coding: qwen/qwen3-coder:free        # Primary free model for coding
   free_model_reasoning: minimax/minimax-m2.5:free  # Primary free for reasoning (near-Opus quality)
 
@@ -213,3 +218,14 @@ telemetry:
   enabled: false
   consent_required: true
   traces_sample_rate: 0.1
+
+# Desktop / webhook notifications for long missions
+notifications:
+  desktop: true
+  auto_notify_long_missions: true   # Enable --notify behavior when mission est. > threshold
+  long_mission_threshold_minutes: 3
+  on_complete: true
+  on_error: true
+  on_blocker: false
+  on_wave: false
+  # webhook_url: https://ntfy.sh/your-topic

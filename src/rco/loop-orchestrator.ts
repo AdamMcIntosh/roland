@@ -12,8 +12,21 @@ import { RoleModelRouter } from '../models/role-model-router.js';
 import { Blackboard } from '../coordination/legacy-blackboard.js';
 import { CommandBlackboard } from './command-blackboard.js';
 import { finalizeSynthesisOutput } from './mission-complete.js';
-import { buildRunUsage, saveRunUsage } from './usage-tracker.js';
-import type { TeamOrchestratorOptions, TeamPlan, TeamResult } from './team-orchestrator.js';
+import {
+  buildRunUsage,
+  saveRunUsage,
+  estimateUsageFromPhaseHistory,
+} from './usage-tracker.js';
+import {
+  createMissionBudgetGuard,
+  formatBudgetStatusLine,
+  resolveMissionBudget,
+} from './mission-budget.js';
+import {
+  drainMissionUsage,
+  startMissionUsageCollector,
+} from './mission-usage-collector.js';
+import type { TeamOrchestratorOptions, TeamPlan, TeamResult } from './team-types.js';
 
 /** True when a loop template id was supplied (CLI `--loop-template`, MCP `loop_template`, etc.). */
 export function hasLoopTemplate(loopTemplate?: string): boolean {
@@ -54,10 +67,27 @@ export async function runClosedLoopMission(opts: ClosedLoopMissionOptions): Prom
     throw new Error(`ClosedLoop: unknown loop template "${templateName}"`);
   }
 
-  const runId = Date.now().toString(36);
+  const runId = opts.runId ?? Date.now().toString(36);
   const runStart = Date.now();
 
   const template = templates.get(templateName)!;
+  const maxIterations = template.maxIterations ?? 1;
+  const budgetResolution = resolveMissionBudget({
+    cliBudgetUsd: opts.missionBudgetUsd,
+    maxIterations,
+  });
+  const budgetGuard = createMissionBudgetGuard({
+    resolution: budgetResolution,
+    stateDir,
+  });
+  if (budgetResolution.ceilingUsd != null) {
+    console.error(
+      `[Loop] Budget ceiling: $${budgetResolution.ceilingUsd.toFixed(2)} ` +
+        `(source=${budgetResolution.source}, est/iter=$${budgetResolution.estimatedPerIterationUsd?.toFixed(2) ?? '?'})`,
+    );
+  }
+
+  startMissionUsageCollector(stateDir, runId);
   const pmStatus = resolvePmIntegrationStatus(template, { enablePmIntegration: opts.enablePmIntegration });
   const modelRouter = RoleModelRouter.fromConfig();
 
@@ -115,6 +145,7 @@ export async function runClosedLoopMission(opts: ClosedLoopMissionOptions): Prom
       process.env.ROLAND_ROOT?.trim() ??
       process.cwd(),
     enablePmIntegration: opts.enablePmIntegration,
+    budgetGuard,
     hooks: { onStateChange: onLoopStateChange },
     teamOpts: {
       hitlQueue: opts.hitlQueue,
@@ -139,13 +170,45 @@ export async function runClosedLoopMission(opts: ClosedLoopMissionOptions): Prom
   };
   onPlanReady?.(plan.tasks);
 
-  const blockersEncountered = result.status === 'escalated' || result.status === 'failed' ? 1 : 0;
+  const blockersEncountered =
+    result.status === 'escalated' || result.status === 'failed' ? 1 : 0;
+  const budgetExceeded = Boolean(result.budgetExceeded);
   let synthesis = buildClosedLoopSynthesis(goal, result, stateDir);
+  if (budgetExceeded && result.budgetMessage) {
+    synthesis += `\n\n## Budget\n\n${result.budgetMessage}\n`;
+  }
+
+  const router = RoleModelRouter.fromConfig();
+  let taskUsage = drainMissionUsage(stateDir, runId);
+  if (taskUsage.length === 0) {
+    taskUsage = estimateUsageFromPhaseHistory(
+      result.state.phaseHistory,
+      (role) => router.getModelForAgent(role).model,
+    );
+  }
+  for (const t of taskUsage) {
+    budgetGuard.recordSpending(t.estimatedCostUsd);
+  }
+
+  const runUsage = buildRunUsage({
+    runId,
+    runStart,
+    runEnd: Date.now(),
+    goal,
+    wavesRun: result.iterationsRun,
+    blockersEncountered,
+    tasks: taskUsage,
+  });
+  saveRunUsage(stateDir, runUsage);
+
   synthesis = finalizeSynthesisOutput(synthesis, {
     goal,
     blockersEncountered,
     wavesRun: result.iterationsRun,
     taskCount: plan.tasks.length,
+    usage: runUsage,
+    budgetExceeded,
+    budgetMessage: result.budgetMessage,
   });
 
   commandBoard.setAgentStatus({
@@ -159,22 +222,14 @@ export async function runClosedLoopMission(opts: ClosedLoopMissionOptions): Prom
   const goalEntry = blackboard.read({ type: 'task', status: 'in_progress' }).find((e) => e.tags.includes('goal'));
   if (goalEntry) blackboard.patch(goalEntry.id, { status: 'done' });
 
-  const runUsage = buildRunUsage({
-    runId,
-    runStart,
-    runEnd: Date.now(),
-    goal,
-    wavesRun: result.iterationsRun,
-    blockersEncountered,
-    tasks: [],
-  });
-  saveRunUsage(stateDir, runUsage);
+  const runUsageSaved = runUsage;
   const pmNote = pmSession
     ? ` | PM path=${pmSession.executionPath} waves=${pmSession.wavesRun}`
     : '';
   console.error(
-    `[Loop] Usage: ~${runUsage.totalTokens.toLocaleString()} est. tokens` +
-      ` | ~$${runUsage.totalCostUsd.toFixed(4)} est. cost` +
+    `[Loop] Usage: ~${runUsageSaved.totalTokens.toLocaleString()} est. tokens` +
+      ` | ~$${runUsageSaved.totalCostUsd.toFixed(4)} est. cost` +
+      ` | ${formatBudgetStatusLine(budgetGuard)}` +
       ` | ClosedLoop harness${pmNote}` +
       ` | saved to ${stateDir}/usage-history.json`,
   );
@@ -240,7 +295,7 @@ function buildClosedLoopSynthesis(goal: string, result: ClosedLoopResult, stateD
   const pmSession = readLoopPmSession(stateDir);
   if (pmSession) {
     lines.push(
-      `- [DEPRECATED] PM Team path: ${pmSession.executionPath} (${pmSession.routingReason})`,
+      `- PM path: ${pmSession.executionPath} (${pmSession.routingReason})`,
       `- PM waves in Act: ${pmSession.wavesRun}`,
       `- PM blockers: ${pmSession.blockersEncountered}`,
     );

@@ -16,6 +16,7 @@ import {
   sanitizeStaleMissionState,
   type MissionTriggeredVia,
 } from '../../rco/mission-state.js';
+import { assertCleanWorktree, DirtyWorktreeError } from '../../utils/worktree-guard.js';
 import { renderTimeline, renderUsage } from '../../pm/render.js';
 import type { PMEventAction } from '../../pm/event-log.js';
 import { PROJECT_CONTEXT_SCHEMA, type McpToolContext, type McpToolRegistrar } from './types.js';
@@ -450,7 +451,7 @@ What would you like to work on?`;
 
   registrar.registerTool(
     'roland_run_team',
-    'Launch a background Pure ClosedLoop mission for goals on the **Team** execution path. Default: auto-selects a loop template (e.g. small-fix-loop for typos). Pass `project_root` (or `cwd`) when triggering from Hermes in a repo other than the MCP server cwd. Pass `loop_template` to override auto-selection. Use `legacy_pm: true` only for [DEPRECATED] legacy PM waves. Also use when the operator forces team mode via --force-team. Do NOT use for single-file edits, Q&A, or quick fixes unless force-team was explicitly requested. Returns immediately; track with pm_standup() or get_team_context().',
+    'Launch a background Pure ClosedLoop mission for goals on the **Team** execution path. Default: auto-selects a loop template (e.g. small-fix-loop for typos). Pass `project_root` (or `cwd`) when triggering from Hermes in a repo other than the MCP server cwd. Pass `loop_template` to override auto-selection. Also use when the operator forces team mode via --force-team. Do NOT use for single-file edits, Q&A, or quick fixes unless force-team was explicitly requested. Returns immediately; track with pm_standup() or get_team_context().',
     async (args: Record<string, unknown>) => {
       const goal = args.goal as string;
       if (!goal || typeof goal !== 'string' || !goal.trim()) {
@@ -460,19 +461,40 @@ What would you like to work on?`;
       const mcpCtx = ctx.resolveToolProjectContext(args);
       const { projectRoot, stateDir: resolvedStateDir } = mcpCtx;
 
-      const legacyPm = args.legacy_pm === true || args.use_pm_team === true;
+      const forceWorktree = args.force === true || args.force_worktree === true;
+      const autoStash = args.auto_stash === true;
+      const missionBudgetUsd =
+        typeof args.budget === 'number' && args.budget > 0 ? args.budget : undefined;
+
+      try {
+        assertCleanWorktree(projectRoot, {
+          force: forceWorktree,
+          autoStash,
+          stashReason: `roland: auto-stash before MCP mission — ${goal.trim().slice(0, 60)}`,
+        });
+      } catch (err) {
+        if (err instanceof DirtyWorktreeError) {
+          throw new McpToolError(
+            'roland_run_team',
+            err.message.trim() + '\n\nPass force: true or auto_stash: true to override.',
+          );
+        }
+        throw err;
+      }
+
       const explicitTemplate = typeof args.loop_template === 'string' ? args.loop_template.trim() : '';
       const loopTemplate = resolveTeamLoopTemplate({
         goal: goal.trim(),
         loopTemplate: explicitTemplate || undefined,
-        legacyPm,
-      }) ?? '';
+      });
       const teamArgv = [
         'team', goal.trim(), '--background', '--quiet', '--no-tui', '--clean',
         '--state-dir', resolvedStateDir,
       ];
       if (loopTemplate) teamArgv.push('--loop-template', loopTemplate);
-      else if (legacyPm) teamArgv.push('--legacy-pm');
+      if (forceWorktree) teamArgv.push('--force');
+      if (autoStash) teamArgv.push('--auto-stash');
+      if (missionBudgetUsd != null) teamArgv.push('--budget', String(missionBudgetUsd));
 
       process.env['ROLAND_TRIGGERED_VIA'] = 'mcp';
 

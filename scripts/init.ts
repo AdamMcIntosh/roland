@@ -145,7 +145,9 @@ function main() {
     console.log(`   ⏭️  .roland/model-quality.json already exists — skipping`);
   }
 
-  console.log(`   💡 Consider adding .roland/ to your .gitignore`);
+  console.log(`   💡 Add .roland/ and .roland-sim/ to your .gitignore`);
+
+  ensureGitignoreEntries(targetDir, ['.roland/', '.roland-sim/']);
 
   console.log(`\n🎉 Roland is ready in ${targetDir}`);
   console.log(`\nNext steps:`);
@@ -155,6 +157,21 @@ function main() {
   console.log(`  4. Edit roland-context.json to add your VB6→C# mapping rules`);
   console.log(`     or use: update_migration_context type=rule pattern=... replacement=...`);
   console.log(`  5. For multi-step work, use: roland team "your goal" --loop-template full-cycle-verified-loop`);
+}
+
+function ensureGitignoreEntries(targetDir: string, entries: string[]): void {
+  const gitignorePath = path.join(targetDir, '.gitignore');
+  let content = '';
+  try {
+    content = fs.existsSync(gitignorePath) ? fs.readFileSync(gitignorePath, 'utf-8') : '';
+  } catch {
+    content = '';
+  }
+  const missing = entries.filter((e) => !content.includes(e));
+  if (missing.length === 0) return;
+  const block = '\n# Roland local mission state\n' + missing.join('\n') + '\n';
+  fs.appendFileSync(gitignorePath, block, 'utf-8');
+  console.log(`   ✅ Updated .gitignore (${missing.join(', ')})`);
 }
 
 main();
