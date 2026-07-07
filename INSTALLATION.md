@@ -21,6 +21,7 @@ Setup guide for Roland as an MCP server integrated with VS Code or Cursor.
 - **Node.js**: v22.0.0 or higher (see `package.json` engines)
 - **npm**: v9.0.0 or higher
 - **IDE**: Cursor (primary) or VS Code (with GitHub Copilot)
+- **Cursor API key** (required for missions): [cursor.com/settings](https://cursor.com/settings) → API Keys — `roland team` / `roland mission` cannot run without it
 - **OpenRouter API key** (optional): [openrouter.ai](https://openrouter.ai/) — for cost tracking and model routing metadata
 
 ## Installation Steps
@@ -39,11 +40,11 @@ irm https://raw.githubusercontent.com/AdamMcIntosh/roland/main/scripts/setup.ps1
 
 This single command will:
 1. Check your environment (Node.js version)
-2. Prompt for your OpenRouter API key and validate it
-3. Clone Roland into `~/.roland/roland/` (or update if already cloned)
-4. Build Roland (`npm install && npm run build`)
-5. Initialize the current directory with agent configs and MCP settings
-6. Save your API key to `~/.roland/config.yaml`
+2. Prompt for your **Cursor API key** (required for missions) and save it to `~/.roland/.env`
+3. Prompt for an optional OpenRouter API key (cost tracking) and save it to `~/.roland/config.yaml`
+4. Clone Roland into `~/.roland/roland/` (or update if already cloned)
+5. Build Roland (`npm install && npm run build`)
+6. Initialize the current directory with agent configs and MCP settings
 
 ### Option B: Manual Setup
 
@@ -64,26 +65,31 @@ npm install
 npm run build
 ```
 
+#### 3. First-run setup (API key)
+
+```bash
+node dist/index.js init    # or `roland init` after global install
+```
+
 </details>
 
-## PM Team Mode (Cursor) — one-command global setup
+## Global CLI + First-Run Setup (`roland init`)
 
-To run Roland as a **PM-first engineering team** (Lead PM on grok-4.3, workers on Composer 2.5 / Sonnet by lane), use the dedicated installer — it builds, installs the
-`roland` binary globally, and merges the MCP entry into `~/.cursor/mcp.json`:
+To install the `roland` binary globally and merge the MCP entry into `~/.cursor/mcp.json`:
 
 ```bash
 bash scripts/install-global.sh      # Windows: pwsh scripts/install-global.ps1
-roland doctor                        # verify: binary, personas, recipes, Cursor entry, .roland write
+roland init                          # interactive: CURSOR_API_KEY, GitHub token, MCP, telemetry
+roland doctor                        # verify: API key, binary, personas, recipes, Cursor entry, .roland write
 ```
 
-Restart Cursor, then in any project's chat call `get_pm_playbook` and
-`pm_standup`. See **[`ONBOARDING.md`](ONBOARDING.md)** and
-**[`docs/guides/pm-workflow.md`](docs/guides/pm-workflow.md)**.
+`roland init` walks you through first-run setup and writes your keys to
+`~/.roland/.env`, which Roland loads automatically on every run. **Missions
+(`roland team` / `roland mission`) fail without `CURSOR_API_KEY`** — if
+`roland doctor` reports it missing, run `roland init` again.
 
-**Optional `pm:` config** (in `config.yaml`) overrides the Cursor models and
-per-engineer lanes — defaults are `claude-opus-4-7` / `composer-2.5-fast` /
-`composer-2.5-standard`. No OpenRouter key is needed for the PM team; it runs on
-your Cursor subscription.
+Restart Cursor after the install so it picks up the MCP entry. See
+**[`ONBOARDING.md`](ONBOARDING.md)** for the full first-session walkthrough.
 
 Prefer to wire it by hand instead? Use the manual options below.
 
@@ -363,6 +369,7 @@ For development, open the `extension/` folder in VS Code and press **F5** to lau
 
 | Problem | Fix |
 |---------|-----|
+| `CURSOR_API_KEY is not set` when running a mission | Run `roland init` (saves to `~/.roland/.env`), then `roland doctor` to confirm |
 | Server not showing in Settings → MCP | Check your `mcp.json` path is correct, rebuild (`npm run build`), restart Cursor |
 | `Cannot find module 'dist/index.js'` | Run `npm run build` in the roland directory |
 | Server shows red status | Click **Restart** in Settings → MCP |
