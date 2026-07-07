@@ -351,6 +351,7 @@ function printHelp(): void {
   ln(`    ${cy('roland')} ${b('reject-commit')} [id]         Reject pending git-commit (loop HITL)`);
   ln();
   ln('  ' + b('UTILITY COMMANDS'));
+  ln(`    ${cy('roland')} ${b('templates')} [--json]         List loop templates ${d('(description, gates, exit conditions)')}`);
   ln(`    ${cy('roland')} doctor              Diagnose your Roland install`);
   ln(`    ${cy('roland')} pm-log              Print the PM event timeline`);
   ln(`    ${cy('roland')} mcp-config          Print Cursor MCP config (--general for HTTP)`);
@@ -394,7 +395,7 @@ function printHelp(): void {
 // ── Known subcommands (used for bare-goal shortcut detection) ─────────────────
 
 const KNOWN_CMDS = new Set([
-  'serve', 'mcp', 'mcp-config', 'doctor', 'pm-log',
+  'serve', 'mcp', 'mcp-config', 'doctor', 'pm-log', 'templates',
   'team', 'mission', 'run', 'goal', 'start', 'status', 'live', 'watch', 'pr', 'chat',
   'pause', 'resume', 'unblock', 'inject', 'replan', 'abort', 'hitl-status',
   'hitl-events', 'mission-summary', 'mission-audit',
@@ -434,6 +435,12 @@ export async function dispatchCommand(cmd: string | undefined, rest: string[]): 
       case 'doctor':
         doctor();
         break;
+      case 'templates': {
+        const { runTemplatesCli } = await import('../rco/templates-cli.js');
+        const code = runTemplatesCli(['templates', ...rest]);
+        if (code !== 0) process.exit(code);
+        break;
+      }
       case 'pm-log': {
         const idx = rest.indexOf('--limit');
         const limit = idx >= 0 ? Number(rest[idx + 1]) || 50 : 50;
