@@ -42,10 +42,8 @@ src/
   index.ts              ← MCP server entry + CLI dispatcher (serve | mcp-config | doctor | pm-log | team | pause | resume | unblock | inject | replan | abort | bg-status | bg-logs | bg-stop)
   rco/
     team-cli.ts         ← `roland team "<goal>"` — renders progress, delegates to team-orchestrator
-    team-orchestrator.ts← Thin router (~120 lines): ClosedLoop OR legacy PM (`--legacy-pm`)
-    legacy/pm-team/     ← [DEPRECATED] PM wave/DAG engine — removal target **v1.6.0**
-    loop-orchestrator.ts← ClosedLoop routing when `--loop-template` is set (Loop Engineering pivot)
-    pm-prompts.ts       ← All three Lead PM prompts (planning, review, synthesis)
+    team-orchestrator.ts← Thin router: always ClosedLoop (auto-selects template when omitted)
+    loop-orchestrator.ts← ClosedLoop mission execution (budget guard, usage collection, PR draft)
     prompts.ts          ← Worker agent prompt builder
     worker-signals.ts   ← Parses BLOCKER / MESSAGE signals from agent prose
     model-routing.ts    ← toCursorModelId(model, agentName) — routes to Opus/Sonnet/Composer
@@ -69,53 +67,25 @@ config.yaml             ← Model routing tiers, RCO settings, dashboard port
 
 ---
 
-## PM Team Mode [DEPRECATED]
-
-> **Hermes is the recommended PM layer.** This section documents the legacy in-loop PM Team path (`use_pm_team: true`, LeadPM) kept for backward compatibility.
-
-The execution path for complex goals **without** a loop template. When `--loop-template` is set, missions route to ClosedLoop instead (see Loop Engineering below).
-
-```bash
-roland team "Add input validation to the registration endpoint"
-roland team "..." --stream          # print 360-char output preview per completed task
-roland team "..." --state-dir /tmp  # use alternate state directory
-```
-
-**How it works:**
-1. **Lead PM** (grok-4.3) reads the goal and roster, outputs a JSON task plan
-2. Tasks with no `dependsOn` run **in parallel** (one wave)
-3. After each wave, PM reviews outputs and decides: `continue` or `adjust`
-   - `adjust` can spawn new tasks, send unblock messages, or re-scope pending tasks
-4. Continues until no tasks remain, then PM writes the final synthesis
-
-**State files** (written to `.roland/` by default):
-- `blackboard.json` — shared key/value store agents read and write
-- `messages.json` — point-to-point message queue between agents
-- `usage-history.json` — per-run token/cost estimates appended by `usage-tracker.ts` after every run
-
----
-
 ## Loop Engineering (ClosedLoop)
 
-When `--loop-template` is set, `runTeam()` routes to `loop-orchestrator.ts` → `ClosedLoop.run()` instead of the legacy PM wave engine.
+Every mission routes through `loop-orchestrator.ts` → `ClosedLoop.run()`. The legacy PM wave engine (`src/legacy/pm-team/`, `--legacy-pm`, `use_pm_team`) was **removed in v1.6.0** — there is no alternate execution path.
 
 ```bash
-roland team "ship OAuth callback with tests green" --loop-template closed-loop-harness
+roland team "ship OAuth callback with tests green"                # template auto-selected
 roland team "add profile settings page" --loop-template feature-implementation-loop
 ```
 
 **Routing** (`team-orchestrator.ts`):
 
 ```typescript
-if (hasLoopTemplate(opts.loopTemplate)) {
-  return runClosedLoopMission(opts); // ClosedLoop — primary path
-}
-return runLegacyPmTeam(opts); // src/legacy/pm-team/ — removal v1.6.0
+const loopTemplate = resolveLoopTemplate(opts); // explicit, or auto via triage-router
+return runClosedLoopMission({ ...opts, loopTemplate });
 ```
 
 **ClosedLoop owns:** EvaluationGate (verify), LoopMemory, reflection, exit conditions, SpecialistSpawner, checkpoint/recovery, and PR formatting (`closed-loop-pr.json`).
 
-**[DEPRECATED] PM Team (legacy, opt-in):** Pure ClosedLoop is the default for Plan/Act (`lightweight-plan-act.ts`). Legacy PM Team runs only when `loop_engine.use_pm_team: true`, template `use_pm_team: true`, or `enablePmIntegration: true`. Hermes handles high-level PM duties in the recommended hybrid setup.
+**Plan/Act:** handled by lightweight handlers (`lightweight-plan-act.ts`) — PM integration is permanently disabled; high-level PM duties live in Hermes / Cursor `@roland`.
 
 **Model routing:** All loop components resolve models via `RoleModelRouter.getModel(role)` in `src/models/role-model-router.ts`. Switch OpenRouter ↔ Ollama by editing `config.yaml` `models` section only (see file comments). Startup prints a routing banner; dashboard Loop panel shows live role + phase routing and PM Integration status.
 
@@ -198,20 +168,11 @@ tools:
 
 ---
 
-## PM Prompts (`src/rco/pm-prompts.ts`)
+## PM Prompts (`src/rco/pm-prompts.ts`) — dead code, removal pending
 
-Three functions; all return template-literal strings (watch for bare backticks — escape as `` \` ``):
-
-| Function | When called | Key constraint |
-|----------|-------------|----------------|
-| `buildLeadPMPlanningPrompt` | Phase 1 | Contains Task Scoping Rules — do not remove |
-| `buildLeadPMReviewPrompt` | After each wave | Short; PM decides continue/adjust |
-| `buildLeadPMSynthesisPrompt` | Phase 3 | Requires 🔴/🟡/🟢 tiers + S/M/L backlog + risk register + deployment checklist |
-
-**Task Scoping Rules** (in the planning prompt) enforce:
-- Narrow, parallelizable tasks over large sequential ones
-- `test-author` cap: ≤ 8–10 files per task; prefer two parallel test-author tasks over one
-- `test-executor` always depends on all test-author tasks for a wave
+The Lead PM prompt builders are **no longer called** anywhere (the legacy PM
+engine was removed in v1.6.0). The file remains only until the post-removal
+dead-code prune lands — do not add new call sites.
 
 ---
 
@@ -337,7 +298,7 @@ Two files serve the browser-based usage dashboard:
 
 **Usage tracker** (`src/rco/usage-tracker.ts`):
 
-- Called at the end of every `runTeam()` — legacy PM path in `team-orchestrator.ts` and loop path in `loop-orchestrator.ts`
+- Called at the end of every `runTeam()` via the loop path in `loop-orchestrator.ts`
 - Estimates tokens as `chars / 4` and cost from per-model rate table (`MODEL_PRICING`)
 - Appends one `RunUsageRecord` to `.roland/usage-history.json` (creates the file on first run)
 - Rate table lives at the top of `usage-tracker.ts` — update it if you have better pricing data
@@ -368,8 +329,8 @@ node scripts/backfill-usage.mjs --state-dir /path/to/project/.roland
 | `Preferences` | Explicit user/team preferences |
 
 **How memory flows:**
-1. `runTeam()` calls `memory.snapshot()` → injected into Lead PM planning prompt
-2. Synthesis prompt asks PM to write a `## Memory Extract` block with the four sections
+1. `memory.snapshot()` → injected into loop planning context
+2. The synthesis format includes a `## Memory Extract` block with the four sections
 3. After synthesis, `memory.extractAndAppend(synthesis, goal, runId)` merges new bullets in
 4. New bullets are deduplicated (first 50 chars) before writing
 
@@ -404,7 +365,7 @@ memory.addBullet('Past Mistakes', 'Never call req.destroy() before sending HTTP 
 ### How it works
 
 After every synthesis, **Phase 4** runs:
-1. **Retrospective LLM call** — Lead PM answers 5 structured questions about the run (what went well, root causes of blockers, wrong assumptions, gotchas, new standards)
+1. **Retrospective LLM call** — the loop's synthesis model answers 5 structured questions about the run (what went well, root causes of blockers, wrong assumptions, gotchas, new standards)
 2. **Parse output** — `parseRetrospectiveOutput()` extracts bullets from `## Retrospective Memory Update` block
 3. **Diff against existing memory** — only bullets not already in `.roland/memory.md` are shown
 4. **Interactive proposal** (non-TUI mode with TTY) — shows a colour diff, auto-accepts after 15s
@@ -457,8 +418,8 @@ Instead of dumping the full memory file, `memory.smartSnapshot(goal)` is used:
 
 1. `loadProjectKnowledge(cwd)` scans for the above files at run start
 2. Present files are loaded and a proportional character budget allocated (total cap: 12,000 chars)
-3. Injection block (`## Project Knowledge`) is prepended to the Lead PM planning prompt — before `## Project Memory`
-4. After synthesis, `appendDecisions()` parses the PM's `## Knowledge Update` block and appends new bullets to `DECISIONS.md`
+3. Injection block (`## Project Knowledge`) is prepended to the loop planning context — before `## Project Memory`
+4. After synthesis, `appendDecisions()` parses the `## Knowledge Update` block and appends new bullets to `DECISIONS.md`
 
 ### Character budget allocation
 
@@ -578,10 +539,8 @@ roland abort                          # stop after current wave completes
 | What | Where |
 |------|-------|
 | CLI entry point | `src/index.ts` |
-| PM team execution (legacy) | `src/legacy/pm-team/legacy-pm-engine.ts` |
 | Team router | `src/rco/team-orchestrator.ts` |
 | Loop orchestrator (ClosedLoop) | `src/rco/loop-orchestrator.ts` |
-| PM prompts | `src/rco/pm-prompts.ts` |
 | Worker prompts | `src/rco/prompts.ts` |
 | Model routing | `src/rco/model-routing.ts` |
 | Signal parsing | `src/rco/worker-signals.ts` |

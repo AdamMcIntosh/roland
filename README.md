@@ -76,7 +76,7 @@ Inspired by [loops.elorm.xyz](https://loops.elorm.xyz) patterns: self-paced iter
 
 > **roland-web** (`roland-web/`) is **experimental** — a separate hosted UI prototype; not required for daily Roland use. See `roland-web/README.md`.
 
-> [DEPRECATED] In-loop PM Team (`use_pm_team: true`) is legacy opt-in only. CLI aliases `run`, `goal`, `start`, `orchestrate` soft-deprecated — use `roland team` or `roland mission`.
+> The in-loop PM Team was **removed in v1.6.0** — all missions run Pure ClosedLoop. CLI aliases `run`, `goal`, `start`, `orchestrate` soft-deprecated — use `roland team` or `roland mission`.
 
 ---
 
