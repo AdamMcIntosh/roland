@@ -1,6 +1,5 @@
 # Dependencies
 node_modules/
-package-lock.json
 yarn.lock
 pnpm-lock.yaml
 
@@ -50,9 +49,9 @@ test_watch/
 coverage/
 *.lcov
 
-# Lock files (if you want - currently tracked)
-# Uncomment to ignore lock files:
-# package-lock.json
+# Root package-lock.json is tracked — required by CI (npm ci + setup-node npm cache).
+# The experimental web UI manages its own dependencies outside CI.
+roland-web/package-lock.json
 
 # IDE specific settings
 .vscode/settings.json

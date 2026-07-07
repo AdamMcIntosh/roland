@@ -108,7 +108,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish to npm
-        if: ${{ secrets.NPM_TOKEN != '' }}
-        run: npm publish --access public --provenance
+        # secrets context is not allowed in step-level `if` — route through env instead.
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        if: ${{ env.NODE_AUTH_TOKEN != '' }}
+        run: npm publish --access public --provenance
