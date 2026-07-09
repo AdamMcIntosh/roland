@@ -145,47 +145,6 @@ If you just want to test within the roland repo itself, the existing `.cursor/mc
 
 If the server shows red, rebuild (`npm run build` in the roland directory) and click **Restart** next to roland in Settings → MCP.
 
-## General MCP (Hermes & HTTP clients)
-
-Roland exposes a **Streamable HTTP** MCP endpoint alongside the Cursor stdio server. External clients (Hermes, custom agents) connect via URL — no process spawn required.
-
-### Start the HTTP endpoint
-
-```bash
-# Local (default — binds 127.0.0.1 only):
-roland mcp --port 8081
-
-# LAN / Tailscale (requires bearer token):
-export ROLAND_MCP_TOKEN="your-secret-token"
-roland mcp --host 0.0.0.0 --port 8081
-# or:
-roland serve --mcp --host 0.0.0.0 --port 8081
-```
-
-Clients must send `Authorization: Bearer $ROLAND_MCP_TOKEN` when the server binds to `0.0.0.0` or when `ROLAND_MCP_TOKEN` is set.
-
-### Verify
-
-```bash
-curl http://127.0.0.1:8081/mcp          # discovery JSON
-curl http://127.0.0.1:8081/mcp/health   # health check
-```
-
-### Connect Hermes
-
-```bash
-hermes mcp add roland --url http://127.0.0.1:8081/mcp
-```
-
-Print client config snippet:
-
-```bash
-roland mcp-config --general
-roland mcp-config --general --url http://192.168.1.10:8081/mcp   # LAN / Tailscale
-```
-
-> **Note:** Cursor integration uses stdio (`roland mcp-config --write`) and is unchanged. Use HTTP MCP only for Hermes and other external clients.
-
 ## VS Code Setup
 
 ### Option A: Per-Project Config (via init command)

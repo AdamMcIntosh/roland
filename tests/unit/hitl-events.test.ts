@@ -1,6 +1,6 @@
 /**
- * HITL → Hermes propagation — unit tests
- * Scoped run: npx vitest run tests/unit/hitl-hermes.test.ts
+ * HITL event propagation — unit tests
+ * Scoped run: npx vitest run tests/unit/hitl-events.test.ts
  */
 
 import fs from 'fs';
@@ -10,26 +10,26 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   buildHitlStatusReport,
   buildMissionCompletionReport,
-  emitHermesMissionComplete,
-  emitHermesHitlEvent,
-  formatHermesHitlSummary,
-  formatHermesMissionCompleteSummary,
-  notifyHermesMissionCompleteFromTeamResult,
-  pollHermesHitlEvents,
+  emitMissionComplete,
+  emitHitlEvent,
+  formatHitlSummary,
+  formatMissionCompleteSummary,
+  notifyMissionCompleteFromTeamResult,
+  pollHitlEvents,
   readMissionCompletionReport,
-  HERMES_HITL_EVENTS_FILE,
-  HERMES_MISSION_COMPLETION_FILE,
-} from '../../src/rco/hitl-hermes.js';
+  HITL_EVENTS_FILE,
+  MISSION_COMPLETION_FILE,
+} from '../../src/rco/hitl-events.js';
 import { HitlQueue } from '../../src/rco/hitl.js';
 import { Blackboard } from '../../src/coordination/legacy-blackboard.js';
 import { GitCommitApprovalQueue } from '../../src/loop-engine/git-commit-approval.js';
 
-describe('hitl-hermes', () => {
+describe('hitl-events', () => {
   let tmpDir: string;
   let stateDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'roland-hitl-hermes-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'roland-hitl-events-'));
     stateDir = path.join(tmpDir, '.roland');
     fs.mkdirSync(stateDir, { recursive: true });
   });
@@ -38,9 +38,9 @@ describe('hitl-hermes', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('emitHermesHitlEvent appends to jsonl and poll returns new events', () => {
+  it('emitHitlEvent appends to jsonl and poll returns new events', () => {
     const t0 = Date.now();
-    const ev = emitHermesHitlEvent(stateDir, {
+    const ev = emitHitlEvent(stateDir, {
       kind: 'loop-escalation',
       blockerDescription: 'Retry budget exhausted',
       currentGate: 'escalation',
@@ -48,13 +48,13 @@ describe('hitl-hermes', () => {
     });
 
     expect(ev.id).toMatch(/^hitl-/);
-    expect(fs.existsSync(path.join(stateDir, HERMES_HITL_EVENTS_FILE))).toBe(true);
+    expect(fs.existsSync(path.join(stateDir, HITL_EVENTS_FILE))).toBe(true);
 
-    const all = pollHermesHitlEvents(stateDir, 0);
+    const all = pollHitlEvents(stateDir, 0);
     expect(all.length).toBe(1);
     expect(all[0]!.kind).toBe('loop-escalation');
 
-    const none = pollHermesHitlEvents(stateDir, t0 + 60_000);
+    const none = pollHitlEvents(stateDir, t0 + 60_000);
     expect(none.length).toBe(0);
   });
 
@@ -102,9 +102,9 @@ describe('hitl-hermes', () => {
     expect(report.gitCommitApproval?.message).toContain('feat: add tests');
   });
 
-  it('formatHermesHitlSummary produces Master Chief one-liner', () => {
+  it('formatHitlSummary produces Master Chief one-liner', () => {
     const report = buildHitlStatusReport(stateDir);
-    expect(formatHermesHitlSummary(report)).toMatch(/idle|No active mission/i);
+    expect(formatHitlSummary(report)).toMatch(/idle|No active mission/i);
 
     fs.writeFileSync(
       path.join(stateDir, 'run-state.json'),
@@ -126,11 +126,11 @@ describe('hitl-hermes', () => {
     });
 
     const active = buildHitlStatusReport(stateDir);
-    const summary = formatHermesHitlSummary(active);
+    const summary = formatHitlSummary(active);
     expect(summary).toMatch(/Mission blocked|git-commit/i);
   });
 
-  it('emitHermesMissionComplete writes snapshot and mission-complete event', () => {
+  it('emitMissionComplete writes snapshot and mission-complete event', () => {
     const report = buildMissionCompletionReport(stateDir, {
       goal: 'Add dark mode toggle',
       finalStatus: 'completed',
@@ -140,16 +140,16 @@ describe('hitl-hermes', () => {
       blockersEncountered: 0,
       wavesRun: 1,
     });
-    const emitted = emitHermesMissionComplete(stateDir, report);
+    const emitted = emitMissionComplete(stateDir, report);
 
     expect(emitted.summary).toMatch(/Mission complete/i);
-    expect(fs.existsSync(path.join(stateDir, HERMES_MISSION_COMPLETION_FILE))).toBe(true);
+    expect(fs.existsSync(path.join(stateDir, MISSION_COMPLETION_FILE))).toBe(true);
 
     const stored = readMissionCompletionReport(stateDir);
     expect(stored?.goal).toBe('Add dark mode toggle');
     expect(stored?.finalStatus).toBe('completed');
 
-    const events = pollHermesHitlEvents(stateDir, 0);
+    const events = pollHitlEvents(stateDir, 0);
     expect(events.some((e) => e.kind === 'mission-complete')).toBe(true);
   });
 
@@ -183,7 +183,7 @@ describe('hitl-hermes', () => {
     expect(report.blockers.length).toBe(0);
   });
 
-  it('notifyHermesMissionCompleteFromTeamResult dedupes by runId', () => {
+  it('notifyMissionCompleteFromTeamResult dedupes by runId', () => {
     fs.writeFileSync(
       path.join(stateDir, 'run-state.json'),
       JSON.stringify({
@@ -212,13 +212,13 @@ describe('hitl-hermes', () => {
       }),
     );
 
-    const first = notifyHermesMissionCompleteFromTeamResult(stateDir, {
+    const first = notifyMissionCompleteFromTeamResult(stateDir, {
       goal: 'Ship feature',
       synthesis: '## Next Steps\n\n1. Review the diff',
       wavesRun: 1,
       blockersEncountered: 0,
     });
-    const second = notifyHermesMissionCompleteFromTeamResult(stateDir, {
+    const second = notifyMissionCompleteFromTeamResult(stateDir, {
       goal: 'Ship feature',
       synthesis: '## Next Steps\n\n1. Review the diff',
       wavesRun: 1,
@@ -226,10 +226,10 @@ describe('hitl-hermes', () => {
     });
 
     expect(second.id).toBe(first.id);
-    expect(formatHermesMissionCompleteSummary(first)).toMatch(/Mission complete/i);
+    expect(formatMissionCompleteSummary(first)).toMatch(/Mission complete/i);
 
     const status = buildHitlStatusReport(stateDir);
     expect(status.missionCompletion?.goal).toBe('Ship feature');
-    expect(formatHermesHitlSummary(status)).toMatch(/Mission complete/i);
+    expect(formatHitlSummary(status)).toMatch(/Mission complete/i);
   });
 });

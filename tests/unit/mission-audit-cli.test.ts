@@ -15,7 +15,7 @@ import {
 } from '../../src/rco/mission-audit-cli.js';
 import { RUN_STATE_FILE } from '../../src/rco/run-state.js';
 import { LOOP_HISTORY_FILE } from '../../src/loop-engine/loop-observability.js';
-import { HERMES_HITL_EVENTS_FILE } from '../../src/rco/hitl-hermes.js';
+import { HITL_EVENTS_FILE } from '../../src/rco/hitl-events.js';
 
 describe('mission-audit-cli', () => {
   let tmpDir: string;
@@ -44,7 +44,7 @@ describe('mission-audit-cli', () => {
       }),
     );
     fs.appendFileSync(
-      path.join(tmpDir, HERMES_HITL_EVENTS_FILE),
+      path.join(tmpDir, HITL_EVENTS_FILE),
       JSON.stringify({
         id: 'e1',
         timestamp: 1300,

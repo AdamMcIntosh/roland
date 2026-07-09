@@ -95,7 +95,6 @@ export const RcoConfigSchema = z.object({
     pattern: z.string(),
     agents: z.array(z.string()),
   })).optional(),
-  dashboard_port: z.number().optional(),
   state_file: z.string().optional(),
 });
 

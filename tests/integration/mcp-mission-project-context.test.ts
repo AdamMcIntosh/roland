@@ -1,6 +1,6 @@
 /**
  * Integration: MCP roland_run_team must honor project_root even when stale env
- * points at a different project (Hermes hybrid scenario).
+ * points at a different project.
  *
  * Run: npx vitest run tests/integration/mcp-mission-project-context.test.ts
  */

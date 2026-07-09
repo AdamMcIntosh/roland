@@ -42,10 +42,10 @@ function registerPmControlTools(registrar: McpToolRegistrar, ctx: McpToolContext
       try {
         const mcpCtx = ctx.resolveToolProjectContext(args);
         const { buildBoardStatusReport, formatConciseUnscSummary } = await import('../../rco/board-report.js');
-        const { buildHitlStatusReport, formatHermesHitlSummary } = await import('../../rco/hitl-hermes.js');
+        const { buildHitlStatusReport, formatHitlSummary } = await import('../../rco/hitl-events.js');
         const unsc = formatConciseUnscSummary(buildBoardStatusReport(mcpCtx.stateDir));
         const hitlReport = buildHitlStatusReport(mcpCtx.stateDir);
-        const hitlSummary = formatHermesHitlSummary(hitlReport);
+        const hitlSummary = formatHitlSummary(hitlReport);
         const hitlSection = hitlReport.waitingOnHitl
           ? `\n\n---\n\n### 🎮 HITL — action required\n\n${hitlSummary}\n\nSuggested: \`${hitlReport.suggestedActions[0] ?? 'roland hitl-status'}\``
           : `\n\n---\n\n**HITL:** ${hitlSummary}`;
@@ -377,15 +377,12 @@ function registerChatTools(registrar: McpToolRegistrar, ctx: McpToolContext): vo
       const greeting = `# 👋 Roland is ready
 
 ${blockerWarning}
-## In Cursor (no Hermes required)
+## In Cursor
 
 | Mode | Role |
 |------|------|
 | **@roland in chat** | PM, triage, direct edits — self-contained via MCP |
 | **ClosedLoop** | \`roland team "…" --loop-template …\` or \`roland_run_team\` for PACVRE missions |
-| **Dashboard** | Monitor active loops only (\`npm run serve-dashboard\`) |
-
-> **Hermes** (\`roland chat\` CLI) is optional for terminal-only workflows — Cursor users do not need it.
 
 ## What I can do
 
@@ -427,7 +424,6 @@ roland "goal"              # full team run
 roland bg-status           # background run health
 roland status              # live TUI observer
 roland doctor              # verify install
-npm run serve-dashboard    # usage dashboard → http://127.0.0.1:8081
 \`\`\`
 ${unscSnippet ? `\n---\n\n${unscSnippet}\n` : ''}
 What would you like to work on?`;
@@ -451,7 +447,7 @@ What would you like to work on?`;
 
   registrar.registerTool(
     'roland_run_team',
-    'Launch a background Pure ClosedLoop mission for goals on the **Team** execution path. Default: auto-selects a loop template (e.g. small-fix-loop for typos). Pass `project_root` (or `cwd`) when triggering from Hermes in a repo other than the MCP server cwd. Pass `loop_template` to override auto-selection. Also use when the operator forces team mode via --force-team. Do NOT use for single-file edits, Q&A, or quick fixes unless force-team was explicitly requested. Returns immediately; track with pm_standup() or get_team_context().',
+    'Launch a background Pure ClosedLoop mission for goals on the **Team** execution path. Default: auto-selects a loop template (e.g. small-fix-loop for typos). Pass `project_root` (or `cwd`) when targeting a repo other than the MCP server cwd. Pass `loop_template` to override auto-selection. Also use when the operator forces team mode via --force-team. Do NOT use for single-file edits, Q&A, or quick fixes unless force-team was explicitly requested. Returns immediately; track with pm_standup() or get_team_context().',
     async (args: Record<string, unknown>) => {
       const goal = args.goal as string;
       if (!goal || typeof goal !== 'string' || !goal.trim()) {

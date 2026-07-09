@@ -314,8 +314,6 @@ function buildClosedLoopSynthesis(goal: string, result: ClosedLoopResult, stateD
 }
 
 /**
- * ## Old PM Persona Deprecated — Hermes is Primary PM
- *
- * Pure ClosedLoop (Hermes PM + Roland Loop Engine) is default.
+ * Pure ClosedLoop (Roland Loop Engine) is the default.
  * [DEPRECATED] Legacy PM Team opt-in: loop_engine.use_pm_team or template use_pm_team.
  */

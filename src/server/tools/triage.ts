@@ -86,7 +86,7 @@ export function registerTriageTools(registrar: McpToolRegistrar, ctx: McpToolCon
 
   registrar.registerTool(
     'triage',
-    'Auto-pilot: analyze any user message and recommend agent persona, recipe workflow, and execution path (direct in chat vs Pure ClosedLoop team mission). Call FIRST on new coding requests. In Cursor, @roland + triage is self-contained — no Hermes required. Returns execution_path.path, summary, team_offer, team_command (roland team + --loop-template), loop_template, loop_template_reason, forced, cleaned_goal, plus agent and complexity routing. Pure ClosedLoop default (use_pm_team: false). Power-user override: --force-team or force team / full team / run as team / spawn team.',
+    'Auto-pilot: analyze any user message and recommend agent persona, recipe workflow, and execution path (direct in chat vs Pure ClosedLoop team mission). Call FIRST on new coding requests. In Cursor, @roland + triage is self-contained. Returns execution_path.path, summary, team_offer, team_command (roland team + --loop-template), loop_template, loop_template_reason, forced, cleaned_goal, plus agent and complexity routing. Pure ClosedLoop default (use_pm_team: false). Power-user override: --force-team or force team / full team / run as team / spawn team.',
     async (args: Record<string, unknown>) => {
       const message = args.message as string;
       if (!message) throw new McpToolError('triage', 'message is required');

@@ -42,7 +42,7 @@ tests/
 ├── integration.test.ts          # Config → router → cost pipeline end-to-end
 ├── rco/
 │   ├── orchestrator.test.ts     # loadConfig, stateLock, tools, orchestrator (mock + real fork)
-│   └── phase2.test.ts           # Plugin commands, persistence, schemas, export, dashboard
+│   └── phase2.test.ts           # Plugin commands, persistence, schemas, export
 ├── phase3.test.ts               # adaptive-swarm, skills, customization, plugin modes
 └── e2e/
     ├── workflow-execution.test.ts    # Recipe session lifecycle, loops, cost tracking
@@ -81,7 +81,6 @@ tests/
 - Schemas: JSON extraction, fallback, Zod validation
 - Persistence: notepad prompts, local save/load round-trip, session listing
 - Export: dynamic triage rules from session outputs
-- Dashboard: `broadcastGraph`, `startDashboard`/`stopDashboard`
 - Prompts: Claude tool-calling prompt content
 
 **Phase 3 — `phase3.test.ts`** (10 tests)
@@ -228,14 +227,6 @@ npm run rco -- --recipe PlanExecRevEx --task "Build a todo app"
 ```
 
 **Expected**: Runs 4 agents (Planner → Executor → Reviewer → Explainer), prints output, writes `.cursor/rules/` and MCP JSON.
-
-With dashboard:
-
-```bash
-npm run rco -- --dashboard --recipe PlanExecRevEx --task "Build a todo app"
-```
-
-Opens WebSocket on port 8080. In another terminal, run `npm run serve-dashboard` and open `http://localhost:8081` to see live metrics.
 
 ### Troubleshooting
 

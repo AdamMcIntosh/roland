@@ -25,7 +25,7 @@ export const MISSIONS_ARCHIVE_DIR = 'missions';
 const STALE_LOOP_ARTIFACTS = [
   'loop-metrics.json',
   'loop-execution-history.json',
-  'hermes-hitl-events.jsonl',
+  'hitl-events.jsonl',
   'closed-loop-pr.json',
   'loop-pm-session.json',
 ];
@@ -51,7 +51,7 @@ export interface MissionMetaRecord {
   projectRoot?: string;
   stateDir?: string;
   updatedAt?: number;
-  /** Launch channel — MCP/Hermes, CLI, dashboard fallback, or Cursor @roland. */
+  /** Launch channel — MCP, CLI, or Cursor @roland. */
   triggeredVia?: MissionTriggeredVia;
   [key: string]: unknown;
 }
@@ -641,7 +641,7 @@ export function buildSupervisorStartDiagnostics(
     hints: [
       'Run `npm run build` in the Roland install root if dist/ is missing',
       logFile ? `Inspect full log: ${logFile}` : 'No background log file found yet',
-      'Retry mission launch from the dashboard or run `roland team "goal" --background`',
+      'Retry mission launch with `roland team "goal" --background`',
       'Use `roland bg-logs` for the latest supervisor output',
     ],
   };

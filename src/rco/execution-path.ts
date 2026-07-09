@@ -4,7 +4,7 @@
  * Used by:
  *   - MCP `triage` tool (execution_path field)
  *   - Orchestrator / Roland system prompts (EXECUTION_PATH_FRAMEWORK)
- *   - Triage Router skill (.hermes/SKILL.md) and triage-router.ts
+ *   - Triage Router (triage-router.ts)
  *   - Unit tests for routing examples
  */
 
@@ -73,7 +73,7 @@ export function stripForceTeamTriggers(message: string): string {
 /** Embedded in Roland system prompts — keep in sync with classifyExecutionPath heuristics. */
 export const EXECUTION_PATH_FRAMEWORK = `## Execution Path Triage (mandatory — every new request)
 
-**Hybrid model:** In Cursor, \`@roland\` + MCP triage is self-contained (no Hermes). Roland ClosedLoop = execution engine · Pure ClosedLoop default (\`use_pm_team: false\`).
+**Hybrid model:** In Cursor, \`@roland\` + MCP triage is self-contained. Roland ClosedLoop = execution engine · Pure ClosedLoop default (\`use_pm_team: false\`).
 
 Before acting, classify the request as **Direct** or **Team (ClosedLoop mission)**. State your decision visibly in one line (use the \`summary\` shape from \`triage\` when available).
 

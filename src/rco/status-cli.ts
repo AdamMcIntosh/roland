@@ -3,22 +3,20 @@
  *
  * Shared CLI printers for mission monitoring — single source of truth used by
  * `roland status`, `roland live`, `roland hitl-status`, `roland mission-summary`,
- * `roland hitl-events`, and MCP parity tools. Hermes polls via MCP; operators use CLI.
- *
- * ## Dashboard Demoted — CLI + Hermes Primary Complete
+ * `roland hitl-events`, and MCP parity tools. Cursor polls via MCP; operators use CLI.
  */
 
 import path from 'path';
 import {
   buildHitlStatusReport,
-  formatHermesHitlSummary,
+  formatHitlSummary,
   formatHitlStatusMarkdown,
   formatMissionCompleteMarkdown,
-  formatHermesMissionCompleteSummary,
-  pollHermesHitlEvents,
+  formatMissionCompleteSummary,
+  pollHitlEvents,
   readMissionCompletionReport,
   buildMissionCompletionReport,
-} from './hitl-hermes.js';
+} from './hitl-events.js';
 import { buildBoardStatusReport, formatConciseUnscSummary } from './board-report.js';
 import { printGitCommitApprovalStatus } from './git-commit-approval-cli.js';
 import { readRunState } from './run-state.js';
@@ -45,7 +43,7 @@ export interface LiveMonitorOpts extends StatusCliOpts {
 }
 
 const VIA_LABELS: Record<string, string> = {
-  mcp: 'MCP (Hermes/Cursor)',
+  mcp: 'MCP (Cursor)',
   cli: 'CLI',
   cursor: 'Cursor @roland',
   dashboard: 'Dashboard (legacy)',
@@ -109,7 +107,7 @@ export function printUnifiedStatus(stateDir = '.roland', opts: StatusCliOpts = {
     },
     hitl: {
       waitingOnHitl: hitl.waitingOnHitl,
-      summary: formatHermesHitlSummary(hitl),
+      summary: formatHitlSummary(hitl),
       currentGate: hitl.currentGate,
       paused: hitl.hitl.paused,
     },
@@ -129,7 +127,7 @@ export function printUnifiedStatus(stateDir = '.roland', opts: StatusCliOpts = {
   const w = (s = '') => console.error(s);
 
   w();
-  w(`  ${bold('Roland Status')}  ${dim('(CLI · Hermes primary · dashboard optional)')}`);
+  w(`  ${bold('Roland Status')}  ${dim('(CLI · MCP parity)')}`);
   w(`  ${hr}`);
   w();
   w(`  ${dim('Project')}       ${cy(projectRoot)}`);
@@ -154,7 +152,7 @@ export function printUnifiedStatus(stateDir = '.roland', opts: StatusCliOpts = {
   }
 
   w();
-  w(`  ${bold('HITL')}  ${hitl.waitingOnHitl ? r('⚠') : g('●')} ${formatHermesHitlSummary(hitl)}`);
+  w(`  ${bold('HITL')}  ${hitl.waitingOnHitl ? r('⚠') : g('●')} ${formatHitlSummary(hitl)}`);
   if (hitl.currentGate) w(`  ${dim('Gate')}          ${y(hitl.currentGate)}`);
   if (hitl.loop) {
     const lp = hitl.loop;
@@ -207,7 +205,7 @@ export async function runLiveMonitor(stateDir = '.roland', opts: LiveMonitorOpts
     if (isTty) process.stderr.write('\x1b[2J\x1b[H');
     printUnifiedStatus(stateDir, { ...opts, concise: true });
 
-    const events = pollHermesHitlEvents(stateDir, lastEventTs, 20);
+    const events = pollHitlEvents(stateDir, lastEventTs, 20);
     if (events.length > 0) {
       lastEventTs = events[events.length - 1]!.timestamp;
       console.error(`\n  ${bold('Recent events')}  ${dim(`(${events.length} new)`)}\n`);
@@ -246,7 +244,7 @@ export async function runLiveMonitor(stateDir = '.roland', opts: LiveMonitorOpts
 /** Print HITL status — delegates to buildHitlStatusReport (MCP parity). */
 export function printHitlStatus(stateDir = '.roland', opts: StatusCliOpts = {}): void {
   const report = buildHitlStatusReport(stateDir);
-  const summary = formatHermesHitlSummary(report);
+  const summary = formatHitlSummary(report);
 
   if (opts.json) {
     console.log(JSON.stringify({ ...report, summary }, null, 2));
@@ -254,7 +252,7 @@ export function printHitlStatus(stateDir = '.roland', opts: StatusCliOpts = {}):
   }
 
   console.error('');
-  console.error(`  ${bold('HITL Status')}  ${dim('(CLI · Hermes monitoring)')}`);
+  console.error(`  ${bold('HITL Status')}`);
   console.error('');
   console.error(`  ${report.waitingOnHitl ? r('⚠') : g('●')} ${summary}`);
   console.error('');
@@ -306,7 +304,7 @@ export function printHitlStatus(stateDir = '.roland', opts: StatusCliOpts = {}):
   printGitCommitApprovalStatus(stateDir);
   console.error('');
 
-  // Full markdown to stdout for piping / Hermes scripts
+  // Full markdown to stdout for piping / scripts
   console.log(formatHitlStatusMarkdown(report));
 }
 
@@ -327,7 +325,7 @@ export function printMissionSummary(stateDir = '.roland', opts: StatusCliOpts = 
     return;
   }
 
-  const summary = formatHermesMissionCompleteSummary(report);
+  const summary = formatMissionCompleteSummary(report);
 
   if (opts.json) {
     console.log(JSON.stringify({ found: true, ...report, summary }, null, 2));
@@ -335,7 +333,7 @@ export function printMissionSummary(stateDir = '.roland', opts: StatusCliOpts = 
   }
 
   console.error('');
-  console.error(`  ${bold('Mission Summary')}  ${dim('(terminal outcome · Hermes)')}`);
+  console.error(`  ${bold('Mission Summary')}  ${dim('(terminal outcome)')}`);
   console.error('');
   console.error(`  ${report.finalStatus === 'completed' ? g('✓') : y('⚠')} ${summary}`);
   console.error('');
@@ -349,9 +347,9 @@ export function printHitlEvents(
 ): void {
   const since = opts.since ?? 0;
   const limit = opts.limit ?? 50;
-  const events = pollHermesHitlEvents(stateDir, since, limit);
+  const events = pollHitlEvents(stateDir, since, limit);
   const report = buildHitlStatusReport(stateDir);
-  const summary = formatHermesHitlSummary(report);
+  const summary = formatHitlSummary(report);
 
   const payload = {
     events,

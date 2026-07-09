@@ -8,7 +8,7 @@ import os from 'os';
 import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { printHitlStatus, printMissionSummary, printHitlEvents, printUnifiedStatus } from '../../src/rco/status-cli.js';
-import { emitHermesHitlEvent, emitHermesMissionComplete, buildMissionCompletionReport } from '../../src/rco/hitl-hermes.js';
+import { emitHitlEvent, emitMissionComplete, buildMissionCompletionReport } from '../../src/rco/hitl-events.js';
 import { HitlQueue } from '../../src/rco/hitl.js';
 
 describe('status-cli', () => {
@@ -63,7 +63,7 @@ describe('status-cli', () => {
 
   it('printMissionSummary reports found completion', () => {
     const report = buildMissionCompletionReport(stateDir, { goal: 'Ship feature X' });
-    emitHermesMissionComplete(stateDir, report);
+    emitMissionComplete(stateDir, report);
 
     printMissionSummary(stateDir);
 
@@ -75,7 +75,7 @@ describe('status-cli', () => {
 
   it('printHitlEvents lists new events since timestamp', () => {
     const t0 = Date.now();
-    emitHermesHitlEvent(stateDir, {
+    emitHitlEvent(stateDir, {
       kind: 'blocker',
       blockerDescription: 'Cannot reach API',
       currentGate: 'blocker',
@@ -107,7 +107,7 @@ describe('status-cli', () => {
 
     const stderr = stderrSpy.mock.calls.map((c) => String(c[0])).join('\n');
     expect(stderr).toContain('Roland Status');
-    expect(stderr).toContain('MCP (Hermes/Cursor)');
+    expect(stderr).toContain('MCP (Cursor)');
     expect(stderr).toContain('roland live');
     expect(stderr).toContain('Suggested actions');
   });

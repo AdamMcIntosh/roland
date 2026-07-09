@@ -117,23 +117,6 @@ export function buildCursorMcpServerEntry(options?: {
   return block;
 }
 
-/** Build HTTP MCP client config for Hermes and other Streamable HTTP clients. */
-export function buildGeneralMcpHttpEntry(
-  baseUrl = 'http://127.0.0.1:8081/mcp',
-  options?: { token?: string },
-): Record<string, unknown> {
-  const url = baseUrl.replace(/\/$/, '');
-  const token = options?.token ?? process.env.ROLAND_MCP_TOKEN?.trim();
-  const entry: Record<string, unknown> = {
-    url,
-    transport: 'streamable-http',
-  };
-  if (token) {
-    entry.headers = { Authorization: `Bearer ${token}` };
-  }
-  return entry;
-}
-
 function sleep(ms: number): Promise<void> { return new Promise((r) => setTimeout(r, ms)); }
 
 // ============================================================================

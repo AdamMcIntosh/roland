@@ -12,9 +12,7 @@ The design follows [loops.elorm.xyz](https://loops.elorm.xyz) patterns: self-pac
 |---------|------|---------------|
 | **@roland (Cursor)** | PM, triage, direct edits — self-contained via MCP | Cursor chat + `roland mcp-config` |
 | **Roland ClosedLoop** | Loop execution engine — PACVRE harness | `roland team "…" --loop-template …` |
-| **Roland Dashboard** | Monitor & control — HITL, pause/resume, history | `npm run serve-dashboard` → http://127.0.0.1:8081 |
-
-> **Hermes** (`roland chat` CLI) is optional for terminal-only workflows — **not required in Cursor**.
+| **CLI monitoring** | Monitor & control — HITL, pause/resume, history | `roland status` / `roland live` / `roland hitl-status` |
 
 **In Cursor**, `@roland` handles triage and PM. **Roland** runs the structured iteration harness when you attach a loop template.
 
@@ -27,7 +25,7 @@ The design follows [loops.elorm.xyz](https://loops.elorm.xyz) patterns: self-pac
            Roland ClosedLoop (PACVRE execution)
                     │
                     ▼
-           Roland Dashboard (monitor + control)
+           roland status / MCP tools (monitor + control)
                     │
                     ▼
            Live PACVRE · Verification gates · HITL · History
@@ -63,7 +61,7 @@ From **Cursor** (`@roland`) or the CLI, attach a loop template when launching a 
 roland team "your goal" --loop-template full-cycle-verified-loop
 ```
 
-Loop health appears in the dashboard Loop Engineering panel and `/api/loop-health`. The dashboard template catalog is **read-only** — use Hermes to launch, the dashboard to monitor.
+Loop health appears in `roland status` and the `board_status` / `hitl_status` MCP tools. Browse templates with `roland templates`.
 
 ---
 
@@ -77,12 +75,12 @@ PLAN → ACT → VERIFY → CRITIQUE → RETRY? → ESCALATE? → OBSERVE → RE
 
 | Phase | Agent | Purpose |
 |-------|-------|---------|
-| **plan** | lightweight planner / Hermes PM scope | Scope work for this iteration (Pure ClosedLoop default) |
+| **plan** | lightweight planner | Scope work for this iteration (Pure ClosedLoop default) |
 | **act** | executor (Sparrow) | Implement changes |
 | **verify** | test-executor (Vanguard) | Run **EvaluationGate** checks |
 | **critique** | critic | Analyze verify output; decide proceed / retry / escalate |
 | **retry** | — | Optional focused retry when critique requests it |
-| **escalate** | operator / Hermes | Optional HITL when retry budget exhausted |
+| **escalate** | operator | Optional HITL when retry budget exhausted |
 | **observe** | researcher | Record state and metrics |
 | **reflect** | researcher / critic | Append learnings to loop memory |
 
@@ -206,7 +204,7 @@ exit_conditions:
     consecutiveIterations: 2
 ```
 
-Exit evaluation results are written to loop state and visible on the dashboard Loop Health panel.
+Exit evaluation results are written to loop state and visible via `roland status`.
 
 ---
 
@@ -382,7 +380,7 @@ Hooks run after each outer iteration (template `between_iterations`) or after a 
 | `auto_stage` | git-commit: `git add -A` before commit (requires `dry_run: false`) |
 | `optional` | Failure recorded but loop continues |
 | `dry_run` | Preview only — default **true** for `git-commit` |
-| `require_approval` | When `dry_run: false`, pause loop and require operator approval via dashboard (default **false**) |
+| `require_approval` | When `dry_run: false`, pause loop and require operator approval via `roland approve-commit` (default **false**) |
 | `approval_timeout_ms` | Max wait for operator decision (default 30 min) |
 | `auto_reject_on_timeout` | Auto-reject commit when timeout elapses (default **true**) |
 | `exit_on_failure` | Stop loop when hook exits non-zero |
@@ -404,10 +402,7 @@ between_iterations:
   message_template: "feat(loop): iteration {iteration} — {goal}"
 ```
 
-When `require_approval: true` and `dry_run: false`, the loop pauses and writes `.roland/git-commit-approval.json`. Approve, reject, or edit the commit message from:
-
-- **Dashboard** — **Git Commit Approval** panel
-- **CLI** — terminal-friendly verbs (same file-backed backend as the API):
+When `require_approval: true` and `dry_run: false`, the loop pauses and writes `.roland/git-commit-approval.json`. Approve, reject, or edit the commit message from the CLI:
 
 ```bash
 # List pending approval (interactive — shows id, message, preview)
@@ -421,14 +416,6 @@ roland reject-commit [id] --reason "needs more tests"
 
 # Non-default state dir (orchestrate / custom runs)
 roland approve-commit --state-dir .roland --message "chore: checkpoint"
-```
-
-- **HTTP API** (when dashboard server is running):
-
-```bash
-curl -X POST http://127.0.0.1:8081/api/git-commit-approval/approve \
-  -H 'Content-Type: application/json' \
-  -d '{"id":"<approval-id>","message":"feat: ship iteration 2"}'
 ```
 
 The loop polls `.roland/git-commit-approval.json` and resumes automatically after approve or reject — no separate `roland resume` needed for git-commit HITL.
@@ -445,9 +432,9 @@ between_iterations:
 
 Built-in actions expand using config where possible (`run-tests` uses the configured `unit` strategy command).
 
-## Live dashboard during runs
+## Live monitoring during runs
 
-When a loop is active, the **Closed-Loop Harness** panel shows real-time activity via WebSocket/polling:
+When a loop is active, `roland status` / `roland live` show real-time activity:
 
 - Current PACVRE phase and progress
 - Active verification strategies (pending → running → pass/fail)
@@ -456,7 +443,7 @@ When a loop is active, the **Closed-Loop Harness** panel shows real-time activit
 - Dispatch method (Cursor SDK vs direct)
 - Specialist spawn activity pulses and rolling history
 
-State flows: `loop-state.json` → `run-state.json` (`liveActivity`) → `/api/loop-health` → dashboard.
+State flows: `loop-state.json` → `run-state.json` (`liveActivity`) → `roland status` / MCP tools.
 
 Startup banner example:
 
@@ -464,7 +451,7 @@ Startup banner example:
 [Loop]   Verification strategies: verify: unit@0.9+integration@0.8?+smoke@0.6≥0.6?
 [Loop]   min_confidence: 0.85
 [Loop]   Between-iterations hook: git-commit (dry-run, optional, msg-template)
-[Loop]   HITL git-commit approval: enabled (dashboard or `roland approve-commit`)
+[Loop]   HITL git-commit approval: enabled (`roland approve-commit`)
 ```
 
 ---
@@ -507,15 +494,14 @@ Test overrides: set `ROLAND_LOOP_TEST_MODE=1` or pass `isTestMode: true` for rel
 
 ### End-to-end simulation (safe local dry-run)
 
-Before a production mission, run the bundled simulator — it exercises Pure ClosedLoop, weighted verification, git-commit dry-run, specialist spawn pulses, dashboard `/api/loop-health`, and one HITL approve-commit cycle **without** mutating the repo:
+Before a production mission, run the bundled simulator — it exercises Pure ClosedLoop, weighted verification, git-commit dry-run, specialist spawn pulses, and one HITL approve-commit cycle **without** mutating the repo:
 
 ```bash
 npm run build
 npm run loop:ready-check          # must print READY
-npm run loop:e2e-sim              # uses .roland-sim state dir + dashboard :8081
+npm run loop:e2e-sim              # uses .roland-sim state dir
 
 # Options
-npx tsx scripts/loop-e2e-sim.ts --no-dashboard
 npx tsx scripts/loop-e2e-sim.ts --template full-cycle-verified-loop
 ```
 
@@ -523,7 +509,7 @@ The simulator:
 
 1. Prints the Loop Engineering startup banner (verification weights, between-iter hook, dispatch mode)
 2. Runs `feature-implementation-loop` (Pure ClosedLoop, `enablePmIntegration=false`) with a pass-through verify runner
-3. Records YAML specialist spawn pulses to `loop-state.json` → dashboard live panel
+3. Records YAML specialist spawn pulses to `loop-state.json`
 4. Runs git-commit **dry-run** hooks between phases (safe default from template YAML)
 5. Simulates one **HITL** cycle via `roland approve-commit` against `.roland-sim/git-commit-approval.json`
 6. Prints `roland hitl-status --state-dir .roland-sim`
@@ -536,10 +522,7 @@ Set `CURSOR_API_KEY` in the environment for true Cursor SDK dispatch; without it
 # 1. Preflight
 npm run loop:ready-check
 
-# 2. Dashboard (optional but recommended for live PACVRE + HITL panels)
-npm run serve-dashboard
-
-# 3. Launch a loop-template mission (Pure ClosedLoop default)
+# 2. Launch a loop-template mission (Pure ClosedLoop default)
 roland team "your goal here" --loop-template full-cycle-verified-loop
 
 # 4. Monitor
@@ -548,58 +531,30 @@ roland board-status --concise
 
 # 5. When git-commit HITL is enabled (dry_run: false, require_approval: true)
 roland approve-commit --message "feat: iteration checkpoint"
-# or use dashboard Git Commit Approval panel
 ```
 
 For feature work with YAML specialist spawns and integration/smoke gates, prefer `feature-implementation-loop`. For production missions with reflection and declarative exit conditions, use `full-cycle-verified-loop`. For typos, hotfixes, and minor one-file changes, use `small-fix-loop`.
 
 ---
 
-## Dashboard & observability
+## Observability
 
-The dashboard is a **monitor and control surface** — not a chat or mission-planning UI. Use Hermes to launch loops; use the dashboard to watch them run.
+Monitor loops from the CLI or MCP:
 
 ```bash
-npm run serve-dashboard
-# GET /api/loop-health — metrics, checkpoint diagnostics, exit condition status
-# GET /api/loop-templates — read-only template catalog (phases, execution modes, spawns)
+roland status              # unified snapshot (board + HITL + supervisor)
+roland live                # refreshing live monitor
+roland status --tui        # full-screen terminal UI
+roland templates --json    # template catalog (phases, execution modes, spawns)
+roland mission-audit --last --format markdown   # post-run timeline
 ```
 
-From the dashboard you can:
+In Cursor, the `board_status`, `hitl_status`, `poll_hitl_events`, and `mission_summary` MCP tools give the same picture:
 
-- Watch live PACVRE phase progress, verification gates, and specialist spawns
-- Approve or reject HITL git-commit requests
-- Pause, resume, inject directives, and abort active runs
-- Browse loop history and the read-only template catalog
-- Copy `roland hitl-status` for CLI-side HITL queue inspection
-
-An **Advanced** panel (collapsed by default) provides a fallback mission launcher for phone-only Tailscale access when Hermes is unavailable. Model selection is not exposed — RoleModelRouter handles routing.
-
-Example `/api/loop-templates` response (truncated):
-
-```json
-{
-  "defaultTemplate": "standard-code-loop",
-  "coreGeneric": ["standard-code-loop", "feature-implementation-loop"],
-  "templates": [{
-    "name": "feature-implementation-loop",
-    "description": "Feature delivery loop — plan scope, implement, verify…",
-    "phaseCount": 8,
-    "isCoreGeneric": true,
-    "executionModes": { "usePmTeam": true, "pmPlan": "auto", "pmAct": "auto" },
-    "hasCustomSpawns": true,
-    "spawnSummary": "plan: planner; act: coding+test-author; verify: verifier+test-executor"
-  }]
-}
-```
-
-The dashboard Loop Engineering panel shows:
-
-- **Loop template catalog** when idle (from `/api/loop-templates`) — descriptions, phases, spawn summary
-- Active template and current phase
-- Gate confidence and streak
-- Exit condition evaluation (met / not met)
-- Between-iteration run history
+- Live PACVRE phase progress, verification gates, and specialist spawns
+- Pending HITL git-commit requests (approve via `roland approve-commit`)
+- Pause, resume, inject directives, and abort active runs (`roland pause` / `resume` / `inject` / `abort`)
+- Gate confidence, exit condition evaluation, and between-iteration run history
 
 ---
 
@@ -607,5 +562,4 @@ The dashboard Loop Engineering panel shows:
 
 - [PR title convention](./pr-title-convention.md)
 - [Product vision](../vision.md)
-- [Mini PC / Tailscale deployment](./mini-pc-deployment.md)
 - Source: `src/rco/loop-orchestrator.ts` (routing), `src/loop-engine/closed-loop.ts`, `src/loop-engine/evaluation-gate.ts`, `src/loop-engine/exit-conditions.ts`, `src/loop-engine/loop-memory.ts`

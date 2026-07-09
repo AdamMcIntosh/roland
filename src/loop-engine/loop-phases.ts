@@ -197,7 +197,7 @@ export interface LoopTemplate {
   pmPlan?: PmTeamMode;
   /** [DEPRECATED] Legacy PM Team routing for Act phase (default: never for minimal templates). */
   pmAct?: PmTeamMode;
-  /** [DEPRECATED] Per-template legacy PM Team opt-in — advanced only; prefer Hermes + Pure ClosedLoop. */
+  /** [DEPRECATED] Per-template legacy PM Team opt-in — advanced only; prefer Pure ClosedLoop. */
   usePmTeam?: boolean;
 }
 

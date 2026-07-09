@@ -10,8 +10,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { buildCursorMcpServerEntry, buildGeneralMcpHttpEntry, runMcpServer } from '../server/mcp-server.js';
-import { runMcpHttpServer } from '../server/mcp-http.js';
+import { buildCursorMcpServerEntry, runMcpServer } from '../server/mcp-server.js';
 import { resolveRolandInstallRoot } from '../utils/project-root.js';
 import { readPackageVersion } from '../utils/package-version.js';
 import { logger } from '../utils/logger.js';
@@ -35,24 +34,8 @@ function rolandMcpEntry(): Record<string, unknown> {
   });
 }
 
-async function serve(rest: string[]): Promise<void> {
-  if (rest.includes('--mcp')) {
-    const portIdx = rest.indexOf('--port');
-    const hostIdx = rest.indexOf('--host');
-    const port = portIdx >= 0 ? Number(rest[portIdx + 1]) || 8081 : 8081;
-    const host = hostIdx >= 0 ? rest[hostIdx + 1] : '127.0.0.1';
-    await runMcpHttpServer({ host, port });
-    return;
-  }
+async function serve(): Promise<void> {
   await runMcpServer();
-}
-
-async function mcpHttp(rest: string[]): Promise<void> {
-  const portIdx = rest.indexOf('--port');
-  const hostIdx = rest.indexOf('--host');
-  const port = portIdx >= 0 ? Number(rest[portIdx + 1]) || 8081 : 8081;
-  const host = hostIdx >= 0 ? rest[hostIdx + 1] : '127.0.0.1';
-  await runMcpHttpServer({ host, port });
 }
 
 export type { DoctorCheck };
@@ -61,29 +44,7 @@ export function collectDoctorChecks(): DoctorCheck[] {
   return collectDoctorChecksImpl(DISPATCH_MODULE_URL);
 }
 
-function mcpConfig(write: boolean, rest: string[]): void {
-  const general = rest.includes('--general') || rest.includes('--http');
-  const portIdx = rest.indexOf('--port');
-  const port = portIdx >= 0 ? Number(rest[portIdx + 1]) || 8081 : 8081;
-  const baseUrl = rest.find((a, i) => rest[i - 1] === '--url') ?? `http://127.0.0.1:${port}/mcp`;
-
-  if (general) {
-    const block = { mcpServers: { roland: buildGeneralMcpHttpEntry(baseUrl) } };
-    if (!write) {
-      console.log('General MCP (Streamable HTTP) — for Hermes and other HTTP MCP clients:\n');
-      console.log(JSON.stringify(block, null, 2));
-      console.log('\nHermes:');
-      console.log(`  hermes mcp add roland --url ${baseUrl.replace(/\/$/, '')}`);
-      console.log('\nHealth check:');
-      console.log(`  curl ${baseUrl.replace(/\/$/, '')}/health`);
-      console.log('\nCursor stdio (unchanged): roland mcp-config --write');
-      return;
-    }
-    console.log('Note: --write applies Cursor stdio config only. For Hermes, use:');
-    console.log(`  hermes mcp add roland --url ${baseUrl.replace(/\/$/, '')}`);
-    return;
-  }
-
+function mcpConfig(write: boolean): void {
   const block = { mcpServers: { roland: rolandMcpEntry() } };
   if (!write) {
     console.log('Add this to ~/.cursor/mcp.json (merge into any existing mcpServers):\n');
@@ -126,10 +87,6 @@ function printHelp(): void {
   ln(`    ${cy('roland')} ${b('mission')} "goal"            Alias for team`);
   ln(`    ${cy('roland')} ${b('"goal"')}                      Shortcut for team ${d('(bare goal string)')}`);
   ln(`    ${cy('roland')} ${b('mission-audit')} [--last]     Post-run timeline ${d('(markdown|json|html)')}`);
-  ln();
-  ln('  ' + b('CHAT MODE') + '  ' + d('(interactive terminal)'));
-  ln(`    ${cy('roland')}                            Start interactive chat  ${d('(type goals naturally, /help inside)')}`);
-  ln(`    ${cy('roland')} ${b('chat')}                        Same as above  ${d('(explicit)')}`);
   ln();
   ln('  ' + b('MONITORING'));
   ln(`    ${cy('roland')} ${b('status')} [--json]              Unified snapshot ${d('(board + HITL + supervisor)')}`);
@@ -190,8 +147,8 @@ function printHelp(): void {
   ln(`    ${cy('roland')} ${b('replan')}                     Ask PM to re-evaluate the plan`);
   ln(`    ${cy('roland')} ${b('abort')}                      Stop the run after current wave`);
   ln(`    ${cy('roland')} ${b('hitl-status')} [--json]      HITL queue, gates, suggested actions`);
-  ln(`    ${cy('roland')} ${b('mission-summary')} [--json]  Last mission outcome (Hermes parity)`);
-  ln(`    ${cy('roland')} ${b('hitl-events')} [--since N]   Poll hermes-hitl-events.jsonl`);
+  ln(`    ${cy('roland')} ${b('mission-summary')} [--json]  Last mission outcome`);
+  ln(`    ${cy('roland')} ${b('hitl-events')} [--since N]   Poll hitl-events.jsonl`);
   ln(`    ${cy('roland')} ${b('approve-commit')} [id]        Approve pending git-commit (loop HITL)`);
   ln(`    ${cy('roland')} ${b('reject-commit')} [id]         Reject pending git-commit (loop HITL)`);
   ln();
@@ -200,9 +157,8 @@ function printHelp(): void {
   ln(`    ${cy('roland')} doctor [--fresh-check] [--fix]  Diagnose install; fix safe issues`);
   ln(`    ${cy('roland')} ${b('templates')} [--json]         List loop templates ${d('(description, gates, exit conditions)')}`);
   ln(`    ${cy('roland')} pm-log              Print the PM event timeline`);
-  ln(`    ${cy('roland')} mcp-config          Print Cursor MCP config (--general for HTTP)`);
-  ln(`    ${cy('roland')} mcp [--port N]      Streamable HTTP MCP on 127.0.0.1 (use --host 0.0.0.0 for LAN)`);
-  ln(`    ${cy('roland')} serve [--mcp]       Stdio MCP (default) or HTTP with --mcp`);
+  ln(`    ${cy('roland')} mcp-config          Print Cursor MCP config (--write to merge)`);
+  ln(`    ${cy('roland')} serve               Stdio MCP server (for Cursor)`);
   ln();
   ln('  ' + b('ENVIRONMENT'));
   ln(`    ${b('ROLAND_NOTIFY=1')}            Enable notifications for all commands`);
@@ -215,9 +171,6 @@ function printHelp(): void {
   ln(`    ${b('ROLAND_PROJECT_ROOT')}        Target project when cwd is not the repo`);
   ln(`    ${b('ROLAND_ROOT')}                Alias for ROLAND_PROJECT_ROOT`);
   ln(`    ${b('ROLAND_STATE_DIR')}           Persistence dir  ${d('(default: .roland under project)')}`);
-  ln(`    ${b('ROLAND_MCP_TOKEN')}           Bearer token for HTTP MCP (required with --host 0.0.0.0)`);
-  ln(`    ${b('ROLAND_MCP_HOST')}            HTTP MCP bind override  ${d('(default: 127.0.0.1)')}`);
-  ln(`    ${b('ROLAND_MCP_PORT')}            HTTP MCP port  ${d('(default: 8081)')}`);
   ln();
   ln('  ' + b('EXAMPLES'));
   ln(`    ${d('# Run a closed-loop mission')}`);
@@ -241,8 +194,8 @@ function printHelp(): void {
 // ── Known subcommands (used for bare-goal shortcut detection) ─────────────────
 
 const KNOWN_CMDS = new Set([
-  'serve', 'mcp', 'mcp-config', 'doctor', 'init', 'pm-log', 'templates',
-  'team', 'mission', 'run', 'goal', 'start', 'status', 'live', 'watch', 'pr', 'chat',
+  'serve', 'mcp-config', 'doctor', 'init', 'pm-log', 'templates',
+  'team', 'mission', 'run', 'goal', 'start', 'status', 'live', 'watch', 'pr',
   'pause', 'resume', 'unblock', 'inject', 'replan', 'abort', 'hitl-status',
   'hitl-events', 'mission-summary', 'mission-audit',
   'approve-commit', 'reject-commit',
@@ -270,13 +223,10 @@ export async function dispatchCommand(cmd: string | undefined, rest: string[]): 
     switch (cmd) {
       case undefined:
       case 'serve':
-        await serve(rest);
-        break;
-      case 'mcp':
-        await mcpHttp(rest);
+        await serve();
         break;
       case 'mcp-config':
-        mcpConfig(rest.includes('--write'), rest);
+        mcpConfig(rest.includes('--write'));
         break;
       case 'doctor': {
         const code = runDoctorCli(DISPATCH_MODULE_URL, rest);
@@ -299,18 +249,6 @@ export async function dispatchCommand(cmd: string | undefined, rest: string[]): 
         const idx = rest.indexOf('--limit');
         const limit = idx >= 0 ? Number(rest[idx + 1]) || 50 : 50;
         pmLog(limit);
-        break;
-      }
-      case 'chat': {
-        const { startChat } = await import('../rco/chat-interface.js');
-        await startChat({
-          stateDir:  rest.find((_, i) => rest[i - 1] === '--state-dir') ?? '.roland',
-          notify:    rest.includes('--notify') || rest.includes('-n'),
-          stream:    rest.includes('--stream') || rest.includes('-s'),
-          noImprove: rest.includes('--no-improve'),
-          parallel:  !rest.includes('--sequential'),
-          webhookUrl: rest.find((_, i) => rest[i - 1] === '--webhook'),
-        });
         break;
       }
       case 'team':

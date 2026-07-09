@@ -2,7 +2,7 @@
 
 Roland operates as a **production-grade agent looping harness** and **UNSC Smart AI supervisor**: structured closed-loop iterations (loops.elorm.xyz patterns), a Lead PM for parallel waves, evaluation gates, clean PR conventions, and a mobile-friendly command center.
 
-Phases 1–2 (Command Blackboard, SDK orchestration, Sparrow hardening, execution-path triage) and Phase 3 (Closed-Loop Harness, EvaluationGate, loop memory, PR cleanup, dashboard GitHub integration, mobile UI) are **complete and wired into production paths**.
+Phases 1–2 (Command Blackboard, SDK orchestration, Sparrow hardening, execution-path triage) and Phase 3 (Closed-Loop Harness, EvaluationGate, loop memory, PR cleanup) are **complete and wired into production paths**.
 
 Product vision: [docs/vision.md](../vision.md)
 
@@ -27,14 +27,11 @@ Product vision: [docs/vision.md](../vision.md)
 | Sparrow hardening | ✅ Production | `agents/unsc/sparrow.yaml`, worker prompts |
 | UNSC callsign map | ✅ Production | `unsc-agents.ts`, legacy alias routing |
 | GitHub PR mode | ✅ Production | `roland pr`, `roland/<slug>` branches |
-| **Dashboard GitHub discovery** | ✅ Production | Connect PAT → browse → clone |
-| **Mobile-responsive dashboard** | ✅ Production | `dashboard-ui/styles/mobile-responsive.css` |
 | HITL controls | ✅ Production | `pause`, `resume`, `inject`, … |
 | Background supervisor | ✅ Production | `--background`, `bg-status`, `bg-logs` |
-| MCP server (47+ tools) | ✅ Production | `roland mcp-config --write` (stdio) · `roland mcp` (HTTP / Hermes) |
+| MCP server (47+ tools) | ✅ Production | `roland mcp-config --write` (stdio, Cursor) |
 | Project memory + smart recall | ✅ Production | `.roland/memory.md` |
 | Self-improvement loop | ✅ Production | post-synthesis retrospective |
-| Web dashboard 2.0 | ✅ Production | `npm run serve-dashboard` |
 
 ---
 
@@ -42,7 +39,7 @@ Product vision: [docs/vision.md](../vision.md)
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│  Operator — Cursor · CLI · Dashboard (mobile) · Tailscale HITL     │
+│  Operator — Cursor · CLI                                            │
 └────────────┬─────────────────────────────┬───────────────────────────┘
              │                             │
              ▼                             ▼
@@ -230,19 +227,6 @@ Key tools: `roland_hello`, `triage`, `roland_run_team`, `pm_standup`, `board_sta
 
 Full tool list: see [README.md](../../README.md#using-roland-in-cursor).
 
-## General MCP (HTTP — Hermes & external clients)
-
-```bash
-npm run serve-dashboard        # MCP at http://127.0.0.1:8081/mcp (enabled by default)
-roland mcp --host 0.0.0.0      # standalone HTTP MCP
-roland mcp-config --general    # print Hermes / HTTP client config
-curl http://127.0.0.1:8081/mcp # discovery JSON
-```
-
-Hermes: `hermes mcp add roland --url http://127.0.0.1:8081/mcp`
-
-Cursor stdio integration is unchanged — use `roland mcp-config --write` for IDE config.
-
 ---
 
 ## SDK orchestration reference
@@ -283,7 +267,6 @@ Team and orchestrate modes preserve the branch workflow:
 - Sub-agents commit to the active mission branch
 - **Clean PR titles** — `type(scope): description` via `pr-format.ts`
 - **PR cleanup** — `roland pr-cleanup --apply` migrates legacy titles/bodies
-- Dashboard: connect PAT → list repos → one-click clone (`scripts/dashboard-github.js`)
 - `roland pr <n> [--fix]` for PR review via `gh` CLI
 
 Guide: [pr-title-convention.md](../guides/pr-title-convention.md)

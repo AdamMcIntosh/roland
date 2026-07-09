@@ -74,7 +74,7 @@ export interface RecipeCatalogEntry {
 export const PROJECT_CONTEXT_SCHEMA = {
   project_root: {
     type: 'string',
-    description: 'Absolute path to the target project directory (Hermes cwd). Default: ROLAND_PROJECT_ROOT env, then MCP server cwd.',
+    description: 'Absolute path to the target project directory. Default: ROLAND_PROJECT_ROOT env, then MCP server cwd.',
   },
   cwd: {
     type: 'string',

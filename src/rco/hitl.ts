@@ -22,7 +22,7 @@
 import fs from 'fs';
 import path from 'path';
 import { isSupervisorAlive, isRunStateActive } from './mission-state.js';
-import { emitHermesHitlEvent } from './hitl-hermes.js';
+import { emitHitlEvent } from './hitl-events.js';
 
 export const HITL_COMMAND_FILE = 'hitl.json';
 export const HITL_STATE_FILE   = 'hitl-state.json';
@@ -66,7 +66,7 @@ export class HitlQueue {
     queue.push({ ...cmd, timestamp: Date.now() });
     this.writeQueue(queue);
     this._updateObserverState(cmd.cmd);
-    this._emitHermesCommand(cmd);
+    this._emitHitlCommandEvent(cmd);
   }
 
   // ── Orchestrator side (read) ─────────────────────────────────────────────
@@ -113,7 +113,7 @@ export class HitlQueue {
     if (paused) {
       try {
         const stateDir = path.dirname(this.stateFile);
-        emitHermesHitlEvent(stateDir, {
+        emitHitlEvent(stateDir, {
           kind: 'hitl-pause',
           blockerDescription: 'Run paused by operator — awaiting resume',
           currentGate: 'pause',
@@ -175,11 +175,11 @@ export class HitlQueue {
     fs.writeFileSync(this.cmdFile, JSON.stringify(queue, null, 2), 'utf-8');
   }
 
-  private _emitHermesCommand(cmd: Omit<HitlCommand, 'timestamp'>): void {
+  private _emitHitlCommandEvent(cmd: Omit<HitlCommand, 'timestamp'>): void {
     try {
       const stateDir = path.dirname(this.cmdFile);
       if (cmd.cmd === 'abort') {
-        emitHermesHitlEvent(stateDir, {
+        emitHitlEvent(stateDir, {
           kind: 'hitl-abort-pending',
           blockerDescription: 'Abort queued — run will stop after current wave',
           currentGate: 'abort',

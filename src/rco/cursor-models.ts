@@ -1,7 +1,6 @@
 /**
- * Cursor SDK model catalog — shared by routing, dashboard, and web UI.
+ * Cursor SDK model catalog — shared by routing and CLI.
  *
- * Keep in sync with scripts/serve-dashboard.js CURSOR_MODELS metadata.
  * IDs here are the allowlist for ROLAND_PM_MODEL / ROLAND_ENGINEER_MODEL env vars.
  */
 

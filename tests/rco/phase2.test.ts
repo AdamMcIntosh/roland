@@ -1,5 +1,5 @@
 /**
- * RCO Phase 2 integration tests: plugin commands, persistence, schemas, export, dashboard.
+ * RCO Phase 2 integration tests: plugin commands, persistence, schemas, export.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -16,7 +16,6 @@ import {
 } from '../../src/persistence.js';
 import { parseClaudeResponseText, ClaudeResponseOutputSchema, PersistedStateSchema } from '../../src/schemas.js';
 import { exportCursor } from '../../src/rco/exportCursor.js';
-import { broadcast, broadcastGraph, startDashboard, stopDashboard } from '../../src/rco/dashboard.js';
 import { buildClaudeToolCallingPrompt } from '../../src/rco/prompts.js';
 import type { RcoState } from '../../src/rco/types.js';
 
@@ -163,28 +162,6 @@ describe('RCO Phase 2: Export dynamic rules', () => {
     expect(content).toContain('Dynamic hints');
     expect(content).toContain('BugFix');
     fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-});
-
-describe('RCO Phase 2: Dashboard', () => {
-  it('broadcastGraph sends graph payload', () => {
-    const received: unknown[] = [];
-    const mockBroadcast = (p: unknown) => received.push(p);
-    // We cannot inject into broadcast; test broadcastGraph directly by checking it doesn't throw
-    broadcastGraph(
-      [
-        { agent: 'Planner', output_to: 'Executor' },
-        { agent: 'Executor', output_to: 'Reviewer' },
-      ],
-      'sess-1'
-    );
-    expect(received.length).toBe(0); // broadcast sends to clients; we didn't add any
-  });
-
-  it('startDashboard and stopDashboard run without error', () => {
-    const wss = startDashboard(0); // port 0 = random
-    expect(wss).toBeDefined();
-    stopDashboard();
   });
 });
 

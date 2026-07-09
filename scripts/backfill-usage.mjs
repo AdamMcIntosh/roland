@@ -147,6 +147,4 @@ console.log(`  Tokens   : ~${(record.totalTokens / 1000).toFixed(1)}K est.`);
 console.log(`  Cost     : ~$${record.totalCostUsd.toFixed(4)} est.`);
 console.log(`  Duration : ${mins}m ${secs}s`);
 console.log(``);
-console.log(`View it:`);
-console.log(`  node scripts/serve-dashboard.js --state-dir "${stateDir}"`);
-console.log(`  Open http://127.0.0.1:8081`);
+console.log(`View it: get_analytics MCP tool in Cursor (state dir: ${stateDir})`);

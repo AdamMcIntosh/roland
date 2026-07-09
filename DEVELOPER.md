@@ -15,7 +15,6 @@ agent personas, workflow recipes, and PM team execution via the Cursor SDK.
 npm run build           # tsc + copy agents/recipes/fixtures to dist/
 npm run dev             # watch mode (no copy-assets)
 npm start               # start MCP server (stdio JSON-RPC)
-roland mcp              # Streamable HTTP MCP on 0.0.0.0:8081 (Hermes / external clients)
 npm run rco:dev         # run RCO orchestrator without building (tsx)
 npm run rco:team:dev    # PM team mode without building
 npm test                # Vitest unit tests
@@ -57,12 +56,11 @@ src/
     types.ts            ← Core interfaces (TeamTask, AgentYaml, …)
   server/
     mcp-server.ts       ← MCP tool definitions + agent/recipe catalogue
-    mcp-http.ts         ← Streamable HTTP transport (/mcp, Hermes) — binds 127.0.0.1 by default; bearer auth on 0.0.0.0
   pm/
     model-policy.ts     ← laneForEngineer() → 'pm' | 'reasoning' | 'coding' | 'light'
 agents/                 ← 45 YAML persona files (copied to dist/agents/ on build)
 recipes/                ← 20 YAML workflow files (copied to dist/recipes/ on build)
-config.yaml             ← Model routing tiers, RCO settings, dashboard port
+config.yaml             ← Model routing tiers, RCO settings
 ```
 
 ---
@@ -85,11 +83,11 @@ return runClosedLoopMission({ ...opts, loopTemplate });
 
 **ClosedLoop owns:** EvaluationGate (verify), LoopMemory, reflection, exit conditions, SpecialistSpawner, checkpoint/recovery, and PR formatting (`closed-loop-pr.json`).
 
-**Plan/Act:** handled by lightweight handlers (`lightweight-plan-act.ts`) — PM integration is permanently disabled; high-level PM duties live in Hermes / Cursor `@roland`.
+**Plan/Act:** handled by lightweight handlers (`lightweight-plan-act.ts`) — PM integration is permanently disabled; high-level PM duties live in Cursor `@roland`.
 
-**Model routing:** All loop components resolve models via `RoleModelRouter.getModel(role)` in `src/models/role-model-router.ts`. Switch OpenRouter ↔ Ollama by editing `config.yaml` `models` section only (see file comments). Startup prints a routing banner; dashboard Loop panel shows live role + phase routing and PM Integration status.
+**Model routing:** All loop components resolve models via `RoleModelRouter.getModel(role)` in `src/models/role-model-router.ts`. Switch OpenRouter ↔ Ollama by editing `config.yaml` `models` section only (see file comments). Startup prints a routing banner; `roland status` shows live role + phase routing.
 
-**Entry points:** `roland team --loop-template`, MCP `roland_run_team` with `loop_template`, dashboard `POST /api/mission { loopTemplate }`.
+**Entry points:** `roland team --loop-template`, MCP `roland_run_team` with `loop_template`.
 
 **State files** (loop missions):
 - `loop-state.json` — phase, iteration, verification, critique snapshots
@@ -279,22 +277,7 @@ All four smoke tests exit 1 on any failure. Run the appropriate one after touchi
 
 ---
 
-## Web Dashboard
-
-Two files serve the browser-based usage dashboard:
-
-| File | Role |
-|------|------|
-| `scripts/serve-dashboard.js` | HTTP server (port 8081). Serves static files from `dashboard-ui/` and three JSON API endpoints |
-| `dashboard-ui/index.html` | Single-page app — polling-only, no WebSocket dependency |
-
-**API endpoints** (all read from `--state-dir`, default `.roland/`):
-
-| Endpoint | Source file | Returns |
-|----------|-------------|---------|
-| `GET /api/usage` | `usage-history.json` | `RunUsageRecord[]` — full history |
-| `GET /api/usage/summary` | `usage-history.json` | Aggregate totals (runs, tokens, cost, lastRunAt) |
-| `GET /api/run-state` | `run-state.json` | `RunState \| null` — live job progress |
+## Usage Tracking
 
 **Usage tracker** (`src/rco/usage-tracker.ts`):
 
@@ -302,12 +285,7 @@ Two files serve the browser-based usage dashboard:
 - Estimates tokens as `chars / 4` and cost from per-model rate table (`MODEL_PRICING`)
 - Appends one `RunUsageRecord` to `.roland/usage-history.json` (creates the file on first run)
 - Rate table lives at the top of `usage-tracker.ts` — update it if you have better pricing data
-
-**Serving the dashboard against a specific project:**
-
-```bash
-node scripts/serve-dashboard.js --state-dir /path/to/project/.roland --port 8082
-```
+- View via the `get_analytics` MCP tool in Cursor
 
 **Backfilling from an existing run-state** (for projects that ran before the tracker was added):
 
@@ -555,8 +533,6 @@ roland abort                          # stop after current wave completes
 | MCP tools smoke test | `scripts/test-mcp-tools.mjs` |
 | Retry/circuit-breaker smoke test | `scripts/test-retry-resilience.mjs` |
 | Usage tracker | `src/rco/usage-tracker.ts` |
-| Web dashboard HTML | `dashboard-ui/index.html` |
-| Dashboard HTTP server | `scripts/serve-dashboard.js` |
 | Usage demo seeder | `scripts/seed-usage-demo.mjs` |
 | Run backfill tool | `scripts/backfill-usage.mjs` |
 | Structured project memory | `src/rco/project-memory.ts` |

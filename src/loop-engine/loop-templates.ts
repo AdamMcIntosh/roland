@@ -691,5 +691,5 @@ export function buildLoopTemplateCatalog(): {
  *         optional: true
  * ```
  *
- * **Dashboard API:** `GET /api/loop-templates` includes verificationSummary + betweenIterationsSummary
+ * `roland templates --json` includes verificationSummary + betweenIterationsSummary
  */

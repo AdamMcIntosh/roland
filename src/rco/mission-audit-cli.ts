@@ -14,7 +14,7 @@ import {
   type LoopExecutionHistory,
   type LoopMetrics,
 } from '../loop-engine/loop-observability.js';
-import { HERMES_HITL_EVENTS_FILE, HERMES_MISSION_COMPLETION_FILE, type HermesHitlEvent } from './hitl-hermes.js';
+import { HITL_EVENTS_FILE, MISSION_COMPLETION_FILE, type HitlEvent } from './hitl-events.js';
 import { RUN_STATE_FILE, type RunState } from './run-state.js';
 import { MISSION_ARCHIVE_FILE, readMissionMetaFile } from './mission-state.js';
 import { Blackboard } from '../coordination/legacy-blackboard.js';
@@ -160,7 +160,7 @@ export function buildMissionAudit(
     });
   }
 
-  const hitlEvents = readJsonl<HermesHitlEvent>(path.join(stateDir, HERMES_HITL_EVENTS_FILE));
+  const hitlEvents = readJsonl<HitlEvent>(path.join(stateDir, HITL_EVENTS_FILE));
   for (const ev of hitlEvents) {
     entries.push({
       timestamp: ev.timestamp,
@@ -222,7 +222,7 @@ export function buildMissionAudit(
     });
   }
 
-  const completionPath = path.join(stateDir, HERMES_MISSION_COMPLETION_FILE);
+  const completionPath = path.join(stateDir, MISSION_COMPLETION_FILE);
   if (fs.existsSync(completionPath)) {
     const completion = safeReadJson<{ timestamp?: number; summary?: string; finalStatus?: string } | null>(
       completionPath,

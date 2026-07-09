@@ -7,12 +7,12 @@
 ## ⚡ The 30-Second Version
 
 ```bash
-roland chat      # optional CLI chat (Hermes) — not required in Cursor
+roland team "your goal"
 ```
 
 Type a goal. Watch the team work. Read the synthesis. Type another goal.
 
-Use the **Roland dashboard** (`npm run serve-dashboard`) to monitor live loop progress and HITL controls — not to plan or chat.
+Monitor live loop progress and HITL state with `roland status` / `roland live`, or the `board_status` and `hitl_status` MCP tools in Cursor.
 
 That's the whole loop.
 
@@ -180,22 +180,9 @@ roland team "long refactor" --background --notify --webhook https://ntfy.sh/my-t
 roland status    # live updating TUI observer
 ```
 
-### Web dashboard (richest view)
+### Full-screen TUI
 ```bash
-npm run serve-dashboard
-# → http://127.0.0.1:8081
-```
-
-The dashboard shows:
-- **Live run progress** — tasks, waves, blockers, in real time
-- **HITL buttons** — Pause / Resume / Replan / Abort without touching the terminal
-- **History** — every past run, searchable, expandable to full task list
-- **Memory editor** — view and edit `.roland/memory.md` from the browser
-- **Usage charts** — tokens, cost, model breakdown across all runs
-
-```bash
-# Point at a different project:
-node scripts/serve-dashboard.js --state-dir /path/to/project/.roland --port 8082
+roland status --tui
 ```
 
 ---
@@ -232,7 +219,7 @@ roland team "goal" --no-improve   one-time skip
 cat .roland/memory.md             # view directly
 ```
 
-Or use the browser dashboard → **Memory** tab to read and edit it with syntax highlighting.
+It's plain Markdown — edit it in your editor of choice.
 
 ### Teaching Roland something immediately
 
@@ -310,7 +297,7 @@ During the day
 
 Background
   └─  roland team "..." --background --notify
-      → phone notification when done, check dashboard later
+      → phone notification when done, check roland status later
 
 End of day
   └─  ❯ review today's changes — anything to clean up?
@@ -464,10 +451,7 @@ roland status --state-dir /path/to/.roland           # custom state dir
 ### Memory file looks wrong or corrupted
 
 ```bash
-# View and edit in browser:
-npm run serve-dashboard    # → http://127.0.0.1:8081  →  Memory tab
-
-# Or edit directly — it's plain Markdown:
+# Edit directly — it's plain Markdown:
 # ## Architecture Decisions
 # - bullet
 # ## Past Mistakes

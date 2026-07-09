@@ -77,7 +77,7 @@ loop_engine:
   templates_dir: recipes/loops
   # Between-iteration self-pacing command (templates may override via between_iterations)
   between_iterations: npm run test:run
-  # [DEPRECATED] Legacy PM Team in Plan/Act — default false (Hermes PM + Pure ClosedLoop).
+  # [DEPRECATED] Legacy PM Team in Plan/Act — default false (Pure ClosedLoop).
   # Set true only for advanced/legacy templates with pm_plan/pm_act: auto.
   use_pm_team: false
   timeout_ms: 1800000
@@ -109,7 +109,7 @@ loop_engine:
       max_ms: 60000
 
 pm:
-  # [DEPRECATED] Legacy Lead PM model routing — Hermes is the recommended PM layer.
+  # [DEPRECATED] Legacy Lead PM model routing — Pure ClosedLoop is the recommended path.
   # These settings apply to use_pm_team: true and non-loop team runs only.
   lead_model: "gpt-5.1-codex-mini"      # The Lead PM (GPT-5.1 Codex Mini — fast, cheap orchestration)
   fast_model: "composer-2.5"            # Interactive / time-sensitive engineers
@@ -190,7 +190,6 @@ rco:
       agents: [critic, code-reviewer, test-author, test-executor]
     - pattern: "explain|document|readme"
       agents: [writer, explainer]
-  dashboard_port: 8080
   state_file: .rco-state.json
 
 context_gathering:

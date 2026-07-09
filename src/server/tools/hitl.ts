@@ -9,13 +9,13 @@ import { PROJECT_CONTEXT_SCHEMA, type McpToolContext, type McpToolRegistrar } fr
 export function registerHitlTools(registrar: McpToolRegistrar, ctx: McpToolContext): void {
   registrar.registerTool(
     'hitl_status',
-    'Human-in-the-loop status for Hermes (Master Chief): mission blockers, git-commit approval, verification failures, loop escalation, pause/abort. Returns structured report + Master Chief summary line. Use when monitoring Roland team missions or after poll_hitl_events returns new events.',
+    'Human-in-the-loop status: mission blockers, git-commit approval, verification failures, loop escalation, pause/abort. Returns structured report + one-line summary. Use when monitoring Roland team missions or after poll_hitl_events returns new events.',
     async (args: Record<string, unknown>) => {
       const mcpCtx = ctx.resolveToolProjectContext(args);
-      const { buildHitlStatusReport, formatHitlStatusMarkdown, formatHermesHitlSummary } =
-        await import('../../rco/hitl-hermes.js');
+      const { buildHitlStatusReport, formatHitlStatusMarkdown, formatHitlSummary } =
+        await import('../../rco/hitl-events.js');
       const report = buildHitlStatusReport(mcpCtx.stateDir);
-      const summary = formatHermesHitlSummary(report);
+      const summary = formatHitlSummary(report);
       if (args.format === 'json') {
         return { ...report, summary, project_root: mcpCtx.projectRoot, state_dir: mcpCtx.stateDir };
       }
@@ -39,21 +39,21 @@ export function registerHitlTools(registrar: McpToolRegistrar, ctx: McpToolConte
 
   registrar.registerTool(
     'poll_hitl_events',
-    'Poll new HITL and mission-complete events since a timestamp (epoch ms). Events append to .roland/hermes-hitl-events.jsonl when Roland hits HITL walls or reaches a terminal mission state. Hermes should poll during active missions; on mission-complete events call mission_summary and report to the operator.',
+    'Poll new HITL and mission-complete events since a timestamp (epoch ms). Events append to .roland/hitl-events.jsonl when Roland hits HITL walls or reaches a terminal mission state. Poll during active missions; on mission-complete events call mission_summary and report to the operator.',
     async (args: Record<string, unknown>) => {
       const mcpCtx = ctx.resolveToolProjectContext(args);
-      const { pollHermesHitlEvents, buildHitlStatusReport, formatHermesHitlSummary } =
-        await import('../../rco/hitl-hermes.js');
+      const { pollHitlEvents, buildHitlStatusReport, formatHitlSummary } =
+        await import('../../rco/hitl-events.js');
       const since = typeof args.since === 'number' ? args.since : 0;
       const limit = typeof args.limit === 'number' ? args.limit : 50;
-      const events = pollHermesHitlEvents(mcpCtx.stateDir, since, limit);
+      const events = pollHitlEvents(mcpCtx.stateDir, since, limit);
       const report = buildHitlStatusReport(mcpCtx.stateDir);
       return {
         events,
         count: events.length,
         latestTimestamp: events.length > 0 ? events[events.length - 1]!.timestamp : since,
         waitingOnHitl: report.waitingOnHitl,
-        summary: formatHermesHitlSummary(report),
+        summary: formatHitlSummary(report),
         project_root: mcpCtx.projectRoot,
         state_dir: mcpCtx.stateDir,
       };
@@ -75,8 +75,8 @@ export function registerHitlTools(registrar: McpToolRegistrar, ctx: McpToolConte
       readMissionCompletionReport,
       buildMissionCompletionReport,
       formatMissionCompleteMarkdown,
-      formatHermesMissionCompleteSummary,
-    } = await import('../../rco/hitl-hermes.js');
+      formatMissionCompleteSummary,
+    } = await import('../../rco/hitl-events.js');
     let report = readMissionCompletionReport(mcpCtx.stateDir);
     if (!report && typeof args.goal === 'string') {
       report = buildMissionCompletionReport(mcpCtx.stateDir, { goal: args.goal });
@@ -89,7 +89,7 @@ export function registerHitlTools(registrar: McpToolRegistrar, ctx: McpToolConte
         state_dir: mcpCtx.stateDir,
       };
     }
-    const summary = formatHermesMissionCompleteSummary(report);
+    const summary = formatMissionCompleteSummary(report);
     if (args.format === 'json') {
       return { found: true, ...report, summary, project_root: mcpCtx.projectRoot, state_dir: mcpCtx.stateDir };
     }
@@ -115,14 +115,14 @@ export function registerHitlTools(registrar: McpToolRegistrar, ctx: McpToolConte
 
   registrar.registerTool(
     'mission_summary',
-    'Latest Roland mission completion report for Hermes: goal, final status, success rate, deliverables, blockers, next action. Auto-written when roland team / ClosedLoop reaches a terminal state. Poll via poll_hitl_events (mission-complete kind) or call after mission finishes.',
+    'Latest Roland mission completion report: goal, final status, success rate, deliverables, blockers, next action. Auto-written when roland team / ClosedLoop reaches a terminal state. Poll via poll_hitl_events (mission-complete kind) or call after mission finishes.',
     missionSummaryHandler,
     missionSummarySchema,
   );
 
   registrar.registerTool(
     'report_completion',
-    'Alias for mission_summary — returns the latest auto-reported mission completion snapshot for Hermes.',
+    'Alias for mission_summary — returns the latest auto-reported mission completion snapshot.',
     missionSummaryHandler,
     missionSummarySchema,
   );

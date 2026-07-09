@@ -97,18 +97,18 @@ export async function runTeam(opts: TeamOrchestratorOptions): Promise<TeamResult
 
     if (!opts.loopEmbedded) {
       try {
-        const { notifyHermesMissionCompleteFromTeamResult } = await import('./hitl-hermes.js');
-        notifyHermesMissionCompleteFromTeamResult(stateDir, result);
+        const { notifyMissionCompleteFromTeamResult } = await import('./hitl-events.js');
+        notifyMissionCompleteFromTeamResult(stateDir, result);
       } catch {
-        /* Hermes notification must not break mission return */
+        /* completion notification must not break mission return */
       }
     }
     return result;
   } catch (err) {
     if (!opts.loopEmbedded) {
       try {
-        const { notifyHermesMissionFailed } = await import('./hitl-hermes.js');
-        notifyHermesMissionFailed(stateDir, goal, err);
+        const { notifyMissionFailed } = await import('./hitl-events.js');
+        notifyMissionFailed(stateDir, goal, err);
       } catch {
         /* non-fatal */
       }

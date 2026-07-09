@@ -1,7 +1,7 @@
 /**
  * ## Assumptions
  * - [DEPRECATED] LeadPM — legacy in-process PM control loop for MCP board tools and team recipes.
- * - Hermes (`roland chat`, Cursor `@roland`) is now the recommended PM / strategist layer.
+ * - Cursor `@roland` is now the recommended PM / strategist layer.
  * - Roland ClosedLoop handles loop execution; Pure ClosedLoop is the default Plan/Act path.
  * - This facade remains for backward compatibility (`use_pm_team: true`, `roland_run_team`, board tools).
  *
@@ -57,7 +57,7 @@ export interface LeadPMOptions {
 }
 
 /**
- * @deprecated Legacy LeadPM — Hermes is now the recommended PM layer. Kept for backward compatibility.
+ * @deprecated Legacy LeadPM — Cursor `@roland` + Pure ClosedLoop is now the recommended PM layer. Kept for backward compatibility.
  */
 export class LeadPM {
   private readonly board: Blackboard;

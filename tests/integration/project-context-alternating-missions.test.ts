@@ -57,7 +57,7 @@ describe('alternating project missions — zero cross-contamination', () => {
   }
 
   it('alternates missions A → B → A with explicit project_root and no bleed', async () => {
-    // Seed stale env pointing at project A (simulates prior Hermes/MCP session).
+    // Seed stale env pointing at project A (simulates prior MCP session).
     process.env.ROLAND_PROJECT_ROOT = projectA;
     process.env.ROLAND_STATE_DIR = path.join(projectA, '.roland');
 

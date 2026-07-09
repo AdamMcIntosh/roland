@@ -3,8 +3,6 @@
  *
  * UNSC board status — human-readable summary of blackboard + command blackboard.
  * Primary CLI: `roland board-status [--concise|--json]`. MCP: `board_status`.
- *
- * ## Dashboard Demoted — CLI + Hermes Primary Complete
  */
 
 import fs from 'fs';
@@ -17,7 +15,7 @@ import {
   type Callsign,
 } from './command-blackboard.js';
 import { readRunGoal, isRunActive } from './hitl.js';
-import { buildHitlStatusReport, formatHermesHitlSummary } from './hitl-hermes.js';
+import { buildHitlStatusReport, formatHitlSummary } from './hitl-events.js';
 import { MISSION_DAG_FILE, type MissionDagSnapshot } from './mission-dag.js';
 
 export interface BoardStatusCounts {
@@ -337,7 +335,7 @@ export function printBoardStatus(
     actions.push('roland status', 'roland board-status');
 
     process.stderr.write('\n');
-    process.stderr.write(`  ${bold('UNSC Board Status')}  ${dim('(CLI primary · Hermes/MCP parity)')}\n`);
+    process.stderr.write(`  ${bold('UNSC Board Status')}  ${dim('(CLI primary · MCP parity)')}\n`);
     process.stderr.write('\n');
     if (report.goal) {
       process.stderr.write(`  ${dim('Mission')}  ${report.goal.slice(0, 100)}\n`);
@@ -355,7 +353,7 @@ export function printBoardStatus(
       }
     }
     if (hitl.waitingOnHitl || hitl.missionCompletion) {
-      process.stderr.write(`\n  ${bold('HITL')}  ${formatHermesHitlSummary(hitl)}\n`);
+      process.stderr.write(`\n  ${bold('HITL')}  ${formatHitlSummary(hitl)}\n`);
     }
     process.stderr.write('\n');
     process.stderr.write(`  ${bold('Suggested actions')}\n`);

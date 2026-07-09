@@ -58,12 +58,9 @@ Roland is a multi-agent platform for **reliable, iterative software missions**:
 
 | Layer | Role |
 |-------|------|
-| **@roland (Cursor)** | PM, triage, direct edits — self-contained via MCP (no Hermes required) |
+| **@roland (Cursor)** | PM, triage, direct edits — self-contained via MCP |
 | **Roland Closed-Loop Harness** | Loop execution engine — PACVRE iterations, gates, reflection ([guide](docs/guides/closed-loop-harness.md)) |
 | **Global CLI + MCP** | `roland mission`, `roland team`, `roland mission-audit`, Cursor MCP tools |
-| **Monitoring Dashboard** | Read-only monitor at `:8081` — loop/HITL panels (launch via CLI) |
-
-> **Hermes** (`roland chat` CLI) is optional for terminal-only workflows — **not required in Cursor**.
 
 Inspired by [loops.elorm.xyz](https://loops.elorm.xyz) patterns: self-paced iterations, between-iteration checks, explicit exit conditions, and reflection memory.
 
@@ -71,7 +68,7 @@ Inspired by [loops.elorm.xyz](https://loops.elorm.xyz) patterns: self-paced iter
   Operator ──► @roland in Cursor (PM + triage) ──► roland team + loop template ──► Roland ClosedLoop (PACVRE)
                     │                                        │
                     ▼                                        ▼
-           Roland Dashboard (read-only monitor)              EvaluationGate · LoopMemory
+           roland status / MCP board_status                  EvaluationGate · LoopMemory
 ```
 
 > **roland-web** (`roland-web/`) is **experimental** — a separate hosted UI prototype; not required for daily Roland use. See `roland-web/README.md`.
@@ -149,27 +146,21 @@ roland mission "add MCP tool for triage" --loop-template mcp-extension-loop
 roland mission "Fix small typo in README" --loop-template small-fix-loop
 ```
 
-### 3. Command center (dashboard — monitor & control)
+### 3. Monitoring active runs
 
-Use **@roland in Cursor** or `roland team` to launch loops. The dashboard watches and controls active runs.
+Use **@roland in Cursor** or `roland team` to launch loops, then monitor from the CLI or MCP tools:
 
 ```bash
 # In Cursor: @roland, or terminal:
 roland team "goal" --loop-template full-cycle-verified-loop
 
 # Monitor:
-npm run serve-dashboard
-# → http://127.0.0.1:8081
+roland status          # unified snapshot (board + HITL + supervisor)
+roland live            # refreshing live monitor
+roland status --tui    # full-screen terminal UI
 ```
 
-For phone access over Tailscale:
-
-```bash
-node scripts/serve-dashboard.js --host 0.0.0.0 --port 8081
-# Open http://<tailscale-ip>:8081 on iPhone Safari
-```
-
-Connect GitHub in the dashboard → browse repos → **one-click clone** into your projects directory.
+In Cursor, use the `board_status`, `hitl_status`, and `pm_standup` MCP tools.
 
 ### 4. Roland inside Cursor (MCP)
 
@@ -186,34 +177,6 @@ Restart Cursor. Roland triages new work automatically:
 | `Improve auth --force-team` | **Force team** — launches immediately |
 
 Key MCP tools: `triage` · `roland_run_team` · `pm_standup` · `board_status`
-
-### 5. General MCP (Hermes & external clients)
-
-Roland also exposes a **Streamable HTTP** MCP endpoint for tools like Hermes, in addition to the Cursor stdio integration:
-
-```bash
-# With dashboard (default — MCP enabled on port 8081):
-npm run serve-dashboard
-
-# Standalone HTTP MCP only (localhost default):
-roland mcp --port 8081
-
-# LAN / Tailscale (requires ROLAND_MCP_TOKEN):
-export ROLAND_MCP_TOKEN="your-secret-token"
-roland mcp --host 0.0.0.0 --port 8081
-
-# Discovery + health:
-curl http://127.0.0.1:8081/mcp
-curl http://127.0.0.1:8081/mcp/health
-
-# Hermes (local):
-hermes mcp add roland --url http://127.0.0.1:8081/mcp
-
-# Print HTTP client config (Cursor stdio unchanged):
-roland mcp-config --general
-```
-
-Cursor users should keep `roland mcp-config --write` (stdio). Hermes and other HTTP MCP clients use the URL above.
 
 ---
 
@@ -363,7 +326,7 @@ Team runs use `roland/<slug>` branches; clean PR titles on completion.
 | `roland inject "…"` | Directive to Lead PM |
 | `roland unblock task-3 "…"` | Unblock a stalled agent |
 
-Also available on the web dashboard and via `/pause`, `/resume` in chat.
+Also available via the `hitl_status` and related MCP tools in Cursor.
 
 ### Background
 
@@ -383,16 +346,12 @@ roland team "goal" --background && roland bg-status && roland bg-logs --follow
 
 ---
 
-## Mobile Usage (iPhone + Tailscale)
+## Mobile Usage (SSH)
 
-Roland is designed for comfortable operation from a phone:
+Roland works over SSH from a phone:
 
-1. **Tailscale** — install on your home server and iPhone; bind dashboard with `--host 0.0.0.0`
-2. **Safari** — open `http://<tailscale-ip>:8081`; dashboard is mobile-first with touch-friendly controls
-3. **Simple TUI** — `roland team "goal" --simple-tui` for ASCII-only SSH sessions (Termius, Blink)
-4. **HITL from phone** — pause, resume, inject directives from the dashboard Live Run Control panel
-
-Details: [docs/guides/mini-pc-deployment.md](docs/guides/mini-pc-deployment.md) (Tailscale section)
+1. **Simple TUI** — `roland team "goal" --simple-tui` for ASCII-only SSH sessions (Termius, Blink)
+2. **HITL from phone** — `roland pause`, `roland resume`, `roland inject "…"`, `roland approve-commit`
 
 ---
 

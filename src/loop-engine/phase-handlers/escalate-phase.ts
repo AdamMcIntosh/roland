@@ -77,8 +77,8 @@ export class EscalatePhaseHandler implements PhaseHandler {
     ctx.commandBoard?.appendBullet('Open Intel', `[ESCALATE] ${summary}`);
 
     if (ctx.stateDir) {
-      const { emitHermesHitlEvent } = await import('../../rco/hitl-hermes.js');
-      emitHermesHitlEvent(ctx.stateDir, {
+      const { emitHitlEvent } = await import('../../rco/hitl-events.js');
+      emitHitlEvent(ctx.stateDir, {
         kind: 'loop-escalation',
         blockerDescription: summary,
         currentGate: 'escalation',

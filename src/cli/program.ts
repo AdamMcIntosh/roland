@@ -108,8 +108,7 @@ export async function runProgram(argv: string[]): Promise<void> {
   }
 
   if (argv.length === 0 && (process.stdin as NodeJS.ReadStream).isTTY) {
-    const { startChat } = await import('../rco/chat-interface.js');
-    await startChat();
+    printHelp();
     return;
   }
 

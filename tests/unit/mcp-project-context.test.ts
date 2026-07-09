@@ -49,8 +49,8 @@ describe('mcp-project-context', () => {
     expect(ctx.stateDir).toBe(stateDir);
   });
 
-  it('resolveMcpProjectContext accepts cwd alias for Hermes', () => {
-    const project = path.join(tmpDir, 'hermes-target');
+  it('resolveMcpProjectContext accepts cwd alias', () => {
+    const project = path.join(tmpDir, 'cwd-target');
     fs.mkdirSync(path.join(project, '.roland'), { recursive: true });
 
     const ctx = resolveMcpProjectContext({ cwd: project });

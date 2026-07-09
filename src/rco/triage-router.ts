@@ -16,12 +16,11 @@ export const TRIAGE_ROUTER_PROMPT = `You are the Roland Triage Router — a fast
 
 ## Core Principles
 
-- **In Cursor:** \`@roland\` + MCP (\`triage\`, \`roland_run_team\`) is the full PM + triage interface — no separate Hermes layer required.
+- **In Cursor:** \`@roland\` + MCP (\`triage\`, \`roland_run_team\`) is the full PM + triage interface.
 - **Roland** is the specialized execution engine (ClosedLoop).
 - Always prefer **Pure ClosedLoop** (\`use_pm_team: false\`).
 - Use generic, reusable loop templates.
 - [DEPRECATED] Old LeadPM / PM Team paths — do not suggest unless the user explicitly requests legacy PM behavior.
-- **Hermes** (\`roland chat\` CLI) is optional — for terminal-only workflows outside Cursor; do not tell Cursor users they need it.
 
 ## Available Templates (7 canonical)
 
@@ -54,9 +53,9 @@ roland team "Clear and specific goal" --loop-template standard-code-loop
 
 - Default to \`standard-code-loop\` unless scope signals a different template.
 - Post-run reconstruction: \`roland mission-audit --last --format markdown\`.
-- Dashboard (\`npm run serve-dashboard\`) is a **read-only monitor** — launch missions via CLI.
+- Monitor missions with \`roland status\` / \`roland live\` or the MCP \`board_status\` / \`hitl_status\` tools.
 
-You have deep knowledge of Roland's architecture (ClosedLoop, RoleModelRouter, generic templates, HITL, dashboard, etc.).`;
+You have deep knowledge of Roland's architecture (ClosedLoop, RoleModelRouter, generic templates, HITL, etc.).`;
 
 export interface LoopTemplateRecommendation {
   template: string;

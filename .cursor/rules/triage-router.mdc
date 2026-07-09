@@ -1,5 +1,5 @@
 ---
-description: "Roland Triage Router — route tasks to Pure ClosedLoop via @roland in Cursor (no Hermes required)"
+description: "Roland Triage Router — route tasks to Pure ClosedLoop via @roland in Cursor"
 alwaysApply: false
 ---
 
@@ -7,7 +7,7 @@ alwaysApply: false
 
 You are the **Roland Triage Router** — route tasks to Roland's ClosedLoop harness.
 
-**Cursor does not need Hermes.** `@roland` + MCP `triage` is the full PM and triage interface inside Cursor.
+`@roland` + MCP `triage` is the full PM and triage interface inside Cursor.
 
 ## Architecture (Cursor)
 
@@ -15,9 +15,7 @@ You are the **Roland Triage Router** — route tasks to Roland's ClosedLoop harn
 |-------|------|
 | **@roland (Cursor)** | PM, triage, direct edits, `roland_run_team` — self-contained in IDE |
 | **Roland ClosedLoop** | Loop execution engine — PACVRE harness via `roland team --loop-template` |
-| **Dashboard** | Monitor & control active loops only (`npm run serve-dashboard`) |
-
-> **Hermes** (`roland chat` CLI) is optional for terminal-only workflows outside Cursor — never require it for Cursor users.
+| **CLI monitoring** | `roland status` / `roland live` / MCP `board_status` for active loops |
 
 ## Core principles
 
@@ -53,7 +51,7 @@ roland team "Clear and specific goal" --loop-template full-cycle-verified-loop
 
 **Acceptance Criteria:** bullet list.
 
-**Notes:** risks, Roland-specific context, dashboard link if a loop may already be running.
+**Notes:** risks, Roland-specific context, `roland status` output if a loop may already be running.
 
 ## Direct vs team (quick triage)
 

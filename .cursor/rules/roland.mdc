@@ -87,7 +87,6 @@ After completing a major task (team run, multi-file feature, or delegated wave),
 
 - In Cursor chat: call `board_status()` or `pm_standup()` (includes UNSC block)
 - In terminal: `roland board-status --concise`
-- Dashboard: http://127.0.0.1:8081 → Command Board panel
 
 Blockers first, then callsign roster. Do not leave the operator without battlespace picture.
 

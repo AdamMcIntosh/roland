@@ -1,7 +1,7 @@
 /**
  * ## Assumptions
  * - [DEPRECATED] Legacy PM Team lane routing bridges to Loop Engineering RoleModelRouter when no explicit policy is passed.
- * - Hermes is the recommended PM layer; this policy serves LeadPM / use_pm_team backward compatibility only.
+ * - Pure ClosedLoop is the recommended path; this policy serves LeadPM / use_pm_team backward compatibility only.
  * - DEFAULT_MODEL_POLICY uses Cursor SDK ids derived from config.yaml `models` section.
  */
 

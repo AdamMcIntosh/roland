@@ -148,7 +148,7 @@ export class VerifyPhaseHandler implements PhaseHandler {
     );
 
     if (ctx.stateDir && !evaluation.accepted) {
-      const { emitHermesHitlEvent } = await import('../../rco/hitl-hermes.js');
+      const { emitHitlEvent } = await import('../../rco/hitl-events.js');
       const { isGreenfieldGoal } = await import('../../rco/goal-scope.js');
       const failedGates = evaluation.gates?.filter((g) => g.required && !g.skipped && !g.pass) ?? [];
       const softSkippedGates = evaluation.gates?.filter((g) => g.skipped) ?? [];
@@ -185,7 +185,7 @@ export class VerifyPhaseHandler implements PhaseHandler {
             ];
 
       if (!skipHitl) {
-        emitHermesHitlEvent(ctx.stateDir, {
+        emitHitlEvent(ctx.stateDir, {
           kind: evaluation.confidence === 0 ? 'verification-gate' : 'verification-failure',
           blockerDescription: evaluation.summary,
           currentGate: 'verification',
@@ -243,8 +243,8 @@ export class VerifyPhaseHandler implements PhaseHandler {
       );
 
       if (ctx.stateDir) {
-        const { emitHermesHitlEvent } = await import('../../rco/hitl-hermes.js');
-        emitHermesHitlEvent(ctx.stateDir, {
+        const { emitHitlEvent } = await import('../../rco/hitl-events.js');
+        emitHitlEvent(ctx.stateDir, {
           kind: 'verification-failure',
           blockerDescription: summary,
           currentGate: 'verification',

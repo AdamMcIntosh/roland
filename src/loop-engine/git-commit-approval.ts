@@ -9,7 +9,7 @@
 import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
-import { emitHermesHitlEvent } from '../rco/hitl-hermes.js';
+import { emitHitlEvent } from '../rco/hitl-events.js';
 
 export const GIT_COMMIT_APPROVAL_FILE = 'git-commit-approval.json';
 export const GIT_COMMIT_APPROVAL_POLL_MS = 2_000;
@@ -91,7 +91,7 @@ export class GitCommitApprovalQueue {
     });
     try {
       const stateDir = path.dirname(this.filePath);
-      emitHermesHitlEvent(stateDir, {
+      emitHitlEvent(stateDir, {
         kind: 'git-commit-approval',
         blockerDescription: request.message.slice(0, 200),
         currentGate: 'git-commit',
@@ -108,7 +108,7 @@ export class GitCommitApprovalQueue {
         },
       });
     } catch {
-      /* Hermes propagation must not block approval queue */
+      /* event propagation must not block approval queue */
     }
     return request;
   }
@@ -176,7 +176,7 @@ export class GitCommitApprovalQueue {
     logApproval('waiting for operator decision', {
       id,
       timeoutMs,
-      hint: 'Approve via `roland approve-commit`, dashboard, or POST /api/git-commit-approval/approve',
+      hint: 'Approve via `roland approve-commit` or reject via `roland reject-commit`',
     });
 
     while (Date.now() < deadline) {

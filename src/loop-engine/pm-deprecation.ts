@@ -1,7 +1,6 @@
 /**
  * ## Assumptions
- * - In Cursor, `@roland` + MCP triage is self-contained — no Hermes dependency.
- * - `roland chat` (Hermes) is an optional CLI alternative for terminal-only workflows.
+ * - In Cursor, `@roland` + MCP triage is self-contained.
  * - Roland ClosedLoop is the specialized loop execution engine (PACVRE harness).
  * - Legacy LeadPM / PM Team (`use_pm_team: true`) remains for backward compatibility only.
  */
@@ -10,16 +9,13 @@
 export const DEPRECATED_LEGACY_PM_TAG = '[DEPRECATED]';
 
 /** Canonical recommendation shown in runtime warnings and docs. */
-export const HERMES_PM_RECOMMENDATION =
+export const PURE_CLOSEDLOOP_RECOMMENDATION =
   'Prefer Pure ClosedLoop (default). In Cursor use @roland; legacy use_pm_team is deprecated.';
-
-/** @deprecated Use HERMES_PM_RECOMMENDATION — name retained for export stability. */
-export const PURE_CLOSEDLOOP_RECOMMENDATION = HERMES_PM_RECOMMENDATION;
 
 /** Full runtime warning when legacy PM Team path is active. */
 export const LEGACY_PM_TEAM_WARNING =
   `${DEPRECATED_LEGACY_PM_TAG} Legacy PM Team (LeadPM / use_pm_team: true) is deprecated. ` +
-  `${HERMES_PM_RECOMMENDATION}`;
+  `${PURE_CLOSEDLOOP_RECOMMENDATION}`;
 
 /**
  * Emit a deprecation warning when legacy PM Team code paths run.

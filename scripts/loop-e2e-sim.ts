@@ -2,17 +2,16 @@
 /**
  * ## Assumptions
  * - Safe local simulation: passRunner for verify, git-commit dry-run from template, one real HITL cycle mocked.
- * - Uses `.roland-sim` state dir so dashboard can attach without touching active `.roland`.
+ * - Uses `.roland-sim` state dir so it never touches the active `.roland`.
  * - ROLAND_LOOP_TEST_MODE=1 relaxes retry/escalation limits for a short run.
  *
  * Usage:
  *   npm run loop:e2e-sim
- *   npx tsx scripts/loop-e2e-sim.ts [--no-dashboard] [--state-dir .roland-sim]
+ *   npx tsx scripts/loop-e2e-sim.ts [--state-dir .roland-sim]
  */
 
 import fs from 'fs';
 import path from 'path';
-import { spawn, type ChildProcess } from 'child_process';
 import {
   ClosedLoop,
   runBetweenIterations,
@@ -33,53 +32,18 @@ const passRunner: CommandRunner = async (cmd) => ({
   stderr: '',
 });
 
-function parseArgs(argv: string[]): { stateDir: string; noDashboard: boolean; template: string } {
+function parseArgs(argv: string[]): { stateDir: string; template: string } {
   let stateDir = '.roland-sim';
-  let noDashboard = false;
   let template = 'feature-implementation-loop';
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--state-dir' && argv[i + 1]) stateDir = argv[++i];
-    else if (argv[i] === '--no-dashboard') noDashboard = true;
     else if (argv[i] === '--template' && argv[i + 1]) template = argv[++i];
   }
-  return { stateDir, noDashboard, template };
+  return { stateDir, template };
 }
 
 function mockMemory(): LoopMemory {
   return { recordBetweenIteration: () => {} } as unknown as LoopMemory;
-}
-
-async function fetchJson(url: string): Promise<unknown> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`${url} → ${res.status}`);
-  return res.json();
-}
-
-async function waitForDashboard(port: number, attempts = 20): Promise<boolean> {
-  for (let i = 0; i < attempts; i++) {
-    try {
-      await fetchJson(`http://127.0.0.1:${port}/api/loop-health`);
-      return true;
-    } catch {
-      await new Promise((r) => setTimeout(r, 250));
-    }
-  }
-  return false;
-}
-
-function startDashboard(stateDir: string, port = 8081): ChildProcess | null {
-  const child = spawn(
-    process.execPath,
-    ['scripts/serve-dashboard.js', '--state-dir', path.resolve(stateDir), '--port', String(port)],
-    { cwd: process.cwd(), stdio: 'pipe', shell: false },
-  );
-  child.stderr?.on('data', (d: Buffer) => {
-    const line = d.toString().trim();
-    if (line.includes('listening') || line.includes('Dashboard')) {
-      process.stderr.write(`[sim] ${line}\n`);
-    }
-  });
-  return child;
 }
 
 async function simulateHitlApproval(stateDir: string): Promise<void> {
@@ -130,9 +94,8 @@ async function simulateHitlApproval(stateDir: string): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const { stateDir, noDashboard, template } = parseArgs(process.argv.slice(2));
+  const { stateDir, template } = parseArgs(process.argv.slice(2));
   const absState = path.resolve(stateDir);
-  const port = 8081;
 
   if (fs.existsSync(absState)) {
     fs.rmSync(absState, { recursive: true, force: true });
@@ -142,13 +105,6 @@ async function main(): Promise<void> {
   process.env.ROLAND_LOOP_TEST_MODE = '1';
   clearLoopEngineConfigCache();
   resetRoleModelRouter();
-
-  let dashboardProc: ChildProcess | null = null;
-  if (!noDashboard) {
-    dashboardProc = startDashboard(stateDir, port);
-    const up = await waitForDashboard(port);
-    console.error(`[sim] Dashboard ${up ? 'ready' : 'unreachable'} at http://127.0.0.1:${port}`);
-  }
 
   const blackboard = new Blackboard(absState);
   const commandBoard = new CommandBlackboard(absState);
@@ -186,21 +142,6 @@ async function main(): Promise<void> {
 
   await simulateHitlApproval(absState);
 
-  if (!noDashboard) {
-    try {
-      const health = (await fetchJson(`http://127.0.0.1:${port}/api/loop-health`)) as {
-        liveActivity?: { recentSpawns?: unknown[] };
-        spawnActivityHistory?: unknown[];
-        loopTemplateId?: string;
-      };
-      const spawns =
-        health.spawnActivityHistory?.length ?? health.liveActivity?.recentSpawns?.length ?? 0;
-      console.error(`[sim] /api/loop-health template=${health.loopTemplateId ?? '—'} spawns=${spawns}`);
-    } catch (e) {
-      console.error(`[sim] loop-health fetch failed: ${(e as Error).message}`);
-    }
-  }
-
   console.error('\n[sim] ── roland hitl-status ──');
   const { spawnSync } = await import('child_process');
   spawnSync(process.execPath, ['dist/index.js', 'hitl-status', '--state-dir', absState], {
@@ -208,7 +149,6 @@ async function main(): Promise<void> {
     cwd: process.cwd(),
   });
 
-  dashboardProc?.kill();
   delete process.env.ROLAND_LOOP_TEST_MODE;
 
   const ok = result.status === 'completed' && result.spawnCount > 0 && spawnHistory.length > 0;

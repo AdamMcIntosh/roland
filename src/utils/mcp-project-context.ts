@@ -2,7 +2,7 @@
  * ## P0 Trust & Safety Fixes
  *
  * Resolves project root + `.roland` state directory for MCP-triggered runs
- * (Hermes HTTP, Cursor stdio) and background team missions.
+ * (Cursor stdio) and background team missions.
  *
  * Priority (explicit args always win over stale env):
  *   1. explicit `project_root` / `cwd` arg
@@ -53,7 +53,7 @@ function normalizeStateDir(projectRoot: string, rawState: string): string {
 
 /**
  * Resolve `{ projectRoot, stateDir }` from MCP tool args and/or process env.
- * Accepts `project_root` or `cwd` for the target repo Hermes is operating in.
+ * Accepts `project_root` or `cwd` for the target repo the caller is operating in.
  */
 export function resolveMcpProjectContext(args?: {
   project_root?: unknown;
@@ -84,7 +84,7 @@ export function resolveMcpProjectContext(args?: {
   if (explicitState) {
     stateDir = normalizeStateDir(projectRoot, explicitState);
   } else if (explicitProject) {
-    // Hermes project_root/cwd — do not inherit stale ROLAND_STATE_DIR from another repo.
+    // Explicit project_root/cwd — do not inherit stale ROLAND_STATE_DIR from another repo.
     stateDir = path.join(projectRoot, '.roland');
   } else if (pickString(process.env['ROLAND_STATE_DIR'])) {
     stateDir = normalizeStateDir(projectRoot, process.env['ROLAND_STATE_DIR']!);
@@ -185,9 +185,6 @@ export function ensureMissionProjectContext(ctx: McpProjectContext): string {
  *
  * MCP stdio (Cursor): pass `project_root` per tool call or set ROLAND_PROJECT_ROOT
  * in ~/.cursor/mcp.json env for the workspace.
- *
- * MCP HTTP (Hermes / dashboard): pass `project_root` on tools/call; the dashboard
- * aligns its active project before handling the request when no mission is running.
  *
  * Background workers: supervisor sets ROLAND_* env + chdir; team-cli resolves
  * state dir from --state-dir / env before blackboard cleanup.

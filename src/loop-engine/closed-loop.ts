@@ -2,7 +2,7 @@
  * ## Final Audit Cleanup (v1.4.0)
  *
  * ## Assumptions
- * - Hermes is the primary PM / strategist; Roland ClosedLoop is the loop execution engine.
+ * - Roland ClosedLoop is the loop execution engine; the Cursor operator is the PM / strategist.
  * - [DEPRECATED] Legacy PM Team opt-in via enablePmIntegration, loop_engine.use_pm_team, or template use_pm_team.
  * - ClosedLoop is the production entry point; LoopEngine remains the phase execution core.
  * - EvaluationGate replaces direct TestExecutor calls in the verify phase.
@@ -454,14 +454,12 @@ export function createClosedLoop(opts: ClosedLoopOptions): ClosedLoop {
 }
 
 /**
- * ## Old PM Persona Deprecated — Hermes is Primary PM
- *
- * Default: Hermes + Pure ClosedLoop Plan/Act via lightweight-plan-act.ts.
+ * Default: Pure ClosedLoop Plan/Act via lightweight-plan-act.ts.
  * [DEPRECATED] Legacy PM Team: opt-in via loop_engine.use_pm_team, template use_pm_team, or enablePmIntegration.
  *
  * ```yaml
  * loop_engine:
- *   use_pm_team: false   # default — Hermes PM + Pure ClosedLoop
+ *   use_pm_team: false   # default — Pure ClosedLoop
  * models:
  *   pm: { provider: openrouter, model: grok-4.3 }
  *   coding: { provider: ollama, model: qwen3.5-coder:14b }

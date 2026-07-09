@@ -19,7 +19,7 @@ import { TuiRenderer } from '../dashboard/tui.js';
 import { SimpleTuiRenderer, isSimpleTui } from '../dashboard/simple-tui.js';
 import { Notifier } from './notifier.js';
 import { HitlQueue } from './hitl.js';
-import { emitHermesHitlEvent } from './hitl-hermes.js';
+import { emitHitlEvent } from './hitl-events.js';
 import { spawnBackground } from './supervisor.js';
 import type { LoopState } from '../loop-engine/index.js';
 import { readLoopPmSession } from '../loop-engine/index.js';
@@ -74,14 +74,14 @@ function rule(ch = '─', indent = 2): string {
 
 const err = (s = '') => process.stderr.write(s + '\n');
 
-function emitHermesBlocker(
+function emitBlockerEvent(
   stateDir: string,
   agent: string,
   description: string,
   waveNumber?: number,
 ): void {
   try {
-    emitHermesHitlEvent(stateDir, {
+    emitHitlEvent(stateDir, {
       kind: 'blocker',
       blockerDescription: description,
       currentGate: 'blocker',
@@ -538,7 +538,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
         },
 
         onBlockerDetected: (taskId, agent, description) => {
-          emitHermesBlocker(stateDir, agent, description);
+          emitBlockerEvent(stateDir, agent, description);
           out(`  ⚠️  BLOCKER [${taskId}/${agent}]: ${description}`);
         },
       });
@@ -658,7 +658,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
         onHitlPause:    (p)             => { runState.setHitlPaused(p); },
         onAbortPending: ()              => { runState.setAbortPending(); },
         onBlockerDetected: (taskId, agent, description, waveNumber) => {
-          emitHermesBlocker(stateDir, agent, description, waveNumber);
+          emitBlockerEvent(stateDir, agent, description, waveNumber);
           void notifier.notify({
             event: 'blocker', goal,
             summary: `Blocked in wave ${waveNumber}`,
@@ -769,7 +769,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
           tui.update(runState.get());
         },
         onBlockerDetected: (taskId, agent, description, waveNumber) => {
-          emitHermesBlocker(stateDir, agent, description, waveNumber);
+          emitBlockerEvent(stateDir, agent, description, waveNumber);
           void notifier.notify({
             event: 'blocker', goal,
             summary: `${agent} is blocked in wave ${waveNumber}`,
@@ -889,7 +889,7 @@ export async function runTeamCli(argv: string[]): Promise<void> {
     missionBudgetUsd,
     onLoopStateChange: (s) => syncLoopStateToRun(runState, s, stateDir),
     onBlockerDetected: (taskId, agent, description, waveNumber) => {
-      emitHermesBlocker(stateDir, agent, description, waveNumber);
+      emitBlockerEvent(stateDir, agent, description, waveNumber);
       void notifier.notify({
         event: 'blocker', goal,
         summary: `${agent} is blocked in wave ${waveNumber}`,

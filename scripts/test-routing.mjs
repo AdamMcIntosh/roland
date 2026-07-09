@@ -17,9 +17,9 @@ const cases = [
   // Execution lane
   ['executor',          '',   DEFAULT_ENGINEER_MODEL],
   ['executor-high',     '',   DEFAULT_ENGINEER_MODEL],
-  // PM lane — matches /api/models defaults.pm
+  // PM lane defaults
   ['Lead-PM',           '',   DEFAULT_PM_MODEL],
-  // Explicit dashboard catalog IDs pass through for engineers
+  // Explicit catalog IDs pass through for engineers
   ['executor',          'claude-sonnet-4-6', 'claude-sonnet-4-6'],
   ['executor',          'gpt-5.2',           'gpt-5.2'],
   ['executor',          'gemini-2.5-pro',    'gemini-2.5-pro'],
@@ -43,7 +43,7 @@ for (const [name, model, expected] of cases) {
   check(name, model, expected);
 }
 
-// Dashboard env overrides (ROLAND_PM_MODEL / ROLAND_ENGINEER_MODEL)
+// Env overrides (ROLAND_PM_MODEL / ROLAND_ENGINEER_MODEL)
 process.env.ROLAND_PM_MODEL = 'grok-4.3';
 check('Lead-PM', '', 'grok-4.3', 'ROLAND_PM_MODEL=grok-4.3');
 

@@ -9,7 +9,7 @@ Quick reference for the most common mission failures. Each section follows: **Sy
 **Symptoms**
 
 - Terminal shows `[Loop][agent] ⏳ … still running…` for many minutes with no progress
-- Dashboard live panel frozen on one phase (Plan, Act, Verify, …)
+- `roland status` frozen on one phase (Plan, Act, Verify, …)
 - No new lines in `.roland/loop-state.json` `updatedAt`
 
 **Diagnosis**
@@ -61,7 +61,7 @@ roland team "goal" --sequential
 
 - Message: `HITL pause` or blocker in synthesis
 - `roland hitl-status` shows pending approval or blocked task
-- Git commit approval pending in dashboard
+- Git commit approval pending
 
 **Diagnosis**
 
@@ -81,7 +81,7 @@ roland unblock <task-id> "Proceed with option B — skip the migration script"
 roland hitl-status
 ```
 
-For git-commit approval gates, approve or reject in the dashboard or follow the prompt in stderr.
+For git-commit approval gates, run `roland approve-commit` / `roland reject-commit` or follow the prompt in stderr.
 
 **Prevention**
 

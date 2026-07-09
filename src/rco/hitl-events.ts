@@ -1,11 +1,7 @@
 /**
- * ## CLI-First Simplification
- *
- * Single source of truth for mission status bubbling to Hermes (Master Chief).
+ * Single source of truth for mission status and HITL event reporting.
  * CLI: `roland status`, `roland live`, `roland hitl-status`, `roland mission-summary`, `roland hitl-events`.
  * MCP: `hitl_status`, `poll_hitl_events`, `mission_summary`, `board_status`.
- *
- * ## Dashboard Demoted — CLI + Hermes Primary Complete
  */
 
 import fs from 'fs';
@@ -25,10 +21,10 @@ import { computeLoopMetrics, LOOP_METRICS_FILE, type LoopMetrics } from '../loop
 import type { LoopRunStatus } from '../loop-engine/loop-state.js';
 import { CLOSED_LOOP_PR_FILE } from '../loop-engine/closed-loop.js';
 
-export const HERMES_HITL_EVENTS_FILE = 'hermes-hitl-events.jsonl';
-export const HERMES_MISSION_COMPLETION_FILE = 'hermes-mission-completion.json';
+export const HITL_EVENTS_FILE = 'hitl-events.jsonl';
+export const MISSION_COMPLETION_FILE = 'mission-completion.json';
 
-export type HermesHitlEventKind =
+export type HitlEventKind =
   | 'hitl-pause'
   | 'hitl-abort-pending'
   | 'git-commit-approval'
@@ -53,7 +49,7 @@ export interface MissionCompletionReport {
   blockers: string[];
   nextRecommendedAction: string;
   suggestedActions: string[];
-  /** Master Chief one-liner for operator reporting. */
+  /** One-liner for operator reporting. */
   summary: string;
   wavesRun: number;
   blockersEncountered: number;
@@ -69,17 +65,17 @@ export interface MissionCompletionReport {
 }
 
 /** Minimal team result shape — avoids circular import from team-orchestrator. */
-export interface HermesTeamCompletionInput {
+export interface TeamCompletionInput {
   goal: string;
   synthesis: string;
   wavesRun: number;
   blockersEncountered: number;
 }
 
-export interface HermesHitlEvent {
+export interface HitlEvent {
   id: string;
   timestamp: number;
-  kind: HermesHitlEventKind;
+  kind: HitlEventKind;
   missionId?: string;
   goal?: string;
   /** Human-readable blocker / escalation description. */
@@ -88,7 +84,7 @@ export interface HermesHitlEvent {
   currentGate: string;
   /** Copy-paste operator commands. */
   suggestedActions: string[];
-  /** Optional structured detail for Hermes tooling. */
+  /** Optional structured detail for monitoring tooling. */
   detail?: Record<string, unknown>;
 }
 
@@ -129,18 +125,18 @@ export interface HitlStatusReport {
   updatedAt: number;
 }
 
-export type HitlHermesEventListener = (stateDir: string, event: HermesHitlEvent) => void;
+export type HitlEventListener = (stateDir: string, event: HitlEvent) => void;
 
-const hitlHermesListeners = new Set<HitlHermesEventListener>();
+const hitlListeners = new Set<HitlEventListener>();
 
-/** Subscribe to HITL events for dashboard WebSocket push / MCP live sync. */
-export function onHitlHermesEvent(listener: HitlHermesEventListener): () => void {
-  hitlHermesListeners.add(listener);
-  return () => hitlHermesListeners.delete(listener);
+/** Subscribe to HITL events for MCP live sync. */
+export function onHitlEvent(listener: HitlEventListener): () => void {
+  hitlListeners.add(listener);
+  return () => hitlListeners.delete(listener);
 }
 
-function emitHitlHermesListeners(stateDir: string, event: HermesHitlEvent): void {
-  for (const listener of hitlHermesListeners) {
+function notifyHitlListeners(stateDir: string, event: HitlEvent): void {
+  for (const listener of hitlListeners) {
     try {
       listener(stateDir, event);
     } catch {
@@ -150,11 +146,11 @@ function emitHitlHermesListeners(stateDir: string, event: HermesHitlEvent): void
 }
 
 function eventsFilePath(stateDir: string): string {
-  return path.join(stateDir, HERMES_HITL_EVENTS_FILE);
+  return path.join(stateDir, HITL_EVENTS_FILE);
 }
 
 function completionFilePath(stateDir: string): string {
-  return path.join(stateDir, HERMES_MISSION_COMPLETION_FILE);
+  return path.join(stateDir, MISSION_COMPLETION_FILE);
 }
 
 function safeReadJsonFile<T>(filePath: string): T | null {
@@ -207,13 +203,13 @@ function pendingGitCommit(stateDir: string): GitCommitApprovalRequest | null {
   return current?.status === 'pending' ? current : null;
 }
 
-/** Append a structured HITL event and notify Hermes subscribers. */
-export function emitHermesHitlEvent(
+/** Append a structured HITL event and notify subscribers. */
+export function emitHitlEvent(
   stateDir: string,
-  partial: Omit<HermesHitlEvent, 'id' | 'timestamp'>,
-): HermesHitlEvent {
+  partial: Omit<HitlEvent, 'id' | 'timestamp'>,
+): HitlEvent {
   const ctx = readMissionContext(stateDir);
-  const event: HermesHitlEvent = {
+  const event: HitlEvent = {
     id: nextEventId(),
     timestamp: Date.now(),
     missionId: partial.missionId ?? ctx.missionId,
@@ -223,7 +219,7 @@ export function emitHermesHitlEvent(
 
   fs.mkdirSync(stateDir, { recursive: true });
   appendUtf8Line(eventsFilePath(stateDir), JSON.stringify(event));
-  emitHitlHermesListeners(stateDir, event);
+  notifyHitlListeners(stateDir, event);
   return event;
 }
 
@@ -296,8 +292,8 @@ function buildSuggestedActionsForCompletion(
   return ['roland board-status --concise', 'git diff', 'npm run test:run'];
 }
 
-/** Master Chief one-liner for terminal mission outcomes. */
-export function formatHermesMissionCompleteSummary(report: MissionCompletionReport): string {
+/** One-liner for terminal mission outcomes. */
+export function formatMissionCompleteSummary(report: MissionCompletionReport): string {
   const goalSnippet = report.goal.length > 55 ? `${report.goal.slice(0, 55)}…` : report.goal;
   switch (report.finalStatus) {
     case 'completed':
@@ -402,7 +398,7 @@ export function buildMissionCompletionReport(
     summary: '',
   };
 
-  report.summary = overrides.summary ?? formatHermesMissionCompleteSummary(report);
+  report.summary = overrides.summary ?? formatMissionCompleteSummary(report);
   return report;
 }
 
@@ -411,8 +407,8 @@ export function readMissionCompletionReport(stateDir: string): MissionCompletion
   return safeReadJsonFile<MissionCompletionReport>(completionFilePath(stateDir));
 }
 
-/** Persist completion snapshot and push mission-complete event to Hermes subscribers. */
-export function emitHermesMissionComplete(
+/** Persist completion snapshot and push mission-complete event to subscribers. */
+export function emitMissionComplete(
   stateDir: string,
   report: MissionCompletionReport,
 ): MissionCompletionReport {
@@ -424,7 +420,7 @@ export function emitHermesMissionComplete(
   fs.mkdirSync(stateDir, { recursive: true });
   writeUtf8Json(completionFilePath(stateDir), report);
 
-  emitHermesHitlEvent(stateDir, {
+  emitHitlEvent(stateDir, {
     kind: 'mission-complete',
     blockerDescription: report.summary,
     currentGate: 'mission-complete',
@@ -444,10 +440,10 @@ export function emitHermesMissionComplete(
   return report;
 }
 
-/** Notify Hermes after a team / closed-loop mission finishes successfully. */
-export function notifyHermesMissionCompleteFromTeamResult(
+/** Emit a completion report after a team / closed-loop mission finishes successfully. */
+export function notifyMissionCompleteFromTeamResult(
   stateDir: string,
-  result: HermesTeamCompletionInput,
+  result: TeamCompletionInput,
 ): MissionCompletionReport {
   const report = buildMissionCompletionReport(stateDir, {
     goal: result.goal,
@@ -455,11 +451,11 @@ export function notifyHermesMissionCompleteFromTeamResult(
     blockersEncountered: result.blockersEncountered,
     nextRecommendedAction: extractNextStepsFromSynthesis(result.synthesis) ?? undefined,
   });
-  return emitHermesMissionComplete(stateDir, report);
+  return emitMissionComplete(stateDir, report);
 }
 
-/** Notify Hermes when a mission throws before returning a TeamResult. */
-export function notifyHermesMissionFailed(
+/** Emit a failure report when a mission throws before returning a TeamResult. */
+export function notifyMissionFailed(
   stateDir: string,
   goal: string,
   error: unknown,
@@ -473,10 +469,10 @@ export function notifyHermesMissionFailed(
     nextRecommendedAction: 'Inspect the error, fix blockers, and relaunch with a focused goal.',
     summary: `Mission failed — ${goal.slice(0, 55)}: ${message.slice(0, 80)}`,
   });
-  return emitHermesMissionComplete(stateDir, report);
+  return emitMissionComplete(stateDir, report);
 }
 
-/** Markdown report for Hermes / MCP mission_summary tool. */
+/** Markdown report for the MCP mission_summary tool. */
 export function formatMissionCompleteMarkdown(report: MissionCompletionReport): string {
   const lines: string[] = [];
   lines.push('## Mission Complete');
@@ -525,15 +521,15 @@ export function formatMissionCompleteMarkdown(report: MissionCompletionReport): 
 }
 
 /** Read HITL events newer than `since` (epoch ms). Newest last. */
-export function pollHermesHitlEvents(stateDir: string, since = 0, limit = 50): HermesHitlEvent[] {
+export function pollHitlEvents(stateDir: string, since = 0, limit = 50): HitlEvent[] {
   const file = eventsFilePath(stateDir);
   if (!fs.existsSync(file)) return [];
   try {
     const lines = fs.readFileSync(file, 'utf-8').split('\n').filter(Boolean);
-    const events: HermesHitlEvent[] = [];
+    const events: HitlEvent[] = [];
     for (const line of lines) {
       try {
-        const ev = JSON.parse(line) as HermesHitlEvent;
+        const ev = JSON.parse(line) as HitlEvent;
         if (ev.timestamp > since) events.push(ev);
       } catch {
         /* skip malformed line */
@@ -545,7 +541,7 @@ export function pollHermesHitlEvents(stateDir: string, since = 0, limit = 50): H
   }
 }
 
-/** Build aggregated HITL status for Hermes / dashboard / CLI. */
+/** Build aggregated HITL status for MCP / CLI. */
 export function buildHitlStatusReport(stateDir: string): HitlStatusReport {
   const ctx = readMissionContext(stateDir);
   const hitlQueue = new HitlQueue(stateDir);
@@ -687,8 +683,8 @@ export function buildHitlStatusReport(stateDir: string): HitlStatusReport {
   };
 }
 
-/** Master Chief one-liner — e.g. "Mission blocked at verification gate — awaiting operator input on git-commit". */
-export function formatHermesHitlSummary(report: HitlStatusReport): string {
+/** One-liner — e.g. "Mission blocked at verification gate — awaiting operator input on git-commit". */
+export function formatHitlSummary(report: HitlStatusReport): string {
   if (!report.runActive && report.missionCompletion && !report.waitingOnHitl) {
     return report.missionCompletion.summary;
   }
@@ -713,12 +709,12 @@ export function formatHermesHitlSummary(report: HitlStatusReport): string {
   return `Mission blocked at ${gateLabel}${suffix}`;
 }
 
-/** Markdown report for Hermes / MCP hitl_status tool. */
+/** Markdown report for the MCP hitl_status tool. */
 export function formatHitlStatusMarkdown(report: HitlStatusReport): string {
   const lines: string[] = [];
   lines.push('## HITL Status');
   lines.push('');
-  lines.push(formatHermesHitlSummary(report));
+  lines.push(formatHitlSummary(report));
   lines.push('');
 
   if (report.missionId) lines.push(`**Mission ID:** ${report.missionId}`);

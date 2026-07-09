@@ -7,9 +7,6 @@ Welcome. Roland is a **production-grade closed-loop agent harness** for Cursor. 
 | **@roland (Cursor MCP)** | Primary entry — triage, direct edits, team launch |
 | **Roland CLI** | Status & control — `roland status`, `roland live`, `roland hitl-status`, `roland board-status` |
 | **Roland ClosedLoop** | Loop execution — `roland mission "…" --loop-template …` |
-| **Dashboard** | Optional adjunct — monitor/control when CLI is inconvenient (`npm run serve-dashboard`) |
-
-> **Hermes** (`roland chat`) is optional for terminal-only workflows — **not required in Cursor**.
 
 ## 60-second setup
 
@@ -46,12 +43,6 @@ roland hitl-status
 roland board-status --concise
 roland mission-summary
 roland mission-audit --last
-```
-
-4. **Optional dashboard** (phone/Tailscale):
-
-```bash
-npm run serve-dashboard    # http://127.0.0.1:8081
 ```
 
 ## Architecture (v1.6.0)
@@ -93,7 +84,7 @@ Per-project under `.roland/` (gitignored):
 - `loop-state.json` — active loop iteration state
 - `loop-metrics.json` — phase timing and success rates
 - `loop-memory.json` — reflection / confidence history
-- `hermes-hitl-events.jsonl` — HITL escalation events
+- `hitl-events.jsonl` — HITL escalation events
 - `usage-history.json` — per-run cost/token estimates
 - `missions/<id>/` — archived blackboard/audit from prior runs
 

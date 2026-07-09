@@ -13,7 +13,6 @@ scripts/
 .idea/
 coverage/
 .cache/
-.hermes/
 
 # Docs not needed at runtime (README kept by npm default)
 docs/

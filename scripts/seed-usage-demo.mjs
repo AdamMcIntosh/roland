@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Seed .roland/usage-history.json with realistic demo data so you can
- * verify the Usage Dashboard display without running a real team session.
+ * verify usage reporting without running a real team session.
  *
  * Usage:
  *   node scripts/seed-usage-demo.mjs
@@ -162,6 +162,4 @@ const totalCost = runs.reduce((s, r) => s + r.totalCostUsd, 0);
 console.log(`✓ Wrote ${runs.length} demo runs to ${outFile}`);
 console.log(`  Total est. tokens : ${(totalToks / 1000).toFixed(1)}K`);
 console.log(`  Total est. cost   : $${totalCost.toFixed(4)}`);
-console.log(`\nView the dashboard:`);
-console.log(`  1. node scripts/serve-dashboard.js`);
-console.log(`  2. Open http://127.0.0.1:8081 → click "Usage & Cost"`);
+console.log(`\nView it: get_analytics MCP tool in Cursor`);

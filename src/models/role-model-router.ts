@@ -878,7 +878,7 @@ export class RoleModelRouter {
       lines.push(`[Loop]   Between-iterations hook: ${ctx.betweenIterSummary}`);
     }
     if (ctx.hitlGitCommitEnabled) {
-      lines.push('[Loop]   HITL git-commit approval: enabled (dashboard or `roland approve-commit`)');
+      lines.push('[Loop]   HITL git-commit approval: enabled (`roland approve-commit`)');
     }
     lines.push(`[Loop]   Effective routing: ${this.formatRoutingSummary()}`);
     const degraded = this.getDegradedRoles();
