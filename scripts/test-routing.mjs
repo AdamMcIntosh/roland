@@ -50,8 +50,8 @@ check('Lead-PM', '', 'grok-4.3', 'ROLAND_PM_MODEL=grok-4.3');
 process.env.ROLAND_PM_MODEL = 'claude-opus-4-7';
 check('Lead-PM', '', 'claude-opus-4-7', 'ROLAND_PM_MODEL=claude-opus-4-7');
 
-process.env.ROLAND_PM_MODEL = 'gpt-5.4-nano';
-check('Lead-PM', '', 'gpt-5.4-nano', 'ROLAND_PM_MODEL=gpt-5.4-nano');
+process.env.ROLAND_PM_MODEL = 'gpt-5.1-codex-mini';
+check('Lead-PM', '', 'gpt-5.1-codex-mini', 'ROLAND_PM_MODEL=gpt-5.1-codex-mini');
 
 process.env.ROLAND_PM_MODEL = undefined;
 process.env.ROLAND_ENGINEER_MODEL = 'claude-sonnet-4-6';

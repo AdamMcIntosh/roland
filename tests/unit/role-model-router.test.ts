@@ -29,12 +29,12 @@ describe('RoleModelRouter', () => {
     }
   });
 
-  it('resolves default OpenRouter models for core roles', () => {
+  it('resolves default models for core roles', () => {
     const router = RoleModelRouter.fromConfig();
     const pm = router.getModel('pm');
-    expect(pm.provider).toBe('openrouter');
-    expect(pm.model).toBe('grok-4.3');
-    expect(pm.displayLabel).toBe('grok-4.3@openrouter');
+    expect(pm.provider).toBe('cursor');
+    expect(pm.model).toBe('gpt-5.1-codex-mini');
+    expect(pm.displayLabel).toBe('gpt-5.1-codex-mini@cursor');
 
     const coding = router.getModel('coding');
     expect(coding.model).toBe('qwen/qwen3-coder-next');

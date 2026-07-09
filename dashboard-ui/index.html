@@ -3597,6 +3597,7 @@
   };
 
   const MODEL_COLORS = {
+    'gpt-5.1-codex-mini': '#22c55e',
     'gpt-5.4-nano':      '#22c55e',
     'grok-4.3':          '#f59e0b',
     'composer-2.5':      '#6366f1',
@@ -3634,7 +3635,7 @@
   let agentSortDir = 'desc';
   let expandedRuns = new Set();      // overview recent runs
   let historyExpanded = new Set();   // history tab
-  let modelCatalog = { models: [], defaults: { pm: 'gpt-5.4-nano', engineer: 'composer-2.5' } };
+  let modelCatalog = { models: [], defaults: { pm: 'gpt-5.1-codex-mini', engineer: 'composer-2.5' } };
   let missionSubmitting = false;
   let teamGoalSubmitting = false;
   let supervisorInfo = null;
@@ -3763,7 +3764,7 @@
 
   LoopEngine.init({
     escHtml,
-    getPmModelId: () => modelCatalog.defaults?.pm || 'gpt-5.4-nano',
+    getPmModelId: () => modelCatalog.defaults?.pm || 'gpt-5.1-codex-mini',
     getEngModelId: () => modelCatalog.defaults?.engineer || 'composer-2.5',
     onHitl: (cmd, params) => doHitl(cmd, params),
     confirmFn: (msg) => confirm(msg),
@@ -5186,7 +5187,7 @@
     const engModels = (modelCatalog.models || []).filter(m => modelMatchesRole(m, 'engineer'));
 
     const pmDefault = modelCatalog.defaults?.pm
-      || pickModelDefault(pmModels, ['gpt-5.4-nano', 'auto', 'composer-2.5']);
+      || pickModelDefault(pmModels, ['gpt-5.1-codex-mini', 'auto', 'composer-2.5']);
     const engDefault = modelCatalog.defaults?.engineer
       || pickModelDefault(engModels, ['composer-2.5', 'auto', 'composer-2']);
 

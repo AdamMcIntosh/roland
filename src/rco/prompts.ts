@@ -19,6 +19,7 @@
  */
 
 import type { AgentYaml } from './types.js';
+import { resolveAgentModel } from './types.js';
 import type { FileBundle } from '../utils/file-gatherer.js';
 import { formatBundleAsMarkdown } from '../utils/file-gatherer.js';
 import { ClaudePromptPayloadSchema } from '../schemas.js';
@@ -79,7 +80,7 @@ export function buildClaudeToolCallingPrompt(input: ToolCallingPromptInput): str
     stepInput: input.stepInput,
     taskContext: input.taskContext,
     tools: input.agentYaml.tools ?? [],
-    model: input.agentYaml.claude_model,
+    model: resolveAgentModel(input.agentYaml),
     stateSummary: input.stateSummary,
   });
   const p = payload.success

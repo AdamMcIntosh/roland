@@ -24,8 +24,8 @@
 # Required loop roles: pm, coding, critic, verifier (validated at ClosedLoop startup).
 models:
   pm:
-    provider: openrouter
-    model: grok-4.3
+    provider: cursor
+    model: gpt-5.1-codex-mini
     fallback:
       provider: openrouter
       model: gpt-5.4-nano
@@ -65,11 +65,11 @@ models:
 
 # PM team (Phase 3) — Cursor-native model routing. The PM team does NOT use
 # OpenRouter; it runs on your Cursor subscription. Routing is lane-based:
-#   Lead PM   → lead_model      (gpt-5.4-nano: orchestration + planning only)
+#   Lead PM   → lead_model      (gpt-5.1-codex-mini: orchestration + planning only)
 #   reasoning → fast_model      (composer-2.5: architect, reviewer, critic…)
 #   coding    → standard_model  (composer-2.5: executor — cost-efficient default)
 #   light     → standard_model  (composer-2.5: docs, tests, research)
-# Cost strategy: GPT-5.4 Nano for the PM brain; composer-2.5 for every engineer.
+# Cost strategy: GPT-5.1 Codex Mini for the PM brain; composer-2.5 for every engineer.
 # This section is optional; the defaults below are used if it is omitted.
 # Loop Engineering — phase templates for long-lived self-healing missions
 loop_engine:
@@ -111,7 +111,7 @@ loop_engine:
 pm:
   # [DEPRECATED] Legacy Lead PM model routing — Hermes is the recommended PM layer.
   # These settings apply to use_pm_team: true and non-loop team runs only.
-  lead_model: "gpt-5.4-nano"            # The Lead PM (GPT-5.4 Nano — fast, cheap orchestration)
+  lead_model: "gpt-5.1-codex-mini"      # The Lead PM (GPT-5.1 Codex Mini — fast, cheap orchestration)
   fast_model: "composer-2.5"            # Interactive / time-sensitive engineers
   standard_model: "composer-2.5"        # Background / execution engineers
   # Override the lane for specific engineers (else inferred from the persona name):

@@ -1,6 +1,6 @@
 name: designer-high
 role_prompt: Senior UX/UI designer for complex design systems, interaction patterns, and accessibility
-claude_model: composer-2.5
+model: kimi-k2.7-code
 provider: cursor
 temperature: 0.8
 tools:

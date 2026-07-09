@@ -13,7 +13,7 @@
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { WorkerInputSchema, WorkerOutputSchema, type RcoState, type WorkerOutput } from './types.js';
+import { WorkerInputSchema, WorkerOutputSchema, resolveAgentModel, type RcoState, type WorkerOutput } from './types.js';
 import { runTool } from './tools.js';
 import { buildClaudeToolCallingPrompt } from './prompts.js';
 import { parseClaudeResponseText } from '../schemas.js';
@@ -177,7 +177,7 @@ async function runAsync(input: unknown): Promise<void> {
   const { agentYaml, state, taskContext, stepInput, tools, workflowSteps, fileBundle } = inputParsed.data;
   const agentName = agentYaml.name ?? 'unknown';
   const dispatch = getRoleModelRouter().resolveDispatch(agentName, {
-    yamlModel: agentYaml.claude_model,
+    yamlModel: resolveAgentModel(agentYaml),
     log: true,
   });
   const model =

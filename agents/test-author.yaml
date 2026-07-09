@@ -121,7 +121,7 @@ role_prompt: >
   (e.g. unit tests OR integration tests — not both). Do not add tests for code
   paths outside the explicit task description. One focused, passing test file is
   strictly better than a large partially-written suite.
-claude_model: composer-2.5
+model: kimi-k2.7-code
 provider: cursor
 temperature: 0.4
 tools:

@@ -4,7 +4,7 @@ designation: UNSC Logistics Operative — DevOps
 legacy_aliases:
   - build-fixer
   - devops-agent
-claude_model: composer-2.5
+model: composer-2.5
 provider: cursor
 temperature: 0.5
 tools:

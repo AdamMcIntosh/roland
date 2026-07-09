@@ -3,7 +3,7 @@ role_prompt: Performance and scalability analyst. Profiles bottlenecks, suggests
 
 
 provider: cursor
-claude_model: composer-2.5
+model: composer-2.5
 temperature: 0.4
 tools:
   - search

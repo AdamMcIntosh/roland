@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
 import { toCursorModelId } from './model-routing.js';
 import type { AgentYaml } from './types.js';
-import { AgentYamlSchema } from './types.js';
+import { AgentYamlSchema, resolveAgentModel } from './types.js';
 
 /** Cursor SDK AgentDefinition shape (subset we populate). */
 export interface SdkAgentDefinition {
@@ -99,9 +99,12 @@ export function toSdkAgentDefinitions(
         '- **Escalation chain:** callsign → Roland (Lead PM) → operator (scope, priority, irreversible actions).',
         '- **BLOCKER format:** `## 🚨 BLOCKER` with Description, Needs from (roland | callsign | operator), Impact.',
       ].join('\n'),
-      model: agent.claude_model
-        ? { id: toCursorModelId(agent.claude_model, agent.name ?? key) }
-        : 'inherit',
+      model: (() => {
+        const yamlModel = resolveAgentModel(agent);
+        return yamlModel
+          ? { id: toCursorModelId(yamlModel, agent.name ?? key) }
+          : 'inherit';
+      })(),
     };
   }
 

@@ -127,7 +127,7 @@ Each file in `agents/` defines one persona:
 name: test-author
 role_prompt: >
   You are a senior test engineer …
-claude_model: claude-sonnet-4-6
+model: claude-sonnet-4-6
 temperature: 0.4
 tools:
   - search

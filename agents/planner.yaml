@@ -1,7 +1,7 @@
 name: planner
 role_prompt: Project planner for breaking complex tasks into sequenced, actionable implementation steps
 provider: cursor
-claude_model: composer-2.5
+model: composer-2.5
 temperature: 0.7
 tools:
   - search

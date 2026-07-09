@@ -12,10 +12,10 @@ export interface ModelOption {
 }
 
 export const PM_MODELS: ModelOption[] = [
-  { value: 'gpt-5.4-nano',       label: 'GPT-5.4 Nano',     badge: 'Default',    tier: 'recommended' },
-  { value: 'gpt-5-mini',         label: 'GPT-5 Mini',       badge: 'Fast',       tier: 'fast'        },
-  { value: 'gemini-2.5-flash',   label: 'Gemini 2.5 Flash', badge: 'Flash',      tier: 'fast'        },
-  { value: 'gpt-5.1-codex-mini', label: 'Codex Mini',       badge: 'Lean',       tier: 'fast'        },
+  { value: 'gpt-5.1-codex-mini', label: 'GPT-5.1 Codex Mini', badge: 'Default',  tier: 'recommended' },
+  { value: 'gpt-5.4-nano',       label: 'GPT-5.4 Nano',       badge: 'Nano',     tier: 'fast'        },
+  { value: 'gpt-5-mini',         label: 'GPT-5 Mini',         badge: 'Fast',     tier: 'fast'        },
+  { value: 'gemini-2.5-flash',   label: 'Gemini 2.5 Flash',   badge: 'Flash',    tier: 'fast'        },
 ];
 
 export const ENGINEER_MODELS: ModelOption[] = [
@@ -26,7 +26,7 @@ export const ENGINEER_MODELS: ModelOption[] = [
   { value: 'gpt-5.1-codex-mini', label: 'Codex Mini',       badge: 'Lean',       tier: 'fast'        },
 ];
 
-export const DEFAULT_PM_MODEL       = 'gpt-5.4-nano';
+export const DEFAULT_PM_MODEL       = 'gpt-5.1-codex-mini';
 export const DEFAULT_ENGINEER_MODEL = 'composer-2.5';
 
 interface ApiKeyCtx {

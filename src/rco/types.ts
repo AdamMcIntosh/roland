@@ -14,12 +14,28 @@ export const AgentYamlSchema = z.object({
   recommended_model: z.string().optional(),
   model: z.string().optional(),
   provider: z.string().optional(),
+  /** @deprecated Use `model` — kept for backward compatibility with older YAML. */
   claude_model: z.string().optional(),
   temperature: z.number().optional(),
   tools: z.array(z.string()).optional(),
 });
 
 export type AgentYaml = z.infer<typeof AgentYamlSchema>;
+
+/** Senior-tier agents (role_prompt contains "Senior") route to Kimi K2.7 Code. */
+export const SENIOR_AGENT_MODEL = 'kimi-k2.7-code';
+
+/** Resolve agent model from YAML — prefers `model`, falls back to legacy `claude_model`. */
+export function resolveAgentModel(spec: {
+  model?: string;
+  claude_model?: string;
+  role_prompt?: string;
+}): string | undefined {
+  if (spec.role_prompt && /\bsenior\b/i.test(spec.role_prompt)) {
+    return SENIOR_AGENT_MODEL;
+  }
+  return spec.model ?? spec.claude_model;
+}
 
 // ---------------------------------------------------------------------------
 // RCO Recipe (workflow + subagents)
@@ -29,6 +45,8 @@ export const RcoSubagentSchema = z.object({
   name: z.string(),
   agentRef: z.string(), // references agents/*.yaml name
   prompt: z.string().optional(),
+  model: z.string().optional(),
+  /** @deprecated Use `model` — kept for backward compatibility with older recipe YAML. */
   claude_model: z.string().optional(),
 });
 

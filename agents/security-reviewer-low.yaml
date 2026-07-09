@@ -1,6 +1,6 @@
 name: security-reviewer-low
 role_prompt: Quick security scanner for common vulnerabilities and dependency CVE checks
-claude_model: composer-2.5
+model: composer-2.5
 provider: cursor
 temperature: 0.5
 tools:

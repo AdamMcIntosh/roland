@@ -425,9 +425,9 @@ const CURSOR_MODELS = [
     pricing: { inputUsdPerMTok: 2.50, outputUsdPerMTok: 10.00 },
   },
   {
-    id: 'gpt-5.1-codex-mini', label: 'GPT-5.1 Codex Mini', group: 'coding',
-    roles: ['engineer'],
-    description: 'Code-focused mini model for targeted fixes',
+    id: 'gpt-5.1-codex-mini', label: 'GPT-5.1 Codex Mini', group: 'recommended',
+    roles: ['pm', 'engineer'],
+    description: 'Default Lead PM — fast, code-aware orchestration',
     pricing: { inputUsdPerMTok: 1.50, outputUsdPerMTok: 6.00 },
   },
   {
@@ -453,6 +453,12 @@ const CURSOR_MODELS = [
     roles: ['engineer'],
     description: 'Multimodal pro tier — screenshots and UI review',
     pricing: { inputUsdPerMTok: 1.25, outputUsdPerMTok: 5.00 },
+  },
+  {
+    id: 'kimi-k2.7-code', label: 'Kimi K2.7 Code', group: 'coding',
+    roles: ['engineer'],
+    description: 'Senior-tier agentic coding — long-horizon implementations and reviews',
+    pricing: { inputUsdPerMTok: 0.95, outputUsdPerMTok: 4.00 },
   },
 ];
 

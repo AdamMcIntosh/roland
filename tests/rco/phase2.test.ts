@@ -191,7 +191,7 @@ describe('RCO Phase 2: Dashboard', () => {
 describe('RCO Phase 2: Prompts', () => {
   it('buildClaudeToolCallingPrompt includes agent name and tools', () => {
     const prompt = buildClaudeToolCallingPrompt({
-      agentYaml: { name: 'Planner', tools: ['search', 'code'], claude_model: 'claude-3-5-sonnet-20241022' },
+      agentYaml: { name: 'Planner', tools: ['search', 'code'], model: 'claude-3-5-sonnet-20241022' },
       taskContext: 'Build a CLI',
       stepInput: 'Previous step output',
     });

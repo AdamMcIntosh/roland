@@ -38,7 +38,7 @@ role_prompt: >
     draw a hard line at changing test assertions or test intent.
   - Always triage failures into categories before reporting: (a) implementation
     bug, (b) test bug (signal test-author), (c) environment/config issue.
-claude_model: composer-2.5
+model: composer-2.5
 provider: cursor
 temperature: 0.3
 tools:

@@ -1,6 +1,6 @@
 name: scientist-high
 role_prompt: Senior data scientist for ML model development, experiment design, and advanced analytics
-claude_model: composer-2.5
+model: kimi-k2.7-code
 provider: cursor
 temperature: 0.6
 tools:

@@ -35,14 +35,14 @@ describe('Vanguard hardening — worker prompt injection', () => {
   const testAuthorYaml = {
     name: 'test-author',
     tools: ['search', 'code'],
-    claude_model: 'composer-2.5',
+    model: 'composer-2.5',
     role_prompt: 'You are test-author.',
   };
 
   const testExecutorYaml = {
     name: 'test-executor',
     tools: ['terminal', 'testing'],
-    claude_model: 'composer-2.5',
+    model: 'composer-2.5',
     role_prompt: 'You are test-executor.',
   };
 
@@ -83,7 +83,7 @@ describe('Vanguard hardening — worker prompt injection', () => {
 
   it('vanguard alias gets Author Protocol', () => {
     const prompt = buildClaudeToolCallingPrompt({
-      agentYaml: { name: 'vanguard', tools: ['code'], claude_model: 'composer-2.5' },
+      agentYaml: { name: 'vanguard', tools: ['code'], model: 'composer-2.5' },
       taskContext: 'Write integration tests',
     });
     expect(prompt).toContain('Vanguard Author Protocol');

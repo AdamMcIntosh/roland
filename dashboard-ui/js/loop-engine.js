@@ -27,7 +27,7 @@
   var loopHealth = null;
   var loopTemplatesCatalog = null;
   var escHtmlFn = defaultEscHtml;
-  var getPmModelId = function () { return 'gpt-5.4-nano'; };
+  var getPmModelId = function () { return 'gpt-5.1-codex-mini'; };
   var getEngModelId = function () { return 'composer-2.5'; };
   var onHitl = null;
   var confirmFn = function (msg) { return global.confirm ? global.confirm(msg) : true; };

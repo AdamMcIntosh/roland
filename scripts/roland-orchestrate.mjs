@@ -38,6 +38,9 @@ const { buildRolandOrchestratorPrompt } = await import(
 const { finalizeSynthesisOutput } = await import(
   resolve(distRoot, 'rco/mission-complete.js')
 );
+const { DEFAULT_PM_MODEL } = await import(
+  resolve(distRoot, 'rco/cursor-models.js')
+);
 const { CommandBlackboard } = await import(
   resolve(distRoot, 'rco/command-blackboard.js')
 );
@@ -78,7 +81,7 @@ async function createRolandSupervisor() {
     try {
       return await Agent.create({
         apiKey,
-        model: { id: 'gpt-5.4-nano' },
+        model: { id: DEFAULT_PM_MODEL },
         name: 'Roland',
         local: resolveSdkAgentLocalOptions('Roland', {
           cwd: process.cwd(),

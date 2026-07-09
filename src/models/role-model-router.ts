@@ -130,8 +130,8 @@ export class RoleModelRouterError extends Error {
 
 export const DEFAULT_MODELS_CONFIG: ModelsConfig = {
   pm: {
-    provider: 'openrouter',
-    model: 'grok-4.3',
+    provider: 'cursor',
+    model: 'gpt-5.1-codex-mini',
     fallback: { provider: 'openrouter', model: 'gpt-5.4-nano' },
   },
   coding: {
@@ -1021,7 +1021,8 @@ function mapProviderModelToCursorSdk(model: string, role: ModelRole): string {
   const m = model.toLowerCase();
   if (role === 'pm') {
     if (m.includes('grok')) return 'grok-4.3';
-    if (m.includes('nano')) return DEFAULT_PM_MODEL;
+    if (m.includes('codex')) return 'gpt-5.1-codex-mini';
+    if (m.includes('nano')) return 'gpt-5.4-nano';
     return DEFAULT_PM_MODEL;
   }
   if (m.includes('opus')) return 'claude-opus-4-7';
@@ -1030,6 +1031,7 @@ function mapProviderModelToCursorSdk(model: string, role: ModelRole): string {
   if (m.includes('gemini') && m.includes('pro')) return 'gemini-2.5-pro';
   if (m.includes('gemini')) return 'gemini-2.5-flash';
   if (m.includes('composer')) return DEFAULT_ENGINEER_MODEL;
+  if (m.includes('kimi')) return 'kimi-k2.7-code';
   return DEFAULT_ENGINEER_MODEL;
 }
 

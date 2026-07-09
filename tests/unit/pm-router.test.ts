@@ -27,8 +27,8 @@ describe('lane assignment', () => {
 
 describe('modelForLane', () => {
   it('maps lanes to Cursor models under the default policy', () => {
-    expect(DEFAULT_MODEL_POLICY.pm).toBe('gpt-5.4-nano');
-    expect(modelForLane('pm').model).toBe('gpt-5.4-nano');
+    expect(DEFAULT_MODEL_POLICY.pm).toBe('gpt-5.1-codex-mini');
+    expect(modelForLane('pm').model).toBe('gpt-5.1-codex-mini');
     expect(modelForLane('reasoning').model).toBe('composer-2.5');
     expect(modelForLane('coding').model).toBe('composer-2.5');
     expect(modelForLane('light').model).toBe('composer-2.5');
@@ -49,7 +49,7 @@ describe('TaskRouter', () => {
 
   it('routes the Lead PM with explicit legacy policy', () => {
     const d = legacyRouter.route('orchestrate', 'lead-pm');
-    expect(d.model).toBe('gpt-5.4-nano');
+    expect(d.model).toBe('gpt-5.1-codex-mini');
     expect(d.lane).toBe('pm');
     expect(d.provider).toBe('cursor');
   });

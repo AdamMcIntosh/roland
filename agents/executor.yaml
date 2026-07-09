@@ -15,7 +15,7 @@ role_prompt: >
   needed, note it as a BLOCKER or MESSAGE to the PM rather than doing it yourself. One focused
   deliverable done well is always better than two half-finished ones.
 provider: cursor
-claude_model: composer-2.5
+model: composer-2.5
 temperature: 0.7
 tools:
   - search

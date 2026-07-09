@@ -38,7 +38,7 @@ describe('Sparrow hardening — worker prompt injection', () => {
   const sparrowYaml = {
     name: 'sparrow',
     tools: ['search', 'code', 'terminal'],
-    claude_model: 'composer-2.5',
+    model: 'composer-2.5',
     role_prompt: 'You are Sparrow.',
   };
 
@@ -63,7 +63,7 @@ describe('Sparrow hardening — worker prompt injection', () => {
 
   it('buildClaudeToolCallingPrompt applies Sparrow format to legacy executor alias', () => {
     const prompt = buildClaudeToolCallingPrompt({
-      agentYaml: { name: 'executor', tools: ['code'], claude_model: 'composer-2.5' },
+      agentYaml: { name: 'executor', tools: ['code'], model: 'composer-2.5' },
       taskContext: 'Wire middleware',
     });
     expect(prompt).toContain('Sparrow Handoff Protocol');
@@ -72,7 +72,7 @@ describe('Sparrow hardening — worker prompt injection', () => {
 
   it('non-implementer agents do not get Sparrow Handoff Protocol', () => {
     const prompt = buildClaudeToolCallingPrompt({
-      agentYaml: { name: 'oracle', tools: ['search'], claude_model: 'claude-sonnet-4-6' },
+      agentYaml: { name: 'oracle', tools: ['search'], model: 'claude-sonnet-4-6' },
       taskContext: 'Map auth flow',
     });
     expect(prompt).not.toContain('Sparrow Handoff Protocol');

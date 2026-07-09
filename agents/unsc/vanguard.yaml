@@ -5,7 +5,7 @@ legacy_aliases:
   - test-author
   - test-executor
   - tdd-guide
-claude_model: composer-2.5
+model: composer-2.5
 provider: cursor
 temperature: 0.4
 tools:

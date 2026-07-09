@@ -44,7 +44,7 @@ role_prompt: |
   - ❌ Request changes
 
   Output the full review in markdown using the structure above.
-claude_model: composer-2.5
+model: kimi-k2.7-code
 provider: cursor
 temperature: 0.5
 tools:

@@ -6,7 +6,7 @@
  */
 
 /** Default Lead PM model — matches GET /api/models `defaults.pm`. */
-export const DEFAULT_PM_MODEL = 'gpt-5.4-nano';
+export const DEFAULT_PM_MODEL = 'gpt-5.1-codex-mini';
 
 /** Default engineer model — matches GET /api/models `defaults.engineer`. */
 export const DEFAULT_ENGINEER_MODEL = 'composer-2.5';
@@ -29,6 +29,7 @@ export const CURSOR_MODEL_IDS = [
   'gemini-2.5-flash',
   'claude-haiku-4-5',
   'gemini-2.5-pro',
+  'kimi-k2.7-code',
 ] as const;
 
 export type CursorModelId = (typeof CURSOR_MODEL_IDS)[number];
