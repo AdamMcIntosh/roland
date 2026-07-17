@@ -25,6 +25,19 @@ describe('unsc-agents', () => {
     }
   });
 
+  it('routes Oracle and Sentinel through Cursor Grok 4.5', () => {
+    const originalApiKey = process.env.CURSOR_API_KEY;
+    process.env.CURSOR_API_KEY = 'test-key';
+    try {
+      const defs = toSdkAgentDefinitions(loadUnscAgents());
+      expect(defs.oracle?.model).toEqual({ id: 'grok-4.5' });
+      expect(defs.sentinel?.model).toEqual({ id: 'grok-4.5' });
+    } finally {
+      if (originalApiKey === undefined) delete process.env.CURSOR_API_KEY;
+      else process.env.CURSOR_API_KEY = originalApiKey;
+    }
+  });
+
   it('legacyAgentToCallsign maps roster names to UNSC callsigns', () => {
     expect(legacyAgentToCallsign('executor')).toBe('sparrow');
     expect(legacyAgentToCallsign('test-author')).toBe('vanguard');

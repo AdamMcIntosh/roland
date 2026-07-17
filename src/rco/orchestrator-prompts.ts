@@ -102,7 +102,7 @@ After each delegation, update **Agent Status** on the Command Blackboard and app
 \`\`\`typescript
 await using agent = await Agent.create({
   apiKey: process.env.CURSOR_API_KEY!,
-  model: { id: "grok-4.3" },
+  model: { id: "grok-4.5" },
   name: "Roland",
   local: { cwd: process.cwd(), settingSources: [] },
   agents: {

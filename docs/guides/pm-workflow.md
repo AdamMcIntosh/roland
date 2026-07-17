@@ -4,7 +4,7 @@ Roland turns Cursor into a small engineering team that **you manage**. In this *
 
 > **The mantra:** *I am the PM. Roland runs the team. Keep them unblocked.*
 
-For **autonomous PM team runs** (Lead PM is grok-4.3 inside `roland team`), see the [main README](../../README.md) and [DAILY-USAGE.md](../../DAILY-USAGE.md).
+For **autonomous PM team runs** (Lead PM is grok-4.5 inside `roland team`), see the [main README](../../README.md) and [DAILY-USAGE.md](../../DAILY-USAGE.md).
 
 ---
 
@@ -13,7 +13,7 @@ For **autonomous PM team runs** (Lead PM is grok-4.3 inside `roland team`), see 
 | Mode | Who plans | When |
 |------|-----------|------|
 | **Direct** | You + Cursor chat | Single-file edits, Q&A, < ~30 min — `triage` returns `execution_path.path: "direct"` |
-| **Team (autonomous)** | Lead PM (grok-4.3) | `roland team "goal"` or MCP `roland_run_team` |
+| **Team (autonomous)** | Lead PM (grok-4.5) | `roland team "goal"` or MCP `roland_run_team` |
 | **Manual PM (this guide)** | You in chat | Fine-grained control; `spawn_task`, `assign_task`, separate engineer panes |
 
 Force full autonomous team from chat: append `--force-team` or say `force team: …` — Roland calls `roland_run_team` immediately.

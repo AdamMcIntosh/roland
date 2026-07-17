@@ -1,5 +1,5 @@
 name: roland-orchestrator
-model: grok-4.3
+model: grok-4.5
 provider: cursor
 temperature: 0.3
 tools:

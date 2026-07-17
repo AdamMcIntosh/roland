@@ -10,7 +10,7 @@ Configuration lives in `config.yaml` at the repo root (copied to npm package). O
 
 | Role | Default model | Provider | Purpose |
 |------|---------------|----------|---------|
-| **pm** | grok-4.3 | openrouter | Planning scope per iteration |
+| **pm** | grok-4.5 | cursor | Planning scope per iteration |
 | **coding** | qwen/qwen3-coder-next | openrouter | Implementation (Act phase) |
 | **critic** | deepseek/deepseek-chat | openrouter | Structured critique (rule-assisted) |
 | **verifier** | deepseek/deepseek-v3-0324 | openrouter | Verification analysis |

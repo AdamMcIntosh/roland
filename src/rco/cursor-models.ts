@@ -5,7 +5,7 @@
  */
 
 /** Default Lead PM model — matches GET /api/models `defaults.pm`. */
-export const DEFAULT_PM_MODEL = 'gpt-5.1-codex-mini';
+export const DEFAULT_PM_MODEL = 'grok-4.5';
 
 /** Default engineer model — matches GET /api/models `defaults.engineer`. */
 export const DEFAULT_ENGINEER_MODEL = 'composer-2.5';
@@ -16,6 +16,7 @@ export const DEFAULT_ENGINEER_MODEL = 'composer-2.5';
  */
 export const CURSOR_MODEL_IDS = [
   'grok-4.3',
+  'grok-4.5',
   'composer-2.5',
   'gpt-5.4-nano',
   'claude-opus-4-7',

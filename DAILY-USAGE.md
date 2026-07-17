@@ -71,7 +71,7 @@ Open chat and describe the work the way you'd brief a senior engineer — specif
 
 Dim `→` lines = agents working. Bright `✓` lines = tasks done. The wave closes with a single summary line — no noise.
 
-**The Lead PM (grok-4.3)** orchestrates the whole run:
+**The Lead PM (grok-4.5)** orchestrates the whole run:
 1. **Planning** — decomposes your goal into parallel tasks
 2. **Review** — after each wave, examines results and decides whether to continue, adjust, or unblock
 3. **Synthesis** — produces the final executive summary when all tasks are done

@@ -131,7 +131,7 @@ export class RoleModelRouterError extends Error {
 export const DEFAULT_MODELS_CONFIG: ModelsConfig = {
   pm: {
     provider: 'cursor',
-    model: 'gpt-5.1-codex-mini',
+    model: 'grok-4.5',
     fallback: { provider: 'openrouter', model: 'gpt-5.4-nano' },
   },
   coding: {
@@ -1020,7 +1020,7 @@ export class RoleModelRouter {
 function mapProviderModelToCursorSdk(model: string, role: ModelRole): string {
   const m = model.toLowerCase();
   if (role === 'pm') {
-    if (m.includes('grok')) return 'grok-4.3';
+    if (m.includes('grok')) return 'grok-4.5';
     if (m.includes('codex')) return 'gpt-5.1-codex-mini';
     if (m.includes('nano')) return 'gpt-5.4-nano';
     return DEFAULT_PM_MODEL;

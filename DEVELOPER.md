@@ -104,7 +104,7 @@ See `docs/guides/closed-loop-harness.md` and `src/rco/loop-orchestrator.ts`.
 
 | Lane | Model | Agent names that map here |
 |------|-------|--------------------------|
-| PM | `grok-4.3` | `lead-pm`, `Lead-PM` |
+| PM | `grok-4.5` | `lead-pm`, `Lead-PM` |
 | Reasoning | `claude-sonnet-4-6` | architect, review*, critic, plan*, analyst, scientist, research*, design*, explore*, security*, **author** |
 | Execution | `composer-2.5` | executor*, build-fixer, test-executor, tdd-guide, designer, writer, doc* |
 

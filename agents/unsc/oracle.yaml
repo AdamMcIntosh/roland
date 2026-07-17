@@ -6,7 +6,7 @@ legacy_aliases:
   - explore
   - explore-medium
   - analyst
-model: claude-sonnet-4-6
+model: grok-4.5
 provider: cursor
 temperature: 0.3
 tools:

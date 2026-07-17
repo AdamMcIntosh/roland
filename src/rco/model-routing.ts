@@ -57,7 +57,7 @@ function toCursorModelIdLegacy(model: string, agentName: string = ''): string {
 
   if (VALID_CURSOR_MODELS.has(m)) return m;
 
-  if (m.includes('grok')) return 'grok-4.3';
+  if (m.includes('grok')) return 'grok-4.5';
   if (m.includes('opus')) return 'claude-opus-4-7';
   if (m.includes('sonnet')) return 'claude-sonnet-4-6';
   if (m.includes('composer')) return DEFAULT_ENGINEER_MODEL;

@@ -18,7 +18,7 @@ const goal = process.argv[2] ?? "No mission specified";
 
 await using roland = await Agent.create({
   apiKey,
-  model: { id: "grok-4.3" },
+  model: { id: "grok-4.5" },
   name: "Roland",
   local: { cwd: process.cwd(), settingSources: [] },
   agents: toSdkAgentDefinitions(loadUnscAgents()),
@@ -82,7 +82,7 @@ async function getRoland(projectId: string, savedId?: string) {
     ? await Agent.resume(savedId, { apiKey: process.env.CURSOR_API_KEY! })
     : await Agent.create({
         apiKey: process.env.CURSOR_API_KEY!,
-        model: { id: "grok-4.3" },
+        model: { id: "grok-4.5" },
         name: "Roland",
         local: { cwd: projectRepoPath, settingSources: ["project"] },
         agents: toSdkAgentDefinitions(loadUnscAgents()),
@@ -189,8 +189,8 @@ Remember: inline MCP servers are **not persisted** across `Agent.resume()` — p
 
 | Callsign | Model | Rationale |
 |----------|-------|-----------|
-| Roland | grok-4.3 | Planning, orchestration |
-| Oracle, Sentinel | claude-sonnet-4-6 | Reasoning, review |
+| Roland | grok-4.5 | Planning, orchestration |
+| Oracle, Sentinel | grok-4.5 | Reasoning, review |
 | Sparrow, Vanguard, Forge, Specter | composer-2.5 | Execution |
 
 Routing is defined in `agents/unsc/*.yaml` and applied via `toCursorModelId()` in `unsc-agents.ts`.
